@@ -5,7 +5,7 @@ import "google/protobuf/wrappers.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
 import "state/v1/metadata.proto";
-import "types/v1/ic00_types.proto";
+import "types/v1/management_canister_types.proto";
 import "types/v1/types.proto";
 
 message CallContext {
@@ -16,6 +16,8 @@ message CallContext {
   message CanisterUpdateOrQuery {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;
+    // If non-zero, this originates from a best-effort canister update call.
+    uint32 deadline_seconds = 3;
   }
   // System task is either a Heartbeat or a GlobalTimer.
   message SystemTask {}
@@ -30,8 +32,9 @@ message CallContext {
   bool responded = 5;
   state.queues.v1.Funds available_funds = 6;
   bool deleted = 8;
-  optional uint64 time_nanos = 9;
+  uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
+  state.queues.v1.RequestMetadata metadata = 11;
 }
 
 message CallContextEntry {
@@ -40,8 +43,9 @@ message CallContextEntry {
 }
 
 message WasmClosure {
+  // The number of functions will never exceed 2^32.
   uint32 func_idx = 1;
-  uint32 env = 2;
+  uint64 env = 2;
 }
 
 message Callback {
@@ -54,6 +58,8 @@ message Callback {
   types.v1.CanisterId respondent = 7;
   state.queues.v1.Cycles prepayment_for_response_execution = 8;
   state.queues.v1.Cycles prepayment_for_response_transmission = 9;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 10;
 }
 
 message CallbackEntry {
@@ -66,6 +72,7 @@ message CallContextManager {
   uint64 next_callback_id = 2;
   repeated CallContextEntry call_contexts = 3;
   repeated CallbackEntry callbacks = 4;
+  repeated uint64 unexpired_callbacks = 5;
 }
 
 message CyclesAccount {
@@ -81,6 +88,7 @@ message Global {
     int64 i64 = 2;
     float f32 = 3;
     double f64 = 4;
+    bytes v128 = 5;
   }
 }
 
@@ -93,8 +101,9 @@ message WasmMethod {
     SYSTEM_METHOD_CANISTER_POST_UPGRADE = 4;
     SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE = 5;
     SYSTEM_METHOD_CANISTER_HEARTBEAT = 6;
-    SYSTEM_METHOD_EMPTY = 7;
+    reserved 7; // deprecated SYSTEM_METHOD_EMPTY
     SYSTEM_METHOD_CANISTER_GLOBAL_TIMER = 8;
+    SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY = 9;
   }
   oneof wasm_method {
     string update = 1;
@@ -135,6 +144,7 @@ message ExecutionStateBits {
   WasmMetadata metadata = 5;
   optional bytes binary_hash = 6;
   optional NextScheduledMethod next_scheduled_method = 7;
+  bool is_wasm64 = 8;
 }
 
 message StopCanisterContext {
@@ -150,6 +160,8 @@ message StopCanisterContext {
     state.queues.v1.Funds funds = 3;
     state.queues.v1.Cycles cycles = 4;
     optional uint64 call_id = 5;
+    // If non-zero, this is a best-effort canister update call.
+    uint32 deadline_seconds = 6;
   }
 
   oneof context {
@@ -174,6 +186,7 @@ message ExecutionTask {
     CANISTER_TASK_UNSPECIFIED = 0;
     CANISTER_TASK_HEARTBEAT = 1;
     CANISTER_TASK_TIMER = 2;
+    CANISTER_TASK_ON_LOW_WASM_MEMORY = 3;
   }
 
   message AbortedExecution {
@@ -220,6 +233,9 @@ enum CyclesUseCase {
   CYCLES_USE_CASE_DELETED_CANISTERS = 10;
   CYCLES_USE_CASE_NON_CONSUMED = 11;
   CYCLES_USE_CASE_BURNED_CYCLES = 12;
+  CYCLES_USE_CASE_SCHNORR_OUTCALLS = 13;
+  CYCLES_USE_CASE_VET_KD = 14;
+  CYCLES_USE_CASE_DROPPED_MESSAGES = 15;
 }
 
 message ConsumedCyclesByUseCase {
@@ -251,6 +267,12 @@ message CanisterControllersChange {
   repeated types.v1.PrincipalId controllers = 1;
 }
 
+message CanisterLoadSnapshot {
+  uint64 canister_version = 1;
+  uint64 taken_at_timestamp = 2;
+  bytes snapshot_id = 3;
+}
+
 message CanisterChange {
   uint64 timestamp_nanos = 1;
   uint64 canister_version = 2;
@@ -263,6 +285,7 @@ message CanisterChange {
     CanisterCodeUninstall canister_code_uninstall = 6;
     CanisterCodeDeployment canister_code_deployment = 7;
     CanisterControllersChange canister_controllers_change = 8;
+    CanisterLoadSnapshot canister_load_snapshot = 9;
   }
 }
 
@@ -291,6 +314,51 @@ message WasmChunkData {
 message WasmChunkStoreMetadata {
   repeated WasmChunkData chunks = 1;
   uint64 size = 2;
+}
+
+message LogVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message LogVisibilityV2 {
+  oneof log_visibility_v2 {
+    int32 controllers = 1;
+    int32 public = 2;
+    LogVisibilityAllowedViewers allowed_viewers = 3;
+  }
+}
+
+message CanisterLogRecord {
+  uint64 idx = 1;
+  uint64 timestamp_nanos = 2;
+  bytes content = 3;
+}
+
+message SnapshotId {
+  bytes content = 1;
+}
+
+enum LongExecutionMode {
+  LONG_EXECUTION_MODE_UNSPECIFIED = 0;
+  LONG_EXECUTION_MODE_OPPORTUNISTIC = 1;
+  LONG_EXECUTION_MODE_PRIORITIZED = 2;
+}
+
+enum OnLowWasmMemoryHookStatus {
+  ON_LOW_WASM_MEMORY_HOOK_STATUS_UNSPECIFIED = 0;
+  ON_LOW_WASM_MEMORY_HOOK_STATUS_CONDITION_NOT_SATISFIED = 1;
+  ON_LOW_WASM_MEMORY_HOOK_STATUS_READY = 2;
+  ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED = 3;
+}
+
+message TaskQueue {
+  // Keeps `PausedExecution`, or `PausedInstallCode`, or `AbortedExecution`,
+  // or `AbortedInstallCode` task if there is one.
+  optional ExecutionTask paused_or_aborted_task = 1;
+  // Status of on_low_wasm_memory hook execution.
+  OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 2;
+  // Queue of `Heartbeat` and `GlobalTimer` tasks.
+  repeated ExecutionTask queue = 3;
 }
 
 message CanisterStateBits {
@@ -325,7 +393,7 @@ message CanisterStateBits {
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
-  types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
+  types.v1.NominalCycles consumed_cycles = 22;
   uint64 freeze_threshold = 23;
   reserved 24;
   reserved "stable_memory_size";
@@ -341,7 +409,7 @@ message CanisterStateBits {
   uint64 install_code_debit = 29;
   // Contains tasks that need to be executed before processing any input of the
   // canister.
-  repeated ExecutionTask task_queue = 30;
+  reserved 30;
   // Time of last charge for resource allocations.
   google.protobuf.UInt64Value time_of_last_allocation_charge_nanos = 31;
   // Postponed charges that are not applied to `cycles_balance` yet.
@@ -351,7 +419,7 @@ message CanisterStateBits {
   // Canister version.
   uint64 canister_version = 34;
   reserved 35;
-  repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 36;
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;
@@ -361,4 +429,29 @@ message CanisterStateBits {
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
+  reserved 42;
+  reserved "log_visibility";
+  // Log visibility for the canister.
+  LogVisibilityV2 log_visibility_v2 = 51;
+  // Log records of the canister.
+  repeated CanisterLogRecord canister_log_records = 43;
+  // The index of the next log record to be created.
+  uint64 next_canister_log_record_idx = 44;
+  // The Wasm memory limit. This is a field in developer-visible canister
+  // settings that allows the developer to limit the usage of the Wasm memory
+  // by the canister to leave some room in 4GiB for upgrade calls.
+  // See the interface specification for more information.
+  optional uint64 wasm_memory_limit = 45;
+  // The next local snapshot ID.
+  uint64 next_snapshot_id = 46;
+  // Captures the memory usage of all snapshots associated with a canister.
+  uint64 snapshots_memory_usage = 52;
+  reserved 47;
+  int64 priority_credit = 48;
+  LongExecutionMode long_execution_mode = 49;
+  optional uint64 wasm_memory_threshold = 50;
+  reserved 53;
+  // Contains tasks that need to be executed before processing any input of the
+  // canister.
+  TaskQueue tasks = 54;
 }

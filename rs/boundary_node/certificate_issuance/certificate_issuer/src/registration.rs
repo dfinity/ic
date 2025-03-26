@@ -8,11 +8,12 @@ use ic_agent::Agent;
 use mockall::automock;
 use serde::{Deserialize, Serialize};
 
+use crate::decoder_config;
 use crate::work::ProcessError;
 
 pub type Id = String;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum State {
     Failed(String),
     PendingOrder,
@@ -21,9 +22,10 @@ pub enum State {
     Available,
 }
 
-impl ToString for State {
-    fn to_string(&self) -> String {
-        serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into())
+impl std::fmt::Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into());
+        write!(f, "{}", string)
     }
 }
 
@@ -63,7 +65,7 @@ impl From<State> for ifc::State {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Registration {
     pub name: String,
     pub canister: Principal,
@@ -80,7 +82,7 @@ impl From<ifc::Registration> for Registration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum UpdateType {
     Canister(Principal),
     State(State),
@@ -169,7 +171,8 @@ impl Get for CanisterGetter {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(reg) => Ok(reg.into()),
@@ -199,7 +202,8 @@ impl Create for CanisterCreator {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(id) => Ok(id),
@@ -232,7 +236,8 @@ impl Update for CanisterUpdater {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(()) => Ok(()),
@@ -262,7 +267,8 @@ impl Remove for CanisterRemover {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(()) => Ok(()),

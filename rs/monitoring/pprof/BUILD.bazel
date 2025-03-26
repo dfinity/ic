@@ -7,13 +7,15 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_pprof",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:async-trait",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:lazy_static",
         "@crate_index//:pprof",
-        "@crate_index//:prost",
+        "@crate_index//:prost_0_12_0",
         "@crate_index//:regex",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",

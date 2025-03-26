@@ -75,10 +75,7 @@ options may be specified:
     Specify an initial denylist of canisters for the Boundary Nodes
 
   --denylist_url url
-    Specify the url for the denylist updater
-
-  --prober-identity path
-    specify an identity file for the prober
+    Specify the url where to download denylist
 
   --system-domains
     comma-delimited list of domains serving system canisters (e.g., ic0.dev or ic0.app)
@@ -109,14 +106,6 @@ options may be specified:
 
   --canary-proxy-port
     the portnumber to run the canary proxy on. Canary proxy disabled if not provided
-
-  --require_seo_certification
-    flag to enforce certification for all crawler and bot requests that are redirected
-    to icx-proxy to bypass the service worker.
-
-  --require_underscore_certification
-    flag to enforce certification for all requests going to /_/raw/ that are
-    passed through icx-proxy.
 
   --certificate_orchestrator_uri
     the API domain to reach the certificate orchestrator canister (e.g., https://ic0.app/).
@@ -161,10 +150,6 @@ options may be specified:
   --certificate_issuer_peek_sleep_sec
     time between peeks by the certificate issuer to fetch a new task from the
     certificate orchestrator.
-
-  --certificate_syncer_polling_interval_sec
-    time between polling the certificate issuer for custom domain updates (i.e.,
-    newly registered, modified, or removed custom domains).
 
   --ic_registry_local_store
     path to a local registry store to be used instead of the one provided by the
@@ -249,8 +234,6 @@ function build_ic_bootstrap_tar() {
 
     # Firewall
     local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
-    # Flags
-    local REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
     # Canary Proxy
     local CANARY_PROXY_PORT
     # Custom domains
@@ -306,9 +289,6 @@ function build_ic_bootstrap_tar() {
             --denylist_url)
                 local DENYLIST_URL="$2"
                 ;;
-            --prober-identity)
-                local PROBER_IDENTITY="$2"
-                ;;
             --system-domains)
                 local SYSTEM_DOMAINS="$2"
                 ;;
@@ -335,12 +315,6 @@ function build_ic_bootstrap_tar() {
                 ;;
             --canary-proxy-port)
                 CANARY_PROXY_PORT="$2"
-                ;;
-            --require_seo_certification)
-                REQUIRE_SEO_CERTIFICATION="$2"
-                ;;
-            --require_underscore_certification)
-                REQUIRE_UNDERSCORE_CERTIFICATION="$2"
                 ;;
             --certificate_orchestrator_uri)
                 CERTIFICATE_ORCHESTRATOR_URI="$2"
@@ -380,9 +354,6 @@ function build_ic_bootstrap_tar() {
                 ;;
             --certificate_issuer_peek_sleep_sec)
                 CERTIFICATE_ISSUER_PEEK_SLEEP_SEC="$2"
-                ;;
-            --certificate_syncer_polling_interval_sec)
-                CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC="$2"
                 ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
@@ -516,10 +487,10 @@ EOF
     # setup the deny list
     if [[ -n "${DENYLIST:-}" ]]; then
         echo "Using deny list ${DENYLIST}"
-        cp "${DENYLIST}" "${BOOTSTRAP_TMPDIR}/denylist.map"
+        cp "${DENYLIST}" "${BOOTSTRAP_TMPDIR}/denylist.json"
     else
         echo "Using empty denylist"
-        touch "${BOOTSTRAP_TMPDIR}/denylist.map"
+        echo '{"canisters":{}}' >"${BOOTSTRAP_TMPDIR}/denylist.json"
     fi
 
     # setup the bn_vars
@@ -537,21 +508,10 @@ ipv4_http_ips=${IPV4_HTTP_IPS}
 ipv6_http_ips=${IPV6_HTTP_IPS}
 ipv6_debug_ips=${IPV6_DEBUG_IPS}
 ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
-require_seo_certification=${REQUIRE_SEO_CERTIFICATION:-}
-require_underscore_certification=${REQUIRE_UNDERSCORE_CERTIFICATION:-}
-ip_hash_salt=${IP_HASH_SALT:-"undefined"}
 logging_url=${LOGGING_URL:-"http://127.0.0.1:12345"}
 logging_user=${LOGGING_USER:-"undefined"}
 logging_password=${LOGGING_PASSWORD:-"undefined"}
-# Default to 1% sampling rate (value is 1/N)
-logging_2xx_sample_rate=${LOGGING_2XX_SAMPLE_RATE:-100}
 EOF
-
-    # setup the prober identity
-    if [[ -n "${PROBER_IDENTITY:-}" ]]; then
-        echo "Using prober identity ${PROBER_IDENTITY}"
-        cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober_identity.pem"
-    fi
 
     # setup the certificates
     if [[ -n "${CERT_DIR:-}" && -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" && -f "${CERT_DIR}/chain.pem" ]]; then
@@ -582,19 +542,18 @@ ${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC:+certificate_issuer_peek_sleep_sec=${CERTIFI
 EOF
     fi
 
-    if [[ ! -z "${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC:-}" ]]; then
-        cat >"${BOOTSTRAP_TMPDIR}/certificate_syncer.conf" <<EOF
-certificate_syncer_polling_interval_sec=${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC}
-EOF
-    fi
-
     # use the registry local store
     if [[ -n "${IC_REGISTRY_LOCAL_STORE:-}" ]]; then
         echo "Using the registry local store at ${IC_REGISTRY_LOCAL_STORE}"
         cp -r "${IC_REGISTRY_LOCAL_STORE}" "${BOOTSTRAP_TMPDIR}/ic_registry_local_store"
     fi
 
-    tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
+    tar cf "${OUT_FILE}" \
+        --sort=name \
+        --owner=root:0 \
+        --group=root:0 \
+        --mtime="UTC 1970-01-01 00:00:00" \
+        -C "${BOOTSTRAP_TMPDIR}" .
     rm -rf "${BOOTSTRAP_TMPDIR}"
 }
 
@@ -607,11 +566,15 @@ function build_ic_bootstrap_diskimage() {
     shift
 
     local TMPDIR=$(mktemp -d)
-    build_ic_bootstrap_tar "${TMPDIR}/ic-bootstrap.tar" "$@"
+    local TAR="${TMPDIR}/ic-bootstrap.tar"
+    build_ic_bootstrap_tar "${TAR}" "$@"
 
-    truncate -s 10M "${OUT_FILE}"
-    mkfs.vfat "${OUT_FILE}"
-    mcopy -i "${OUT_FILE}" -o "${TMPDIR}/ic-bootstrap.tar" ::
+    size=$(du --bytes "${TAR}" | awk '{print $1}')
+    size=$((2 * size + 1048576))
+    echo "image size: $size"
+    truncate -s $size "${OUT_FILE}"
+    mkfs.vfat -n CONFIG "${OUT_FILE}"
+    mcopy -i "${OUT_FILE}" -o "${TAR}" ::
 
     rm -rf "${TMPDIR}"
 }

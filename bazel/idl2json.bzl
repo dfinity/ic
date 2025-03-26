@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["idl2json"])
 """
 
-VERSION = "0.9.3"
+VERSION = "0.9.2"
 SHA256 = {
-    "unknown-linux-musl.tar.gz": "0dbae9e1c7e5d20e6b954ec50f61132c5221f2e748727b2c3d24c19eb0a1560d",
-    "apple-darwin.zip": "e6301003ab7eff3ee9e2f2dc68031015e1208f38fd90caa856eab74c1cfd2a8f",
+    "unknown-linux-musl.tar.gz": "c91863c56f94bcafa70ca6aa5aa3d937324075afdd0c0c222f27b5d11372fcfb",
+    "apple-darwin.zip": "c7356d96ae091a47e180631492d1c45462e85042dcc3a7b68da60722fc87edba",
 }
 
 URL = "https://github.com/dfinity/idl2json/releases/download/v{version}/idl2json_cli-{arch}-{file}"

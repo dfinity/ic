@@ -7,10 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }
-ic-async-utils = { path = "../../async_utils" }
+hyper-util = { workspace = true }
+ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-btc-replica-types = { path = "../replica_types" }
 ic-btc-service = { path = "../service" }
-ic-btc-types-internal = { path = "../types/internal" }
 ic-config = { path = "../../config" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -18,10 +19,8 @@ ic-metrics = { path = "../../monitoring/metrics" }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }

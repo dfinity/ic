@@ -1,8 +1,8 @@
 use candid::Decode;
+use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterId, Cycles, ErrorCode, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError, WasmResult};
+use ic_types::Cycles;
 use serde::Deserialize;
 
 /// This number should not exceed the length of the canister output queue,
@@ -10,7 +10,7 @@ use serde::Deserialize;
 pub const CANISTERS_PER_BATCH: u64 = 490;
 
 thread_local! {
-    // Store test canister WASM in a thread local memory to avoid re-reading the file for each bench.
+    // Store test canister Wasm in a thread local memory to avoid re-reading the file for each bench.
     static TEST_CANISTER_WASM: Vec<u8> = canister_test::Project::cargo_bin_maybe_from_env("test_canister", &[]).bytes();
 }
 
@@ -18,11 +18,15 @@ pub fn test_canister_wasm() -> Vec<u8> {
     TEST_CANISTER_WASM.with(|wasm| wasm.clone())
 }
 
-pub fn setup() -> (StateMachine, CanisterId) {
-    let env = StateMachineBuilder::new()
+pub fn env() -> StateMachine {
+    StateMachineBuilder::new()
         .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
-        .build();
+        .build()
+}
+
+pub fn setup() -> (StateMachine, CanisterId) {
+    let env = env();
     let test_canister = env
         .install_canister_with_cycles(
             test_canister_wasm(),

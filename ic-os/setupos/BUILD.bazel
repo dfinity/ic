@@ -3,27 +3,17 @@ package(default_visibility = ["__subpackages__"])
 exports_files([
     "partitions.csv",
     "grub.cfg",
-    "rootfs/docker-base.dev",
-    "rootfs/extra_boot_args",
-    "rootfs/docker-base.prod",
-    "rootfs/docker-base.sev",
     "config/config.ini",
-    "config/ssh_authorized_keys/admin",
     "config/node_operator_private_key.pem",
+    "config/ssh_authorized_keys/admin",
     "data/deployment.json.template",
     "data/nns_public_key.pem",
 ])
-
-filegroup(
-    name = "rootfs-files",
-    srcs = glob(["rootfs/**"]),
-)
 
 # All setup-os targets are named the same, just stay in different submodules.
 # To build or run specific target:
 #
 # bazel run   //ic-os/setupos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
 # bazel build //ic-os/setupos/envs/dev/...
-# bazel build //ic-os/setupos/envs/dev-sev/...
 #
 # check //ic-os/defs.bzl for the full list of targets.

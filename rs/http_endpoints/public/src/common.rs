@@ -1,40 +1,47 @@
-use crate::state_reader_executor::StateReaderExecutor;
 use crate::HttpError;
-use http::request::Parts;
-use hyper::{header, Body, HeaderMap, Response, StatusCode};
+use axum::{body::Body, extract::FromRequest, response::IntoResponse};
+use bytes::Bytes;
+use http::{
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    HeaderMap, HeaderValue, Method,
+};
+use http_body_util::BodyExt;
+use hyper::{header, Response, StatusCode};
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_registry_client_helpers::crypto::{
+    root_of_trust::RegistryRootOfTrustProvider, CryptoRegistry,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, PrincipalId,
-    RegistryVersion, SubnetId,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    malicious_flags::MaliciousFlags,
+    messages::{HttpRequest, HttpRequestContent},
+    RegistryVersion, SubnetId, Time,
 };
-use ic_validator::RequestValidationError;
-use serde::Serialize;
+use ic_validator::{
+    CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
+};
+use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value as CBOR;
-use std::collections::BTreeMap;
-use std::convert::Infallible;
 use std::sync::Arc;
-use std::task::Poll;
+use std::{collections::BTreeMap, time::Duration};
+use tokio::time::timeout;
 use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
+use tower_http::cors::{CorsLayer, Vary};
 
-pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
-pub const CONTENT_TYPE_TEXT: &str = "text/plain";
-
-pub(crate) fn poll_ready(r: Poll<Result<(), Infallible>>) -> Poll<Result<(), BoxError>> {
-    match r {
-        Poll::Pending => Poll::Pending,
-        Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
-        Poll::Ready(Err(_infallible)) => {
-            panic!("Can't enter match arm when Infallible");
-        }
-    }
-}
+pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
+pub const CONTENT_TYPE_TEXT: &str = "text/plain; charset=utf-8";
+/// If the request body is not received/parsed within
+/// `max_request_receive_seconds`, then the request will be rejected and
+/// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
+pub(crate) const MAX_REQUEST_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
@@ -56,9 +63,8 @@ pub(crate) fn get_root_threshold_public_key(
 }
 
 pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
-    let mut resp = Response::new(Body::from(message));
+    let mut resp = Response::new(Body::new(message.map_err(BoxError::from)));
     *resp.status_mut() = status;
-    *resp.headers_mut() = get_cors_headers();
     resp.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static(CONTENT_TYPE_TEXT),
@@ -66,40 +72,7 @@ pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Re
     resp
 }
 
-/// Converts a user error into an HTTP response.
-///
-/// We need this conversion because we validate user requests twice:
-///
-///   1. Ingress filter checks user messages before including them in blocks
-///      so that we don't have to reach a consensus on payloads that we will
-///      throw away in the execution.
-///      We cannot put UserErrors produced at this stage in the state tree;
-///      We have to return them in the  HTTP body.
-///
-///   2. Once messages reach execution, we include UserErrors into the state tree.
-///      Users can fetch the details via the read_state endpoint.
-///
-/// make_response conversion applies the first case.
-pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
-    let reject_response: CBOR = CBOR::Map(BTreeMap::from([
-        (
-            CBOR::Text("error_code".to_string()),
-            CBOR::Text(user_error.code().to_string()),
-        ),
-        (
-            CBOR::Text("reject_message".to_string()),
-            CBOR::Text(user_error.description().to_string()),
-        ),
-        (
-            CBOR::Text("reject_code".to_string()),
-            CBOR::Integer(user_error.reject_code() as i128),
-        ),
-    ]));
-
-    cbor_response(&reject_response).0
-}
-
-pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
+pub(crate) async fn map_box_error_to_response(err: BoxError) -> Response<Body> {
     if err.is::<Overloaded>() {
         make_plaintext_response(
             StatusCode::TOO_MANY_REQUESTS,
@@ -118,24 +91,13 @@ pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
     }
 }
 
-/// Add CORS headers to provided Response. In particular we allow
-/// wildcard origin, POST and GET and allow Accept, Authorization and
-/// Content Type headers.
-pub(crate) fn get_cors_headers() -> HeaderMap {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_METHODS,
-        header::HeaderValue::from_static("POST, GET"),
-    );
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        header::HeaderValue::from_static("*"),
-    );
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_HEADERS,
-        header::HeaderValue::from_static("Accept, Authorization, Content-Type"),
-    );
-    headers
+pub fn cors_layer() -> CorsLayer {
+    CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE])
+        .allow_origin(tower_http::cors::Any)
+        // No Vary header
+        .vary(Vary::list(vec![]))
 }
 
 /// Convert an object into CBOR binary.
@@ -146,88 +108,212 @@ pub(crate) fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.into_inner()
 }
 
-/// Write the "self describing" CBOR tag and serialize the response
-pub(crate) fn cbor_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
-    let cbor = into_cbor(r);
-    let body_size_bytes = cbor.len();
-    let mut response = Response::new(Body::from(cbor));
-    *response.status_mut() = StatusCode::OK;
-    *response.headers_mut() = get_cors_headers();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static(CONTENT_TYPE_CBOR),
-    );
-    (response, body_size_bytes)
-}
+/// `IntoResponse` implementation for Cbor. Similar to axum implementation for JSON.
+/// https://docs.rs/axum/latest/axum/struct.Json.html#impl-IntoResponse-for-Json%3CT%3E
+pub struct Cbor<T>(pub T);
 
-/// Empty response.
-pub(crate) fn empty_response() -> Response<Body> {
-    let mut response = Response::new(Body::from(""));
-    *response.status_mut() = StatusCode::NO_CONTENT;
-    response
-}
-
-pub(crate) fn validation_error_to_http_error(
-    message_id: MessageId,
-    err: RequestValidationError,
-    log: &ReplicaLogger,
-) -> HttpError {
-    match err {
-        RequestValidationError::InvalidIngressExpiry(message)
-        | RequestValidationError::InvalidDelegationExpiry(message) => HttpError {
-            status: StatusCode::BAD_REQUEST,
-            message,
-        },
-        _ => {
-            let message = format!(
-                "Failed to authenticate request {} due to: {}",
-                message_id, err
-            );
-            info!(log, "Unexpected http request validation error: {}", message);
-
-            HttpError {
-                status: StatusCode::FORBIDDEN,
-                message,
-            }
+impl<T> IntoResponse for Cbor<T>
+where
+    T: Serialize,
+{
+    fn into_response(self) -> axum::response::Response {
+        // Use a small initial capacity of 128 bytes like serde_json::to_vec
+        // https://docs.rs/serde_json/1.0.82/src/serde_json/ser.rs.html#2189
+        let buf = Vec::with_capacity(128);
+        let mut ser = serde_cbor::Serializer::new(buf);
+        ser.self_describe().expect("Could not write magic tag.");
+        match &self.0.serialize(&mut ser) {
+            Ok(()) => (
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(CONTENT_TYPE_CBOR),
+                )],
+                ser.into_inner(),
+            )
+                .into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(CONTENT_TYPE_TEXT),
+                )],
+                err.to_string(),
+            )
+                .into_response(),
         }
     }
 }
 
-pub(crate) async fn get_latest_certified_state(
-    state_reader_executor: &StateReaderExecutor,
-) -> Option<Arc<ReplicatedState>> {
-    let paths = &mut [Path::from(Label::from("time"))];
-    let labeled_tree = match sparse_labeled_tree_from_paths(paths) {
-        Ok(labeled_tree) => labeled_tree,
-        // This error is not recoverable and should never happen, because the
-        // path is valid and required to start the HTTP endpoint.
-        Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
+fn cbor_content_type(headers: &HeaderMap) -> bool {
+    let Some(content_type) = headers.get(header::CONTENT_TYPE) else {
+        return false;
     };
-    state_reader_executor
-        .read_certified_state(labeled_tree)
-        .await
-        .ok()?
-        .map(|r| r.0)
+
+    let Ok(content_type) = content_type.to_str() else {
+        return false;
+    };
+
+    content_type.to_lowercase() == CONTENT_TYPE_CBOR
 }
 
-/// Remove the effective principal id from the request parts.
-/// The effective principal id is added to the request during routing by looking at the url.
-/// Returns an BAD_REQUEST response if the effective principal id is not found in the request parts.
-pub(crate) fn remove_effective_principal_id(
-    parts: &mut Parts,
-) -> Result<PrincipalId, Response<Body>> {
-    match parts.extensions.remove::<PrincipalId>() {
-        Some(principal_id) => Ok(principal_id),
-        _ => Err(make_plaintext_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to get effective principal id from request. This is a bug.".to_string(),
-        )),
+impl<T, S> FromRequest<S> for Cbor<T>
+where
+    T: for<'a> Deserialize<'a>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, String);
+    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
+        if cbor_content_type(req.headers()) {
+            let bytes = Bytes::from_request(req, state)
+                .await
+                .map_err(|e| (e.status(), e.body_text()))?;
+            match serde_cbor::from_slice(&bytes) {
+                Ok(value) => Ok(Cbor(value)),
+                Err(err) => Err((
+                    StatusCode::BAD_REQUEST,
+                    format!("Failed to deserialize cbor request: {err}"),
+                )),
+            }
+        } else {
+            Err((
+                StatusCode::BAD_REQUEST,
+                format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+            ))
+        }
+    }
+}
+
+pub(crate) struct WithTimeout<E>(pub E);
+
+impl<S, E> FromRequest<S> for WithTimeout<E>
+where
+    S: Send + Sync,
+    E: FromRequest<S>,
+{
+    type Rejection = axum::response::Response;
+    async fn from_request(req: axum::extract::Request, s: &S) -> Result<Self, Self::Rejection> {
+        match timeout(MAX_REQUEST_RECEIVE_TIMEOUT, E::from_request(req, s)).await {
+            Ok(Ok(bytes)) => Ok(WithTimeout(bytes)),
+            Ok(Err(err)) => Err(err.into_response()),
+            Err(_) => Err((
+                StatusCode::REQUEST_TIMEOUT,
+                format!(
+                    "receiving request took longer than {}s",
+                    MAX_REQUEST_RECEIVE_TIMEOUT.as_secs()
+                ),
+            )
+                .into_response()),
+        }
+    }
+}
+
+/// Converts a user error into an HTTP response.
+///
+/// We need this conversion because we validate user requests twice:
+///
+///   1. Ingress filter checks user messages before including them in blocks
+///      so that we don't have to reach a consensus on payloads that we will
+///      throw away in the execution.
+///      We cannot put UserErrors produced at this stage in the state tree;
+///      We have to return them in the  HTTP body.
+///
+///   2. Once messages reach execution, we include UserErrors into the state tree.
+///      Users can fetch the details via the read_state endpoint.
+///
+/// make_response conversion applies the first case.
+pub struct CborUserError(pub UserError);
+
+impl IntoResponse for CborUserError {
+    fn into_response(self) -> axum::response::Response {
+        let reject_response: CBOR = CBOR::Map(BTreeMap::from([
+            (
+                CBOR::Text("error_code".to_string()),
+                CBOR::Text(self.0.code().to_string()),
+            ),
+            (
+                CBOR::Text("reject_message".to_string()),
+                CBOR::Text(self.0.description().to_string()),
+            ),
+            (
+                CBOR::Text("reject_code".to_string()),
+                CBOR::Integer(self.0.reject_code() as i128),
+            ),
+        ]));
+        Cbor(reject_response).into_response()
+    }
+}
+
+pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestContent>(
+    request: &HttpRequest<C>,
+    err: RequestValidationError,
+    log: &ReplicaLogger,
+) -> HttpError {
+    let message_id = request.id();
+    match err {
+        RequestValidationError::InvalidSignature(_) => {
+            info!(
+                log,
+                "msg_id: {}, err: {}, request: {:?}", message_id, err, request
+            )
+        }
+        _ => info!(log, "msg_id: {}, err: {}", message_id, err),
+    }
+
+    HttpError {
+        status: StatusCode::BAD_REQUEST,
+        message: format!("{err}"),
+    }
+}
+
+pub(crate) async fn get_latest_certified_state(
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+) -> Option<Arc<ReplicatedState>> {
+    tokio::task::spawn_blocking(move || {
+        let paths = &mut [Path::from(Label::from("time"))];
+        let labeled_tree = match sparse_labeled_tree_from_paths(paths) {
+            Ok(labeled_tree) => labeled_tree,
+            // This error is not recoverable and should never happen, because the
+            // path is valid and required to start the HTTP endpoint.
+            Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
+        };
+        let state = state_reader.read_certified_state(&labeled_tree);
+        state.map(|r| r.0)
+    })
+    .await
+    .ok()?
+}
+
+pub(crate) fn build_validator<T: HttpRequestContent>(
+    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    malicious_flags: Option<MaliciousFlags>,
+) -> Arc<dyn HttpRequestVerifier<T, RegistryRootOfTrustProvider>>
+where
+    HttpRequestVerifierImpl: HttpRequestVerifier<T, RegistryRootOfTrustProvider>,
+{
+    if malicious_flags.is_some_and(|f| f.maliciously_disable_ingress_validation) {
+        pub struct DisabledHttpRequestVerifier;
+
+        impl<C: HttpRequestContent, R> HttpRequestVerifier<C, R> for DisabledHttpRequestVerifier {
+            fn validate_request(
+                &self,
+                _request: &HttpRequest<C>,
+                _current_time: Time,
+                _root_of_trust_provider: &R,
+            ) -> Result<CanisterIdSet, RequestValidationError> {
+                Ok(CanisterIdSet::all())
+            }
+        }
+
+        Arc::new(DisabledHttpRequestVerifier) as Arc<_>
+    } else {
+        Arc::new(HttpRequestVerifierImpl::new(ingress_verifier)) as Arc<_>
     }
 }
 
 // A few test helpers, improving readability in the tests
 #[cfg(test)]
 pub(crate) mod test {
+
     use super::*;
     use hyper::header;
     use ic_types::messages::{Blob, CertificateDelegation};
@@ -236,26 +322,10 @@ pub(crate) mod test {
     use serde::Serialize;
     use serde_cbor::Value;
 
-    fn check_cors_headers(hm: &HeaderMap) {
-        let acl_headers = hm.get_all(header::ACCESS_CONTROL_ALLOW_HEADERS).iter();
-        assert!(acl_headers.eq(["Accept, Authorization, Content-Type"].iter()));
-        let acl_methods = hm.get_all(header::ACCESS_CONTROL_ALLOW_METHODS).iter();
-        assert!(acl_methods.eq(["POST, GET"].iter()));
-        let acl_origin = hm.get_all(header::ACCESS_CONTROL_ALLOW_ORIGIN).iter();
-        assert!(acl_origin.eq(["*"].iter()));
-    }
-
-    #[test]
-    fn test_add_headers() {
-        let hm = get_cors_headers();
-        assert_eq!(hm.len(), 3);
-        check_cors_headers(&hm);
-    }
-
     #[test]
     fn test_cbor_response() {
-        let response = cbor_response(b"").0;
-        assert_eq!(response.headers().len(), 4);
+        let response = Cbor(b"").into_response();
+        assert_eq!(response.headers().len(), 1);
         assert_eq!(
             response
                 .headers()
@@ -264,7 +334,6 @@ pub(crate) mod test {
                 .count(),
             1
         );
-        check_cors_headers(response.headers());
     }
 
     /// Makes sure that the serialized CBOR version of `obj` is the same as

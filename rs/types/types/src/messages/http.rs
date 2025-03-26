@@ -2,16 +2,14 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! HTTP requests that the Internet Computer is prepared to handle.
 
-use super::Blob;
+use super::{query::QuerySource, Blob};
 use crate::{
     crypto::SignedBytesWithoutDomainSeparator,
     messages::{
-        message_id::hash_of_map, MessageId, ReadState, SignedIngressContent, UserQuery,
-        UserSignature,
+        message_id::hash_of_map, MessageId, Query, ReadState, SignedIngressContent, UserSignature,
     },
     Height, Time, UserId,
 };
-use derive_more::Display;
 use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
@@ -24,11 +22,12 @@ use std::{
     error::Error,
     fmt,
 };
+use strum_macros::AsRefStr;
 
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub(crate) enum CallOrQuery {
     Call,
     Query,
@@ -91,7 +90,7 @@ pub(crate) fn representation_independent_hash_read_state(
 
 /// Describes the fields of a canister update call as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#http-call>`.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct HttpCanisterUpdate {
     pub canister_id: Blob,
@@ -126,7 +125,7 @@ impl HttpCanisterUpdate {
 }
 
 /// Describes the contents of a /api/v2/canister/_/call request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "request_type")]
@@ -153,7 +152,7 @@ impl HttpCallContent {
 
 /// Describes the fields of a canister query call (a query from a user to a canister) as
 /// defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#http-query>`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct HttpUserQuery {
     pub canister_id: Blob,
     pub method_name: String,
@@ -168,7 +167,7 @@ pub struct HttpUserQuery {
 }
 
 /// Describes the contents of a /api/v2/canister/_/query request.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "request_type")]
 pub enum HttpQueryContent {
@@ -191,7 +190,7 @@ impl HttpQueryContent {
 }
 
 /// A `read_state` request as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state>`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct HttpReadState {
     pub sender: Blob,
     // A list of paths, where a path is itself a sequence of labels.
@@ -202,7 +201,7 @@ pub struct HttpReadState {
 }
 
 /// Describes the contents of a /api/v2/canister/_/read_state request.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "request_type")]
 pub enum HttpReadStateContent {
@@ -256,7 +255,7 @@ impl HttpReadState {
 ///
 /// The content is either [`HttpCallContent`], [`HttpQueryContent`] or
 /// [`HttpReadStateContent`].
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct HttpRequestEnvelope<C> {
     pub content: C,
@@ -269,14 +268,14 @@ pub struct HttpRequestEnvelope<C> {
 }
 
 /// A strongly-typed version of [`HttpRequestEnvelope`].
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct HttpRequest<C> {
     content: C,
     auth: Authentication,
 }
 
 /// The authentication associated with an HTTP request.
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum Authentication {
     Authenticated(UserSignature),
     Anonymous,
@@ -330,21 +329,30 @@ impl<C> HttpRequest<C> {
     }
 }
 
-impl HttpRequestContent for UserQuery {
+impl HttpRequestContent for Query {
     fn id(&self) -> MessageId {
         self.id()
     }
 
     fn sender(&self) -> UserId {
-        self.source
+        match self.source {
+            QuerySource::User { user_id, .. } => user_id,
+            QuerySource::Anonymous => UserId::from(PrincipalId::default()),
+        }
     }
 
     fn ingress_expiry(&self) -> u64 {
-        self.ingress_expiry
+        match self.source {
+            QuerySource::User { ingress_expiry, .. } => ingress_expiry,
+            QuerySource::Anonymous => 0,
+        }
     }
 
     fn nonce(&self) -> Option<Vec<u8>> {
-        self.nonce.clone()
+        match &self.source {
+            QuerySource::User { nonce, .. } => nonce.clone(),
+            QuerySource::Anonymous => None,
+        }
     }
 }
 
@@ -366,14 +374,14 @@ impl HttpRequestContent for ReadState {
     }
 }
 
-impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<UserQuery> {
+impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<Query> {
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpQueryContent>) -> Result<Self, Self::Error> {
         let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpQueryContent::Query { query } => Ok(HttpRequest {
-                content: UserQuery::try_from(query)?,
+                content: Query::try_from(query)?,
                 auth,
             }),
         }
@@ -409,7 +417,7 @@ impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for HttpRequest<SignedIngress
 }
 
 /// Errors returned by `HttpHandler` when processing ingress messages.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Serialize)]
 pub enum HttpRequestError {
     InvalidMessageId(String),
     InvalidIngressExpiry(String),
@@ -450,7 +458,7 @@ impl From<CanisterIdError> for HttpRequestError {
 
 /// Describes a delegation map as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct Delegation {
     pubkey: Blob,
@@ -525,7 +533,7 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
 
 /// Describes a delegation as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct SignedDelegation {
     delegation: Delegation,
@@ -554,7 +562,7 @@ impl SignedDelegation {
 }
 
 /// The different types of values supported in `RawHttpRequest`.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum RawHttpRequestVal {
     Bytes(#[serde(with = "serde_bytes")] Vec<u8>),
     String(String),
@@ -564,7 +572,7 @@ pub enum RawHttpRequestVal {
 }
 
 /// The reply to an update call.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum HttpReply {
     CodeCall { arg: Blob },
@@ -572,7 +580,7 @@ pub enum HttpReply {
 }
 
 /// The response for a query call from the execution service.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "status")]
 pub enum HttpQueryResponse {
@@ -592,7 +600,7 @@ pub struct QueryResponseHash([u8; 32]);
 
 impl QueryResponseHash {
     /// Creates a [`QueryResponseHash`] from a given query response, request and timestamp.
-    pub fn new(response: &HttpQueryResponse, request: &UserQuery, timestamp: Time) -> Self {
+    pub fn new(response: &HttpQueryResponse, request: &Query, timestamp: Time) -> Self {
         use RawHttpRequestVal::*;
 
         let self_map_representation = match response {
@@ -642,7 +650,7 @@ impl SignedBytesWithoutDomainSeparator for QueryResponseHash {
 }
 
 /// The response to `/api/v2/canister/_/query`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct HttpSignedQueryResponse {
     #[serde(flatten)]
@@ -673,7 +681,7 @@ where
     tup.end()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NodeSignature {
     /// The time of creation of the signature (or the batch time).
     pub timestamp: Time,
@@ -684,20 +692,20 @@ pub struct NodeSignature {
 }
 
 /// The body of the `QueryResponse`
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct HttpQueryResponseReply {
     pub arg: Blob,
 }
 
 /// The response to a `read_state` request.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct HttpReadStateResponse {
     /// The CBOR-encoded `Certificate`.
     pub certificate: Blob,
 }
 
 /// A `Certificate` as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certificate>`
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Certificate {
     pub tree: MixedHashTree,
     pub signature: Blob,
@@ -706,7 +714,7 @@ pub struct Certificate {
 }
 
 /// A `CertificateDelegation` as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CertificateDelegation {
     pub subnet_id: Blob,
     pub certificate: Blob,
@@ -714,7 +722,7 @@ pub struct CertificateDelegation {
 
 /// Different stages required for the full initialization of the HTTPS endpoint.
 /// The fields are listed in order of execution/transition.
-#[derive(Debug, Display, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, AsRefStr, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplicaHealthStatus {
     /// Marks the start state of the HTTPS endpoint. Some requests will fail
@@ -746,16 +754,15 @@ pub enum ReplicaHealthStatus {
 }
 
 /// The response to `/api/v2/status`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct HttpStatusResponse {
-    pub ic_api_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub impl_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_key: Option<Blob>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub impl_version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub impl_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replica_health_status: Option<ReplicaHealthStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]

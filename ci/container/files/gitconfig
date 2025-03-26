@@ -1,0 +1,7 @@
+[safe]
+  # avoid git requiring ownership of directory to match with effective user
+  directory = *
+[http]
+  # github actions use http
+  # https://stackoverflow.com/questions/6842687/the-remote-end-hung-up-unexpectedly-while-git-cloning
+  postBuffer = 524288000

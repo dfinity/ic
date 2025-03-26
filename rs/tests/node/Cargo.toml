@@ -1,0 +1,31 @@
+[package]
+name = "node-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-registry-canister-api = { path = "../../registry/canister/api" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic-system-test-driver = { path = "../driver" }
+indoc = "1.0.9"
+k256 = { workspace = true }
+registry-canister = { path = "../../registry/canister" }
+slog = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "ic-systest-ipv4-integration"
+path = "ipv4_integration_test.rs"
+
+[[bin]]
+name = "reboot_toy"
+path = "reboot_toy.rs"

@@ -16,41 +16,45 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_constants::MAX_INGRESS_TTL;
-use ic_ingress_manager::IngressManager;
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
-    p2p::consensus::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    p2p::consensus::{MutablePool, PoolMutationsProducer, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
+use ic_replicated_state::{
+    canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+};
 use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
-    history::MockIngressHistory,
-    mock_time,
-    state::ReplicatedStateBuilder,
-    types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-    types::messages::SignedIngressBuilder,
-    FastForwardTimeSource,
 };
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     batch::RawQueryStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
+    time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId, Time,
 };
+use pprof::criterion::{Output, PProfProfiler};
 use rand::{seq::SliceRandom, Rng};
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -90,7 +94,7 @@ impl SimulatedIngressHistory {
                         IngressStatus::Known {
                             receiver: canister_test_id(0).get(),
                             user_id: user_test_id(0),
-                            time: mock_time(),
+                            time: UNIX_EPOCH,
                             state: IngressState::Completed(ic_types::ingress::WasmResult::Reply(
                                 vec![],
                             )),
@@ -139,7 +143,7 @@ impl SimulatedIngressHistory {
         let set_limit = MAX_INGRESS_COUNT_PER_PAYLOAD * (MAX_INGRESS_TTL.as_secs() as usize) / 2;
         while time < end_time {
             let min_time = if start_time + MAX_INGRESS_TTL < time {
-                time.saturating_sub_duration(MAX_INGRESS_TTL)
+                time.saturating_sub(MAX_INGRESS_TTL)
             } else {
                 start_time
             };
@@ -157,7 +161,7 @@ impl SimulatedIngressHistory {
 }
 
 /// Helper to run a single test with dependency setup.
-fn run_test<T>(_test_name: &str, test: T)
+fn run_test<T>(test: T)
 where
     T: FnOnce(
         Arc<FastForwardTimeSource>,
@@ -190,6 +194,7 @@ where
                         metadata,
                         CanisterQueues::default(),
                         RawQueryStats::default(),
+                        CanisterSnapshots::default(),
                     )),
                 )
             });
@@ -235,6 +240,7 @@ where
                 Arc::new(state_manager),
                 cycles_account_manager,
                 MaliciousFlags::default(),
+                RandomStateKind::Random,
             );
             test(
                 time_source,
@@ -297,7 +303,7 @@ fn setup(
 fn on_state_change(pool: &mut IngressPoolImpl, manager: &IngressManager) -> usize {
     let changeset = manager.on_state_change(pool);
     let n = changeset.len();
-    pool.apply_changes(changeset);
+    pool.apply(changeset);
     n
 }
 
@@ -316,16 +322,14 @@ fn handle_ingress(criterion: &mut Criterion) {
         let expiry_range = MAX_INGRESS_TTL + time_span;
         let total_messages = ingress_rate * expiry_range.as_secs();
         run_test(
-            "get_ingress_payload",
             |time_source: Arc<FastForwardTimeSource>,
              pool_config: ArtifactPoolConfig,
              log: ReplicaLogger,
              history: &SimulatedIngressHistory,
              manager: &mut IngressManager| {
-                let name = format!("handle_ingress({})", ingress_rate);
                 let messages = prepare(time_source.as_ref(), expiry_range, total_messages as usize);
                 let (pool, message_ids) = setup(time_source.as_ref(), pool_config, log, messages);
-                group.bench_function(&name, |bench| {
+                group.bench_function(format!("handle_ingress({})", ingress_rate), |bench| {
                     bench.iter_custom(|iters| {
                         let mut elapsed = Duration::from_secs(0);
                         for _ in 0..iters {
@@ -377,6 +381,12 @@ fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<d
     registry
 }
 
-criterion_group!(benches, handle_ingress);
+criterion_group! {
+    name = benches;
+    // Flamegraphs can be generated by passing the `--profile-time SECONDS` argument
+    // to the benchmark. The SVG files can be found in the bazel output directory.
+    config = Criterion::default().with_profiler(PProfProfiler::new(499, Output::Flamegraph(None)));
+    targets = handle_ingress
+}
 
 criterion_main!(benches);

@@ -1,16 +1,13 @@
 //! Wrapper to read the consensus pool
 
-use crate::{lookup_replica_version, registry_version_at_height};
+use crate::registry_version_at_height;
 use ic_interfaces::batch_payload::PastPayload;
 use ic_interfaces::consensus_pool::*;
-use ic_interfaces_registry::RegistryClient;
-use ic_logger::ReplicaLogger;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 use ic_types::{
-    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, replica_config::ReplicaConfig,
-    Height, NodeId, RegistryVersion, ReplicaVersion, Time,
+    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, Height, RegistryVersion, Time,
 };
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::cmp::Ordering;
+use std::time::Instant;
 
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
@@ -67,16 +64,14 @@ impl<'a> PoolReader<'a> {
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
     /// `min` and `max`. This assumes the correctness of the state of the pool.
     pub fn get_range(
-        &'a self,
+        &self,
         block: Block,
         min: Height,
         max: Height,
-    ) -> Box<dyn Iterator<Item = Block> + 'a> {
-        Box::new(
-            self.chain_iterator(block)
-                .skip_while(move |block| block.height > max)
-                .take_while(move |block| block.height >= min),
-        )
+    ) -> impl Iterator<Item = Block> + '_ {
+        self.chain_iterator(block)
+            .skip_while(move |block| block.height > max)
+            .take_while(move |block| block.height >= min)
     }
 
     /// Return a `Vec` of all of the `Payload` between the provided `start`
@@ -96,10 +91,12 @@ impl<'a> PoolReader<'a> {
             .collect()
     }
 
-    /// Returns the parent of the given block if there exist one.
-    pub fn get_parent(&self, child: &Block) -> Option<Block> {
-        match child.height.cmp(&self.get_catch_up_height()) {
-            Ordering::Greater => match self.get_block(&child.parent, child.height.decrement()) {
+    /// Returns the parent of the given block if there exists one.
+    pub fn get_parent(&self, child: &HashedBlock) -> Option<HashedBlock> {
+        match child.height().cmp(&self.get_catch_up_height()) {
+            Ordering::Greater => match self
+                .get_block(&child.as_ref().parent, child.height().decrement())
+            {
                 Ok(block) => Some(block),
                 Err(OnlyError::NoneAvailable) => None,
                 Err(OnlyError::MultipleValues) => panic!("Multiple parents found for {:?}", child),
@@ -109,7 +106,11 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Return a valid block with the matching hash and height if it exists.
-    pub fn get_block(&self, hash: &CryptoHashOf<Block>, h: Height) -> Result<Block, OnlyError> {
+    pub fn get_block(
+        &self,
+        hash: &CryptoHashOf<Block>,
+        h: Height,
+    ) -> Result<HashedBlock, OnlyError> {
         match h.cmp(&self.get_catch_up_height()) {
             Ordering::Less => Err(OnlyError::NoneAvailable),
             Ordering::Equal => {
@@ -117,7 +118,7 @@ impl<'a> PoolReader<'a> {
                 if cup.content.block.get_hash() != hash {
                     Err(OnlyError::NoneAvailable)
                 } else {
-                    Ok(cup.content.block.into_inner())
+                    Ok(cup.content.block)
                 }
             }
             Ordering::Greater => {
@@ -130,7 +131,7 @@ impl<'a> PoolReader<'a> {
                     .collect();
                 match blocks.len() {
                     0 => Err(OnlyError::NoneAvailable),
-                    1 => Ok(blocks.remove(0).into()),
+                    1 => Ok(blocks.remove(0).content),
                     _ => Err(OnlyError::MultipleValues),
                 }
             }
@@ -143,7 +144,7 @@ impl<'a> PoolReader<'a> {
         &self,
         hash: &CryptoHashOf<Block>,
         h: Height,
-    ) -> Result<Block, OnlyError> {
+    ) -> Result<HashedBlock, OnlyError> {
         self.get_block(hash, h).and_then(|block| {
             if h > self.get_catch_up_height() {
                 if self
@@ -161,6 +162,12 @@ impl<'a> PoolReader<'a> {
                 Ok(block)
             }
         })
+    }
+
+    /// Return the the first instant at which a block with the given hash was inserted
+    /// into the consensus pool. Returns None if no timestamp was found.
+    pub fn get_block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
+        self.pool.block_instant(hash)
     }
 
     /// Return the finalized block of a given height which is either the genesis
@@ -194,7 +201,7 @@ impl<'a> PoolReader<'a> {
                     // the pool. Since there is only one block at this height,
                     // we know that this block must be a part of that finalized
                     // chain.
-                    (Some(block), None) => Some(block),
+                    (Some(block), None) => Some(block.into_inner()),
                     // If we have multiple notarized blocks, create a finalization height range,
                     // starting from `h`, then get the next finalization above `h`, and walk the chain
                     // back to `h`.
@@ -212,7 +219,7 @@ impl<'a> PoolReader<'a> {
                             .finalization()
                             .get_by_height_range(height_range)
                             .next()
-                            .and_then(|f| self.get_block(&f.content.block, f.content.height).ok())
+                            .and_then(|f| self.get_block(&f.content.block, f.content.height).ok().map(|block| block.into_inner()))
                             .and_then(|block| self.follow_to_height(block, h))
                     }
                 }
@@ -221,14 +228,11 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Return all valid notarized blocks of a given height.
-    pub fn get_notarized_blocks(&'a self, h: Height) -> Box<dyn Iterator<Item = Block> + 'a> {
+    pub fn get_notarized_blocks(&'a self, h: Height) -> Box<dyn Iterator<Item = HashedBlock> + 'a> {
         match h.cmp(&self.get_catch_up_height()) {
             Ordering::Less => Box::new(std::iter::empty()),
             Ordering::Equal => Box::new(std::iter::once(
-                self.get_highest_catch_up_package()
-                    .content
-                    .block
-                    .into_inner(),
+                self.get_highest_catch_up_package().content.block,
             )),
             Ordering::Greater => Box::new(
                 self.pool
@@ -303,8 +307,8 @@ impl<'a> PoolReader<'a> {
         self.cache.catch_up_package()
     }
 
-    /// Get the DKG summary block with greatest height.
-    pub fn get_highest_summary_block(&self) -> Block {
+    /// Get the finalized DKG summary block with greatest height.
+    pub fn get_highest_finalized_summary_block(&self) -> Block {
         self.cache.summary_block()
     }
 
@@ -343,16 +347,15 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Get the round start time of a given height, which is the max timestamp
-    /// of first notarization and random beacon of the previous height.
-    /// Return None if a timestamp is not found.
+    /// of first notarization and random beacon of the previous height. Return
+    /// `None` if no suitable artifact indicating a round start has been found.
     pub fn get_round_start_time(&self, height: Height) -> Option<Time> {
         let validated = self.pool.validated();
         let catch_up_height = self.get_catch_up_height();
 
-        let get_random_beacon_time = |h| {
-            self.get_random_beacon(h)
-                .and_then(|x| validated.get_timestamp(&x.get_id()))
-        };
+        if height <= catch_up_height {
+            return None;
+        }
 
         let get_notarization_time = |h| {
             validated
@@ -362,27 +365,69 @@ impl<'a> PoolReader<'a> {
                 .min()
         };
 
-        if height > catch_up_height {
-            let prev_height = height.decrement();
-            // Here we stop early if random beacon time is not available, to avoid doing
-            // a redundant lookup on notarizations.
-            get_random_beacon_time(prev_height)
-                .and_then(|random_beacon_time| {
-                    get_notarization_time(prev_height)
-                        .map(|notarization_time| notarization_time.max(random_beacon_time))
-                })
-                .or_else(|| {
-                    // If notarization has already been purged at catch_up_height, we use the time
-                    // of the CatchUpPackage instead.
-                    if prev_height == catch_up_height {
-                        validated.get_timestamp(&self.get_highest_catch_up_package().get_id())
-                    } else {
-                        None
-                    }
-                })
-        } else {
-            None
+        let prev_height = height.decrement();
+        // Here we stop early if random beacon time is not available, to avoid doing
+        // a redundant lookup on notarizations.
+        self.get_random_beacon(prev_height)
+            .and_then(|x| validated.get_timestamp(&x.get_id()))
+            .and_then(|random_beacon_time| {
+                get_notarization_time(prev_height)
+                    .map(|notarization_time| notarization_time.max(random_beacon_time))
+            })
+            .or_else(|| {
+                // If notarization and random beacon have already been purged at
+                // catch_up_height, we use the time of the CatchUpPackage instead.
+                if prev_height == catch_up_height {
+                    validated.get_timestamp(&self.get_highest_catch_up_package().get_id())
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Get the round start instant of a given height, which is the max instant
+    /// of first notarization and random beacon of the previous height. If either
+    /// of the messages don't have instants, we use the given fallback instance.
+    /// Return `None` if no suitable artifact indicating a round start has been found.
+    ///
+    /// The reason we have a fallback for instants is because they are not persisted
+    /// on disk, so we could lose instants when e.g. the replica restarts due to
+    /// updates or crashes. We also don't collect instants in the uncached pool during
+    /// genesis.
+    pub fn get_round_start_instant(&self, height: Height, fallback: Instant) -> Option<Instant> {
+        let validated = self.pool.validated();
+        let catch_up_height = self.get_catch_up_height();
+
+        if height <= catch_up_height {
+            return None;
         }
+
+        let get_notarization_instant = |h| {
+            validated
+                .notarization()
+                .get_by_height(h)
+                .map(|x| self.pool.message_instant(&x.get_id()).unwrap_or(fallback))
+                .min()
+        };
+
+        let prev_height = height.decrement();
+        // Here we stop early if random beacon time is not available, to avoid doing
+        // a redundant lookup on notarizations.
+        self.get_random_beacon(prev_height)
+            .map(|x| self.pool.message_instant(&x.get_id()).unwrap_or(fallback))
+            .and_then(|random_beacon_time| {
+                get_notarization_instant(prev_height)
+                    .map(|notarization_time| notarization_time.max(random_beacon_time))
+            })
+            .or_else(|| {
+                // If notarization and random beacon have already been purged at
+                // catch_up_height, we use the time of the CatchUpPackage instead.
+                (prev_height == catch_up_height).then(|| {
+                    self.pool
+                        .message_instant(&self.get_highest_catch_up_package().get_id())
+                        .unwrap_or(fallback)
+                })
+            })
     }
 
     /// Get all valid random beacon shares at the given height.
@@ -498,43 +543,17 @@ impl<'a> PoolReader<'a> {
         None
     }
 
-    /// Returns the set of DKG messages (indexed by the dealer Id) from the
-    /// finalized tip to the highest summary block.
-    pub fn get_dkg_payloads(&self) -> BTreeMap<NodeId, NiDkgDealing> {
-        self.chain_iterator(self.get_finalized_tip())
-            .take_while(|block| !block.payload.is_summary())
-            .flat_map(|block| {
-                block
-                    .payload
-                    .as_ref()
-                    .as_data()
-                    .dealings
-                    .messages
-                    .clone()
-                    .into_iter()
-            })
-            .map(|message| (message.signature.signer, message.content.dealing))
-            .collect()
-    }
-
-    /// Return the replica version as recorded in the block DKG summary of
-    /// the highest catch up package.
-    ///
-    /// Return None in case of registry lookup failure.
-    pub fn get_replica_version_from_highest_catch_up_package(
-        &self,
-        registry_client: &dyn RegistryClient,
-        replica_config: &ReplicaConfig,
-        log: &ReplicaLogger,
-    ) -> Option<ReplicaVersion> {
-        let catch_up_package = self.get_highest_catch_up_package();
-        let registry_version = catch_up_package.content.registry_version();
-        lookup_replica_version(
-            registry_client,
-            replica_config.subnet_id,
-            log,
-            registry_version,
-        )
+    /// Returns the height of the next CUP.
+    pub fn get_next_cup_height(&self) -> Height {
+        self.get_highest_catch_up_package()
+            .content
+            .block
+            .as_ref()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .get_next_start_height()
     }
 }
 
@@ -567,8 +586,9 @@ where
 pub mod test {
     use super::*;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_interfaces_registry::RegistryClient;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
     #[test]
     fn test_get_dkg_summary_block() {
@@ -641,7 +661,7 @@ pub mod test {
                 pool_reader.dkg_summary_block_for_finalized_height(block4.height)
             );
             // The summary of block5 should be the highest summary block eventhough no CUP was created at that height.
-            let summary = pool_reader.get_highest_summary_block();
+            let summary = pool_reader.get_highest_finalized_summary_block();
             assert_eq!(
                 Some(summary.clone()),
                 pool_reader.dkg_summary_block(&block5)
@@ -672,6 +692,7 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let start = pool.make_next_block();
+            pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
             pool.insert_block_chain_with(start.clone(), Height::from(10));
             let ten_block = pool
                 .validated()
@@ -727,19 +748,22 @@ pub mod test {
     // sorted in ascending order.
     fn test_get_by_height_range() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
-            // Let's generate 4 proposals so that 2 of them end up in the
-            // unvalidated pool and have the same height.
             let rounds = 30;
-            let replicas = 3;
+            let replicas = 10;
+            let f = 3;
+            let Dependencies { mut pool, .. } = dependencies(pool_config, replicas);
+
+            // Because `TestConsensusPool::advance_round` alternates between
+            // putting blocks in validated and unvalidated pools for each rank,
+            // we expect (f+1)/2 blocks in the unvalidated pool per round.
             let mut round = pool
                 .prepare_round()
-                .with_replicas(replicas)
-                .with_new_block_proposals(replicas + 1)
-                .with_random_beacon_shares(replicas)
-                .with_notarization_shares(replicas)
-                .with_finalization_shares(replicas);
-            // Grow the artifact pool for `rounds` mimicking a subnet with 3 replicas.
+                .with_replicas(replicas as u32)
+                .with_new_block_proposals(f + 1)
+                .with_random_beacon_shares(replicas as u32)
+                .with_notarization_shares(replicas as u32)
+                .with_finalization_shares(replicas as u32);
+            // Grow the artifact pool for `rounds`.
             for _ in 0..rounds {
                 round.advance();
             }
@@ -764,9 +788,9 @@ pub mod test {
                     Height::from((rounds * 2) as u64),
                 ))
                 .collect::<Vec<_>>();
-            // We expect to see `2*rounds` unvalidated block proposals sorted by
+            // We expect to see `rounds * ((f+1)/2)` unvalidated block proposals sorted by
             // height in ascending order.
-            assert_eq!(artifacts.len(), 2 * rounds);
+            assert_eq!(artifacts.len(), rounds * ((f as usize + 1) / 2));
             for i in 0..artifacts.len() - 1 {
                 // Heights are ascending, but NOT unique.
                 assert!(artifacts[i].content.height() <= artifacts[i + 1].content.height());

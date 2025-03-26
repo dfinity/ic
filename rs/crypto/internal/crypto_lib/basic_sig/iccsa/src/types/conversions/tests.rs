@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use crate::types::conversions::PublicKeyFromBytesError;
 use crate::types::PublicKey;
 use crate::types::PublicKeyBytes;

@@ -1,17 +1,10 @@
-use crate::{
-    pb::v1::{
-        governance::{
-            followers_map::Followers, FollowersMap, GovernanceCachedMetrics, MakingSnsProposal,
-            Migrations, NeuronInFlightCommand,
-        },
-        neuron::Followees,
-        Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent,
-    },
-    storage::{NeuronIdU64, Signed32, TopicSigned32},
+use crate::pb::v1::{
+    governance::{FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
+    neuron::Followees,
+    Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+    NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
+    XdrConversionRate as XdrConversionRatePb,
 };
-use ic_nervous_system_governance::index::neuron_following::HeapNeuronFollowingIndex;
-use ic_nns_common::pb::v1::NeuronId;
 use std::collections::{BTreeMap, HashMap};
 
 /// A GovernanceProto representation on the heap, which should have everything except for neurons.
@@ -31,74 +24,81 @@ pub struct HeapGovernanceData {
     pub short_voting_period_seconds: u64,
     pub neuron_management_voting_period_seconds: u64,
     pub metrics: Option<GovernanceCachedMetrics>,
-    pub most_recent_monthly_node_provider_rewards: Option<MostRecentMonthlyNodeProviderRewards>,
+    pub most_recent_monthly_node_provider_rewards: Option<MonthlyNodeProviderRewards>,
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,
     pub making_sns_proposal: Option<MakingSnsProposal>,
-    pub migrations: Option<Migrations>,
+    pub xdr_conversion_rate: XdrConversionRate,
+    pub restore_aging_summary: Option<RestoreAgingSummary>,
 }
 
-fn proto_to_heap_topic_followee_index(
-    proto: HashMap<i32, FollowersMap>,
-) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
-    let map = proto
-        .into_iter()
-        .map(|(topic_i32, followers_map)| {
-            let topic = Signed32(topic_i32);
+/// Internal representation for `XdrConversionRatePb`.
+#[derive(Clone, Debug, Default)]
+pub struct XdrConversionRate {
+    /// Time at which this rate has been fetched.
+    pub timestamp_seconds: u64,
 
-            let followers_map = followers_map
-                .followers_map
-                .into_iter()
-                .map(|(neuron_id, followers)| {
-                    let followers = followers
-                        .followers
-                        .into_iter()
-                        .map(|neuron_id| neuron_id.id)
-                        .collect();
-                    (neuron_id, followers)
-                })
-                .collect();
-            (topic, followers_map)
-        })
-        .collect();
-    HeapNeuronFollowingIndex::new(map)
+    /// Number of 1/10,000ths of XDR that 1 ICP is worth.
+    pub xdr_permyriad_per_icp: u64,
 }
 
-fn heap_topic_followee_index_to_proto(
-    heap: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
-) -> HashMap<i32, FollowersMap> {
-    heap.into_inner()
-        .into_iter()
-        .map(|(topic, followers_map)| {
-            let topic = topic.0;
-            let followers_map = followers_map
-                .into_iter()
-                .map(|(followee, followers)| {
-                    let followers = Followers {
-                        followers: followers.into_iter().map(|id| NeuronId { id }).collect(),
-                    };
-                    (followee, followers)
-                })
-                .collect();
+impl TryFrom<XdrConversionRatePb> for XdrConversionRate {
+    type Error = String;
 
-            let followers_map = FollowersMap { followers_map };
+    fn try_from(src: XdrConversionRatePb) -> Result<Self, Self::Error> {
+        let XdrConversionRatePb {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
+        } = src;
 
-            (topic, followers_map)
+        let Some(timestamp_seconds) = timestamp_seconds else {
+            return Err("XdrConversionRate.timestamp_seconds must be specified.".to_string());
+        };
+
+        let Some(xdr_permyriad_per_icp) = xdr_permyriad_per_icp else {
+            return Err("XdrConversionRate.xdr_permyriad_per_icp must be specified.".to_string());
+        };
+
+        Ok(Self {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
         })
-        .collect()
+    }
+}
+
+impl From<XdrConversionRate> for XdrConversionRatePb {
+    fn from(src: XdrConversionRate) -> Self {
+        let XdrConversionRate {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
+        } = src;
+
+        Self {
+            timestamp_seconds: Some(timestamp_seconds),
+            xdr_permyriad_per_icp: Some(xdr_permyriad_per_icp),
+        }
+    }
+}
+
+/// Converts a vector of u8s to array of length 32, which is the length needed for our rng seed.
+/// If the array is the wrong size, this returns an error.
+fn vec_to_array(v: Vec<u8>) -> Result<[u8; 32], String> {
+    <[u8; 32]>::try_from(v).map_err(|v| format!("Expected 32 bytes, got {}", v.len()))
 }
 
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because
 /// we have a dedicated struct NeuronStore owning the heap neurons.
 /// Does not guarantee round-trip equivalence between this and
 /// reassemble_governance_proto if the proto has fields that are None, as they might be filled in by default values.
+#[allow(clippy::type_complexity)]
 pub fn split_governance_proto(
     governance_proto: GovernanceProto,
 ) -> (
     BTreeMap<u64, Neuron>,
-    HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    HashMap<i32, FollowersMap>,
     HeapGovernanceData,
+    Option<[u8; 32]>,
 ) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
@@ -124,13 +124,26 @@ pub fn split_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
         topic_followee_index,
+        xdr_conversion_rate,
+        restore_aging_summary,
+        rng_seed,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
         neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
-    let topic_followee_index = proto_to_heap_topic_followee_index(topic_followee_index);
+
+    let xdr_conversion_rate =
+        xdr_conversion_rate.expect("Governance.xdr_conversion_rate must be specified.");
+
+    let xdr_conversion_rate =
+        XdrConversionRate::try_from(xdr_conversion_rate).unwrap_or_else(|err| {
+            panic!("Deserialization failed for XdrConversionRate: {}", err);
+        });
+
+    let rng_seed = rng_seed
+        .map(|seed| vec_to_array(seed).ok())
+        .and_then(|seed| seed);
 
     (
         neurons,
@@ -153,8 +166,10 @@ pub fn split_governance_proto(
             maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons,
             making_sns_proposal,
-            migrations,
+            xdr_conversion_rate,
+            restore_aging_summary,
         },
+        rng_seed,
     )
 }
 
@@ -162,8 +177,9 @@ pub fn split_governance_proto(
 /// it can be serialized into UPGRADES_MEMORY.
 pub fn reassemble_governance_proto(
     neurons: BTreeMap<u64, Neuron>,
-    topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    topic_followee_index: HashMap<i32, FollowersMap>,
     heap_governance_proto: HeapGovernanceData,
+    rng_seed: Option<[u8; 32]>,
 ) -> GovernanceProto {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
@@ -188,10 +204,13 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
+        xdr_conversion_rate,
+        restore_aging_summary,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
+
+    let xdr_conversion_rate = XdrConversionRatePb::from(xdr_conversion_rate);
 
     GovernanceProto {
         neurons,
@@ -212,8 +231,10 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
-        topic_followee_index: heap_topic_followee_index_to_proto(topic_followee_index),
+        topic_followee_index,
+        xdr_conversion_rate: Some(xdr_conversion_rate),
+        restore_aging_summary,
+        rng_seed: rng_seed.map(|seed| seed.to_vec()),
     }
 }
 
@@ -221,8 +242,9 @@ pub fn reassemble_governance_proto(
 mod tests {
     use super::*;
 
-    use crate::pb::v1::{Neuron, ProposalData};
+    use crate::pb::v1::{governance::followers_map::Followers, Neuron, ProposalData};
 
+    use ic_nns_common::pb::v1::NeuronId;
     use maplit::{btreemap, hashmap};
 
     // The members are chosen to be the simplest form that's not their default().
@@ -245,15 +267,26 @@ mod tests {
             short_voting_period_seconds: 4,
             neuron_management_voting_period_seconds: Some(5),
             metrics: Some(GovernanceCachedMetrics::default()),
-            most_recent_monthly_node_provider_rewards: Some(
-                MostRecentMonthlyNodeProviderRewards::default(),
-            ),
+            most_recent_monthly_node_provider_rewards: Some(MonthlyNodeProviderRewards::default()),
             cached_daily_maturity_modulation_basis_points: Some(6),
             maturity_modulation_last_updated_at_timestamp_seconds: Some(7),
             spawning_neurons: Some(true),
             making_sns_proposal: Some(MakingSnsProposal::default()),
-            migrations: Some(Migrations::default()),
-            topic_followee_index: Default::default(),
+            topic_followee_index: hashmap! {
+                1 => FollowersMap {
+                    followers_map: hashmap! {
+                        2 => Followers {
+                            followers: vec![NeuronId { id: 3 }],
+                        },
+                    },
+                }
+            },
+            xdr_conversion_rate: Some(XdrConversionRatePb {
+                timestamp_seconds: Some(1),
+                xdr_permyriad_per_icp: Some(50_000),
+            }),
+            restore_aging_summary: None,
+            rng_seed: Some(vec![1u8; 32]),
         }
     }
 
@@ -261,35 +294,16 @@ mod tests {
     fn split_and_reassemble_equal() {
         let governance_proto = simple_governance_proto();
 
-        let (heap_neurons, topic_followee_index, heap_governance_data) =
+        let (heap_neurons, topic_followee_index, heap_governance_data, rng_seed) =
             split_governance_proto(governance_proto.clone());
 
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
+        let reassembled_governance_proto = reassemble_governance_proto(
+            heap_neurons,
+            topic_followee_index,
+            heap_governance_data,
+            rng_seed,
+        );
 
-        assert_eq!(reassembled_governance_proto, governance_proto);
-    }
-
-    #[test]
-    fn test_split_and_reassemble_with_topic_follower_index() {
-        let mut governance_proto = simple_governance_proto();
-        governance_proto.topic_followee_index = hashmap! {
-            1 => FollowersMap {
-                followers_map: hashmap! {
-                    2 => Followers {
-                        followers: vec![NeuronId { id: 3 }],
-                    },
-                },
-            }
-        };
-
-        let (heap_neurons, topic_followee_index, heap_governance_data) =
-            split_governance_proto(governance_proto.clone());
-
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
-
-        assert_eq!(reassembled_governance_proto.topic_followee_index.len(), 1);
         assert_eq!(reassembled_governance_proto, governance_proto);
     }
 
@@ -300,10 +314,14 @@ mod tests {
             ..simple_governance_proto()
         };
 
-        let (heap_neurons, topic_followee_index, heap_governance_data) =
+        let (heap_neurons, topic_followee_index, heap_governance_data, rng_seed) =
             split_governance_proto(governance_proto.clone());
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
+        let reassembled_governance_proto = reassemble_governance_proto(
+            heap_neurons,
+            topic_followee_index,
+            heap_governance_data,
+            rng_seed,
+        );
 
         assert_eq!(
             reassembled_governance_proto,
@@ -316,8 +334,12 @@ mod tests {
 
     #[test]
     fn private_voting_period_assumed_to_be_48h() {
+        let governance_proto = GovernanceProto {
+            xdr_conversion_rate: Some(XdrConversionRatePb::with_default_values()),
+            ..GovernanceProto::default()
+        };
         // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-        let (_, _, heap_governance_proto) = split_governance_proto(GovernanceProto::default());
+        let (_, _, heap_governance_proto, _) = split_governance_proto(governance_proto);
         assert_eq!(
             heap_governance_proto.neuron_management_voting_period_seconds,
             48 * 60 * 60

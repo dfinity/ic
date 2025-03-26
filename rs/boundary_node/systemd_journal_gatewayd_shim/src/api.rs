@@ -2,13 +2,13 @@ use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Context;
 use axum::{
-    body::{Body, StreamBody},
-    extract::{Query, State},
+    body::Body,
+    extract::{Query, Request, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use itertools::{concat, Itertools};
-use reqwest::{Method, Request};
+use reqwest::Method;
 use url::Url;
 
 use crate::client::HttpClient;
@@ -43,7 +43,7 @@ pub(crate) async fn entries(
         c,  // http_client
     )): State<(Url, HashSet<String>, Arc<dyn HttpClient>)>,
     Query(params): Query<Vec<(String, String)>>,
-    req: http::Request<Body>,
+    req: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate request
     let (ps_us, ps_other) =
@@ -92,11 +92,12 @@ pub(crate) async fn entries(
     });
 
     let (parts, body) = req.into_parts();
+    let body_stream = body.into_data_stream();
 
-    let mut upstream_req = Request::new(Method::GET, u);
+    let mut upstream_req = reqwest::Request::new(Method::GET, u);
 
     *upstream_req.headers_mut() = parts.headers;
-    *upstream_req.body_mut() = Some(body.into());
+    *upstream_req.body_mut() = Some(reqwest::Body::wrap_stream(body_stream));
 
     // Send request to upstream
     let resp = c
@@ -123,7 +124,7 @@ pub(crate) async fn entries(
 
     // Body
     let resp = b
-        .body(StreamBody::from(resp.bytes_stream()))
+        .body(Body::from_stream(resp.bytes_stream()))
         .context("failed to set response body")?;
 
     Ok(resp)

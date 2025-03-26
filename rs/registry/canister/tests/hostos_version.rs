@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
@@ -12,6 +11,7 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::{hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord};
 use ic_registry_keys::{make_hostos_version_key, make_node_record_key};
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
+use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
@@ -25,7 +25,7 @@ use common::test_helpers::{
     prepare_registry_with_nodes, prepare_registry_with_nodes_from_template,
 };
 
-const GOOD_PACKAGE_URL: &str = "http://release_package.tar.gz";
+const GOOD_PACKAGE_URL: &str = "http://release_package.tar.zst";
 const GOOD_SHA256_HEX: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
 
 // ~~~~~~~~~~ Adding versions ~~~~~~~~~~
@@ -380,11 +380,12 @@ fn test_the_anonymous_user_cannot_remove_a_version() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -474,11 +475,12 @@ fn test_a_canister_other_than_the_governance_canister_cannot_remove_a_version() 
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -546,11 +548,12 @@ fn test_the_governance_canister_can_remove_a_version() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -670,11 +673,12 @@ fn test_cannot_remove_used_version() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -751,11 +755,12 @@ fn test_the_anonymous_user_cannot_update_hostos_version() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -828,11 +833,12 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_hostos_versi
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -884,11 +890,12 @@ fn test_the_governance_canister_can_update_hostos_version() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -949,11 +956,12 @@ fn test_can_unset_nodes_hostos_version() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_hostos_version_key(&hostos_version_id),
-                        encode_or_panic(&HostosVersionRecord {
+                        HostosVersionRecord {
                             release_package_urls: vec![GOOD_PACKAGE_URL.to_string()],
                             release_package_sha256_hex: GOOD_SHA256_HEX.to_string(),
                             hostos_version_id: hostos_version_id.clone(),
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })

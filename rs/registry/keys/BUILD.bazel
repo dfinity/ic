@@ -4,12 +4,13 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "keys",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_keys",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/types/base_types",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:serde",
@@ -20,6 +21,8 @@ rust_test(
     name = "keys_test",
     crate = ":keys",
     deps = [
+        # Keep sorted.
         "@crate_index//:rand",
+        "@crate_index//:strum",
     ],
 )

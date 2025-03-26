@@ -1,0 +1,115 @@
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "oci_tar", "system_test_nns", "uvm_config_image")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
+    "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+]
+
+system_test_nns(
+    name = "ic_xc_ledger_suite_orchestrator_test",
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/nervous_system/clients",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nervous_system/root",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/wasm_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "ic_xc_cketh_test",
+    env = {
+        "CKETH_UVM_CONFIG_PATH": "$(rootpath :cketh_uvm_config_image)",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath //rs/ethereum/cketh/minter:cketh_minter.wasm.gz)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
+    },
+    tags = ["long_test"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            ":cketh_uvm_config_image",
+            "//rs/ethereum/cketh/minter:cketh_minter.wasm.gz",
+            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        ],
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/cketh/minter",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:hex-literal",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+    ],
+)
+
+filegroup(
+    name = "erc20_contract",
+    srcs = [
+        "ERC20.sol",
+    ],
+)
+
+oci_tar(
+    name = "foundry.tar",
+    image = "@foundry",
+    repo_tags = ["foundry:latest"],
+)
+
+uvm_config_image(
+    name = "cketh_uvm_config_image",
+    srcs = [
+        ":erc20_contract",
+        ":foundry.tar",
+        "//rs/ethereum/cketh/minter:helper_contracts",
+    ],
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)

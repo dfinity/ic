@@ -1,1 +1,0 @@
-ACTION=="add", KERNEL=="sev-guest", MODE="0777"

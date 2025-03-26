@@ -15,7 +15,7 @@ pub mod common;
 
 #[test]
 fn test_update_sns_subnet_list_can_be_called_via_nns_proposal() {
-    let machine = set_up_state_machine_with_nns(vec![]);
+    let machine = set_up_state_machine_with_nns();
 
     let principal = PrincipalId::new_user_test_id(1);
     let request = UpdateSnsSubnetListRequest {

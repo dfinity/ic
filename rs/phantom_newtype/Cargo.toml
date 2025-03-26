@@ -1,15 +1,16 @@
 [package]
-name = "phantom_newtype"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "phantom_newtype"
+version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+num-traits = { workspace = true }
 serde = { workspace = true }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

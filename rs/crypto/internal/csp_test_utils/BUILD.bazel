@@ -4,23 +4,19 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 rust_library(
     name = "csp_test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_csp_test_utils",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
         "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
-        "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/internal/crypto_service_provider",
-        "//rs/crypto/internal/logmon",
         "//rs/crypto/internal/test_vectors",
-        "//rs/monitoring/logger",
         "//rs/protobuf",
         "//rs/types/types",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
         "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",

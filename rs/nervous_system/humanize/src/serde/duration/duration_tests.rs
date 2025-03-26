@@ -8,7 +8,7 @@ fn test_round_trip() {
         expected_seconds: u64,
         expected_formatted_str: &str,
     ) {
-        #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+        #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
         struct T {
             #[serde(with = "crate::serde::duration")]
             duration: Duration,
@@ -30,7 +30,7 @@ fn test_round_trip() {
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("---\nduration: {}\n", expected_formatted_str),
+            format!("duration: {}\n", expected_formatted_str),
             "original_duration_str = {:?}",
             original_duration_str,
         );

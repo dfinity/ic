@@ -3,6 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/canonical_state/certification_version",
     "//rs/canonical_state/tree_hash",
     "//rs/crypto/tree_hash",
@@ -12,24 +14,29 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/types",
-    "@crate_index//:itertools",
     "@crate_index//:leb128",
-    "@crate_index//:scoped_threadpool",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
-    "@crate_index//:thiserror",
+    "@crate_index//:strum",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/tree_hash/test_utils",
+    "//rs/crypto/sha2",
     "//rs/registry/subnet_features",
     "//rs/sys",
-    "//rs/test_utilities",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:assert_matches",
@@ -37,12 +44,12 @@ DEV_DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
 ]
 
-DEV_MACRO_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
 ]
 
 rust_library(
@@ -50,7 +57,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_canonical_state",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -63,20 +70,20 @@ rust_test(
 rust_test(
     name = "compatibility_test",
     srcs = ["tests/compatibility.rs"],
-    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canonical_state"],
 )
 
 rust_test(
     name = "size_limit_visitor_test",
     srcs = ["tests/size_limit_visitor.rs"],
-    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canonical_state"],
 )
 
 rust_test(
     name = "hash_tree_test",
     srcs = ["tests/hash_tree.rs"],
-    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canonical_state"],
 )

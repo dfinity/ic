@@ -1,5 +1,3 @@
-#![allow(clippy::redundant_closure)]
-
 use ic_protobuf::registry::firewall::v1::FirewallRule;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -12,15 +10,12 @@ use proptest_derive::Arbitrary;
 // This path is not used in practice. The code should panic if it is.
 pub const FIREWALL_FILE_DEFAULT_PATH: &str = "/This/must/not/be/a/real/path";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(Arbitrary))]
-pub struct Config {
+pub struct ReplicaConfig {
     /// Path to use for storing state on the file system
-    #[cfg_attr(
-        test,
-        proptest(strategy = "any::<String>().prop_map(|x| PathBuf::from(x))")
-    )]
+    #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(PathBuf::from)"))]
     pub config_file: PathBuf,
     pub file_template: String,
     pub ipv4_tcp_rule_template: String,
@@ -40,7 +35,7 @@ pub struct Config {
     pub max_simultaneous_connections_per_ip_address: u32,
 }
 
-impl Default for Config {
+impl Default for ReplicaConfig {
     fn default() -> Self {
         Self {
             config_file: PathBuf::from(FIREWALL_FILE_DEFAULT_PATH),
@@ -55,6 +50,40 @@ impl Default for Config {
             tcp_ports_for_node_whitelist: vec![],
             udp_ports_for_node_whitelist: vec![],
             ports_for_http_adapter_blacklist: vec![],
+            max_simultaneous_connections_per_ip_address: 0,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(Arbitrary))]
+pub struct BoundaryNodeConfig {
+    /// Path to use for storing state on the file system
+    #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(PathBuf::from)"))]
+    pub config_file: PathBuf,
+    pub file_template: String,
+    pub ipv4_tcp_rule_template: String,
+    pub ipv6_tcp_rule_template: String,
+    pub ipv4_udp_rule_template: String,
+    pub ipv6_udp_rule_template: String,
+    #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(|_x| vec![])"))]
+    pub default_rules: Vec<FirewallRule>,
+    /// We allow a maximum of `max_simultaneous_connections_per_ip_address` persistent connections to any ip address.
+    /// Any ip address with `max_simultaneous_connections_per_ip_address` connections will be dropped if a new connection is attempted.
+    pub max_simultaneous_connections_per_ip_address: u32,
+}
+
+impl Default for BoundaryNodeConfig {
+    fn default() -> Self {
+        Self {
+            config_file: PathBuf::from(FIREWALL_FILE_DEFAULT_PATH),
+            file_template: String::default(),
+            ipv4_tcp_rule_template: String::default(),
+            ipv6_tcp_rule_template: String::default(),
+            ipv4_udp_rule_template: String::default(),
+            ipv6_udp_rule_template: String::default(),
+            default_rules: Vec::default(),
             max_simultaneous_connections_per_ip_address: 0,
         }
     }

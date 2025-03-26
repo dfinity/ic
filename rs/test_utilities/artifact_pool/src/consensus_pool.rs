@@ -1,40 +1,47 @@
+use batch::BatchPayload;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
-        PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
+        Mutations, PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
-    p2p::consensus::{ChangeResult, MutablePool},
+    p2p::consensus::{ArtifactTransmits, MutablePool},
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
-use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
+use ic_test_utilities::crypto::CryptoReturningOk;
+use ic_test_utilities_consensus::fake::*;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
-use ic_types::{
-    artifact_kind::ConsensusArtifact,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-};
 use ic_types::{consensus::*, crypto::*, *};
+use ic_types::{
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+    time::UNIX_EPOCH,
+};
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Instant;
 
 #[allow(clippy::type_complexity)]
 pub struct TestConsensusPool {
+    subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     pool: ConsensusPoolImpl,
     time_source: Arc<dyn TimeSource>,
     dkg_payload_builder:
         Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload>,
+    membership: Membership,
 }
 
 pub struct Round<'a> {
@@ -139,7 +146,7 @@ fn dkg_payload_builder_fn(
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
 ) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload> {
     Box::new(move |cons_pool, parent, validation_context| {
-        ic_consensus::dkg::create_payload(
+        ic_consensus_dkg::create_payload(
             subnet_id,
             &*registry_client,
             &*crypto,
@@ -182,37 +189,98 @@ impl TestConsensusPool {
                 ))
             }),
         ));
-        let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
+
+        let cup_contents = registry_client
+            .get_cup_contents(subnet_id, registry_client.get_latest_version())
+            .expect("Failed to retreive the DKG transcripts from registry");
+        let summary = get_dkg_summary_from_cup_contents(
+            cup_contents.value.expect("Missing CUP contents"),
+            subnet_id,
+            &*registry_client,
+            cup_contents.version,
+        )
+        .expect("Failed to get DKG summary from CUP contents");
+
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&ic_test_utilities::consensus::make_genesis(summary)).into(),
+            (&ic_test_utilities_consensus::make_genesis(summary)).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
+            time_source.clone(),
         );
+        let membership = Membership::new(pool.get_cache(), registry_client.clone(), subnet_id);
         TestConsensusPool {
+            subnet_id,
             registry_client,
             pool,
             time_source,
             dkg_payload_builder,
+            membership,
         }
     }
 
+    /// Utility function to determine the identity of the block maker with the
+    /// specified rank at a given height. Panics if this rank does not exist.
+    pub fn get_block_maker_by_rank(&self, height: Height, rank: Rank) -> NodeId {
+        let pool_reader = PoolReader::new(&self.pool);
+        let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
+        *self
+            .membership
+            .get_nodes(height)
+            .unwrap()
+            .iter()
+            .find(|node| {
+                self.membership
+                    .get_block_maker_rank(height, &prev_beacon, **node)
+                    == Ok(Some(rank))
+            })
+            .unwrap()
+    }
+
     pub fn make_next_block(&self) -> BlockProposal {
+        self.make_next_block_with_rank(Rank(0))
+    }
+
+    pub fn make_next_block_with_rank(&self, rank: Rank) -> BlockProposal {
         if let Some(parent) = self.latest_notarized_blocks().next() {
-            self.make_next_block_from_parent(&parent)
+            self.make_next_block_from_parent(&parent, rank)
         } else {
             panic!("Pool contains a valid notarization on a block that is not in the pool");
         }
     }
 
-    pub fn make_next_block_from_parent(&self, parent: &Block) -> BlockProposal {
+    pub fn make_next_block_from_parent(&self, parent: &Block, rank: Rank) -> BlockProposal {
         let mut block = Block::from_parent(parent);
-        block.context.registry_version = self.registry_client.get_latest_version();
+        block.rank = rank;
+        let registry_version = self.registry_client.get_latest_version();
+
+        // Increase time monotonically by at least initial_notary_delay
+        let settings = self
+            .registry_client
+            .get_notarization_delay_settings(self.subnet_id, registry_version)
+            .unwrap()
+            .expect("subnet record should be available");
+        let monotonic_block_increment = settings.initial_notary_delay
+            + settings.unit_delay * rank.0 as u32
+            + std::time::Duration::from_nanos(1);
+        block.context.time += monotonic_block_increment;
+
+        block.context.registry_version = registry_version;
+        let idkg = block.payload.as_ref().as_idkg().cloned();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
-        block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
-        BlockProposal::fake(block, node_test_id(0))
+        let payload = match dkg_payload {
+            dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
+            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dkg,
+                idkg,
+            }),
+        };
+        block.payload = Payload::new(ic_types::crypto::crypto_hash, payload);
+        let signer = self.get_block_maker_by_rank(block.height(), rank);
+        BlockProposal::fake(block, signer)
     }
 
     pub fn make_next_beacon(&self) -> RandomBeacon {
@@ -223,6 +291,27 @@ impl TestConsensusPool {
     pub fn make_next_tape(&self) -> RandomTape {
         let finalized_height = self.validated().finalization().max_height().unwrap();
         RandomTape::fake(RandomTapeContent::new(finalized_height))
+    }
+
+    /// Creates an equivocation proof for the given height and rank. Make sure
+    /// the rank is valid, otherwise this function panics.
+    pub fn make_equivocation_proof(&self, rank: Rank, height: Height) -> EquivocationProof {
+        let signer = self.get_block_maker_by_rank(height, rank);
+        EquivocationProof {
+            signer,
+            version: self
+                .pool
+                .validated()
+                .highest_catch_up_package()
+                .content
+                .version,
+            height,
+            subnet_id: self.subnet_id,
+            hash1: CryptoHashOf::new(CryptoHash(vec![1, 2, 3])),
+            signature1: BasicSigOf::new(BasicSig(vec![])),
+            hash2: CryptoHashOf::new(CryptoHash(vec![4, 5, 6])),
+            signature2: BasicSigOf::new(BasicSig(vec![])),
+        }
     }
 
     pub fn make_catch_up_package(&self, height: Height) -> CatchUpPackage {
@@ -264,6 +353,7 @@ impl TestConsensusPool {
                 HashedBlock::new(ic_types::crypto::crypto_hash, block),
                 HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon.clone()),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                None,
             ),
             signature: ThresholdSignature {
                 signer: random_beacon.signature.signer,
@@ -328,6 +418,15 @@ impl TestConsensusPool {
         height
     }
 
+    pub fn advance_round_normal_operation_no_finalization_n(&mut self, steps: u64) -> Height {
+        assert!(steps > 0, "Cannot advance for 0 steps.");
+        let mut height = Height::from(0);
+        for _ in 0..steps {
+            height = self.advance_round_normal_operation_no_finalization();
+        }
+        height
+    }
+
     // Advances the pool mimicking an idealized situation: 1 notarized and finalized
     // block in every round, and creating a CUP for summary heights.
     pub fn advance_round_normal_operation(&mut self) -> Height {
@@ -362,6 +461,33 @@ impl TestConsensusPool {
         let new_blocks = 1;
         let blocks_to_notarize = 1;
         let should_finalize = true;
+        let add_catch_up_package_if_needed = false;
+        let should_add_random_tape = true;
+        let n_shares = 0;
+        let rb_shares = 0;
+        let f_shares = 0;
+        let certified_height = None;
+        self.advance_round(
+            max_replicas,
+            new_blocks,
+            blocks_to_notarize,
+            add_catch_up_package_if_needed,
+            should_finalize,
+            should_add_random_tape,
+            n_shares,
+            rb_shares,
+            f_shares,
+            certified_height,
+        )
+    }
+
+    // Advances the pool mimicking an idealized situation: 1 notarized
+    // block in every round. However, no CUPs or finalizations are created.
+    pub fn advance_round_normal_operation_no_finalization(&mut self) -> Height {
+        let max_replicas = 10;
+        let new_blocks = 1;
+        let blocks_to_notarize = 1;
+        let should_finalize = false;
         let add_catch_up_package_if_needed = false;
         let should_add_random_tape = true;
         let n_shares = 0;
@@ -463,7 +589,9 @@ impl TestConsensusPool {
         let mut blocks = Vec::new();
         for i in 0..new_blocks {
             let parent = &candidates[rand_num.next().unwrap() % candidates.len()];
-            let mut block: Block = self.make_next_block_from_parent(parent).into();
+            let mut block: Block = self
+                .make_next_block_from_parent(parent, Rank(i as u64))
+                .into();
             // if it is a dkg summary block and catch up package is required, we must
             // finalize this round too.
             if block.payload.as_ref().is_summary() && add_catch_up_package_if_needed {
@@ -471,7 +599,6 @@ impl TestConsensusPool {
             } else {
                 add_catch_up_package_if_needed = false;
             }
-            block.rank = Rank(i as u64);
             if let Some(height) = certified_height {
                 block.context.certified_height = height;
             }
@@ -515,7 +642,7 @@ impl TestConsensusPool {
             let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
             let share = RandomBeaconShare {
                 signature: crypto
-                    .sign_threshold(&content, dkg_id)
+                    .sign_threshold(&content, &dkg_id)
                     .map(|signature| ThresholdSignatureShare {
                         signature,
                         signer: node_id,
@@ -574,14 +701,20 @@ impl TestConsensusPool {
         height
     }
 
-    pub fn notarize(&mut self, block: &BlockProposal) {
+    pub fn notarize(&mut self, block: &BlockProposal) -> Notarization {
         let content = NotarizationContent::new(block.height(), block.content.get_hash().clone());
-        self.insert_validated(Notarization::fake(content))
+        let notarization = Notarization::fake(content);
+        self.insert_validated(notarization.clone());
+
+        notarization
     }
 
-    pub fn finalize(&mut self, block: &BlockProposal) {
+    pub fn finalize(&mut self, block: &BlockProposal) -> Finalization {
         let content = FinalizationContent::new(block.height(), block.content.get_hash().clone());
-        self.insert_validated(Finalization::fake(content))
+        let finalization = Finalization::fake(content);
+        self.insert_validated(finalization.clone());
+
+        finalization
     }
 
     pub fn finalize_block(&mut self, block: &Block) {
@@ -628,7 +761,7 @@ impl TestConsensusPool {
         let mut result = Vec::new();
         let mut last = start;
         while last.height() <= to {
-            let next = self.make_next_block_from_parent(last.as_ref());
+            let next = self.make_next_block_from_parent(last.as_ref(), Rank(0));
             result.push(last.clone());
             self.insert_validated(last.clone());
             self.notarize(&last);
@@ -644,7 +777,7 @@ impl TestConsensusPool {
     pub fn insert_random_tape(&mut self, height: Height) {
         let msg = RandomTape::fake(RandomTapeContent::new(height)).into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(vec![ChangeAction::AddToValidated(
+        self.apply(vec![ChangeAction::AddToValidated(
             ValidatedConsensusArtifact {
                 msg,
                 timestamp: time_source.get_relative_time(),
@@ -654,13 +787,13 @@ impl TestConsensusPool {
 
     pub fn purge_validated_below<T: ConsensusMessageHashable + HasHeight>(&mut self, value: T) {
         let msg = value.into_message();
-        self.apply_changes(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
+        self.apply(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
     }
 
     pub fn insert_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(vec![ChangeAction::AddToValidated(
+        self.apply(vec![ChangeAction::AddToValidated(
             ValidatedConsensusArtifact {
                 msg,
                 timestamp: time_source.get_relative_time(),
@@ -670,14 +803,14 @@ impl TestConsensusPool {
 
     pub fn remove_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
-        self.apply_changes(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
+        self.apply(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
     }
 
     pub fn insert_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
         self.insert(UnvalidatedConsensusArtifact {
             message: value.into_message(),
             peer_id: node_test_id(0),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
 
@@ -706,10 +839,22 @@ impl ConsensusPool for TestConsensusPool {
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self.pool.as_block_cache()
     }
+
+    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+        self.pool.build_block_chain(start, end)
+    }
+
+    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
+        self.pool.block_instant(hash)
+    }
+
+    fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant> {
+        self.pool.message_instant(id)
+    }
 }
 
-impl MutablePool<ConsensusArtifact> for TestConsensusPool {
-    type ChangeSet = ChangeSet;
+impl MutablePool<ConsensusMessage> for TestConsensusPool {
+    type Mutations = Mutations;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
@@ -719,7 +864,7 @@ impl MutablePool<ConsensusArtifact> for TestConsensusPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
-        self.pool.apply_changes(change_set)
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
+        self.pool.apply(change_set)
     }
 }

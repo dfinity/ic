@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_canister(
+    name = "backtrace-canister",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    keep_name_section = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":backtrace_canister.did",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "backtrace_canister_test",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    data = ["backtrace_canister.did"],
+    env = {
+        "DID_PATH": "rs/rust_canisters/backtrace_canister/backtrace_canister.did",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "backtrace-canister-binary",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [],
+    deps = DEPENDENCIES,
+)

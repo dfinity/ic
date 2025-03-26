@@ -8,6 +8,4 @@ documentation.workspace = true
 
 [dependencies]
 on_wire = { path = "../on_wire" }
-dfn_core = { path = "../dfn_core" }
-ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }

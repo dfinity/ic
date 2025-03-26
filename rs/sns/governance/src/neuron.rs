@@ -4,6 +4,7 @@ use crate::pb::v1::{
     NeuronPermissionType, Vote,
 };
 use ic_base_types::PrincipalId;
+use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use std::{
     cmp::Ordering,
@@ -21,7 +22,7 @@ pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
 pub const DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER: u64 = 100;
 
 /// The state of a neuron
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum NeuronState {
     /// In this state, the neuron is not dissolving and has a specific
     /// `dissolve_delay` that is larger than zero.
@@ -38,7 +39,7 @@ pub enum NeuronState {
     Dissolved,
 }
 /// The status of an invocation of `remove_permission`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum RemovePermissionsStatus {
     /// This status indicates all PermissionTypes for a PrincipalId
     /// were removed from a neuron's permission list and therefore
@@ -55,6 +56,18 @@ impl Neuron {
         NeuronPermissionType::Vote,
         NeuronPermissionType::SubmitProposal,
         NeuronPermissionType::ManageVotingPermission,
+    ];
+
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_CONTROLLER:
+        &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::ManageVotingPermission,
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
+    ];
+
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_HOTKEY: &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
     ];
 
     // Utility methods on neurons.
@@ -169,6 +182,7 @@ impl Neuron {
     ///   and is applied against the total voting power of the neuron. It is represented
     ///   as a percent in the range of 0 and 100 where 0 will result in 0 voting power,
     ///   and 100 will result in unadjusted voting power.
+    ///
     /// max_dissolve_delay_seconds and max_neuron_age_for_age_bonus are defined in
     /// the nervous system parameters.
     pub fn voting_power(
@@ -229,53 +243,78 @@ impl Neuron {
         std::cmp::min(vad_stake, u64::MAX as u128) as u64
     }
 
-    /// Given the specified `ballots`, determine how the neuron would
-    /// vote on a proposal of `action` based on which neurons this
-    /// neuron follows on this action (or on the default action if this
-    /// neuron doesn't specify any followees for `action`).
+    /// Given the specified `ballots` and `proposal_criticality`, determine how the neuron would
+    /// vote on a proposal of `action` based on which neurons this neuron follows on this action
+    /// (or on the default action if this neuron doesn't specify any followees for `action`).
     pub(crate) fn would_follow_ballots(
         &self,
-        action: u64,
+        function_id: u64,
         ballots: &BTreeMap<String, Ballot>,
+        proposal_criticality: ProposalCriticality,
     ) -> Vote {
-        // Compute the list of followees for this action. If no
-        // following is specified for the action, use the followees
-        // from the 'Unspecified' action.
-        let unspecified_key = u64::from(&Action::Unspecified(Empty {}));
-        if let Some(followees) = self
-            .followees
-            .get(&(action))
-            .filter(|followees| !followees.followees.is_empty())
-            .or_else(|| self.followees.get(&unspecified_key))
-            // extract plain vector from 'Followees' proto
-            .map(|x| &x.followees)
-        {
-            // If, for some reason, a list of followees is specified
-            // but empty (this is not normal), don't vote 'no', as
-            // would be the natural result of the algorithm below, but
-            // instead don't cast a vote.
-            if followees.is_empty() {
-                return Vote::Unspecified;
-            }
-            let mut yes: usize = 0;
-            let mut no: usize = 0;
-            for f in followees.iter() {
-                if let Some(f_vote) = ballots.get(&f.to_string()) {
-                    if f_vote.vote == (Vote::Yes as i32) {
-                        yes += 1;
-                    } else if f_vote.vote == (Vote::No as i32) {
-                        no += 1;
-                    }
+        // Step 1: Who are the relevant followees?
+
+        let empty = vec![];
+        let get_followee_neuron_ids = |function_id| -> &Vec<NeuronId> {
+            self.followees
+                .get(&function_id)
+                .map(|followees_message| &followees_message.followees)
+                // If there was no Followees object, then result is empty Vec. Therefore, we treat
+                // None the same as Some(Followees { followees: vec![] }).
+                .unwrap_or(&empty)
+        };
+
+        let mut followee_neuron_ids = get_followee_neuron_ids(function_id);
+
+        // If the function is not critical, and this Neuron does not have followees specifically for
+        // the function, then fall back to the "catch-all" following.
+        if followee_neuron_ids.is_empty() {
+            use ProposalCriticality::{Critical, Normal};
+            match proposal_criticality {
+                Normal => {
+                    let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
+                    followee_neuron_ids = get_followee_neuron_ids(fallback_pseudo_function_id);
                 }
-            }
-            if 2 * yes > followees.len() {
-                return Vote::Yes;
-            }
-            if 2 * no >= followees.len() {
-                return Vote::No;
+                Critical => (),
             }
         }
-        // No followees specified.
+
+        // This is needed to avoid returning No in Step 3 due to no followees.
+        if followee_neuron_ids.is_empty() {
+            return Vote::Unspecified;
+        }
+
+        // Step 2: Count followee votes.
+        let mut yes: usize = 0;
+        let mut no: usize = 0;
+        for followee_neuron_id in followee_neuron_ids {
+            let followee_vote = match ballots.get(&followee_neuron_id.to_string()) {
+                Some(ballot) => ballot.vote,
+                None => {
+                    // We are following someone who doesn't even have an empty
+                    // ballot. Maybe this followee should be removed?
+                    continue;
+                }
+            };
+
+            if followee_vote == Vote::Yes as i32 {
+                yes += 1;
+            } else if followee_vote == Vote::No as i32 {
+                no += 1;
+            }
+        }
+
+        // Step 3: Use vote counts to decide which Vote option to return.
+
+        // If a majority of followees voted Yes, return Yes.
+        if 2 * yes > followee_neuron_ids.len() {
+            return Vote::Yes;
+        }
+        // If a majority for Yes can never be achieved, return No.
+        if 2 * no >= followee_neuron_ids.len() {
+            return Vote::No;
+        }
+        // Otherwise, we are still open to going either way.
         Vote::Unspecified
     }
 
@@ -750,6 +789,10 @@ impl NeuronId {
         subaccount[1..1 + id.len()].copy_from_slice(id);
         NeuronId::from(subaccount)
     }
+
+    pub fn test_neuron_ids<const N: usize>() -> [NeuronId; N] {
+        core::array::from_fn(|i| NeuronId::new_test_neuron_id(10 + i as u64))
+    }
 }
 
 impl From<Subaccount> for NeuronId {
@@ -793,469 +836,4 @@ impl PartialOrd for NeuronId {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pb::v1::neuron::DissolveState;
-    use proptest::prelude::proptest;
-
-    #[test]
-    fn test_is_vesting() {
-        let mut neuron = Neuron {
-            created_timestamp_seconds: 3400,
-            ..Default::default()
-        };
-
-        assert!(!neuron.is_vesting(0));
-        assert!(!neuron.is_vesting(10000));
-        neuron.vesting_period_seconds = Some(600);
-        assert!(neuron.is_vesting(3600));
-        assert!(neuron.is_vesting(4000));
-        assert!(!neuron.is_vesting(4001));
-        assert!(!neuron.is_vesting(10000));
-    }
-
-    #[test]
-    fn test_voting_power_fully_boosted() {
-        let base_stake = 100;
-        let neuron = Neuron {
-            cached_neuron_stake_e8s: base_stake,
-            neuron_fees_e8s: 0,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
-            aging_since_timestamp_seconds: 0,
-            voting_power_percentage_multiplier: 100,
-            ..Neuron::default()
-        };
-
-        assert_eq!(
-            neuron.voting_power(100, 100, 100, 100, 25),
-            base_stake
-            * 2 // dissolve_delay boost
-            * 5 / 4 // voting power boost
-        );
-    }
-
-    #[test]
-    fn test_voting_power_with_bonus_thresholds_zero() {
-        let base_stake = 100;
-        let neuron = Neuron {
-            cached_neuron_stake_e8s: base_stake,
-            neuron_fees_e8s: 0,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
-            aging_since_timestamp_seconds: 0,
-            voting_power_percentage_multiplier: 100,
-            ..Neuron::default()
-        };
-
-        assert_eq!(
-            neuron.voting_power(
-                100, // now_seconds
-                // These are the operative data of this test.
-                // In an earlier implementation, these would have cause divide by zero.
-                0,   // max_dissolve_delay_seconds
-                0,   // max_neuron_age_for_age_bonus
-                100, // max_dissolve_delay_bonus_percentage
-                25   // max_age_bonus_percentage
-            ),
-            base_stake
-        );
-    }
-
-    proptest! {
-        /// Tests that the voting power is increased by max_dissolve_delay_bonus_percentage
-        /// when the neuron's dissolve delay == max_dissolve_delay_seconds.
-        #[test]
-        fn test_voting_power_dissolve_delay_boost(
-            base_stake in 0u64..1_000_000,
-            dissolve_delay_seconds in 1u64..1_000_000,  // Needs to be > 0 due to values of 0 causing the dissolve delay bonus to never apply.
-            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    0, // now_seconds
-                    dissolve_delay_seconds,
-                    100, // max_neuron_age_for_age_bonus
-                    max_dissolve_delay_bonus_percentage,
-                    25 // max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_dissolve_delay_bonus_percentage / 100)
-            );
-        }
-
-        /// Tests that the voting power is increased by max_age_bonus_percentage
-        /// when the neuron's age == max_neuron_age_for_age_bonus.
-        #[test]
-        fn test_voting_power_age_boost(
-            base_stake in 0u64..1_000_000,
-            max_neuron_age_for_age_bonus in 1u64..1_000_000,  // Needs to be > 0 due to values of 0 causing the age bonus to never apply.
-            max_age_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: None,
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    max_neuron_age_for_age_bonus,
-                    100, // max_dissolve_delay_seconds
-                    max_neuron_age_for_age_bonus,
-                    100, // max_dissolve_delay_bonus_percentage
-                    max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_age_bonus_percentage / 100)
-            );
-        }
-
-        /// Tests that the voting power is increased by half of max_dissolve_delay_bonus_percentage
-        /// when the neuron's dissolve delay == max_dissolve_delay_seconds / 2.
-        #[test]
-        fn test_voting_power_dissolve_delay_boost_half(
-            base_stake in 0u64..1_000_000,
-            dissolve_delay_seconds in 0u64..1_000_000,
-            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    0, // now_seconds
-                    dissolve_delay_seconds * 2,
-                    100, // max_neuron_age_for_age_bonus
-                    max_dissolve_delay_bonus_percentage,
-                    25 // max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_dissolve_delay_bonus_percentage / 100 / 2)
-            );
-        }
-
-        /// Tests that the voting power is increased by half of max_age_bonus_percentage
-        /// when the neuron's age == max_neuron_age_for_age_bonus / 2.
-        #[test]
-        fn test_voting_power_age_boost_half(
-            base_stake in 0u64..1_000_000,
-            age in 0u64..1_000_000,
-            max_age_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: None,
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    age, // now_seconds
-                    100, // max_dissolve_delay_seconds
-                    age * 2, // max_neuron_age_for_age_bonus
-                    100, // max_dissolve_delay_bonus_percentage
-                    max_age_bonus_percentage // max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_age_bonus_percentage / 100 / 2)
-            );
-        }
-
-        /// Tests that the voting power is not increased when the neuron meets
-        /// neither bonus criteria (age or dissolve delay)
-        #[test]
-        fn test_voting_power_not_eligible_for_boost(
-            base_stake in 0u64..1_000_000,
-            max_dissolve_delay_seconds in 1u64..1_000_000,
-            max_dissolve_delay_bonus_percentage in 1u64..1_000_000,
-            age in 0u64..1_000_000,
-            max_age_bonus_percentage in 1u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: None,
-                aging_since_timestamp_seconds: age,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    age,
-                    max_dissolve_delay_seconds,
-                    max_age_bonus_percentage,
-                    max_dissolve_delay_bonus_percentage,
-                    max_age_bonus_percentage
-                ),
-                base_stake
-            );
-        }
-
-        /// This makes up random data and puts it into Neuron::voting_power,
-        /// which has asserts internally. This is testing that those asserts do not fire regardless of the inputs.
-        #[test]
-        fn test_no_voting_power_calculation_causes_panic(
-            base_stake in 0u64..1_000_000,
-            neuron_fees_e8s in 0u64..1_000_000,
-            aging_since_timestamp_seconds in 0u64..1_000_000,
-            voting_power_percentage_multiplier in 0u64..1_000_000,
-
-            now_seconds in 0u64..1_000_000,
-            dissolve_delay_seconds in 0u64..1_000_000,
-            max_dissolve_delay_seconds in 0u64..1_000_000,
-            max_neuron_age_for_age_bonus in 0u64..1_000_000,
-            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
-            max_age_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                aging_since_timestamp_seconds,
-                voting_power_percentage_multiplier,
-                ..Neuron::default()
-            };
-
-            neuron.voting_power(
-                now_seconds,
-                max_dissolve_delay_seconds,
-                max_neuron_age_for_age_bonus,
-                max_dissolve_delay_bonus_percentage,
-                max_age_bonus_percentage
-            );
-        }
-    }
-
-    /// Tests that the normal stake is computed as
-    /// cached neuron stake - neurons fees.  
-    #[test]
-    fn test_neuron_normal_stake() {
-        // create neuron with staked maturity
-        let neuron_id = NeuronId { id: vec![1, 2, 3] };
-        let neuron = Neuron {
-            id: Some(neuron_id),
-            cached_neuron_stake_e8s: 100,
-            neuron_fees_e8s: 10,
-            staked_maturity_e8s_equivalent: Some(50),
-            ..Default::default()
-        };
-
-        // The normal stake should corresponds to cached_neuron_stake - fees
-        let normal_stake: u64 = neuron.stake_e8s();
-        assert_eq!(normal_stake, 100 - 10);
-    }
-
-    /// Tests that the voting power stake is computed as
-    /// cached neuron stake - neurons fees + staked maturity.  
-    #[test]
-    fn test_neuron_voting_power_stake() {
-        // create neuron with staked maturity
-        let neuron_id = NeuronId { id: vec![1, 2, 3] };
-        let neuron = Neuron {
-            id: Some(neuron_id),
-            cached_neuron_stake_e8s: 100,
-            neuron_fees_e8s: 10,
-            staked_maturity_e8s_equivalent: Some(50),
-            ..Default::default()
-        };
-
-        // The voting power stake should correspond to cached stake - fee + staked maturity
-        let voting_power_stake: u64 = neuron.voting_power_stake_e8s();
-        assert_eq!(voting_power_stake, 100 - 10 + 50);
-    }
-
-    #[test]
-    fn increase_dissolve_delay_sets_age_correctly_for_dissolved_neurons() {
-        // We set NOW to const in the test since it's shared in the cases and the test impl fn
-        const NOW: u64 = 1000;
-        const MAX_DISSOLVE: u64 = 2000;
-        fn test_increase_dissolve_delay_by_1_on_dissolved_neuron(
-            current_aging_since_timestamp_seconds: u64,
-            current_dissolve_state: Option<DissolveState>,
-        ) {
-            let mut neuron = Neuron {
-                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
-                dissolve_state: current_dissolve_state,
-                ..Default::default()
-            };
-            // precondition, neuron is considered dissolved
-            assert_eq!(neuron.state(NOW), NeuronState::Dissolved);
-
-            neuron
-                .increase_dissolve_delay(NOW, 1, MAX_DISSOLVE)
-                .expect("Dissolve failed");
-
-            // Post-condition - always aging_since_timestamp_seconds = now
-            // always DissolveState::DissolveDelaySeconds(1)
-            assert_eq!(
-                neuron,
-                Neuron {
-                    aging_since_timestamp_seconds: NOW,
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
-                    ..Default::default()
-                }
-            );
-        }
-
-        #[rustfmt::skip]
-            let cases = [
-            // These invalid cases ensure that the method actually transforms "now" correctly
-            (0, Some(DissolveState::DissolveDelaySeconds(0))),
-            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
-            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
-            (0, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
-            (0, None),
-            // These are also inconsistent with what should be observed.
-            (NOW + 100, Some(DissolveState::DissolveDelaySeconds(0))),
-            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
-            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
-            (NOW + 100, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
-            (NOW + 100, None),
-            // Consistent with observations
-            (NOW - 100, Some(DissolveState::DissolveDelaySeconds(0))),
-            (NOW - 100, None),
-            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW))),
-            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(NOW - 1))),
-            (u64::MAX, Some(DissolveState::WhenDissolvedTimestampSeconds(0))),
-        ];
-
-        for (current_aging_since_timestamp_seconds, current_dissolve_state) in cases {
-            test_increase_dissolve_delay_by_1_on_dissolved_neuron(
-                current_aging_since_timestamp_seconds,
-                current_dissolve_state,
-            );
-        }
-    }
-
-    #[test]
-    fn increase_dissolve_delay_does_not_set_age_for_non_dissolving_neurons() {
-        const NOW: u64 = 1000;
-        const MAX_DISSOLVE: u64 = 2000;
-        fn test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
-            current_aging_since_timestamp_seconds: u64,
-            current_dissolve_delay_seconds: u64,
-        ) {
-            let mut non_dissolving_neuron = Neuron {
-                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    current_dissolve_delay_seconds,
-                )),
-                ..Default::default()
-            };
-
-            assert_eq!(non_dissolving_neuron.state(NOW), NeuronState::NotDissolving);
-
-            non_dissolving_neuron
-                .increase_dissolve_delay(NOW, 1, MAX_DISSOLVE)
-                .expect("Dissolve failed");
-
-            assert_eq!(
-                non_dissolving_neuron,
-                Neuron {
-                    // This field should be unaffected
-                    aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
-                    // This field's inner value should increment by 1
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                        current_dissolve_delay_seconds + 1
-                    )),
-                    ..Default::default()
-                }
-            );
-        }
-
-        // Test cases
-        for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, 2000] {
-            for current_dissolve_delay_seconds in [1, 10, 100, NOW, 1000, MAX_DISSOLVE - 1] {
-                test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
-                    current_aging_since_timestamp_seconds,
-                    current_dissolve_delay_seconds,
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn increase_dissolve_delay_set_age_to_u64_max_for_dissolving_neurons() {
-        const NOW: u64 = 1000;
-        const MAX_DISSOLVE: u64 = 2000;
-        fn test_increase_dissolve_delay_by_1_for_dissolving_neuron(
-            current_aging_since_timestamp_seconds: u64,
-            dissolved_at_timestamp_seconds: u64,
-        ) {
-            let mut neuron = Neuron {
-                aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
-                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                    dissolved_at_timestamp_seconds,
-                )),
-                ..Default::default()
-            };
-
-            assert_eq!(neuron.state(NOW), NeuronState::Dissolving);
-
-            neuron
-                .increase_dissolve_delay(NOW, 1, MAX_DISSOLVE)
-                .expect("Dissolve failed");
-
-            assert_eq!(
-                neuron,
-                Neuron {
-                    aging_since_timestamp_seconds: u64::MAX,
-                    dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                        dissolved_at_timestamp_seconds + 1
-                    )),
-                    ..Default::default()
-                }
-            );
-        }
-
-        for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, 2000] {
-            for dissolved_at_timestamp_seconds in [NOW + 1, NOW + 1000, NOW + MAX_DISSOLVE - 1] {
-                test_increase_dissolve_delay_by_1_for_dissolving_neuron(
-                    current_aging_since_timestamp_seconds,
-                    dissolved_at_timestamp_seconds,
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn neurons_with_governance_controller_are_nf() {
-        let neuron = Neuron {
-            permissions: vec![NeuronPermission {
-                principal: Some(PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
-                permission_type: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }],
-            ..Default::default()
-        };
-        assert!(neuron.is_neurons_fund_controlled())
-    }
-
-    #[test]
-    fn neurons_without_governance_controller_are_nf() {
-        let neuron = Neuron {
-            permissions: vec![NeuronPermission {
-                principal: Some(PrincipalId::new_user_test_id(1)),
-                permission_type: vec![NeuronPermissionType::ManagePrincipals as i32],
-            }],
-            ..Default::default()
-        };
-        assert!(!neuron.is_neurons_fund_controlled())
-    }
-}
+mod tests;

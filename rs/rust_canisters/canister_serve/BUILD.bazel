@@ -3,8 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/canister_log",
     "@crate_index//:by_address",
+    "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:maplit",
@@ -19,6 +21,7 @@ rust_library(
         "src/lib.rs",
     ],
     crate_name = "ic_canister_serve",
+    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     version = "0.1.0",
     deps = DEPENDENCIES,
 )

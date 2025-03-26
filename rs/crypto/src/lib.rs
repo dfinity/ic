@@ -16,82 +16,47 @@ mod common;
 mod keygen;
 mod sign;
 mod tls;
+mod vetkd;
 
+use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{
-    get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
+    MegaKeyFromRegistryError,
 };
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::CspPublicKeyStore;
+use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_crypto_utils_time::CurrentSystemTimeSource;
-use ic_interfaces::crypto::{BasicSigner, KeyManager, ThresholdSigVerifierByPublicKey};
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::crypto::KeyManager;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
-use ic_types::consensus::CatchUpContentProtobufBytes;
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
-use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::fmt;
 use std::sync::Arc;
 
 /// Defines the maximum number of entries contained in the
-/// `ThresholdSigDataStore`.
-pub const THRESHOLD_SIG_DATA_STORE_CAPACITY: usize = ThresholdSigDataStoreImpl::CAPACITY;
+/// `ThresholdSigDataStore` per tag, where tag is of type `NiDkgTag`.
+pub const THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG: usize =
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY;
 
 /// A type alias for `CryptoComponentImpl<Csp>`.
 /// See the Rust documentation of `CryptoComponentImpl`.
 pub type CryptoComponent = CryptoComponentImpl<Csp>;
-
-/// A crypto component that offers limited functionality and can be used outside
-/// of the replica process.
-///
-/// This is an intermediate solution before crypto runs in a separate process.
-///
-/// This should be used whenever crypto is required on a node, but a
-/// full-fledged `CryptoComponent` is not available. Example use cases are in
-/// separate process such as ic-fe or the orchestrator.
-///
-/// Do not instantiate a CryptoComponent outside of the replica process, since
-/// that may lead to problems with concurrent access to the secret key store.
-/// `CryptoComponentForNonReplicaProcess` guarantees that only methods are
-/// exposed that don't risk running into such concurrency issues, as they do not
-/// modify the secret key store.
-pub trait CryptoComponentForNonReplicaProcess:
-    KeyManager
-    + BasicSigner<MessageId>
-    + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
-    + TlsHandshake
-    + Send
-    + Sync // TODO(CRP-606): add API for authenticating registry queries.
-{
-}
-
-// Blanket implementation of `CryptoComponentForNonReplicaProcess` for all types
-// that fulfill the requirements.
-impl<T> CryptoComponentForNonReplicaProcess for T where
-    T: KeyManager
-        + BasicSigner<MessageId>
-        + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
-        + TlsHandshake
-        + Send
-        + Sync
-{
-}
 
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
 /// handshakes.
 pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
+    vault: Arc<dyn CspVault>,
     csp: C,
     registry_client: Arc<dyn RegistryClient>,
     // The node id of the node that instantiated this crypto component.
@@ -129,10 +94,13 @@ impl LockableThresholdSigDataStore {
     }
 }
 
+/// Methods required for testing. Ideally, this block would be `#[test]` code,
+/// but this is not possible as the methods are required outside of the crate.
 impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     /// Creates a crypto component using the given `csp` and fake `node_id`.
-    pub fn new_with_csp_and_fake_node_id(
+    pub fn new_for_test(
         csp: C,
+        vault: Arc<dyn CspVault>,
         logger: ReplicaLogger,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
@@ -142,12 +110,12 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
+            vault,
             registry_client,
             node_id,
-            logger: new_logger!(&logger),
+            logger,
             metrics,
-            time_source: time_source
-                .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(logger))),
+            time_source: time_source.unwrap_or_else(|| Arc::new(SysTimeSource::new())),
         }
     }
 }
@@ -223,13 +191,18 @@ impl CryptoComponentImpl<Csp> {
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::new(metrics_registry));
-        let csp = Csp::new(
+        let vault = vault_from_config(
             config,
             tokio_runtime_handle,
-            Some(new_logger!(&logger)),
+            new_logger!(&logger),
             Arc::clone(&metrics),
         );
-        let node_pks = csp
+        let csp = Csp::new_from_vault(
+            Arc::clone(&vault),
+            new_logger!(&logger),
+            Arc::clone(&metrics),
+        );
+        let node_pks = vault
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
         let node_signing_pk = node_pks
@@ -242,92 +215,15 @@ impl CryptoComponentImpl<Csp> {
         let crypto_component = CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
+            vault,
             registry_client,
             node_id,
-            logger: new_logger!(&logger),
+            time_source: Arc::new(SysTimeSource::new()),
+            logger,
             metrics,
-            time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
         };
         crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component
-    }
-
-    /// Creates a crypto component using a fake `node_id`.
-    ///
-    /// # Panics
-    /// Panics if the `config`'s vault type is `UnixSocket` and
-    /// `tokio_runtime_handle` is `None`.
-    pub fn new_with_fake_node_id(
-        config: &CryptoConfig,
-        tokio_runtime_handle: Option<tokio::runtime::Handle>,
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        logger: ReplicaLogger,
-        time_source: Arc<dyn TimeSource>,
-    ) -> Self {
-        let metrics = Arc::new(CryptoMetrics::none());
-        CryptoComponentImpl {
-            lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
-            csp: Csp::new(
-                config,
-                tokio_runtime_handle,
-                Some(logger.clone()),
-                Arc::clone(&metrics),
-            ),
-            registry_client,
-            node_id,
-            logger,
-            metrics,
-            time_source,
-        }
-    }
-
-    /// Creates a crypto component that offers limited functionality and can be
-    /// used outside of the replica process.
-    ///
-    /// Please refer to the trait documentation of
-    /// `CryptoComponentForNonReplicaProcess` for more details.
-    ///
-    /// If the `config`'s vault type is `UnixSocket`, a `tokio_runtime_handle`
-    /// must be provided, which is then used for the `async`hronous
-    /// communication with the vault via RPC for secret key operations. In most
-    /// cases, this is done by calling `tokio::runtime::Handle::block_on` and
-    /// it is the caller's responsibility to ensure that these calls to
-    /// `block_on` do not panic. This can be achieved, for example, by ensuring
-    /// that the crypto component's methods are not themselves called from
-    /// within a call to `block_on` (because calls to `block_on` cannot be
-    /// nested), or by wrapping them with `tokio::task::block_in_place`
-    /// and accepting the performance implications.
-    /// Because the asynchronous communication with the vault happens only for
-    /// secret key operations, for the `CryptoComponentImpl` the concerned
-    /// methods are
-    /// * `KeyManager::check_keys_with_registry`
-    /// * `BasicSigner::sign_basic`
-    ///
-    /// The methods of the `TlsHandshake` trait are unaffected by this.
-    ///
-    /// # NOTE:
-    /// Callers of this method are strongly encouraged to switch from using
-    /// `CryptoComponentForNonReplicaProcess`, to using the full crypto component,
-    /// by calling `new` instead of `new_for_non_replica_process`.
-    ///
-    /// # Panics
-    /// Panics if the `config`'s vault type is `UnixSocket` and
-    /// `tokio_runtime_handle` is `None`.
-    pub fn new_for_non_replica_process(
-        config: &CryptoConfig,
-        tokio_runtime_handle: Option<tokio::runtime::Handle>,
-        registry_client: Arc<dyn RegistryClient>,
-        logger: ReplicaLogger,
-        metrics_registry: Option<&MetricsRegistry>,
-    ) -> impl CryptoComponentForNonReplicaProcess {
-        CryptoComponentImpl::new(
-            config,
-            tokio_runtime_handle,
-            registry_client,
-            logger,
-            metrics_registry,
-        )
     }
 
     /// Returns the `NodeId` of this crypto component.
@@ -370,8 +266,8 @@ fn key_from_registry(
 ///  * Should not have too many collisions within a short time span (e.g., 5 minutes)
 ///  * The generation of the identifier should not block or panic
 ///  * The generation of the identifier should not require synchronization between threads
-fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
-    if logger.is_enabled_at(slog::Level::Debug, module_path) {
+fn get_log_id(logger: &ReplicaLogger) -> u64 {
+    if logger.is_enabled_at(slog::Level::Debug) {
         ic_types::time::current_time().as_nanos_since_unix_epoch()
     } else {
         0

@@ -1,7 +1,6 @@
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap, HashSet},
     hash::{Hash, Hasher},
-    path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, MutexGuard,
@@ -9,19 +8,17 @@ use std::{
     time::Duration,
 };
 
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{
+    AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
+};
 use ic_logger::ReplicaLogger;
 use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
-use ic_types::{
-    artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
-    chunkable::{ArtifactChunk, ArtifactChunkData, ArtifactErrorCode, ChunkId, Chunkable},
-    crypto::CryptoHash,
-    state_sync::{Manifest, MetaManifest, StateSyncVersion},
-    CryptoHashOfState, Height, NodeId, PrincipalId,
-};
-use tokio::{runtime::Handle, task::JoinHandle};
+use ic_quic_transport::Shutdown;
+use ic_state_manager::state_sync::types::StateSyncMessage;
+use ic_types::{crypto::CryptoHash, Height, NodeId, PrincipalId};
+use tokio::runtime::Handle;
 
 const META_MANIFEST_ID: u32 = u32::MAX - 1;
 
@@ -30,7 +27,7 @@ fn is_manifest_chunk(chunk_id: ChunkId) -> bool {
     chunk_id.get() > (u32::MAX >> 2)
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 struct StateInner {
     height: Height,
     /// Chunks part of this state. The actual chunks always consist of zeros for this
@@ -38,7 +35,7 @@ struct StateInner {
     chunks: BTreeMap<ChunkId, usize>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct State(Arc<Mutex<StateInner>>);
 
 impl Default for State {
@@ -102,7 +99,7 @@ impl State {
             .map(|chunk_size| vec![0; *chunk_size])
     }
 
-    /// Calulcates the artifact Id of the current state by hashing the ChunkId map.
+    /// Calculates the artifact Id of the current state by hashing the ChunkId map.
     pub fn artifact_id(&self) -> StateSyncArtifactId {
         let state = self.0.lock().unwrap();
         let mut hasher = DefaultHasher::new();
@@ -110,7 +107,7 @@ impl State {
         state.chunks.hash(&mut hasher);
         StateSyncArtifactId {
             height: state.height,
-            hash: CryptoHashOfState::from(CryptoHash(hasher.finish().to_be_bytes().to_vec())),
+            hash: CryptoHash(hasher.finish().to_be_bytes().to_vec()),
         }
     }
 
@@ -183,6 +180,8 @@ impl FakeStateSync {
 }
 
 impl StateSyncClient for FakeStateSync {
+    type Message = StateSyncMessage;
+
     fn available_states(&self) -> Vec<StateSyncArtifactId> {
         if self.disconnected.load(Ordering::SeqCst) {
             return vec![];
@@ -194,10 +193,10 @@ impl StateSyncClient for FakeStateSync {
         }
     }
 
-    fn start_state_sync(
+    fn maybe_start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
         if !self.uses_global() && id.height > self.current_height() && !self.disconnected() {
             return Some(Box::new(FakeChunkable::new(
                 self.local_state.clone(),
@@ -207,7 +206,7 @@ impl StateSyncClient for FakeStateSync {
         None
     }
 
-    fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
+    fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool {
         if !self.uses_global() {
             self.global_state.height() > id.height + Height::from(1)
         } else {
@@ -215,32 +214,16 @@ impl StateSyncClient for FakeStateSync {
         }
     }
 
-    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         if self.disconnected.load(Ordering::SeqCst) || id != &self.global_state.artifact_id() {
             return None;
         }
 
         if is_manifest_chunk(chunk_id) {
-            return Some(ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(vec![0; 100]),
-            });
+            return Some(vec![0; 100].into());
         }
 
-        self.global_state
-            .chunk(chunk_id)
-            .map(|chunk| ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(chunk),
-            })
-    }
-
-    fn deliver_state_sync(&self, msg: StateSyncMessage, _peer_id: NodeId) {
-        if !self.uses_global() {
-            self.local_state.set_height(msg.height);
-        } else {
-            panic!("Node that follows global state should not start state sync");
-        }
+        self.global_state.chunk(chunk_id).map(Chunk::from)
     }
 }
 
@@ -249,6 +232,7 @@ pub struct FakeChunkable {
     syncing_state: StateSyncArtifactId,
     // [meta-manifest, manifests, chunks]
     chunk_sets: [HashSet<ChunkId>; 3],
+    is_completed: bool,
 }
 
 impl FakeChunkable {
@@ -267,11 +251,12 @@ impl FakeChunkable {
             local_state,
             syncing_state: global_state.artifact_id(),
             chunk_sets,
+            is_completed: false,
         }
     }
 }
 
-impl Chunkable for FakeChunkable {
+impl Chunkable<StateSyncMessage> for FakeChunkable {
     /// Returns iterator for chunks to download.
     /// Tries to first download metamanifest, then manifest and then chunks. Does not advance if previous didn't complete.
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
@@ -287,42 +272,36 @@ impl Chunkable for FakeChunkable {
         Box::new(to_download.into_iter().map(ChunkId::from))
     }
 
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         for set in self.chunk_sets.iter_mut() {
             if set.is_empty() {
                 continue;
             }
-            if set.remove(&artifact_chunk.chunk_id) {
+            if set.remove(&chunk_id) {
                 break;
             } else {
-                panic!("Downloaded chunk {} twice", artifact_chunk.chunk_id)
+                panic!("Downloaded chunk {} twice", chunk_id)
             }
         }
 
         // Add chunk to state if not part of manifest
-        if !is_manifest_chunk(artifact_chunk.chunk_id) {
-            if let ArtifactChunkData::SemiStructuredChunkData(data) =
-                artifact_chunk.artifact_chunk_data
-            {
-                self.local_state
-                    .add_chunk(artifact_chunk.chunk_id, data.len())
-            } else {
-                panic!("Bug: Wrong artifact data type.")
-            }
+        if !is_manifest_chunk(chunk_id) {
+            self.local_state.add_chunk(chunk_id, chunk.as_bytes().len())
         }
 
         let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();
         if elems == 0 {
-            Ok(state_sync_artifact(self.syncing_state.clone()))
-        } else {
-            Err(ArtifactErrorCode::ChunksMoreNeeded)
+            self.local_state.set_height(self.syncing_state.height);
+            self.is_completed = true;
         }
+
+        Ok(())
     }
 }
 
 #[derive(Clone, Default)]
 pub struct SharableMockChunkable {
-    mock: Arc<Mutex<MockChunkable>>,
+    mock: Arc<Mutex<MockChunkable<StateSyncMessage>>>,
     chunks_to_download_calls: Arc<AtomicUsize>,
     add_chunks_calls: Arc<AtomicUsize>,
 }
@@ -334,7 +313,7 @@ impl SharableMockChunkable {
             ..Default::default()
         }
     }
-    pub fn get_mut(&self) -> MutexGuard<'_, MockChunkable> {
+    pub fn get_mut(&self) -> MutexGuard<'_, MockChunkable<StateSyncMessage>> {
         self.mock.lock().unwrap()
     }
     pub fn add_chunks_calls(&self) -> usize {
@@ -346,25 +325,24 @@ impl SharableMockChunkable {
     }
 }
 
-impl Chunkable for SharableMockChunkable {
+impl Chunkable<StateSyncMessage> for SharableMockChunkable {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         self.chunks_to_download_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunks_to_download()
     }
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().add_chunk(artifact_chunk)
+        self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
     }
 }
 
 #[derive(Clone, Default)]
 pub struct SharableMockStateSync {
-    mock: Arc<Mutex<MockStateSync>>,
+    mock: Arc<Mutex<MockStateSync<StateSyncMessage>>>,
     available_states_calls: Arc<AtomicUsize>,
-    start_state_sync_calls: Arc<AtomicUsize>,
-    should_cancel_calls: Arc<AtomicUsize>,
+    maybe_start_state_sync_calls: Arc<AtomicUsize>,
+    cancel_if_running_calls: Arc<AtomicUsize>,
     chunk_calls: Arc<AtomicUsize>,
-    deliver_state_sync_calls: Arc<AtomicUsize>,
 }
 
 impl SharableMockStateSync {
@@ -374,44 +352,42 @@ impl SharableMockStateSync {
             ..Default::default()
         }
     }
-    pub fn get_mut(&self) -> MutexGuard<'_, MockStateSync> {
+    pub fn get_mut(&self) -> MutexGuard<'_, MockStateSync<StateSyncMessage>> {
         self.mock.lock().unwrap()
     }
-    pub fn start_state_sync_calls(&self) -> usize {
-        self.start_state_sync_calls.load(Ordering::SeqCst)
+    pub fn maybe_start_state_sync_calls(&self) -> usize {
+        self.maybe_start_state_sync_calls.load(Ordering::SeqCst)
     }
     pub fn clear(&self) {
         self.available_states_calls.store(0, Ordering::SeqCst);
-        self.start_state_sync_calls.store(0, Ordering::SeqCst);
-        self.should_cancel_calls.store(0, Ordering::SeqCst);
+        self.maybe_start_state_sync_calls.store(0, Ordering::SeqCst);
+        self.cancel_if_running_calls.store(0, Ordering::SeqCst);
         self.chunk_calls.store(0, Ordering::SeqCst);
-        self.deliver_state_sync_calls.store(0, Ordering::SeqCst);
     }
 }
 
 impl StateSyncClient for SharableMockStateSync {
+    type Message = StateSyncMessage;
+
     fn available_states(&self) -> Vec<StateSyncArtifactId> {
         self.available_states_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().available_states()
     }
-    fn start_state_sync(
+    fn maybe_start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
-        self.start_state_sync_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().start_state_sync(id)
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
+        self.maybe_start_state_sync_calls
+            .fetch_add(1, Ordering::SeqCst);
+        self.mock.lock().unwrap().maybe_start_state_sync(id)
     }
-    fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
-        self.should_cancel_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().should_cancel(id)
+    fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool {
+        self.cancel_if_running_calls.fetch_add(1, Ordering::SeqCst);
+        self.mock.lock().unwrap().cancel_if_running(id)
     }
-    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         self.chunk_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunk(id, chunk_id)
-    }
-    fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
-        self.deliver_state_sync_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().deliver_state_sync(msg, peer_id)
     }
 }
 
@@ -425,23 +401,6 @@ pub fn latency_30ms_throughput_1000mbits() -> (Duration, usize) {
     (Duration::from_millis(30), 3_750_000)
 }
 
-fn state_sync_artifact(id: StateSyncArtifactId) -> Artifact {
-    let manifest = Manifest::new(StateSyncVersion::V0, vec![], vec![]);
-    let meta_manifest = MetaManifest {
-        version: StateSyncVersion::V0,
-        sub_manifest_hashes: vec![],
-    };
-
-    Artifact::StateSync(StateSyncMessage {
-        height: id.height,
-        root_hash: id.hash,
-        checkpoint_root: PathBuf::new(),
-        manifest,
-        meta_manifest: Arc::new(meta_manifest),
-        state_sync_file_group: Default::default(),
-    })
-}
-
 pub fn create_node(
     node_num: u64,
     log: ReplicaLogger,
@@ -450,7 +409,7 @@ pub fn create_node(
     uses_global: bool,
     global_state: State,
     link: (Duration, usize),
-) -> (Arc<FakeStateSync>, JoinHandle<()>) {
+) -> (Arc<FakeStateSync>, Shutdown) {
     let local_state = State::new();
     let state_sync = Arc::new(FakeStateSync {
         local_state,
@@ -459,10 +418,11 @@ pub fn create_node(
         disconnected: Arc::new(AtomicBool::new(false)),
     });
 
-    let (router, rx) = ic_state_sync_manager::build_axum_router(
-        state_sync.clone(),
-        log.clone(),
+    let (router, manager) = ic_state_sync_manager::build_state_sync_manager(
+        &log,
         &MetricsRegistry::default(),
+        rt,
+        state_sync.clone(),
     );
     let transport = transport_router.add_peer(
         NodeId::from(PrincipalId::new_node_test_id(node_num)),
@@ -470,21 +430,6 @@ pub fn create_node(
         link.0,
         link.1,
     );
-    let jh = ic_state_sync_manager::start_state_sync_manager(
-        log,
-        &MetricsRegistry::default(),
-        rt,
-        Arc::new(transport),
-        state_sync.clone(),
-        rx,
-    );
-
-    (state_sync, jh)
-}
-
-pub fn empty_artifact_chunk(chunk_id: ChunkId) -> ArtifactChunk {
-    ArtifactChunk {
-        chunk_id,
-        artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(Vec::new()),
-    }
+    let shutdown = manager.start(Arc::new(transport));
+    (state_sync, shutdown)
 }

@@ -4,11 +4,12 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use bitcoin::network::{
-    constants::ServiceFlags,
+use bitcoin::p2p::ServiceFlags;
+
+use bitcoin::p2p::{
     message::{CommandString, NetworkMessage},
     message_network::VersionMessage,
-    Address,
+    Address, Magic,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use rand::prelude::*;
@@ -81,7 +82,7 @@ pub struct ConnectionManager {
     logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
-    magic: u32,
+    magic: Magic,
     /// This field contains the number of connections the connection manager can manage at one time.
     max_connections: usize,
     /// This field contains the number of connections the connection manager must have in order to send messages.
@@ -300,6 +301,7 @@ impl ConnectionManager {
         if self.connections.contains_key(&address) {
             return Err(ConnectionManagerError::AlreadyConnected(address));
         }
+        #[allow(clippy::disallowed_methods)]
         let (writer, network_message_receiver) = unbounded_channel();
         let stream_event_sender = self.stream_event_sender.clone();
         let network_message_sender = self.network_message_sender.clone();
@@ -392,6 +394,10 @@ impl ConnectionManager {
         addr: &SocketAddr,
         network_message: NetworkMessage,
     ) -> ConnectionManagerResult<()> {
+        self.metrics
+            .bitcoin_messages_sent
+            .with_label_values(&[network_message.cmd()])
+            .inc();
         let conn = self.get_connection(addr)?;
         if conn.send(network_message).is_err() {
             conn.disconnect();
@@ -427,7 +433,15 @@ impl ConnectionManager {
             .get_connection(address)
             .map_err(|_| ProcessBitcoinNetworkMessageError::InvalidMessage)?;
         if !conn.is_seed() && !self.validate_received_version(message) {
-            warn!(self.logger, "Received an invalid version from {}", address);
+            warn!(
+                self.logger,
+                "Received an invalid version from {}. Version: {}; Height: {}; Services: {}, while current height is: {}",
+                address,
+                message.version,
+                message.start_height,
+                message.services,
+                self.current_height,
+            );
             return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
         }
         self.send_verack(address).ok();
@@ -576,10 +590,6 @@ impl ConnectionManager {
 
 impl Channel for ConnectionManager {
     fn send(&mut self, command: Command) -> Result<(), ChannelError> {
-        self.metrics
-            .bitcoin_messages_sent
-            .with_label_values(&[command.message.cmd()])
-            .inc();
         let Command { address, message } = command;
         if let Some(addr) = address {
             self.send_to(&addr, message).ok();
@@ -684,7 +694,8 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::{network::constants::ServiceFlags, Network};
+    use bitcoin::p2p::ServiceFlags;
+    use bitcoin::Network;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
@@ -917,10 +928,7 @@ mod test {
         let conn = manager
             .get_connection(&addr)
             .expect("there should be a seed connection");
-        assert!(matches!(
-            conn.state(),
-            ConnectionState::NodeDisconnected { timestamp: _ }
-        ));
+        assert!(matches!(conn.state(), ConnectionState::NodeDisconnected));
         assert_eq!(*conn.address_entry().addr(), addr);
         assert!(!manager.initial_address_discovery);
         assert_eq!(manager.get_max_number_of_connections(), 5);
@@ -944,6 +952,7 @@ mod test {
             RouterMetrics::new(&MetricsRegistry::default()),
         );
         let timestamp = SystemTime::now() - Duration::from_secs(60);
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
             let conn = Connection::new_with_state(
@@ -953,6 +962,7 @@ mod test {
                     writer,
                 },
                 ConnectionState::Connected { timestamp },
+                timestamp,
             );
             manager.connections.insert(addr, conn);
             manager.flag_version_handshake_timeouts();
@@ -989,6 +999,7 @@ mod test {
         );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
             let conn = Connection::new_with_state(
@@ -1000,6 +1011,7 @@ mod test {
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp1,
                 },
+                timestamp1,
             );
             manager.connections.insert(addr, conn);
             let conn2 = Connection::new_with_state(
@@ -1011,7 +1023,9 @@ mod test {
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp2,
                 },
+                timestamp2,
             );
+
             manager.connections.insert(addr2, conn2);
             manager.flag_seed_addr_retrieval_timeouts();
             let conn = manager
@@ -1058,6 +1072,7 @@ mod test {
         );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
             let conn = Connection::new_with_state(
@@ -1069,6 +1084,7 @@ mod test {
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp1,
                 },
+                timestamp1,
             );
             manager.connections.insert(addr, conn);
             let conn2 = Connection::new_with_state(
@@ -1077,9 +1093,8 @@ mod test {
                     handle: tokio::task::spawn(async {}),
                     writer,
                 },
-                ConnectionState::HandshakeComplete {
-                    timestamp: timestamp2,
-                },
+                ConnectionState::HandshakeComplete,
+                timestamp2,
             );
             manager.connections.insert(addr2, conn2);
 
@@ -1118,16 +1133,17 @@ mod test {
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
+        let timestamp = SystemTime::now();
         let conn = Connection::new_with_state(
             ConnectionConfig {
                 address_entry: AddressEntry::Discovered(socket_2),
                 handle: tokio::task::spawn(async {}),
                 writer,
             },
-            ConnectionState::Connected {
-                timestamp: SystemTime::now(),
-            },
+            ConnectionState::Connected { timestamp },
+            timestamp,
         );
         manager.connections.insert(socket_2, conn);
 
@@ -1164,16 +1180,17 @@ mod test {
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
+        let timestamp = SystemTime::now();
         let conn = Connection::new_with_state(
             ConnectionConfig {
                 address_entry: AddressEntry::Seed(socket_2),
                 handle: tokio::task::spawn(async {}),
                 writer,
             },
-            ConnectionState::Connected {
-                timestamp: SystemTime::now(),
-            },
+            ConnectionState::Connected { timestamp },
+            timestamp,
         );
         manager.connections.insert(socket_2, conn);
 

@@ -1,17 +1,15 @@
 use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
-use ic_types::artifact::StateSyncMessage;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use tokio_metrics::TaskMonitor;
 
 use crate::ongoing::DownloadChunkError;
 
 const CHUNK_DOWNLOAD_STATUS_LABEL: &str = "status";
-const CHUNK_DOWNLOAD_STATUS_MORE_NEEDED: &str = "more_needed";
 const CHUNK_DOWNLOAD_STATUS_SUCCESS: &str = "success";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct StateSyncManagerMetrics {
     pub state_syncs_total: IntCounter,
     pub adverts_received_total: IntCounter,
@@ -43,7 +41,7 @@ impl StateSyncManagerMetrics {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct StateSyncManagerHandlerMetrics {
     pub compression_ratio: Histogram,
 }
@@ -59,7 +57,7 @@ impl StateSyncManagerHandlerMetrics {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct OngoingStateSyncMetrics {
     pub download_task_monitor: TaskMonitor,
     pub allowed_parallel_downloads: IntGauge,
@@ -119,20 +117,12 @@ impl OngoingStateSyncMetrics {
     }
 
     /// Utility to record metrics for download result.
-    pub fn record_chunk_download_result(
-        &self,
-        res: &Result<Option<StateSyncMessage>, DownloadChunkError>,
-    ) {
+    pub fn record_chunk_download_result(&self, res: &Result<(), DownloadChunkError>) {
         match res {
             // Received chunk
-            Ok(Some(_)) => {
+            Ok(()) => {
                 self.chunk_download_results_total
                     .with_label_values(&[CHUNK_DOWNLOAD_STATUS_SUCCESS])
-                    .inc();
-            }
-            Ok(None) => {
-                self.chunk_download_results_total
-                    .with_label_values(&[CHUNK_DOWNLOAD_STATUS_MORE_NEEDED])
                     .inc();
             }
             Err(e) => {

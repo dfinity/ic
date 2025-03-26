@@ -9,8 +9,8 @@ pub mod consensus;
 pub mod consensus_pool;
 pub mod crypto;
 pub mod dkg;
-pub mod ecdsa;
 pub mod execution_environment;
+pub mod idkg;
 pub mod ingress_manager;
 pub mod ingress_pool;
 pub mod messaging;
@@ -19,6 +19,7 @@ pub mod query_stats;
 pub mod self_validating_payload;
 pub mod time_source;
 pub mod validation;
+pub mod vetkd;
 
 // Note [Associated Types in Interfaces]
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

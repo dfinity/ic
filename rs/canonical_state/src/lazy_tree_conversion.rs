@@ -5,7 +5,7 @@ use crate::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
         encode_subnet_canister_ranges, encode_subnet_metrics,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_canonical_state_tree_hash::lazy_tree::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
 use ic_crypto_tree_hash::Label;
@@ -15,7 +15,8 @@ use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::CanisterState,
     metadata_state::{
-        IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology, SystemMetadata,
+        ApiBoundaryNodeEntry, IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology,
+        SystemMetadata,
     },
     replicated_state::ReplicatedStateMessageRouting,
     ExecutionState, ReplicatedState,
@@ -77,6 +78,25 @@ impl<'a> FiniteMap<'a> {
     ) -> Self {
         if condition {
             self.0.insert(Label::from(label), Lazy::Value(tree));
+        }
+        self
+    }
+
+    /// If the optional field is `Some` value, adds a new subtree to this map.
+    /// Otherwise does nothing.
+    /// The subtree is constructed by applying `func` to the value extracted from the optional field.
+    pub fn with_optional_tree<B, T, F>(
+        mut self,
+        optional_field: Option<T>,
+        label: B,
+        func: F,
+    ) -> Self
+    where
+        B: AsRef<[u8]>,
+        F: Fn(T) -> LazyTree<'a>,
+    {
+        if let Some(field) = optional_field {
+            self.0.insert(Label::from(label), Lazy::Value(func(field)));
         }
         self
     }
@@ -164,7 +184,7 @@ impl LabelLike for CanisterId {
     }
 
     fn from_label(label: &[u8]) -> Option<Self> {
-        PrincipalId::from_label(label).map(|principal| Self::unchecked_from_principal(principal))
+        PrincipalId::from_label(label).map(Self::unchecked_from_principal)
     }
 }
 
@@ -265,14 +285,21 @@ fn invert_routing_table(
 pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
-        certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
-        "Unable to certify state with version {:?}. Maximum supported certification version is {:?}",
+        MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version && certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
+        "Unable to certify state with version {:?}. Supported certification versions are {:?}..={:?}",
         certification_version,
-        MAX_SUPPORTED_CERTIFICATION_VERSION
+        MIN_SUPPORTED_CERTIFICATION_VERSION,
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
     );
 
     fork(
         FiniteMap::default()
+            .with("api_boundary_nodes", move || {
+                api_boundary_nodes_as_tree(
+                    &state.metadata.api_boundary_nodes,
+                    certification_version,
+                )
+            })
             .with("metadata", move || {
                 system_metadata_as_tree(&state.metadata, certification_version)
             })
@@ -284,10 +311,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
             })
             .with_tree(
                 "request_status",
-                fork(IngressHistoryFork(
-                    &state.metadata.ingress_history,
-                    certification_version,
-                )),
+                fork(IngressHistoryFork(&state.metadata.ingress_history)),
             )
             .with("subnet", move || {
                 let inverted_routing_table = Arc::new(invert_routing_table(
@@ -349,13 +373,13 @@ fn system_metadata_as_tree(
     blob(move || encode_metadata(m, certification_version))
 }
 
-struct IngressHistoryFork<'a>(&'a IngressHistoryState, CertificationVersion);
+struct IngressHistoryFork<'a>(&'a IngressHistoryState);
 
 impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let byte_array: [u8; EXPECTED_MESSAGE_ID_LENGTH] = label.as_bytes().try_into().ok()?;
         let id = MessageId::from(byte_array);
-        self.0.get(&id).map(|status| status_to_tree(status, self.1))
+        self.0.get(&id).map(|status| status_to_tree(status))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
@@ -366,7 +390,7 @@ impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
         Box::new(
             self.0
                 .statuses()
-                .map(|(id, status)| (Label::from(id.as_bytes()), status_to_tree(status, self.1))),
+                .map(|(id, status)| (Label::from(id.as_bytes()), status_to_tree(status))),
         )
     }
 
@@ -433,11 +457,11 @@ impl<'a> LazyFork<'a> for ReplyStatus<'a> {
     }
 }
 
-const REJECT_STATUS_LABELS: [(&[u8], CertificationVersion); 4] = [
-    (ERROR_CODE_LABEL, CertificationVersion::V11),
-    (REJECT_CODE_LABEL, CertificationVersion::V0),
-    (REJECT_MESSAGE_LABEL, CertificationVersion::V0),
-    (STATUS_LABEL, CertificationVersion::V0),
+const REJECT_STATUS_LABELS: [&[u8]; 4] = [
+    ERROR_CODE_LABEL,
+    REJECT_CODE_LABEL,
+    REJECT_MESSAGE_LABEL,
+    STATUS_LABEL,
 ];
 
 #[derive(Clone)]
@@ -445,7 +469,6 @@ struct RejectStatus<'a> {
     reject_code: u64,
     error_code: Option<ErrorCode>,
     message: &'a str,
-    version: CertificationVersion,
 }
 
 impl<'a> LazyFork<'a> for RejectStatus<'a> {
@@ -462,20 +485,12 @@ impl<'a> LazyFork<'a> for RejectStatus<'a> {
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
-        let version = self.version;
-        Box::new(
-            REJECT_STATUS_LABELS
-                .iter()
-                .filter_map(move |(label, v)| (*v <= version).then_some(Label::from(label))),
-        )
+        Box::new(REJECT_STATUS_LABELS.iter().map(From::from))
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
         let status = self.clone();
-        Box::new(REJECT_STATUS_LABELS.iter().filter_map(move |(label, v)| {
-            if *v > status.version {
-                return None;
-            }
+        Box::new(REJECT_STATUS_LABELS.iter().filter_map(move |label| {
             let label = Label::from(label);
             let fork = status.edge(&label)?;
             Some((label, fork))
@@ -483,29 +498,23 @@ impl<'a> LazyFork<'a> for RejectStatus<'a> {
     }
 
     fn len(&self) -> usize {
-        REJECT_STATUS_LABELS
-            .iter()
-            .filter(|(_, v)| *v <= self.version)
-            .count()
+        REJECT_STATUS_LABELS.len()
     }
 }
 
-fn status_to_tree(status: &IngressStatus, version: CertificationVersion) -> LazyTree<'_> {
+fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
     match status {
         IngressStatus::Known { state, .. } => match state {
             IngressState::Completed(WasmResult::Reply(b)) => fork(ReplyStatus(b)),
             IngressState::Completed(WasmResult::Reject(s)) => fork(RejectStatus {
                 reject_code: RejectCode::CanisterReject as u64,
-                error_code: (version >= CertificationVersion::V11)
-                    .then_some(ErrorCode::CanisterRejectedMessage),
+                error_code: Some(ErrorCode::CanisterRejectedMessage),
                 message: s,
-                version,
             }),
             IngressState::Failed(error) => fork(RejectStatus {
                 reject_code: error.reject_code() as u64,
-                error_code: (version >= CertificationVersion::V11).then_some(error.code()),
+                error_code: Some(error.code()),
                 message: error.description(),
-                version,
             }),
             IngressState::Processing | IngressState::Received | IngressState::Done => {
                 fork(OnlyStatus(status.as_str()))
@@ -521,46 +530,14 @@ const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
 
-const CANISTER_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 5] = [
-    (
-        CERTIFIED_DATA_LABEL,
-        CertificationVersion::V0,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ),
-    (
-        CONTROLLER_LABEL,
-        CertificationVersion::V1,
-        CertificationVersion::V12,
-    ),
-    (
-        CONTROLLERS_LABEL,
-        CertificationVersion::V2,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ),
-    (
-        METADATA_LABEL,
-        CertificationVersion::V6,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ),
-    (
-        MODULE_HASH_LABEL,
-        CertificationVersion::V1,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ),
+const CANISTER_LABELS: [&[u8]; 4] = [
+    CERTIFIED_DATA_LABEL,
+    CONTROLLERS_LABEL,
+    METADATA_LABEL,
+    MODULE_HASH_LABEL,
 ];
 
-const CANISTER_NO_MODULE_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 2] = [
-    (
-        CONTROLLER_LABEL,
-        CertificationVersion::V1,
-        CertificationVersion::V12,
-    ),
-    (
-        CONTROLLERS_LABEL,
-        CertificationVersion::V2,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ),
-];
+const CANISTER_NO_MODULE_LABELS: [&[u8]; 1] = [CONTROLLERS_LABEL];
 
 #[derive(Clone)]
 struct CanisterFork<'a> {
@@ -598,62 +575,54 @@ impl<'a> CanisterFork<'a> {
 
 impl<'a> LazyFork<'a> for CanisterFork<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
-        CANISTER_LABELS.iter().find(|(l, minv, maxv)| {
-            l == &label.as_bytes() && *minv <= self.version && self.version <= *maxv
-        })?;
-
+        CANISTER_LABELS.iter().find(|l| *l == &label.as_bytes())?;
         self.edge_no_checks(label.as_bytes())
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
-        let version = self.version;
-        if self.canister.execution_state.is_some() {
-            Box::new(
-                CANISTER_LABELS
-                    .iter()
-                    .filter_map(move |(label, minv, maxv)| {
-                        (*minv <= version && version <= *maxv).then_some(Label::from(label))
-                    }),
-            )
-        } else {
-            Box::new(
-                CANISTER_NO_MODULE_LABELS
-                    .iter()
-                    .filter_map(move |(label, minv, maxv)| {
-                        (*minv <= version && version <= *maxv).then_some(Label::from(label))
-                    }),
-            )
+        match self.canister.execution_state {
+            Some(_) => Box::new(CANISTER_LABELS.iter().map(From::from)),
+            None => Box::new(CANISTER_NO_MODULE_LABELS.iter().map(From::from)),
         }
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
         let canister = self.clone();
         Box::new(
-            CANISTER_LABELS
-                .iter()
-                .filter_map(move |(label, minv, maxv)| {
-                    if !(*minv <= canister.version && canister.version <= *maxv) {
-                        return None;
-                    }
-                    Some((Label::from(label), canister.edge_no_checks(label)?))
-                }),
+            CANISTER_LABELS.iter().filter_map(move |label| {
+                Some((Label::from(label), canister.edge_no_checks(label)?))
+            }),
         )
     }
 
     fn len(&self) -> usize {
-        let version = self.version;
-        if self.canister.execution_state.is_some() {
-            CANISTER_LABELS
-                .iter()
-                .filter(move |(_, minv, maxv)| *minv <= version && version <= *maxv)
-                .count()
-        } else {
-            CANISTER_NO_MODULE_LABELS
-                .iter()
-                .filter(move |(_, minv, maxv)| *minv <= version && version <= *maxv)
-                .count()
+        match self.canister.execution_state {
+            Some(_) => CANISTER_LABELS.len(),
+            None => CANISTER_NO_MODULE_LABELS.len(),
         }
     }
+}
+
+fn api_boundary_nodes_as_tree(
+    api_boundary_nodes: &BTreeMap<NodeId, ApiBoundaryNodeEntry>,
+    certification_version: CertificationVersion,
+) -> LazyTree<'_> {
+    fork(MapTransformFork {
+        map: api_boundary_nodes,
+        certification_version,
+        mk_tree: |_api_boundary_node_id, api_boundary_node, _certification_version| {
+            fork(
+                FiniteMap::default()
+                    .with_tree("domain", string(&api_boundary_node.domain))
+                    .with_optional_tree(
+                        api_boundary_node.ipv4_address.as_ref(),
+                        "ipv4_address",
+                        |ipv4_address| string(ipv4_address),
+                    )
+                    .with_tree("ipv6_address", string(&api_boundary_node.ipv6_address)),
+            )
+        },
+    })
 }
 
 fn canisters_as_tree(
@@ -687,8 +656,7 @@ fn subnets_as_tree<'a>(
             fork(
                 FiniteMap::default()
                     .with_tree("public_key", Blob(&subnet_topology.public_key[..], None))
-                    .with_tree_if(
-                        certification_version > CertificationVersion::V2,
+                    .with_tree(
                         "canister_ranges",
                         blob({
                             let inverted_routing_table = Arc::clone(&inverted_routing_table);
@@ -699,15 +667,11 @@ fn subnets_as_tree<'a>(
                             }
                         }),
                     )
-                    .with_if(
-                        certification_version > CertificationVersion::V11
-                            && subnet_id == own_subnet_id,
-                        "node",
-                        move || nodes_as_tree(own_subnet_node_public_keys, certification_version),
-                    )
+                    .with_if(subnet_id == own_subnet_id, "node", move || {
+                        nodes_as_tree(own_subnet_node_public_keys, certification_version)
+                    })
                     .with_tree_if(
-                        certification_version >= CertificationVersion::V15
-                            && subnet_id == own_subnet_id,
+                        subnet_id == own_subnet_id,
                         "metrics",
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     ),

@@ -1,22 +1,21 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/interfaces/sig_verification",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/registry/helpers",
-    "//rs/registry/keys",
-    "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/validator",
     "@crate_index//:prometheus",
@@ -26,17 +25,21 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager/mocks",
     "//rs/registry/client",
+    "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
     "@crate_index//:proptest",
     "@crate_index//:rand",
     "@crate_index//:tokio",
@@ -47,14 +50,10 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 DATA = [
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
 ]
 
 ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
 }
 
@@ -64,7 +63,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_ingress_manager",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -76,53 +75,60 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "build_payload_bench",
     testonly = True,
     srcs = ["benches/build_payload.rs"],
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":ingress_manager",
         "//rs/artifact_pool",
-        "//rs/constants",
         "//rs/interfaces",
         "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/client",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
+        "//rs/registry/subnet_type",
         "//rs/test_utilities",
         "//rs/test_utilities/registry",
-        "//rs/types/ic00_types",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:pprof",
         "@crate_index//:rand",
         "@crate_index//:tokio",
     ],
 )
 
-rust_bench(
+rust_ic_bench(
     name = "handle_ingress_bench",
     testonly = True,
     srcs = ["benches/handle_ingress.rs"],
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":ingress_manager",
         "//rs/artifact_pool",
         "//rs/config",
-        "//rs/constants",
         "//rs/interfaces",
         "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/client",
@@ -133,8 +139,12 @@ rust_bench(
         "//rs/test_utilities",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:pprof",
         "@crate_index//:rand",
         "@crate_index//:tokio",
     ],

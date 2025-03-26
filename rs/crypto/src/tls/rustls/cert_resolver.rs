@@ -1,11 +1,11 @@
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
-use tokio_rustls::rustls::sign::CertifiedKey;
-use tokio_rustls::rustls::{
+use rustls::{
     client::ResolvesClientCert,
     server::{ClientHello, ResolvesServerCert},
+    sign::CertifiedKey,
     SignatureScheme,
 };
+use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -40,7 +40,7 @@ impl StaticCertResolver {
 }
 
 /// Occurs if a certified key is incompatible with a signature scheme.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct KeyIncompatibleWithSigSchemeError {}
 
 impl ResolvesClientCert for StaticCertResolver {
@@ -74,10 +74,10 @@ impl Debug for StaticCertResolver {
         write!(
             f,
             "StaticCertResolver{{ \
-                certified_key: CertifiedKey{{ cert: {:?}, key: OMITTED, ocsp: {:?}, sct_list: {:?} }}, \
+                certified_key: CertifiedKey{{ cert: {:?}, key: OMITTED, ocsp: {:?} }}, \
                 sig_scheme: {:?} \
             }}",
-            self.certified_key.cert, self.certified_key.ocsp, self.certified_key.sct_list, self.sig_scheme
+            self.certified_key.cert, self.certified_key.ocsp, self.sig_scheme
         )
     }
 }

@@ -1,8 +1,9 @@
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
-    MetricsRegistry, Timer,
+    MetricsRegistry,
 };
 use prometheus::{Histogram, HistogramVec};
+use std::time::Instant;
 
 const LABEL_STATUS: &str = "status";
 const LABEL_TYPE: &str = "type";
@@ -69,24 +70,29 @@ impl BitcoinPayloadBuilderMetrics {
     }
 
     // Records the status and duration of a `get_self_validating_payload()` call.
-    pub fn observe_build_duration(&self, status: &str, timer: Timer) {
+    pub fn observe_build_duration(&self, status: &str, since: Instant) {
         self.build_payload_duration
             .with_label_values(&[status])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 
     // Records the status and duration of a `validate_self_validating_payload()` call.
-    pub fn observe_validate_duration(&self, status: &str, timer: Timer) {
+    pub fn observe_validate_duration(&self, status: &str, since: Instant) {
         self.validate_payload_duration
             .with_label_values(&[status])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 
     // Records the status, type and duration of a request made to the BitcoinAdapter.
-    pub fn observe_adapter_request_duration(&self, status: &str, request_type: &str, timer: Timer) {
+    pub fn observe_adapter_request_duration(
+        &self,
+        status: &str,
+        request_type: &str,
+        since: Instant,
+    ) {
         self.adapter_request_duration
             .with_label_values(&[status, request_type])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 
     // Records the number of blocks per `GetSuccessorsResponse`.

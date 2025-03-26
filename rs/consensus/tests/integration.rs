@@ -1,23 +1,22 @@
+#[cfg(test)]
 mod framework;
 
 use crate::framework::{
-    malicious, setup_subnet, ConsensusDependencies, ConsensusInstance, ConsensusModifier,
-    ConsensusRunner, ConsensusRunnerConfig,
+    malicious, setup_subnet, ComponentModifier, ConsensusDependencies, ConsensusInstance,
+    ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
-use ic_interfaces::consensus_pool::ConsensusPool;
+use framework::test_master_public_key_ids;
+use ic_consensus_utils::pool_reader::PoolReader;
+use ic_interfaces::{consensus_pool::ConsensusPool, messaging::MessageRouting};
 use ic_interfaces_registry::RegistryClient;
-use ic_test_utilities::{
-    types::ids::{node_test_id, subnet_test_id},
-    FastForwardTimeSource,
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_types::{
+    crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, Height,
 };
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 #[test]
 fn multiple_nodes_are_live() -> Result<(), String> {
@@ -37,6 +36,19 @@ fn single_node_is_live() {
         ..Default::default()
     };
     run_n_rounds_and_collect_hashes(config, Vec::new(), true);
+}
+
+#[test]
+fn master_pubkeys_are_produced() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|mut config| {
+            // make sure we run at least 60 rounds
+            if config.num_rounds < 60 {
+                config.num_rounds = 60;
+            }
+            assert!(run_n_rounds_and_check_pubkeys(config, Vec::new(), true));
+        })
 }
 
 #[ignore]
@@ -61,7 +73,7 @@ fn minority_invalid_notary_share_signature_would_pass() -> Result<(), String> {
             let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 malicious.push(malicious::invalid_notary_share_signature())
             }
@@ -74,7 +86,7 @@ fn majority_invalid_notary_share_signature_would_stuck() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|config| {
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..(config.num_nodes / 3 + 1) {
                 malicious.push(malicious::invalid_notary_share_signature())
             }
@@ -90,7 +102,7 @@ fn minority_absent_notary_share_would_pass() -> Result<(), String> {
             let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 malicious.push(malicious::absent_notary_share());
             }
@@ -103,7 +115,7 @@ fn majority_absent_notary_share_signature_would_stuck() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|config| {
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..(config.num_nodes / 3 + 1) {
                 malicious.push(malicious::absent_notary_share());
             }
@@ -119,7 +131,7 @@ fn minority_maliciouly_notarize_all_would_pass() -> Result<(), String> {
             let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
                     maliciously_notarize_all: true,
@@ -139,7 +151,7 @@ fn minority_maliciouly_finalize_all_would_pass() -> Result<(), String> {
             let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
                     maliciously_finalize_all: true,
@@ -165,7 +177,7 @@ fn majority_maliciouly_finalize_all_would_diverge() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|config| {
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..((config.num_nodes - 1) / 3 * 2 + 1) {
                 let malicious_flags = MaliciousFlags {
                     maliciously_notarize_all: true, // to create more than 1 branches
@@ -178,28 +190,55 @@ fn majority_maliciouly_finalize_all_would_diverge() -> Result<(), String> {
         })
 }
 
-fn run_n_rounds_and_collect_hashes(
+#[test]
+fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|mut config| {
+            // make sure we run at least 60 rounds
+            if config.num_rounds < 60 {
+                config.num_rounds = 60;
+            }
+            let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
+            for _ in 0..rng.gen_range(1..=f) {
+                let malicious_flags = MaliciousFlags {
+                    maliciously_corrupt_idkg_dealings: true,
+                    ..MaliciousFlags::default()
+                };
+                malicious.push(malicious::with_malicious_flags(malicious_flags));
+            }
+            assert!(run_n_rounds_and_check_pubkeys(config, malicious, true))
+        })
+}
+
+#[test]
+fn stalled_clocks_with_f_malicious_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|mut config| {
+            config.stall_clocks = true;
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
+            for _ in 0..f {
+                malicious.push(malicious::absent_notary_share())
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, true);
+        })
+}
+
+fn run_test(
     config: ConsensusRunnerConfig,
-    mut modifiers: Vec<ConsensusModifier>,
+    mut modifiers: Vec<ComponentModifier>,
+    stop_predicate: StopPredicate,
     finish: bool,
-) -> Vec<CryptoHash> {
+) {
     let rng = &mut ChaChaRng::seed_from_u64(config.random_seed);
     let nodes = config.num_nodes;
-    ic_test_utilities::artifact_pool_config::with_test_pool_configs(nodes, |pool_configs| {
-        let rounds = config.num_rounds;
-        let hashes = Rc::new(RefCell::new(Vec::new()));
-        let hashes_clone = hashes.clone();
-        let reach_n_rounds = move |inst: &ConsensusInstance<'_>| {
-            let pool = inst.driver.consensus_pool.write().unwrap();
-            for nota in pool.validated().notarization().get_highest_iter() {
-                let hash = ic_types::crypto::crypto_hash(&nota);
-                let hash = hash.get_ref();
-                if !hashes_clone.borrow().contains(hash) {
-                    hashes_clone.borrow_mut().push(hash.clone());
-                }
-            }
-            inst.deps.message_routing.expected_batch_height() >= Height::from(rounds)
-        };
+    ic_test_utilities::artifact_pool_config::with_test_pool_configs(nodes, move |pool_configs| {
         let time_source = FastForwardTimeSource::new();
         let subnet_id = subnet_test_id(0);
         let replica_configs: Vec<_> = vec![(); nodes]
@@ -224,6 +263,7 @@ fn run_n_rounds_and_collect_hashes(
                     pool_config.clone(),
                     Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
                     cup.clone(),
+                    time_source.clone(),
                 )
             })
             .collect();
@@ -235,15 +275,9 @@ fn run_n_rounds_and_collect_hashes(
             .zip(inst_deps.iter())
             .zip(cryptos.iter())
         {
-            let membership = Membership::new(
-                deps.consensus_pool.read().unwrap().get_cache(),
-                Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-                subnet_id,
-            );
-            let membership = Arc::new(membership);
             let modifier = modifiers.pop();
             runner.add_instance(
-                membership.clone(),
+                deps.consensus_pool.read().unwrap().get_cache(),
                 crypto.clone(),
                 crypto.clone(),
                 modifier,
@@ -252,9 +286,62 @@ fn run_n_rounds_and_collect_hashes(
                 &PoolReader::new(&*deps.consensus_pool.read().unwrap()),
             );
         }
-        assert_eq!(runner.run_until(&reach_n_rounds), finish);
-        hashes.as_ref().take()
+        assert_eq!(runner.run_until(stop_predicate), finish);
     })
+}
+
+fn run_n_rounds_and_collect_hashes(
+    config: ConsensusRunnerConfig,
+    modifiers: Vec<ComponentModifier>,
+    finish: bool,
+) -> Vec<CryptoHash> {
+    let rounds = config.num_rounds;
+    let hashes = Rc::new(RefCell::new(Vec::new()));
+    let hashes_clone = hashes.clone();
+    let reach_n_rounds = move |inst: &ConsensusInstance<'_>| {
+        let pool = inst.driver.consensus_pool.write().unwrap();
+        for nota in pool.validated().notarization().get_highest_iter() {
+            let hash = ic_types::crypto::crypto_hash(&nota);
+            let hash = hash.get_ref();
+            if !hashes_clone.borrow().contains(hash) {
+                hashes_clone.borrow_mut().push(hash.clone());
+            }
+        }
+        inst.deps.message_routing.expected_batch_height() >= Height::from(rounds)
+    };
+    run_test(config, modifiers, Box::new(reach_n_rounds), finish);
+    hashes.as_ref().take()
+}
+
+fn run_n_rounds_and_check_pubkeys(
+    config: ConsensusRunnerConfig,
+    modifiers: Vec<ComponentModifier>,
+    finish: bool,
+) -> bool {
+    let rounds = config.num_rounds;
+    let pubkey_exists = Rc::new(RefCell::new(false));
+    let pubkey_exists_clone = pubkey_exists.clone();
+    let got_pubkey = move |inst: &ConsensusInstance<'_>| {
+        let batches = inst.deps.message_routing.as_ref().batches.read().unwrap();
+        let Some(batch) = batches.last() else {
+            return false;
+        };
+
+        let mut found_keys = 0;
+        for key_id in test_master_public_key_ids() {
+            if batch.chain_key_subnet_public_keys.contains_key(&key_id) {
+                found_keys += 1
+            }
+        }
+        if found_keys == test_master_public_key_ids().len() {
+            *pubkey_exists_clone.borrow_mut() = true;
+        }
+        *pubkey_exists_clone.borrow()
+            || inst.deps.message_routing.expected_batch_height() >= Height::from(rounds)
+    };
+    run_test(config, modifiers, Box::new(got_pubkey), finish);
+    let result = *pubkey_exists.borrow();
+    result
 }
 
 /// Run a test subnets with `num_nodes` many nodes, out of which there are `num_nodes_equivocating` many equivocating blockmaker
@@ -266,9 +353,13 @@ fn equivocating_block_maker_test(
     ConsensusRunnerConfig::new_from_env(num_nodes, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|config| {
-            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
+            let malicious_flags = MaliciousFlags {
+                maliciously_propose_equivocating_blocks: true,
+                ..MaliciousFlags::default()
+            };
             for _ in 0..num_nodes_equivocating {
-                malicious.push(malicious::absent_notary_share());
+                malicious.push(malicious::with_malicious_flags(malicious_flags.clone()));
             }
             run_n_rounds_and_collect_hashes(config, malicious, finish);
         })

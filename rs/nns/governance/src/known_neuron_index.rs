@@ -1,17 +1,15 @@
-#![allow(dead_code)] // TODO(NNS1-2409): remove when it is used by NNS Governance.
-
-use crate::governance::KNOWN_NEURON_NAME_MAX_LEN;
+use crate::{governance::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::{Memory, StableBTreeMap, Storable};
 
 /// An index to make it easy to check whether a known neuron with the same name exists,
 /// as well as listing all known neuron's ids.
 /// Note that the index only cares about the uniqueness of the names, not the ids -
 /// the caller should make sure the name-id is removed from the index when a neuron
 /// is removed or its name is changed.
-
 pub struct KnownNeuronIndex<M: Memory> {
-    known_neuron_name_to_id: StableBTreeMap<KnownNeuronName, u64, M>,
+    known_neuron_name_to_id: StableBTreeMap<KnownNeuronName, NeuronId, M>,
 }
 
 #[derive(Debug)]
@@ -45,7 +43,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
     pub fn contains_entry(&self, neuron_id: NeuronId, known_neuron_name: &str) -> bool {
         KnownNeuronName::new(known_neuron_name)
             .and_then(|known_neuron_name| self.known_neuron_name_to_id.get(&known_neuron_name))
-            .map(|value| value == neuron_id.id)
+            .map(|known_neuron_id| known_neuron_id == neuron_id)
             .unwrap_or_default()
     }
 
@@ -69,7 +67,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
             return Err(AddKnownNeuronError::AlreadyExists);
         }
         self.known_neuron_name_to_id
-            .insert(known_neuron_name, neuron_id.id);
+            .insert(known_neuron_name, neuron_id);
         Ok(())
     }
 
@@ -93,7 +91,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
         match removed_neuron_id {
             None => Err(RemoveKnownNeuronError::AlreadyAbsent),
             Some(removed_neuron_id) => {
-                if removed_neuron_id == neuron_id.id {
+                if removed_neuron_id == neuron_id {
                     Ok(())
                 } else {
                     // The removed known neuron id does not match the given neuron id. There is
@@ -102,9 +100,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
                     self.known_neuron_name_to_id
                         .insert(known_neuron_name, removed_neuron_id);
                     Err(RemoveKnownNeuronError::NameExistsWithDifferentNeuronId(
-                        NeuronId {
-                            id: removed_neuron_id,
-                        },
+                        removed_neuron_id,
                     ))
                 }
             }
@@ -125,12 +121,18 @@ impl<M: Memory> KnownNeuronIndex<M> {
     pub fn list_known_neuron_ids(&self) -> Vec<NeuronId> {
         self.known_neuron_name_to_id
             .iter()
-            .map(|(_name, id)| NeuronId { id })
+            .map(|(_name, neuron_id)| neuron_id)
             .collect()
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        validate_stable_btree_map(&self.known_neuron_name_to_id);
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct KnownNeuronName(String);
 
 impl KnownNeuronName {
@@ -151,11 +153,11 @@ impl Storable for KnownNeuronName {
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
         Self(String::from_bytes(bytes))
     }
-}
 
-impl BoundedStorable for KnownNeuronName {
-    const MAX_SIZE: u32 = KNOWN_NEURON_NAME_MAX_LEN as u32;
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: KNOWN_NEURON_NAME_MAX_LEN as u32,
+        is_fixed_size: false,
+    };
 }
 
 #[cfg(test)]

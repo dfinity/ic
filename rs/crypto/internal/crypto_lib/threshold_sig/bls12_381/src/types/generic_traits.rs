@@ -1,8 +1,7 @@
 //! These are boilerplate implementations of standard traits that either:
 //! - cannot be auto-generated in the normal way because Rust doesn't have const
-//!   generics
-//! yet, or
-//! - keep sensitive information from being logged via Debug
+//!   generics yet.
+//! - keep sensitive information from being logged via Debug.
 //!
 //! This code is in a separate file to avoid cluttering the types file with
 //! implementation details.

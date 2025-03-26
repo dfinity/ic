@@ -11,17 +11,16 @@ documentation.workspace = true
 # Because this crate is used in a canister, we can only
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
-hex = "0.4.2"
-ic-base-types = { path = "../../../types/base_types" }
+hex = { workspace = true }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
-ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 serde = { workspace = true }
-x509-parser = { version = "0.14.0" }
+x509-parser = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-curve25519-dalek = "3.0.2"
-ic-crypto-test-utils-tls = { path = "../../test_utils/tls" }
+assert_matches = { workspace = true }
+curve25519-dalek = { workspace = true }
 ic-crypto-test-utils-keys = { path = "../../test_utils/keys" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
+ic-crypto-test-utils-tls = { path = "../../test_utils/tls" }

@@ -1,5 +1,5 @@
 ---
-- name: dump all
+- name: Dump all
   hosts: all
 
   tasks:

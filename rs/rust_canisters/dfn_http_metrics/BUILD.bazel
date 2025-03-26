@@ -1,19 +1,29 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    # Keep sorted.
+    "//rs/ledger_suite/icp:__subpackages__",
+    "//rs/ledger_suite/icrc1:__pkg__",
+    "//rs/ledger_suite/icrc1/ledger:__pkg__",
+    "//rs/nns:__subpackages__",
+    "//rs/registry/canister:__pkg__",
+    "//rs/rust_canisters:__subpackages__",
+])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http",
+    "//rs/rust_canisters/http_types",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:serde_bytes",
 ]
 
 rust_library(
     name = "dfn_http_metrics",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "dfn_http_metrics",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

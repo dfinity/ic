@@ -13,7 +13,7 @@
   (func (;4;) (type 3) (param i32)
     local.get 0
     call_indirect (type 0))
-  (table (;0;) 5 5 anyfunc)
+  (table (;0;) 5 5 funcref)
   (export "Mt.call" (func 0))
   (export "call Mt.call" (func 3))
   (export "call" (func 4))

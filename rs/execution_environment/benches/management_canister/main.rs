@@ -1,3 +1,4 @@
+mod canister_snapshots;
 mod create_canisters;
 mod ecdsa;
 mod http_request;
@@ -8,6 +9,7 @@ mod utils;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 fn all_benchmarks(c: &mut Criterion) {
+    canister_snapshots::benchmark(c);
     create_canisters::create_canisters_benchmark(c);
     install_code::install_code_benchmark(c);
     update_settings::update_settings_benchmark(c);

@@ -5,6 +5,7 @@ use ic_replicated_state::{
     PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
+use ic_types::{NumBytes, NumOsPages};
 use nix::{
     errno::Errno,
     sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
@@ -12,7 +13,7 @@ use nix::{
 use std::{
     cell::{Cell, RefCell},
     ops::Range,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
 // The upper bound on the number of pages that are memory mapped from the
@@ -20,10 +21,6 @@ use std::{
 // throughput in memory intensive workloads, but may regress performance
 // in other workloads because it increases work per signal handler call.
 const MAX_PAGES_TO_MAP: usize = 128;
-
-// The target number of memory instructions allowed when prefetching
-// beyond the minimum range
-const TARGET_MEMORY_INSTRUCTIONS: usize = 0;
 
 // The new signal handler requires `AccessKind` which currently available only
 // on Linux without WSL.
@@ -35,24 +32,28 @@ fn new_signal_handler_available() -> bool {
 // size must be a multiple of PAGE_SIZE.
 #[derive(Clone)]
 pub struct MemoryArea {
-    // base address of the tracked memory area
+    // Base address of the tracked memory area.
     addr: usize,
-    // size of the tracked memory area
-    size: Cell<usize>,
+    // Size of the tracked memory area in bytes.
+    size: Cell<NumBytes>,
 }
 
 impl MemoryArea {
-    pub fn new(addr: *const libc::c_void, size: usize) -> Self {
+    pub fn new(addr: *const libc::c_void, size: NumBytes) -> Self {
         let addr = addr as usize;
         assert!(addr % PAGE_SIZE == 0, "address is page-aligned");
-        assert!(size % PAGE_SIZE == 0, "size is a multiple of page size");
+        assert!(
+            size.get() % PAGE_SIZE as u64 == 0,
+            "size is a multiple of page size"
+        );
         let size = Cell::new(size);
         MemoryArea { addr, size }
     }
 
     #[inline]
     pub fn is_within(&self, a: *const libc::c_void) -> bool {
-        (self.addr <= a as usize) && ((a as usize) < self.addr + (self.size.get()))
+        let a = a as usize;
+        (self.addr <= a) && (a < self.addr + self.size.get().get() as usize)
     }
 
     #[inline]
@@ -61,7 +62,7 @@ impl MemoryArea {
     }
 
     #[inline]
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> NumBytes {
         self.size.get()
     }
 }
@@ -69,7 +70,7 @@ impl MemoryArea {
 /// Specifies whether the currently running message execution needs to know
 /// which pages were dirtied or not. Dirty page tracking comes with a large
 /// performance overhead.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DirtyPageTracking {
     Ignore,
     Track,
@@ -77,7 +78,7 @@ pub enum DirtyPageTracking {
 
 /// Specifies whether the memory access that caused the signal was a read access
 /// or a write access.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum AccessKind {
     Read,
     Write,
@@ -86,22 +87,22 @@ pub enum AccessKind {
 /// Bitmap tracking which pages on the memory were accessed during an execution.
 pub struct PageBitmap {
     pages: BitVec,
-    marked_count: usize,
+    marked_count: NumOsPages,
 }
 
 impl PageBitmap {
-    fn new(num_pages: usize) -> Self {
+    fn new(num_pages: NumOsPages) -> Self {
         Self {
-            pages: BitVec::from_elem(num_pages, false),
-            marked_count: 0,
+            pages: BitVec::from_elem(num_pages.get() as usize, false),
+            marked_count: 0.into(),
         }
     }
 
-    fn grow(&mut self, delta: usize) {
-        self.pages.grow(delta, false);
+    fn grow(&mut self, delta_pages: NumOsPages) {
+        self.pages.grow(delta_pages.get() as usize, false);
     }
 
-    fn marked_count(&self) -> usize {
+    fn marked_count(&self) -> NumOsPages {
         self.marked_count
     }
 
@@ -112,16 +113,16 @@ impl PageBitmap {
 
     fn mark(&mut self, page: PageIndex) {
         self.pages.set(page.get() as usize, true);
-        self.marked_count += 1;
+        self.marked_count.inc_assign();
     }
 
     fn mark_range(&mut self, range: &Range<PageIndex>) {
         let range = Range {
-            start: range.start.get() as usize,
-            end: range.end.get() as usize,
+            start: range.start.get(),
+            end: range.end.get(),
         };
         for i in range {
-            self.mark(PageIndex::new(i as u64));
+            self.mark(PageIndex::new(i));
         }
     }
 
@@ -210,6 +211,11 @@ struct MemoryInstructionsStats {
     copy_page_count: AtomicUsize,
 }
 
+#[derive(Default)]
+pub struct MemoryTrackerMetrics {
+    pub sigsegv_handler_duration_nanos: AtomicU64,
+}
+
 pub struct SigsegvMemoryTracker {
     memory_area: MemoryArea,
     accessed_bitmap: RefCell<PageBitmap>,
@@ -224,19 +230,20 @@ pub struct SigsegvMemoryTracker {
     read_before_write_stats: ReadBeforeWriteStats,
     sigsegv_count: AtomicUsize,
     memory_instructions_stats: MemoryInstructionsStats,
+    pub metrics: MemoryTrackerMetrics,
 }
 
 impl SigsegvMemoryTracker {
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(
         addr: *mut libc::c_void,
-        size: usize,
+        size: NumBytes,
         log: ReplicaLogger,
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
     ) -> nix::Result<Self> {
         assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
-        let num_pages = size / PAGE_SIZE;
+        let num_pages = NumOsPages::new(size.get() / PAGE_SIZE as u64);
         debug!(
             log,
             "SigsegvMemoryTracker::new: addr={:?}, size={}, num_pages={}", addr, size, num_pages
@@ -269,6 +276,7 @@ impl SigsegvMemoryTracker {
                 mprotect_count: AtomicUsize::new(0),
                 copy_page_count: AtomicUsize::new(0),
             },
+            metrics: MemoryTrackerMetrics::default(),
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
@@ -276,11 +284,11 @@ impl SigsegvMemoryTracker {
             let mut instructions = tracker.page_map.get_base_memory_instructions();
 
             // Restrict to tracked range before applying
-            instructions.range = tracker.page_range();
+            instructions.restrict_to_range(&tracker.page_range());
 
             apply_memory_instructions(&tracker, ProtFlags::PROT_NONE, instructions);
         } else {
-            unsafe { mprotect(addr, size, ProtFlags::PROT_NONE)? }
+            unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
             tracker
                 .memory_instructions_stats
                 .mprotect_count
@@ -307,11 +315,17 @@ impl SigsegvMemoryTracker {
         &self.memory_area
     }
 
-    pub fn expand(&self, delta: usize) {
-        let old_size = self.area().size.get();
-        self.area().size.set(old_size + delta);
-        self.accessed_bitmap.borrow_mut().grow(delta);
-        self.dirty_bitmap.borrow_mut().grow(delta);
+    pub fn expand(&self, delta: NumBytes) {
+        let old_size = self.memory_area.size.get();
+        self.memory_area.size.set(old_size + delta);
+        let delta_pages = NumOsPages::new(delta.get() / PAGE_SIZE as u64);
+        debug_assert_eq!(
+            delta_pages.get() * PAGE_SIZE as u64,
+            delta.get(),
+            "Expand delta {delta} must be page-size aligned (page size: {PAGE_SIZE})"
+        );
+        self.accessed_bitmap.borrow_mut().grow(delta_pages);
+        self.dirty_bitmap.borrow_mut().grow(delta_pages);
     }
 
     pub fn take_dirty_pages(&self) -> Vec<PageIndex> {
@@ -332,7 +346,7 @@ impl SigsegvMemoryTracker {
     }
 
     pub fn num_accessed_pages(&self) -> usize {
-        self.accessed_bitmap.borrow().marked_count()
+        self.accessed_bitmap.borrow().marked_count().get() as usize
     }
 
     fn page_index_from(&self, addr: *mut libc::c_void) -> PageIndex {
@@ -590,7 +604,8 @@ pub fn sigsegv_fault_handler_new(
         (_, DirtyPageTracking::Ignore) => {
             // We don't care about dirty pages here, so we can set up the page mapping for
             // for multiple pages as read/write right away.
-            let prefetch_range = range_from_count(faulting_page, MAX_PAGES_TO_MAP);
+            let prefetch_range =
+                range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
             let max_prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
             let min_prefetch_range =
                 accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
@@ -605,7 +620,8 @@ pub fn sigsegv_fault_handler_new(
         (AccessKind::Read, DirtyPageTracking::Track) => {
             // Set up the page mapping as read-only in order to get a signal on subsequent
             // write accesses to track dirty pages. We can do this for multiple pages.
-            let prefetch_range = range_from_count(faulting_page, MAX_PAGES_TO_MAP);
+            let prefetch_range =
+                range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
             let max_prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
             let min_prefetch_range =
                 accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
@@ -620,7 +636,8 @@ pub fn sigsegv_fault_handler_new(
         (AccessKind::Write, DirtyPageTracking::Track) => {
             let mut dirty_bitmap = tracker.dirty_bitmap.borrow_mut();
             assert!(!dirty_bitmap.is_marked(faulting_page));
-            let prefetch_range = range_from_count(faulting_page, MAX_PAGES_TO_MAP);
+            let prefetch_range =
+                range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
             // Ensure that we don't overwrite an already dirty page.
             let prefetch_range = dirty_bitmap.restrict_range_to_unmarked(prefetch_range);
             if accessed_bitmap.is_marked(faulting_page) {
@@ -682,6 +699,7 @@ pub fn sigsegv_fault_handler_new(
 /// Preconditions:
 ///    * The pages in `max_prefetch_range` have not been dirtied before.
 ///    * `min_prefetch_range` ⊆ `max_prefetch_range`
+///
 /// Guarantees:
 ///    * `min_prefetch_range` ⊆ result ⊆ `max_prefetch_range`
 ///    * Any data read from the tracker's memory within the result range will be equal
@@ -697,11 +715,9 @@ fn map_unaccessed_pages(
             && min_prefetch_range.end <= max_prefetch_range.end
     );
 
-    let instructions = tracker.page_map.get_memory_instructions(
-        min_prefetch_range,
-        max_prefetch_range,
-        TARGET_MEMORY_INSTRUCTIONS,
-    );
+    let instructions = tracker
+        .page_map
+        .get_memory_instructions(min_prefetch_range, max_prefetch_range);
 
     let range = instructions.range.clone();
 
@@ -727,8 +743,10 @@ fn apply_memory_instructions(
     // for any later mmap calls.
     let mut current_prot_flags = ProtFlags::PROT_NONE;
     for (range, mmap_or_data) in instructions {
-        let clamped_range = range_intersection(&prefetch_range, &range);
-        let start_offset = (clamped_range.start.get() - range.start.get()) as usize;
+        debug_assert!(
+            range.start.get() >= prefetch_range.start.get()
+                && range.end.get() <= prefetch_range.end.get()
+        );
         match mmap_or_data {
             ic_replicated_state::page_map::MemoryMapOrData::MemoryMap(
                 FileDescriptor { fd },
@@ -740,12 +758,12 @@ fn apply_memory_instructions(
                     .fetch_add(1, Ordering::Relaxed);
                 unsafe {
                     mmap(
-                        tracker.page_start_addr_from(clamped_range.start),
-                        range_size_in_bytes(&clamped_range),
+                        tracker.page_start_addr_from(range.start),
+                        range_size_in_bytes(&range),
                         current_prot_flags,
                         MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
                         fd,
-                        (offset + start_offset * PAGE_SIZE) as i64,
+                        offset as i64,
                     )
                     .map_err(print_enomem_help)
                     .unwrap()
@@ -753,7 +771,7 @@ fn apply_memory_instructions(
             }
             ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
                 tracker.memory_instructions_stats.copy_page_count.fetch_add(
-                    (clamped_range.end.get() - clamped_range.start.get()) as usize,
+                    (range.end.get() - range.start.get()) as usize,
                     Ordering::Relaxed,
                 );
 
@@ -774,13 +792,11 @@ fn apply_memory_instructions(
                         .fetch_add(1, Ordering::Relaxed);
                 }
                 unsafe {
-                    let data = &data[start_offset * PAGE_SIZE
-                        ..start_offset * PAGE_SIZE + range_size_in_bytes(&clamped_range)];
-                    debug_assert_eq!(data.len(), range_size_in_bytes(&clamped_range));
+                    debug_assert_eq!(data.len(), range_size_in_bytes(&range));
                     std::ptr::copy_nonoverlapping(
                         data.as_ptr() as *const libc::c_void,
-                        tracker.page_start_addr_from(clamped_range.start),
-                        range_size_in_bytes(&clamped_range),
+                        tracker.page_start_addr_from(range.start),
+                        range_size_in_bytes(&range),
                     )
                 }
             }
@@ -819,10 +835,10 @@ fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
     (range.end.get() - range.start.get()) as usize * PAGE_SIZE
 }
 
-fn range_from_count(page: PageIndex, count: usize) -> Range<PageIndex> {
+fn range_from_count(page: PageIndex, count: NumOsPages) -> Range<PageIndex> {
     Range {
         start: page,
-        end: PageIndex::new(page.get() + count as u64),
+        end: PageIndex::new(page.get() + count.get()),
     }
 }
 

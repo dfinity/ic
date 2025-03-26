@@ -1,49 +1,48 @@
 [package]
 name = "ic-quic-transport"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.36"
-axum = "0.6.12"
-bincode = "1.2.1"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 bytes = { workspace = true }
-either = "1.6.0"
 futures = { workspace = true }
-http = "0.2.9"
-http-serde = "1.1.2"
-ic-async-utils = { path = "../../async_utils" }
+http = { workspace = true }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-base-types = { path = "../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-base-types = { path = "../../types/base_types" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-peer-manager = { path = "../../p2p/peer_manager" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-protobuf = { path = "../../protobuf" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
-quinn = { version = "0.10.2", features = ["ring"] }
-serde = { workspace = true }
-serde_bytes = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
-socket2 = { version = "0.5", features = ["all"] }
-thiserror = "1.0.50"
+prost = { workspace = true }
+quinn = { workspace = true }
+rustls = { workspace = true }
+slog = { workspace = true }
+static_assertions = { workspace = true }
+socket2 = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-metrics = "0.3.0"
-tokio-rustls = "0.24.0"
-tokio-util = { version = "0.7.4", features = ["codec", "time"] }
+tokio-metrics = { workspace = true }
+tokio-util = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
+assert_matches = { workspace = true }
+criterion = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-turmoil = "0.5"
+rstest = { workspace = true }
+turmoil = { workspace = true }

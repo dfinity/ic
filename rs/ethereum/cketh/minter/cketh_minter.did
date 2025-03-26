@@ -5,13 +5,17 @@ type EthereumNetwork = variant {
     Sepolia;
 };
 
+type Subaccount = blob;
+
 type CanisterStatusResponse = record {
+  query_stats : QueryStats;
   status : CanisterStatusType;
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
   idle_cycles_burned_per_day : nat;
   module_hash : opt vec nat8;
+  reserved_cycles : nat;
 };
 
 type CanisterStatusType = variant { stopped; stopping; running };
@@ -21,6 +25,22 @@ type DefiniteCanisterSettings = record {
   controllers : vec principal;
   memory_allocation : nat;
   compute_allocation : nat;
+  reserved_cycles_limit : nat;
+  log_visibility: LogVisibility;
+  wasm_memory_limit : nat;
+};
+
+type LogVisibility = variant {
+    controllers;
+    public;
+    allowed_viewers : vec principal;
+};
+
+type QueryStats = record {
+  response_payload_bytes_total : nat;
+  num_instructions_total : nat;
+  num_calls_total : nat;
+  request_payload_bytes_total : nat;
 };
 
 type BlockTag = variant {
@@ -72,17 +92,46 @@ type UpgradeArg = record {
     // Change the minimum amount in Wei that can be withdrawn.
     minimum_withdrawal_amount : opt nat;
 
-    // Change the helper smart contract address.
+    // Change the ETH helper smart contract address.
     ethereum_contract_address : opt text;
 
     // Change the ethereum block height observed by the minter.
     ethereum_block_height : opt BlockTag;
+
+    // The principal of the ledger suite orchestrator that handles the ICRC1 ledger suites
+    // for all ckERC20 tokens.
+    ledger_suite_orchestrator_id : opt principal;
+
+    // Change the ERC-20 helper smart contract address.
+    erc20_helper_contract_address : opt text;
+
+    // Change the last scraped block number of the ERC-20 helper smart contract.
+    last_erc20_scraped_block_number : opt nat;
+
+    // The principal of the EVM RPC canister that handles the communication
+    // with the Ethereum blockchain.
+    evm_rpc_id : opt principal;
+
+    // Change the deposit with subaccount helper smart contract address.
+    deposit_with_subaccount_helper_contract_address : opt text;
+
+    // Change the last scraped block number of the deposit with subaccount helper smart contract.
+    last_deposit_with_subaccount_scraped_block_number : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
 
+// Argument to Eip1559TransactionPrice.
+// When specified, it is to lookup transaction price for a ckERC20 token withdrawal.
+// When not specified (null), it is for ETH withdrawal.
+type Eip1559TransactionPriceArg = record {
+    // The ledger ID for that ckERC20 token.
+    ckerc20_ledger_id : principal;
+};
+
 // Estimate price of an EIP-1559 transaction
-// when converting ckETH to ETH, see https://eips.ethereum.org/EIPS/eip-1559
+// when converting ckETH to ETH or ckERC20 to ERC20, see
+// https://eips.ethereum.org/EIPS/eip-1559
 type Eip1559TransactionPrice = record {
     // Maximum amount of gas transaction is authorized to consume.
     gas_limit : nat;
@@ -98,6 +147,88 @@ type Eip1559TransactionPrice = record {
     // Maximum amount of Wei that can be charged for the transaction,
     // computed as `max_fee_per_gas * gas_limit`
     max_transaction_fee : nat;
+
+    // Timestamp of when the price was estimated.
+    // Nanoseconds since the UNIX epoch.
+    timestamp : opt nat64;
+};
+
+type CkErc20Token = record {
+  ckerc20_token_symbol: text;
+  erc20_contract_address: text;
+  ledger_canister_id: principal;
+};
+
+type MinterInfo = record {
+    // Ethereum address controlled by the minter via threshold ECDSA.
+    minter_address: opt text;
+
+    // (Deprecated) Address of the ETH helper smart contract.
+    // Use `eth_helper_contract_address`.
+    smart_contract_address: opt text;
+
+    // Address of the ETH helper smart contract.
+    eth_helper_contract_address: opt text;
+
+    // Address of the ERC20 helper smart contract
+    erc20_helper_contract_address: opt text;
+
+    // Address of the ETH or ERC20 deposit with subaccount helper smart contract.
+    deposit_with_subaccount_helper_contract_address: opt text;
+
+    // Information of supported ERC20 tokens.
+    supported_ckerc20_tokens: opt vec CkErc20Token;
+
+    // Minimum amount in Wei that can be withdrawn when converting ckETH -> ETH.
+    minimum_withdrawal_amount : opt nat;
+
+    // Determine ethereum block height observed by minter.
+    ethereum_block_height: opt BlockTag;
+
+    // Last Ethereum block number observed by the minter.
+    last_observed_block_number : opt nat;
+
+    // Amount of ETH in Wei controlled by the minter.
+    // This might be less that the actual amount available on the `minter_address()`.
+    eth_balance : opt nat;
+
+    // Last gas fee estimate.
+    last_gas_fee_estimate: opt GasFeeEstimate;
+
+    // Amount of ETH in Wei controlled by the minter.
+    // This might be less that the actual amount available on the `minter_address()`.
+    erc20_balances : opt vec record { erc20_contract_address: text; balance: nat};
+
+    // Last scraped block number for logs of the ETH helper contract.
+    last_eth_scraped_block_number: opt nat;
+
+    // Last scraped block number for logs of the ERC20 helper contract.
+    last_erc20_scraped_block_number: opt nat;
+
+    // Last scraped block number for logs of the deposit with subaccount helper contract.
+    last_deposit_with_subaccount_scraped_block_number: opt nat;
+
+    // Canister ID of the ckETH ledger.
+    cketh_ledger_id: opt principal;
+
+    // Canister ID of the EVM RPC canister that handles the communication
+    // with the Ethereum blockchain.
+    evm_rpc_id : opt principal;
+};
+
+
+type GasFeeEstimate = record {
+    // Maximum amount of Wei per gas unit that the transaction is willing to pay in total.
+    // This covers the base fee determined by the network and the `max_priority_fee_per_gas`.
+    max_fee_per_gas : nat;
+
+    // Maximum amount of Wei per gas unit that the transaction gives to miners
+    // to incentivize them to include their transaction (priority fee).
+    max_priority_fee_per_gas : nat;
+
+    // Timestamp of when the price was estimated.
+    // Nanoseconds since the UNIX epoch.
+    timestamp: nat64;
 };
 
 type EthTransaction = record { transaction_hash : text };
@@ -105,7 +236,10 @@ type EthTransaction = record { transaction_hash : text };
 // Status of a finalized transaction.
 type TxFinalizedStatus = variant {
     // Transaction was successful.
-    Success : EthTransaction;
+    Success : record {
+        transaction_hash : text;
+        effective_transaction_fee: opt nat;
+    };
     // Transaction failed, user got reimbursed.
     Reimbursed : record {
         transaction_hash : text;
@@ -135,7 +269,73 @@ type RetrieveEthStatus = variant {
     TxFinalized : TxFinalizedStatus;
 };
 
-type WithdrawalArg = record { recipient : text; amount : nat };
+type WithdrawalArg = record {
+    // The address to which the minter should deposit ETH.
+    recipient : text;
+
+    // The amount of ckETH in Wei that the client wants to withdraw.
+    amount : nat;
+
+    // The subaccount to burn ckETH from.
+    from_subaccount : opt Subaccount;
+};
+
+// Details of a withdrawal request and its status.
+type WithdrawalDetail = record {
+    // Symbol of the withdrawal token (either ckETH or ckERC20 token symbol).
+    token_symbol : text;
+
+    // Amount of tokens in base unit that was withdrawn.
+    withdrawal_amount : nat;
+
+    // Max transaction fee in Wei (transaction fee paid by the sender).
+    max_transaction_fee : opt nat;
+
+    // Withdrawal id (i.e. burn index on the ckETH ledger).
+    withdrawal_id : nat64;
+
+    // Sender's principal.
+    from : principal;
+
+    // Sender's subaccount (if given).
+    from_subaccount : opt blob;
+
+    // Address to send tokens to.
+    recipient_address : text;
+
+    // Withdrawal status
+    status : WithdrawalStatus;
+};
+
+// Status of a withdrawal request.
+type WithdrawalStatus = variant {
+    // Request is pending, i.e. transaction is not yet created.
+    Pending;
+
+    // Transaction created byt not yet sent.
+    TxCreated;
+
+    // Transaction sent but not yet finalized.
+    TxSent : EthTransaction;
+
+    // Transaction already finalized.
+    TxFinalized : TxFinalizedStatus;
+};
+
+// ICRC-1 account type.
+type Account = record { owner : principal; subaccount : opt blob };
+
+// Search parameter for withdrawals.
+type WithdrawalSearchParameter = variant {
+    // Search by recipient's ETH address.
+    ByRecipient : text;
+
+    // Search by sender's token account.
+    BySenderAccount : Account;
+
+    // Search by ckETH burn index (which is also used to index ckERC20 withdrawals).
+    ByWithdrawalId : nat64;
+};
 
 type RetrieveEthRequest = record { block_index : nat };
 
@@ -150,7 +350,70 @@ type WithdrawalError = variant {
    // Recipient's address is blocked.
    // No withdrawal can be made to that address.
     RecipientAddressBlocked : record { address : text };
-    // The minter is overloaded, retry the request.
+    // The minter or the ckETH ledger is temporarily unavailable, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+};
+
+type WithdrawErc20Arg = record {
+    // Amount of tokens to withdraw.
+    // The amount is in the smallest unit of the token, e.g.,
+    // ckUSDC uses 6 decimals and so to withdraw 1 ckUSDC, the amount should be 1_000_000.
+    amount : nat;
+
+    // The ledger ID for that ckERC20 token.
+    ckerc20_ledger_id : principal;
+
+    // Ethereum address to withdraw to.
+    recipient : text;
+
+    // The subaccount to burn ckETH from to pay for the transaction fee.
+    from_cketh_subaccount : opt Subaccount;
+
+    // The subaccount to burn ckERC20 from.
+    from_ckerc20_subaccount : opt Subaccount;
+};
+
+type RetrieveErc20Request = record {
+    // Burn index on the ckETH ledger.
+    // ckETH is needed to pay for the transaction fees.
+    cketh_block_index : nat;
+
+    // Burn index on the ledger handling the withdrawn ckERC20 token.
+    ckerc20_block_index : nat;
+};
+
+type WithdrawErc20Error = variant {
+    // The user provided ckERC20 token is not supported by the minter.
+    TokenNotSupported : record {supported_tokens : vec CkErc20Token};
+
+    // Recipient's address is blocked.
+    // No withdrawal can be made to that address.
+    RecipientAddressBlocked : record { address : text };
+
+    // The minter could not burn the required amount of ckETH to pay for the transaction fees.
+    CkEthLedgerError : record { error : LedgerError };
+
+    // The minter could not burn the requested amount of ckERC20 tokens.
+    // The `cketh_block_index` identifies the burn that occurred on the ckETH ledger and that will be reimbursed.
+    CkErc20LedgerError : record { cketh_block_index : nat; error : LedgerError };
+
+    // The minter is temporarily unavailable, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+};
+
+type LedgerError = variant {
+    // The balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
+
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
+
+    // The withdrawal amount is too low and doesn't cover the ledger transaction fee.
+    AmountTooLow : record { minimum_burn_amount : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
+
+    // The ledger is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
 };
@@ -158,6 +421,11 @@ type WithdrawalError = variant {
 type EventSource = record {
     transaction_hash : text;
     log_index : nat;
+};
+
+type ReimbursementIndex = variant {
+    CkEth : record { ledger_burn_index : nat };
+    CkErc20 : record { cketh_ledger_burn_index : nat; ledger_id : principal; ckerc20_ledger_burn_index: nat };
 };
 
 type TransactionReceipt = record {
@@ -193,6 +461,7 @@ type Event = record {
             from_address : text;
             value : nat;
             "principal" : principal;
+            subaccount : opt Subaccount;
         };
         InvalidDeposit : record {
             event_source : EventSource;
@@ -203,6 +472,12 @@ type Event = record {
             mint_block_index: nat;
         };
         SyncedToBlock : record {
+            block_number : nat;
+        };
+        SyncedErc20ToBlock : record {
+            block_number : nat;
+        };
+        SyncedDepositWithSubaccountToBlock : record {
             block_number : nat;
         };
         AcceptedEthWithdrawalRequest : record {
@@ -235,10 +510,79 @@ type Event = record {
             withdrawal_id : nat;
             transaction_hash : opt text;
         };
+        ReimbursedErc20Withdrawal : record {
+            withdrawal_id : nat;
+            burn_in_block : nat;
+            reimbursed_in_block : nat;
+            ledger_id: principal;
+            reimbursed_amount : nat;
+            transaction_hash : opt text;
+        };
         SkippedBlock : record {
+            contract_address: opt text;
             block_number : nat;
         };
+        AddedCkErc20Token : record {
+            chain_id : nat;
+            address : text;
+            ckerc20_token_symbol : text;
+            ckerc20_ledger_id : principal;
+        };
+        AcceptedErc20Deposit : record {
+            transaction_hash : text;
+            block_number : nat;
+            log_index : nat;
+            from_address : text;
+            value : nat;
+            "principal" : principal;
+            erc20_contract_address : text;
+            subaccount : opt Subaccount;
+        };
+        AcceptedErc20WithdrawalRequest : record {
+            max_transaction_fee : nat;
+            withdrawal_amount : nat;
+            erc20_contract_address : text;
+            destination : text;
+            cketh_ledger_burn_index : nat;
+            ckerc20_ledger_id : principal;
+            ckerc20_ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
+            created_at: nat64;
+        };
+        FailedErc20WithdrawalRequest : record {
+            withdrawal_id : nat;
+            reimbursed_amount : nat;
+            to : principal;
+            to_subaccount : opt blob;
+        };
+        MintedCkErc20 : record {
+            event_source : EventSource;
+            erc20_contract_address : text;
+            mint_block_index : nat;
+            ckerc20_token_symbol: text;
+        };
+        QuarantinedDeposit : record {
+            event_source : EventSource;
+        };
+        QuarantinedReimbursement : record {
+            index : ReimbursementIndex;
+        };
     };
+};
+
+type AddCkErc20Token = record {
+    // Ethereum chain ID.
+    chain_id : nat;
+
+    // The Ethereum address of the ERC-20 smart contract.
+    address : text;
+
+    // The ckERC20 token symbol on the ledger.
+    ckerc20_token_symbol : text;
+
+    // The ledger ID for that ckERC20 token.
+    ckerc20_ledger_id : principal;
 };
 
 service : (MinterArg) -> {
@@ -250,6 +594,7 @@ service : (MinterArg) -> {
     minter_address : () -> (text);
 
     // Address of the helper smart contract.
+    // Returns "N/A" if the helper smart contract is not set.
     // IMPORTANT:
     // * Use this address to send ETH to the minter to convert it to ckETH.
     // * In case the smart contract needs to be updated the returned address will change!
@@ -257,21 +602,36 @@ service : (MinterArg) -> {
     smart_contract_address : () -> (text) query;
 
     // Estimate the price of a transaction issued by the minter when converting ckETH to ETH.
-    eip_1559_transaction_price : () -> (Eip1559TransactionPrice);
+    eip_1559_transaction_price : (opt Eip1559TransactionPriceArg) -> (Eip1559TransactionPrice) query;
+
+    // Returns internal minter parameters
+    get_minter_info : () -> (MinterInfo) query;
 
     // Withdraw the specified amount in Wei to the given Ethereum address.
     // IMPORTANT: The current gas limit is set to 21,000 for a transaction so withdrawals to smart contract addresses will likely fail.
     withdraw_eth : (WithdrawalArg) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
 
-    // Retrieve the status of a withdrawal request.
+    // Withdraw the specified amount of ERC-20 tokens to the given Ethereum address.
+    withdraw_erc20 : (WithdrawErc20Arg) -> (variant { Ok : RetrieveErc20Request; Err : WithdrawErc20Error });
+
+    // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
+
+    // Return details of all withdrawals matching the given search parameter.
+    withdrawal_status : (WithdrawalSearchParameter) -> (vec WithdrawalDetail) query;
 
     // Check if an address is blocked by the minter.
     is_address_blocked : (text) -> (bool) query;
+
     // Retrieve the status of the minter canister.
     get_canister_status : () -> (CanisterStatusResponse);
 
-    // Retrive events from the minter's audit log.
+    // Retrieve events from the minter's audit log.
     // The endpoint can return fewer events than requested to bound the response size.
+    // IMPORTANT: this endpoint is meant as a debugging tool and is not guaranteed to be backwards-compatible.
     get_events : (record { start : nat64; length : nat64 }) -> (record { events : vec Event; total_event_count : nat64 }) query;
+
+    // Add a ckERC-20 token to be supported by the minter.
+    // This call is restricted to the orchestrator ID.
+    add_ckerc20_token : (AddCkErc20Token) -> ();
 }

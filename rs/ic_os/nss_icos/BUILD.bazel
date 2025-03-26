@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:base64",
+    "@crate_index//:lazy_static",
+    "@crate_index//:libc",
+    "@crate_index//:libnss",
+    "@crate_index//:local-ip-address",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:paste",
+]
+
+ALIASES = {}
+
+rust_shared_library(
+    name = "nss_icos",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "nss_icos",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

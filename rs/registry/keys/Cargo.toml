@@ -9,9 +9,11 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-types = { path = "../../types/types" }
 serde = { workspace = true }
 
 [dev-dependencies]
-rand = "0.8"
+rand = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }

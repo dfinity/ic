@@ -1,0 +1,22 @@
+[package]
+name = "xnet-slo-test-lib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+canister-test = { path = "../../../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
+futures = { workspace = true }
+ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../../driver" }
+slog = { workspace = true }
+systest-message-routing-common = { path = "../../common" }
+xnet-test = { path = "../../../../rust_canisters/xnet_test" }
+tokio = { workspace = true }
+
+[lib]
+name = "xnet_slo_test_lib"
+path = "xnet_slo_test_lib.rs"

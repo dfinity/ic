@@ -2,7 +2,7 @@ use candid::{CandidType, Deserialize};
 use serde::Serialize;
 
 /// DEPRECATED
-/// This payload and proposal type is superseded by UpdateElectedReplicaVersions
+/// This payload and proposal type is superseded by ReviseElectedGuestosVersions
 ///
 /// The payload of a proposal to retire a set of replica versions.
 ///
@@ -11,7 +11,7 @@ use serde::Serialize;
 /// RetireReplicaVersionPayload, it is possible to construct a ReplicaVersionRecord.
 ///
 /// See /rs/protobuf/def/registry/replica_version/v1/replica_version.proto
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RetireReplicaVersionPayload {
     /// Version IDs. These can be anything, they have no semantics.
     pub replica_version_ids: Vec<String>,

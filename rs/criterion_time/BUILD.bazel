@@ -6,6 +6,7 @@ rust_library(
     name = "criterion_time",
     srcs = glob(["src/**"]),
     deps = [
+        # Keep sorted.
         "@crate_index//:criterion",
         "@crate_index//:libc",
     ],

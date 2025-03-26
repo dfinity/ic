@@ -4,14 +4,14 @@ use ic_types::{
     messages::{MessageId, Response as CanisterResponse},
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Response {
     Ingress(IngressResponse),
     Canister(CanisterResponse),
 }
 
 /// An ingress response.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct IngressResponse {
     pub message_id: MessageId,
     pub status: IngressStatus,

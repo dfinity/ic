@@ -5,6 +5,7 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
     "//rs/protobuf",
@@ -14,6 +15,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash/test_utils",
     "@crate_index//:assert_matches",
@@ -25,6 +27,11 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
 ]
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_library(
     name = "tree_hash",
     srcs = glob(["src/**"]),
@@ -33,7 +40,7 @@ rust_library(
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
         "//conditions:default": [],
     }),
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -46,7 +53,7 @@ rust_test(
 rust_test_suite(
     name = "tree_hash_integration",
     srcs = glob(["tests/**"]),
-    edition = "2021",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
 )
 

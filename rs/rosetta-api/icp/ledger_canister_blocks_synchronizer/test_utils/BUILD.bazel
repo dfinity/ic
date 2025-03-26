@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/canister_client/sender",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
+    "//rs/types/types",
+    "@crate_index//:rand",
+    "@crate_index//:rand_distr",
+    "@crate_index//:tempfile",
+    "@crate_index//:tracing",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "test_utils",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_ledger_canister_blocks_synchronizer_test_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)

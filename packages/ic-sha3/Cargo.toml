@@ -1,0 +1,17 @@
+[package]
+name = "ic-sha3"
+version = "1.0.0"
+description = "Library for SHA-3 and Keccak hashing on the Internet Computer"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation = "https://docs.rs/ic-sha3"
+
+[dependencies]
+sha3 = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }

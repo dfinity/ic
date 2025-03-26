@@ -7,4 +7,4 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-tempfile = "3.1.0"
+tempfile = { workspace = true }

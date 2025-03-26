@@ -9,6 +9,9 @@ impl From<&IDkgTranscriptOperation> for IDkgTranscriptType {
             IDkgTranscriptOperation::Random => {
                 IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random)
             }
+            IDkgTranscriptOperation::RandomUnmasked => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random)
+            }
             IDkgTranscriptOperation::ReshareOfMasked(transcript) => IDkgTranscriptType::Unmasked(
                 IDkgUnmaskedTranscriptOrigin::ReshareMasked(transcript.transcript_id),
             ),

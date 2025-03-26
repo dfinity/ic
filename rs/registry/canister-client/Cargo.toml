@@ -1,0 +1,26 @@
+[package]
+name = "ic-registry-canister-client"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+futures = "0.3.31"
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-registry-transport = { path = "../transport" }
+ic-types = { path = "../../types/types" }
+ic-stable-structures = { workspace = true }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-nns-constants = { path = "../../nns/constants" }
+itertools = { workspace = true }
+ic-nns-common = { path = "../../nns/common" }
+anyhow = { workspace = true }
+ic-cdk = { workspace = true }
+candid = { workspace = true }
+
+
+[dev-dependencies]
+ic-registry-keys = { path = "../keys" }

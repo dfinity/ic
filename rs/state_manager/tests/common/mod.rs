@@ -1,8 +1,9 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::state_manager::Config;
+use ic_config::state_manager::{lsmt_config_default, Config, LsmtConfig};
 use ic_interfaces::{
-    certification::{CertificationPermanentError, Verifier, VerifierError},
+    certification::{InvalidCertificationReason, Verifier, VerifierError},
+    p2p::state_sync::{Chunk, ChunkId, Chunkable},
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
@@ -11,32 +12,27 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
-use ic_state_manager::{state_sync::StateSync, stream_encoding, StateManagerImpl};
-use ic_test_utilities::{
-    consensus::fake::{Fake, FakeVerifier},
-    state::{initial_execution_state, new_canister_state},
-    types::ids::{subnet_test_id, user_test_id},
+use ic_state_manager::{
+    state_sync::types::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
+    state_sync::StateSync,
+    stream_encoding, StateManagerImpl,
 };
+use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_state::{initial_execution_state, new_canister_state};
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::{
-    artifact::{Artifact, StateSyncMessage},
-    chunkable::{
-        ArtifactChunk, ArtifactChunkData,
-        ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
-        ChunkId, Chunkable, ChunkableArtifact,
-    },
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
-    state_sync::MANIFEST_CHUNK_ID_OFFSET,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
 
-const EMPTY_WASM: &[u8] = &[
+pub const EMPTY_WASM: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
     0x01, 0x00,
 ];
@@ -101,7 +97,7 @@ impl Verifier for RejectingVerifier {
         _certification: &Certification,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
-        Err(CertificationPermanentError::RejectedByRejectingVerifier.into())
+        Err(InvalidCertificationReason::RejectedByRejectingVerifier.into())
     }
 }
 
@@ -138,7 +134,7 @@ pub fn encode_decode_stream_test<
             streams.insert(destination_subnet, stream.clone());
         });
 
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
 
         certify_height(&state_manager, Height::new(1));
 
@@ -158,7 +154,7 @@ pub fn encode_decode_stream_test<
             decoded_slice.unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
 
         assert_eq!(
-            stream.slice(stream.header().begin, size_limit),
+            stream.slice(stream.header().begin(), size_limit),
             decoded_slice
         );
     });
@@ -170,9 +166,9 @@ pub fn encode_decode_stream_test<
 /// `CertifiedStreamSlice`, and checks that:
 ///
 ///  1. the payload is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `msg_begin` and the same limits; and
+///     witness and payload beginning at `msg_begin` and the same limits; and
 ///  2. the witness is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `witness_begin` and matching message limit.
+///     witness and payload beginning at `witness_begin` and matching message limit.
 ///
 /// # Panics
 /// Whenever encoding and/or decoding would under normal circumstances return an
@@ -193,7 +189,7 @@ pub fn encode_partial_slice_test(
             streams.insert(destination_subnet, stream.clone());
         });
 
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
 
         certify_height(&state_manager, Height::new(1));
 
@@ -226,7 +222,7 @@ pub fn encode_partial_slice_test(
                 &same_payload_slice,
             )
             .unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
-        let msg_count = decoded_slice.messages().map(|m| m.len()).unwrap_or(0);
+        let msg_count = decoded_slice.messages().map_or(0, |m| m.len());
 
         // Slice with the same witness and matching payload.
         let same_witness_slice = state_manager
@@ -284,7 +280,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
         streams.insert(subnet_test_id(42), modified_stream);
     });
 
-    state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
 
     certify_height(&state_manager, Height::new(2));
 
@@ -305,7 +301,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
     use std::time::{Duration, Instant};
 
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(100);
     let started = Instant::now();
     while started.elapsed() < timeout {
         match state_manager.get_state_hash_at(h) {
@@ -381,29 +377,21 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
         .wasm_binary = WasmBinary::new(wasm);
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum StateSyncErrorCode {
-    ChunksMoreNeeded,
     MetaManifestVerificationFailed,
     ManifestVerificationFailed,
     OtherChunkVerificationFailed,
 }
 
-pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> StateSyncMessage {
-    pipe_partial_state_sync(&src, &mut *dst, &Default::default(), false)
-        .expect("State sync not completed.")
+pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable<StateSyncMessage>>) {
+    let is_finished = pipe_partial_state_sync(&src, &mut *dst, &Default::default(), false)
+        .expect("State sync chunk verification failed.");
+    assert!(is_finished, "State sync not completed");
 }
 
-fn alter_chunk_data(chunk: &mut ArtifactChunk) {
-    let mut chunk_data = match &chunk.artifact_chunk_data {
-        ArtifactChunkData::UnitChunkData(_) => {
-            panic!(
-                "Unexpected artifact chunk data type: {:?}",
-                chunk.artifact_chunk_data
-            );
-        }
-        ArtifactChunkData::SemiStructuredChunkData(chunk_data) => chunk_data.clone(),
-    };
+fn alter_chunk_data(chunk: &mut Chunk) {
+    let mut chunk_data = chunk.as_bytes().to_vec();
     match chunk_data.last_mut() {
         Some(last) => {
             // Alter the last element of chunk_data.
@@ -414,16 +402,16 @@ fn alter_chunk_data(chunk: &mut ArtifactChunk) {
             chunk_data = vec![9; 100];
         }
     }
-    chunk.artifact_chunk_data = ArtifactChunkData::SemiStructuredChunkData(chunk_data);
+    *chunk = chunk_data.into();
 }
 
 /// Pipe the meta-manifest (chunk 0) from src to dest.
 /// Alter the chunk data if `use_bad_chunk` is set to true.
 pub fn pipe_meta_manifest(
     src: &StateSyncMessage,
-    dst: &mut dyn Chunkable,
+    dst: &mut dyn Chunkable<StateSyncMessage>,
     use_bad_chunk: bool,
-) -> Result<StateSyncMessage, StateSyncErrorCode> {
+) -> Result<bool, StateSyncErrorCode> {
     let ids: Vec<_> = dst.chunks_to_download().collect();
 
     // Only the meta-manifest should be requested
@@ -431,7 +419,8 @@ pub fn pipe_meta_manifest(
 
     let id = ids[0];
 
-    let mut chunk = Box::new(src.clone())
+    let mut chunk = src
+        .clone()
         .get_chunk(id)
         .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
@@ -439,13 +428,9 @@ pub fn pipe_meta_manifest(
         alter_chunk_data(&mut chunk);
     }
 
-    match dst.add_chunk(chunk) {
-        Ok(Artifact::StateSync(msg)) => Ok(msg),
-        Ok(artifact) => {
-            panic!("Unexpected artifact type: {:?}", artifact);
-        }
-        Err(ChunksMoreNeeded) => Err(StateSyncErrorCode::ChunksMoreNeeded),
-        Err(ChunkVerificationFailed) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
+    match dst.add_chunk(id, chunk) {
+        Ok(()) => Ok(dst.chunks_to_download().next().is_none()),
+        Err(_) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
     }
 }
 
@@ -454,9 +439,9 @@ pub fn pipe_meta_manifest(
 /// Alter the data of the chunk in the middle position if `use_bad_chunk` is set to true.
 pub fn pipe_manifest(
     src: &StateSyncMessage,
-    dst: &mut dyn Chunkable,
+    dst: &mut dyn Chunkable<StateSyncMessage>,
     use_bad_chunk: bool,
-) -> Result<StateSyncMessage, StateSyncErrorCode> {
+) -> Result<bool, StateSyncErrorCode> {
     let ids: Vec<_> = dst.chunks_to_download().collect();
 
     // Only the manifest chunks should be requested
@@ -467,7 +452,8 @@ pub fn pipe_manifest(
     assert!(ids.iter().all(|id| manifest_chunks.contains(id)));
 
     for (index, id) in ids.iter().enumerate() {
-        let mut chunk = Box::new(src.clone())
+        let mut chunk = src
+            .clone()
             .get_chunk(*id)
             .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
@@ -475,30 +461,28 @@ pub fn pipe_manifest(
             alter_chunk_data(&mut chunk);
         }
 
-        match dst.add_chunk(chunk) {
-            Ok(Artifact::StateSync(msg)) => {
-                return Ok(msg);
+        match dst.add_chunk(*id, chunk) {
+            Ok(()) => {
+                if dst.chunks_to_download().next().is_none() {
+                    return Ok(true);
+                }
             }
-            Ok(artifact) => {
-                panic!("Unexpected artifact type: {:?}", artifact);
-            }
-            Err(ChunksMoreNeeded) => (),
-            Err(ChunkVerificationFailed) => {
-                return Err(StateSyncErrorCode::ManifestVerificationFailed)
+            Err(_) => {
+                return Err(StateSyncErrorCode::ManifestVerificationFailed);
             }
         }
     }
-    Err(StateSyncErrorCode::ChunksMoreNeeded)
+    Ok(false)
 }
 
 /// Pipe chunks from src to dst, but omit any chunks in omit
 /// Alter the data of the chunk in the middle position if `use_bad_chunk` is set to true.
 pub fn pipe_partial_state_sync(
     src: &StateSyncMessage,
-    dst: &mut dyn Chunkable,
+    dst: &mut dyn Chunkable<StateSyncMessage>,
     omit: &HashSet<ChunkId>,
     use_bad_chunk: bool,
-) -> Result<StateSyncMessage, StateSyncErrorCode> {
+) -> Result<bool, StateSyncErrorCode> {
     loop {
         let ids: Vec<_> = dst.chunks_to_download().collect();
 
@@ -512,7 +496,8 @@ pub fn pipe_partial_state_sync(
                 omitted_chunks = true;
                 continue;
             }
-            let mut chunk = Box::new(src.clone())
+            let mut chunk = src
+                .clone()
                 .get_chunk(*id)
                 .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
@@ -520,21 +505,17 @@ pub fn pipe_partial_state_sync(
                 alter_chunk_data(&mut chunk);
             }
 
-            match dst.add_chunk(chunk) {
-                Ok(Artifact::StateSync(msg)) => {
-                    return Ok(msg);
+            match dst.add_chunk(*id, chunk) {
+                Ok(()) => {
+                    if dst.chunks_to_download().next().is_none() {
+                        return Ok(true);
+                    }
                 }
-                Ok(artifact) => {
-                    panic!("Unexpected artifact type: {:?}", artifact);
-                }
-                Err(ChunksMoreNeeded) => (),
-                Err(ChunkVerificationFailed) => {
-                    return Err(StateSyncErrorCode::OtherChunkVerificationFailed)
-                }
+                Err(_) => return Err(StateSyncErrorCode::OtherChunkVerificationFailed),
             }
         }
         if omitted_chunks {
-            return Err(StateSyncErrorCode::ChunksMoreNeeded);
+            return Ok(false);
         }
     }
     unreachable!()
@@ -602,6 +583,50 @@ fn state_manager_test_with_state_sync_and_verifier_result<
     })
 }
 
+pub fn state_manager_restart_test_with_state_sync<Test>(test: Test)
+where
+    Test: FnOnce(
+        &MetricsRegistry,
+        Arc<StateManagerImpl>,
+        StateSync,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
+    ),
+{
+    let tmp = tmpdir("sm");
+    let config = Config::new(tmp.path().into());
+    let own_subnet = subnet_test_id(42);
+    let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
+
+    with_test_replica_logger(|log| {
+        let log_sm = log.clone();
+        let make_state_manager = move |starting_height| {
+            let metrics_registry = MetricsRegistry::new();
+
+            let state_manager = Arc::new(StateManagerImpl::new(
+                Arc::clone(&verifier),
+                own_subnet,
+                SubnetType::Application,
+                log_sm.clone(),
+                &metrics_registry,
+                &config,
+                starting_height,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            ));
+
+            (metrics_registry, state_manager)
+        };
+
+        let (metrics_registry, state_manager) = make_state_manager(None);
+        let state_sync = StateSync::new(state_manager.clone(), log.clone());
+
+        let restart_fn = Box::new(move |state_manager, starting_height| {
+            drop(state_manager);
+            make_state_manager(starting_height)
+        });
+        test(&metrics_registry, state_manager, state_sync, restart_fn);
+    });
+}
+
 pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {
     state_manager_test_with_verifier_result(true, f)
 }
@@ -657,12 +682,28 @@ where
     });
 }
 
-pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
+pub fn lsmt_with_sharding() -> LsmtConfig {
+    LsmtConfig { shard_num_pages: 1 }
+}
+
+pub fn lsmt_without_sharding() -> LsmtConfig {
+    LsmtConfig {
+        shard_num_pages: u64::MAX,
+    }
+}
+
+pub fn state_manager_restart_test_with_lsmt<Test>(lsmt_config: LsmtConfig, test: Test)
 where
     Test: FnOnce(
         &MetricsRegistry,
         StateManagerImpl,
-        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
+        Box<
+            dyn Fn(
+                StateManagerImpl,
+                Option<Height>,
+                LsmtConfig,
+            ) -> (MetricsRegistry, StateManagerImpl),
+        >,
     ),
 {
     let tmp = tmpdir("sm");
@@ -671,8 +712,11 @@ where
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
 
     with_test_replica_logger(|log| {
-        let make_state_manager = move |starting_height| {
+        let make_state_manager = move |starting_height, lsmt_config| {
             let metrics_registry = MetricsRegistry::new();
+
+            let mut config = config.clone();
+            config.lsmt_config = lsmt_config;
 
             let state_manager = StateManagerImpl::new(
                 Arc::clone(&verifier),
@@ -688,15 +732,34 @@ where
             (metrics_registry, state_manager)
         };
 
-        let (metrics_registry, state_manager) = make_state_manager(None);
+        let (metrics_registry, state_manager) = make_state_manager(None, lsmt_config);
 
-        let restart_fn = Box::new(move |state_manager, starting_height| {
+        let restart_fn = Box::new(move |state_manager, starting_height, lsmt_config| {
             drop(state_manager);
-            make_state_manager(starting_height)
+            make_state_manager(starting_height, lsmt_config)
         });
 
         test(&metrics_registry, state_manager, restart_fn);
     });
+}
+
+pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
+where
+    Test: FnOnce(
+        &MetricsRegistry,
+        StateManagerImpl,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
+    ),
+{
+    state_manager_restart_test_with_lsmt(
+        lsmt_config_default(),
+        |metrics, state_manager, restart_fn| {
+            let restart_fn_simplified = Box::new(move |state_manager, starting_height| {
+                restart_fn(state_manager, starting_height, lsmt_config_default())
+            });
+            test(metrics, state_manager, restart_fn_simplified);
+        },
+    );
 }
 
 pub fn state_manager_restart_test<Test>(test: Test)

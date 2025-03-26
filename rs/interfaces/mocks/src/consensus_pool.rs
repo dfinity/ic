@@ -3,7 +3,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::{Block, CatchUpPackage},
     time::Time,
-    RegistryVersion,
+    Height, RegistryVersion,
 };
 use mockall::mock;
 
@@ -20,6 +20,8 @@ mock! {
         fn cup_as_protobuf(&self) -> pb::CatchUpPackage;
 
         fn get_oldest_registry_version_in_use(&self) -> RegistryVersion;
+
+        fn is_replica_behind(&self, certified_height: Height) -> bool;
     }
 }
 

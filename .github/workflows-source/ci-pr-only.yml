@@ -1,0 +1,170 @@
+name: CI PR Only
+# Jobs that run on PRs, but no other pipelines
+
+on:
+  merge_group:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  # only triggered on PR, so head_ref will always be set
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+env:
+  CI_PROJECT_DIR: ${{ github.workspace }}
+  MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
+  ORG: ${{ github.repository_owner }}
+
+anchors:
+  image: &image
+    image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
+  dind-small-setup: &dind-small-setup
+    timeout-minutes: 30
+    runs-on:
+      labels: dind-small
+    container:
+      <<: *image
+      options: >-
+        -e NODE_NAME
+  dind-large-setup: &dind-large-setup
+    timeout-minutes: 90
+    runs-on:
+      labels: dind-large
+    container:
+      <<: *image
+      options: >-
+        -e NODE_NAME
+  checkout: &checkout
+    name: Checkout
+    uses: actions/checkout@v4
+  skip-merge-group: &skip-merge-group
+    if: ${{ github.event_name != 'merge_group' }}
+
+jobs:
+  bazel-build-fuzzers-archives:
+    name: Bazel Build Fuzzers Archives
+    <<: *dind-large-setup
+    <<: *skip-merge-group
+    steps:
+      - <<: *checkout
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            fuzzers:
+              - '.github/workflows/pr-only.yml'
+              - 'bin/build-all-fuzzers.sh'
+              - 'bazel/fuzz_testing.bzl'
+      - name: Run Bazel Build Fuzzers Archives
+        id: bazel-build-fuzzers-archives
+        if: steps.filter.outputs.fuzzers == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"/bin
+          ./build-all-fuzzers.sh --zip
+
+  lock-generate:
+    name: Lock Generate
+    <<: *dind-small-setup
+    <<: *skip-merge-group
+    env:
+      CI_EVENT_NAME: ${{ github.event_name }}
+    steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            lock-generate:
+              - '.github/workflows/pr-only.yml'
+              - '.bazelrc'
+              - '.bazelversion'
+              - '**/*.bazel'
+              - '**/*.bzl'
+              - '**/*.lock'
+              - '**/*.rs'
+              - '**/*.toml'
+      - name: Run Lock Generate
+        id: lock-generate
+        if: steps.filter.outputs.lock-generate == 'true'
+        run: ./ci/scripts/lock-generate.sh
+
+  dependencies-check:
+    name: Dependency Scan for PR
+    <<: *dind-small-setup
+    <<: *skip-merge-group
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      SHELL_WRAPPER: "/usr/bin/time"
+      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
+      CI_PROJECT_PATH: ${{ github.repository }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      CI_COMMIT_SHA: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+      REPO_NAME: ${{ github.repository }}
+    steps:
+      - <<: *checkout
+        with:
+          fetch-depth: 256
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup python deps
+        id: setup-python-deps
+        shell: bash
+        run: |
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
+      - name: Dependency Scan for Pull Request
+        id: dependencies-check
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
+          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+
+  # CI job is also executed in Schedule Hourly
+  bazel-test-coverage:
+    name: Bazel Test Coverage
+    <<: *dind-large-setup
+    <<: *skip-merge-group
+    if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - <<: *checkout
+      - name: Run Bazel Test Coverage
+        shell: bash
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+          ./ci/scripts/bazel-coverage.sh
+      - name: Upload bazel-coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-coverage
+          retention-days: 1
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            cov_html.zip

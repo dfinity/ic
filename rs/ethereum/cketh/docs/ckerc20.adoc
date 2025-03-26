@@ -1,0 +1,279 @@
+= ckERC20 +
+
+The ckETH minter canister is extended to convert a selected subset of Ethereum ERC-20  tokens to ckERC20 and back, where each ckERC20 is a token issued on the Internet Computer that is backed 1:1 by the corresponding ERC-20 token. For each ckERC20 token, the minter works with a dedicated link:../../../ledger_suite/icrc1/README.md[Ledger Canister], handling the ckERC20 token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
+
+NOTE: An ERC-20 token denotes a fungible token on the Ethereum blockchain that follows the https://eips.ethereum.org/EIPS/eip-20[ERC-20 token standard].
+
+== Supported ERC-20 tokens
+
+NOTE: For the most up-to-date list of supported ERC-20 tokens, see `supported_ckerc20_tokens` when calling `get_minter_info` on the minter.
+
+=== Ethereum Mainnet
+
+|===
+| ERC-20 token symbol | ERC-20 smart contract address
+
+|EURC
+|https://etherscan.io/token/0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c[0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c]
+
+|LINK
+|https://etherscan.io/token/0x514910771AF9Ca656af840dff83E8264EcF986CA[0x514910771AF9Ca656af840dff83E8264EcF986CA]
+
+|OCT
+|https://etherscan.io/token/0xF5cFBC74057C610c8EF151A439252680AC68c6DC[0xF5cFBC74057C610c8EF151A439252680AC68c6DC]
+
+|PEPE
+|https://etherscan.io/token/0x6982508145454Ce325dDbE47a25d4ec3d2311933[0x6982508145454Ce325dDbE47a25d4ec3d2311933]
+
+|SHIB
+|https://etherscan.io/token/0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE[0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE]
+
+|UNI
+|https://etherscan.io/token/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984[0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984]
+
+|USDC
+|https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48[0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48]
+
+|USDT
+|https://etherscan.io/token/0xdAC17F958D2ee523a2206206994597C13D831ec7[0xdAC17F958D2ee523a2206206994597C13D831ec7]
+
+|WBTC
+|https://etherscan.io/token/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599[0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599]
+
+|wstETH
+|https://etherscan.io/token/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0[0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0]
+
+|XAUt
+|https://etherscan.io/token/0x68749665FF8D2d112Fa859AA293F07A622782F38[0x68749665FF8D2d112Fa859AA293F07A622782F38]
+|===
+
+=== Ethereum Testnet Sepolia
+
+|===
+| ERC-20 token symbol | ERC-20 smart contract address
+
+|(Sepolia) LINK
+|https://sepolia.etherscan.io/address/0x779877A7B0D9E8603169DdbD7836e478b4624789[0x779877A7B0D9E8603169DdbD7836e478b4624789]
+
+|(Sepolia) PEPE
+|https://sepolia.etherscan.io/address/0x560eF9F39E4B08f9693987cad307f6FBfd97B2F6[0x560eF9F39E4B08f9693987cad307f6FBfd97B2F6]
+
+|(Sepolia) USDC
+|https://sepolia.etherscan.io/address/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238[0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238]
+|===
+
+== Testing with Sepolia
+
+Another instance of the minter and of the ledger are deployed that target specifically the link:https://moralis.io/sepolia-testnet-guide-what-is-the-sepolia-testnet/[Sepolia] Ethereum testnet.
+This allows you to test the minter without having to use real ETH or USDC tokens.
+You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet] to obtain some Sepolia ETH and the link:https://faucet.circle.com/[Circle Tesnet Faucet] to obtain some Sepolia USDC and start testing the ckSepoliaETH minter!
+
+== Quick Links
+
+|===
+|Ethereum Chain |ckERC20 helper smart contract |Minter dashboard|Ledger|`dfx` commands in
+
+|link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
+|link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68[0x18901044688D3756C35Ed2b36D93e6a5B8e00E68]
+|link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[ckETH minter]
+|link:https://dashboard.internetcomputer.org/canister/ss2fx-dyaaa-aaaar-qacoq-cai[ckETH ledger]
+| `ic/rs/ethereum/cketh/mainnet`
+
+|link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-11155111.json[Ethereum Testnet Sepolia]
+|link:https://sepolia.etherscan.io/address/0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38[0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38]
+|link:https://jzenf-aiaaa-aaaar-qaa7q-cai.raw.icp0.io/dashboard[ckSepoliaETH minter]
+|link:https://dashboard.internetcomputer.org/canister/apia6-jaaaa-aaaar-qabma-cai[ckSepoliaETH ledger]
+| `ic/rs/ethereum/cketh/testnet`
+|===
+
+TIP: To interact with the minter or ledger as exemplified below with `dfx`, make sure to locate yourself in the correct directory as listed in the table above.
+
+== Feedback
+
+We would greatly appreciate any feedback you may have.
+Please feel free to reach out by leaving a comment in this link:https://forum.dfinity.org/t/cketh-a-canister-issued-ether-twin-token-on-the-ic/22819/1[forum post].
+
+== Architecture
+
+The ckERC20 implementation consists of a suite of canisters:
+
+. The existing ckETH minter is responsible for handling ERC-20 deposits and withdrawal requests. Each ERC-20 deposit and ckERC-20 withdrawal will result in a transaction on the ledger associated with that ERC-20 token. We reuse the ckETH minter to deal with ckERC-20 because a ckERC-20 withdrawal involves issuing an Ethereum transaction where the transaction fee is paid by the sender in ETH: ETH is needed to pay for ERC-20 transfers! Another canister would have another Ethereum address (because it would have another threshold ECDSA public key) and so that address would first need some ETH (which involves some costly Ethereum transfers) from the ckETH minter before being able to issue any ERC-20 transactions.
+. One ICRC1 ledger suite (ledger, index-ng, archive(s)) per ERC-20 token:
+.. ckERC20 ledger is the canister tracking movements of the ckERC20 token and handling token transfer requests.
+.. ckERC20 archive is the canister storing archived ckERC20 transactions. ckERC20 ledger creates this canister on demand.
+.. ckERC20 index is the canister indexing ckERC20 transactions by account.
+. Ledger suite orchestrator that controls each ICRC1 ledger suite to manage them in a scalable way. This canister will be controlled by the NNS and will be responsible for
+.. Spawning a new ICRC ledger suite when adding a new ERC-20 token (via NNS proposal)
+.. Upgrading all managed canisters (ledgers, indexes, archives) to some given version (via NNS proposal)
+.. Cycles top-up of all managed canisters.
+
+
+== Deposit: ERC20 to ckERC20
+
+The ERC-20 deposit flow is similar to the ckETH deposit flow in that deposits will transit via a helper smart contract to be able to bind an Ethereum transaction with an IC principal.
+
+----
+ ┌────┐                      ┌───────────────┐                                      ┌───────────────┐                                                      ┌──────┐
+ │User│                      │ERC-20 Contract│                                      │Helper Contract│                                                      │Minter│
+ └─┬──┘                      └───────┬───────┘                                      └───────┬───────┘                                                      └──┬───┘
+   │                                 │                                                      │                                                                 │
+   │approve(helper_contract, amount) │                                                      │                                                                 │
+   │────────────────────────────────>│                                                      │                                                                 │
+   │                                 │                                                      │                                                                 │
+   │                depositErc20(token_id, amount, principal, subaccount)                   │                                                                 │
+   │───────────────────────────────────────────────────────────────────────────────────────>│                                                                 │
+   │                                 │           transferFrom(user, minter, amount)         │                                                                 │
+   │                                 │<─────────────────────────────────────────────────────│                                                                 │
+   │                                 │                                                      │                                                                 │
+   │                                 │                                                      │       get_events                                                │
+   │                                 │                                                      │<────────────────────────────────────────────────────────────────│
+   │                                 │                                                      │ReceivedEthOrErc20(token_id, user, amount, principal, subaccount)│
+   │                                 │                                                      │────────────────────────────────────────────────────────────────>│
+   │                                 │     mint(token_id, amount, principal, subaccount)    │                                                                 │
+   │<─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ ┌─┴──┐                      ┌───────┴───────┐                                      ┌───────┴───────┐                                                      ┌──┴───┐
+ │User│                      │ERC-20 Contract│                                      │Helper Contract│                                                      │Minter│
+ └────┘                      └───────────────┘                                      └───────────────┘                                                      └──────┘
+----
+
+[WARNING]
+.Address of the helper smart contract
+====
+The address of the helper smart contract may change in the future when the minter is upgraded.
+Please verify the address of the helper contract **before** any important transfer by querying the minter as follows
+and checking the field `deposit_with_subaccount_helper_contract_address`:
+[source,shell]
+----
+dfx canister --network ic call minter get_minter_info
+----
+====
+
+Similarly to ckETH, the IC principal passed to the helper smart contract must be encoded as a
+`bytes32` array. The simplest way to convert your IC principal to the smart contract argument is to use the link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[minter dashboard].
+Refer to xref:cketh.adoc#deposit_eth_to_cketh[Deposit: ETH to ckETH] to see other methods.
+[WARNING]
+====
+* It's critical that the encoded IC principal is correct otherwise the funds will be lost.
+* The helper smart contracts for Ethereum and for Sepolia have different addresses (refer to the above table).
+====
+
+The ERC-20 -> ckERC-20 flow involves the following steps:
+
+. The user submits an Ethereum transaction calling the `approve` function of the ERC-20 smart contract to allow the helper smart contract address to use some of the user’s funds. Depending on the amount specified, additional deposits may not need to be approved beforehand. The `approve` function can be invoked directly on the contract's Etherscan page after connecting any of Web3-capable wallets.
+. The user calls the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositErc20` method of the helper smart contract (just as `approve` this method can be called from contract's Etherscan page) specifying
+.. The ERC-20 smart contract address. This identifies the ERC-20 token being deposited.
+.. The amount of ERC-20 tokens being deposited.
+.. The IC principal encoded as a `bytes32`.
+.. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as a hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
+. The helper smart contract does the following steps within the *same* Ethereum transaction
+.. Call `transferFrom` on the ERC-20 smart contract to transfer the given amount of ERC-20 tokens from the user’s address to the minter’s address. (This requires that the smart contract’s address was previously approved as in step 2).
+.. Emits the `ReceivedEthOrErc20(address,address,uint,bytes32,bytes32)` event
+... The first `address` argument is the ERC-20 smart contract Ethereum address.
+... The second `address` argument is the source Ethereum address.
+... The `uint` argument is the deposit value.
+... The first `bytes32` argument encodes the IC principal.
+... The second `bytes32` argument encodes the ledger subaccount. The principal and subaccount together identify the receiver of ckERC20 on the IC.
+. The scrapping of the logs will be done as in ckETH, meaning that ckETH minter executes the following steps on a timer:
+.. Query the latest finalized block number using the `eth_getBlockByNumber` RPC endpoint. If the finalized block number hasn't changed since the last timer execution, skip the rest of the timer logic.
+.. Use the `eth_getLogs` RPC endpoint to fetch the helper smart contract logs from the previous finalized block number to the block number obtained in the previous step. The response is an array of events, where each event includes in particular the transaction hash `transactionHash` and the log entry index `logIndex`. Parse `ReceivedEthOrErc20` events contained in the logs.
+.. For each new event, if the `transactionHash` was not seen before (minter keeps track of minted transactions), check that the sender of the transaction is not on the blocklist and mint ckERC20 and include the transaction hash and the log entry index in the ckERC-20 mint transaction memo (ICRC-1 ledger feature). Add the `transactionHash` to the list of seen transactions kept by the minter. If the sender of the transaction was a blocked address, then the minter does not mint ckERC20, but still marks the transaction hash as seen.
+
+
+[WARNING]
+.Supported ERC-20 tokens
+====
+Note that the helper smart contract does not enforce any whitelist of allowed ERC-20 tokens. This is enforced by the minter, which fetches logs only for the supported ERC-20 tokens. Therefore, funds of unsupported ERC-20 tokens could be deposited via the helper smart contract, but the minter will not know anything about it. To avoid any loss of funds, please verify **before** any important transfer that the desired ERC-20 token is supported by querying the minter as follows
+and checking the field `supported_ckerc20_tokens`:
+[source,shell]
+----
+dfx canister --network ic call minter get_minter_info
+----
+====
+
+.Deposit of USDC -> ckUSDC
+====
+To make things more concrete, we consider a deposit of USDC, whose contract is available at link:https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48[0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48], involving the following steps:
+
+. The user approves the helper smart contract to use some of their USDC tokens. Depending on the approved amount and the afterward deposited amount, this could be a one-time transaction per deposit or, if the approved amount is high enough, the same approval could be re-used for several deposits from that user and ERC-20 token.
+.. Transaction link:https://etherscan.io/tx/0x7ae0a41347cb7372ceb0e1ed56259a4fc02b6673d6e77cda7c4da5c6dd909e29[0x7ae0a41347cb7372ceb0e1ed56259a4fc02b6673d6e77cda7c4da5c6dd909e29] to approve `4_000` USDC tokens to be used by the helper smart contract. This corresponds to 0.004$ since USDC has 6 decimals.
+.. Gas: `55_546`
+. The user calls the `depositErc20` method of the helper smart contract to transfer the `4_000` USDC tokens to the minter's address. This is a one-time transaction per deposit.
+.. Transaction link:https://etherscan.io/tx/0x9a43bb8bdf52764c025853f8fa46dc5ce082ea07f6df4f83949fa525058604fc[0x9a43bb8bdf52764c025853f8fa46dc5ce082ea07f6df4f83949fa525058604fc] to deposit the USDC tokens to the minter's address.
+.. Gas: `56_970`
+
+Assuming a gas price of 25 gwei/gas and 3000 USD/ETH, a deposit costs around 9 USD that breaks as follows
+
+. 4.2 USD for the approval transaction
+. 4.3 USD for the deposit transaction
+
+The exact cost will depend on the gas cost of the involved ERC-20 operations (`approve`, `transferFrom`) and will vary between each ERC-20 smart contract.
+====
+
+== Withdrawal: ckERC20 to ERC20
+
+The ckERC-20 → ERC-20 conversion flow is similar to the ckETH → ETH conversion flow explained in the link:cketh.adoc#withdrawal_eth_to_cketh[Withdrawal: ETH to ckETH] section; however, it contains an additional step involving the approval of the ckETH ledger to spend some of the user's ckETH tokens on behalf of the minter to allow to pay for the transaction fee. This is needed because an ERC-20 transaction on Ethereum requires ETH to pay for the transaction fee.
+
+----
+ ┌────┐                    ┌────────────┐           ┌──────────────┐       ┌──────┐                              ┌────────────────┐
+ │User│                    │ckETH Ledger│           │ckERC20 Ledger│       │Minter│                              │Ethereum Network│
+ └─┬──┘                    └─────┬──────┘           └──────┬───────┘       └──┬───┘                              └───────┬────────┘
+   │                             │                         │                  │                                          │
+   │icrc2_approve(minter, tx_fee)│                         │                  │                                          │
+   │────────────────────────────>│                         │                  │                                          │
+   │               icrc2_approve(minter, amount)           │                  │                                          │
+   │──────────────────────────────────────────────────────>│                  │                                          │
+   │                             │                         │                  │                                          │
+   │                             │                         │                  │                                          │
+   │                             │                         │                  │                                          │
+   │    withdraw_erc20(ckerc20_ledger_id, amount, destination_eth_address)    │                                          │
+   │─────────────────────────────────────────────────────────────────────────>│                                          │
+   │                             │                         │                  │                                          │
+   │                             │                         │                  │ eth_sendRawTransaction                   │
+   │                             │                         │                  │ (destination_eth_address, amount)        │
+   │                             │                         │                  │─────────────────────────────────────────>│
+ ┌─┴──┐                    ┌─────┴──────┐           ┌──────┴───────┐       ┌──┴───┐                              ┌───────┴────────┐
+ │User│                    │ckETH Ledger│           │ckERC20 Ledger│       │Minter│                              │Ethereum Network│
+ └────┘                    └────────────┘           └──────────────┘       └──────┘                              └────────────────┘
+----
+
+The ckERC-20 → ERC-20 conversion flow involves the following steps:
+
+1. The user calls the ckETH ledger to approve the minter to burn some of the user's ckETH tokens to pay for the transaction fees. The exact amount of ckETH needed depends on the current Ethereum gas price, which can greatly fluctuate. The following example approves the minter for 1 ETH, which could potentially allow for multiple withdrawals without having to approve the minter each time.
++
+[source,shell]
+----
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000:nat })"
+----
+2. The user calls the ckERC20 ledger to approve minter to burn some of the user's ckERC20 tokens. Note that the ledger id of the corresponding ckERC20 token is returned by the `get_minter_info` query on the minter and the `LARGE_AMOUNT_CK_TOKEN` should take the amount of decimals corresponding to the ERC20 contract being used.
++
+[source,shell]
+----
+dfx canister --network ic call CKERC20_LEDGER icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_CK_TOKEN:nat })"
+----
+3. The user calls the `withdraw_erc20` endpoint on the ckETH minter that specifies
++
+--
+.. the ERC-20 token identified by the ledger id of that token,
+.. the desired withdrawal amount in the smallest unit of that token (e.g., 1 USDC = 1_000_000 USDC cents),
+.. the Ethereum destination address.
+.. optionally, from which subaccounts the ckETH for the transaction fee and the ckERC20 for the withdrawal should be burned. They do not need to be the same subaccount.
+--
++
+[source,shell]
+----
+dfx canister --network ic call minter withdraw_erc20 "(record { amount = AMOUNT_CK_TOKEN:nat; ckerc20_ledger_id = principal \"CKERC20_LEDGER\"; recipient = \"ETH_ADDRESS\"})"
+----
+
+After having called `withdraw_erc20`, the user does not need to do anything else. The minter will take care of the rest:
+
+. The minter checks the desired destination address against the blocklist, and rejects the request if the destination is blocked.
+. The ckETH minter attempts to estimate the current transaction fee and tries to burn the necessary amount of ckETH to pay for the transaction. The `gas_limit` for ckERC20 withdrawals is currently fixed to `65_000` and should be sufficient for standard ERC-20 contracts. This estimate must include some safety margin to ensure that the minter can resubmit the transaction if necessary, which requires an increase of at least 10% in the max priority fee per gas. If the burn fails (e.g., insufficient funds), the withdrawal request will be rejected. If the burn succeeds, the burn transaction index is used as the request identifier.
+. The minter attempts to burn the specified token amount from the user account on the ckERC20 ledger. If the burn succeeds, the minter schedules a withdrawal task. If the burn fails (e.g., insufficient funds), the minter schedules the reimbursement of the burnt ckETH amount from the previous step minus some (small) penalty fee.
+. The ckETH minter constructs a 0-ETH amount transaction containing the ERC-20 withdrawal (in `data` field) to the Ethereum network.
+. The user can query the withdrawal status using the identifier from the erc20_withdraw response.
+. Once the transaction gets enough confirmations, the minter considers the transaction finalized.
+. The minter retrieves the receipt of the finalized transaction (as done currently by the ckETH minter) and will reimburse the ckERC20 tokens in case the transaction failed. Overcharged transaction fees are not reimbursed.
+
+== Adding a new ckERC20 token
+
+Any ERC-20 token on Ethereum can be brought to the Internet Computer by adding a new ckERC20 token, which simply requires a single upgrade proposal targeting the ckERC20 ledger suite orchestrator canister `vxkom-oyaaa-aaaar-qafda-cai`. We refer the interested reader to the corresponding xref:../../ledger-suite-orchestrator/README.adoc#add-new-ckerc20[section] in the ledger suite orchestrator documentation.

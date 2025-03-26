@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/monitoring/logger",
@@ -12,6 +11,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/local_store",
     "//rs/types/types",
+    "@crate_index//:anyhow",
     "@crate_index//:chrono",
     "@crate_index//:clap",
     "@crate_index//:rand",
@@ -26,6 +26,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/test_utilities/tmpdir",
 ]
 
@@ -40,6 +41,9 @@ rust_library(
     crate_name = "ic_backup",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.2",
+    visibility = [
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 
@@ -48,12 +52,16 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [":backup"],
 )
 
 rust_test(
     name = "backup_test",
+    compile_data = ["test_data/fake_input_config.json.template"],
     crate = ":backup",
-    data = ["test_data/fake_input_config.json.template"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

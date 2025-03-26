@@ -10,8 +10,8 @@ fn main() {
     let governance_proto = manifest_dir.join("../proto");
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
     let nervous_system_proto = manifest_dir.join("../../../nervous_system/proto/proto");
-    let ic00_types_proto = manifest_dir.join("../../../protobuf/def");
-    let ledger_proto = manifest_dir.join("../../../rosetta-api/icp_ledger/proto");
+    let management_canister_types_proto = manifest_dir.join("../../../protobuf/def");
+    let ledger_proto = manifest_dir.join("../../../ledger_suite/icp/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -27,7 +27,7 @@ fn main() {
             governance: &governance_proto,
             base_types: &base_types_proto,
             nervous_system: &nervous_system_proto,
-            ic00_types: &ic00_types_proto,
+            management_canister_types: &management_canister_types_proto,
             ledger: &ledger_proto,
         },
         out.as_ref(),

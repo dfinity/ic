@@ -7,15 +7,15 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-arrayvec = "0.5.1"
-hex = "0.4.2"
+arrayvec = { workspace = true }
+hex = { workspace = true }
 ic-protobuf = { path = "../../../../protobuf" }
 phantom_newtype = { path = "../../../../phantom_newtype" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-thiserror = "1.0"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]

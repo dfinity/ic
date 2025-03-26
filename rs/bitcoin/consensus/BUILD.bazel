@@ -3,7 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/bitcoin/types/internal",
+    # Keep sorted.
+    "//packages/ic-error-types",
+    "//rs/bitcoin/replica_types",
     "//rs/config",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -15,7 +17,6 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/subnet_features",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:prometheus",
@@ -27,10 +28,14 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/interfaces/state_manager/mocks",
+    # Keep sorted.
     "//rs/interfaces/registry/mocks",
+    "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "@crate_index//:mockall",
     "@crate_index//:proptest",
 ]
@@ -53,6 +58,9 @@ rust_test(
     name = "consensus_test",
     aliases = ALIASES,
     crate = ":consensus",
+    crate_features = [
+        "proptest",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

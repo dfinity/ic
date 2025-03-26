@@ -55,7 +55,7 @@ pub const MAXIMUM_EPOCH: u32 = ((1u64 << LAMBDA_T) - 1) as u32;
 const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
 /// Type for a single bit
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Zeroize)]
 pub(crate) enum Bit {
     Zero = 0,
     One = 1,
@@ -93,7 +93,7 @@ impl From<&Bit> for u32 {
 ///
 /// The bits are the encoding (in big-endian ordering) of an
 /// integer which represents a prefix of an epoch.
-#[derive(Debug, Clone, Zeroize)]
+#[derive(Clone, Debug, Zeroize)]
 pub(crate) struct Tau(pub Vec<Bit>);
 
 impl Tau {
@@ -814,6 +814,7 @@ pub fn dec_chunks(
 
     let mut powers = Vec::with_capacity(m);
 
+    // TODO(CRP-2550) These multipairings could be computed in parallel
     for i in 0..m {
         let x = Gt::multipairing(&[
             (&cj[i], G2Prepared::generator()),
@@ -837,6 +838,7 @@ pub fn dec_chunks(
 
             for i in 0..dlogs.len() {
                 if dlogs[i].is_none() {
+                    // TODO(CRP-2550) All BSGS could be run in parallel
                     // It may take hours to brute force a cheater's discrete log.
                     dlogs[i] = cheating_solver.solve(&powers[i]);
                 }
@@ -888,6 +890,7 @@ pub fn verify_ciphertext_integrity(
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
 
+    // TODO(CRP-2550) Each of these checks could be run in parallel
     for i in 0..NUM_CHUNKS {
         let r = &crsz.rr[i];
         let s = &crsz.ss[i];
@@ -902,7 +905,7 @@ pub fn verify_ciphertext_integrity(
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum CiphertextIntegrityError {
     CrszVectorsLengthMismatch,
     InvalidNidkgCiphertext,

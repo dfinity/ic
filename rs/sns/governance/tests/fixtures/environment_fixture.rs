@@ -1,8 +1,10 @@
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
+use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_sns_governance::{
     pb::sns_root_types::{RegisterDappCanistersRequest, SetDappControllersRequest},
+    sns_upgrade::ListUpgradeStepsRequest,
     types::{Environment, HeapGrowthPotential},
 };
 use rand::{rngs::StdRng, RngCore};
@@ -10,14 +12,16 @@ use std::sync::{Arc, Mutex};
 
 type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum CanisterCallRequest {
     RegisterDappCanisters(RegisterDappCanistersRequest),
     SetDappControllers(SetDappControllersRequest),
+    UpdateSettings(CanisterSettings),
+    ListUpgradeSteps(ListUpgradeStepsRequest),
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Clone)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum CanisterCallReply {
     Response(Vec<u8>),
@@ -69,6 +73,12 @@ impl EnvironmentFixture {
             )?),
             "set_dapp_controllers" => {
                 CanisterCallRequest::SetDappControllers(Decode!(&args, SetDappControllersRequest)?)
+            }
+            "update_settings" => {
+                CanisterCallRequest::UpdateSettings(Decode!(&args, CanisterSettings)?)
+            }
+            "list_upgrade_steps" => {
+                CanisterCallRequest::ListUpgradeSteps(Decode!(&args, ListUpgradeStepsRequest)?)
             }
             _ => panic!("Unsupported method_name `{method_name}` in decode_canister_call."),
         };
@@ -126,22 +136,12 @@ impl Environment for EnvironmentFixture {
         self.environment_fixture_state.try_lock().unwrap().now
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn insecure_random_u64(&mut self) -> u64 {
         self.environment_fixture_state
             .try_lock()
             .unwrap()
             .rng
             .next_u64()
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .fill_bytes(&mut bytes);
-        bytes
     }
 
     async fn call_canister(
@@ -173,7 +173,7 @@ impl Environment for EnvironmentFixture {
                 .unwrap()
                 .mocked_canister_replies
                 .pop()
-                .expect("Expected there to be a mocked canister reply on the stack"),
+                .unwrap_or_else(|| panic!("Expected there to be a mocked canister reply on the stack for method `{method_name}`")),
         );
 
         match encode_result {

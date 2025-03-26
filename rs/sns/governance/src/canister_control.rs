@@ -9,8 +9,7 @@ use crate::{
     types::Environment,
 };
 use candid::{Decode, Encode};
-use dfn_core::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -89,21 +88,18 @@ async fn install_code(
     wasm: Vec<u8>,
     arg: Vec<u8>,
 ) -> Result<(), GovernanceError> {
-    const MEMORY_ALLOCATION_BYTES: u64 = 1_u64 << 30;
-
-    let install_code_args = ic_ic00_types::InstallCodeArgs {
-        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+    let install_code_args = ic_management_canister_types_private::InstallCodeArgs {
+        mode: ic_management_canister_types_private::CanisterInstallMode::Upgrade,
         canister_id: canister_id.get(),
         wasm_module: wasm,
         arg,
         compute_allocation: None,
-        memory_allocation: Some(candid::Nat::from(MEMORY_ALLOCATION_BYTES)),
-        query_allocation: None,
+        memory_allocation: None,
         sender_canister_version: env.canister_version(),
     };
 
     env.call_canister(
-        ic_ic00_types::IC_00,
+        ic_management_canister_types_private::IC_00,
         "install_code",
         Encode!(&install_code_args).expect("Unable to encode install_code args."),
     )
@@ -150,7 +146,7 @@ async fn stop_canister(
     let serialized_canister_id = candid::Encode!(&CanisterIdRecord::from(canister_id))
         .expect("Unable to encode stop_canister args.");
 
-    match env
+    let result = env
         .call_canister(
             CanisterId::ic_00(),
             "stop_canister",
@@ -164,7 +160,9 @@ async fn stop_canister(
             );
             log!(ERROR, "{}{:?}", log_prefix(), err);
             err
-        }) {
+        });
+
+    match result {
         Ok(_) => Ok(()),
         Err(err) => {
             log!(

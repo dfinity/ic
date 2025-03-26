@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/interfaces",
     "//rs/monitoring/logger",
@@ -10,7 +11,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
@@ -18,9 +19,12 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/constants",
+    # Keep sorted.
+    "//rs/limits",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/types",
     "//rs/types/wasm_types",
     "@crate_index//:candid",
 ]
@@ -29,7 +33,7 @@ rust_library(
     name = "cycles_account_manager",
     srcs = glob(["src/**"]),
     crate_name = "ic_cycles_account_manager",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

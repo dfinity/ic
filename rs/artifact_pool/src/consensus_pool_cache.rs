@@ -13,19 +13,19 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-/// Implementation of ConsensusCache and ConsensusPoolCache.
+/// Implementation of [`ConsensusBlockCache`] and [`ConsensusPoolCache`].
 pub(crate) struct ConsensusCacheImpl {
     cache: RwLock<CachedData>,
 }
 
 /// Things that can be updated in the consensus cache.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CacheUpdateAction {
     Finalization,
     CatchUpPackage,
 }
 
-// Internal cached data held by the the ConsensusCache.
+/// Internal cached data held by the [`ConsensusCacheImpl`].
 struct CachedData {
     finalized_block: Block,
     summary_block: Block,
@@ -120,7 +120,7 @@ impl<'a> CachedChainIterator<'a> {
     }
 }
 
-impl<'a> Iterator for CachedChainIterator<'a> {
+impl Iterator for CachedChainIterator<'_> {
     type Item = Block;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -468,16 +468,13 @@ mod test {
     use crate::test_utils::fake_block_proposal;
     use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::{
-        consensus::fake::*,
-        crypto::CryptoReturningOk,
-        mock_time,
-        state_manager::FakeStateManager,
-        types::ids::{node_test_id, subnet_test_id},
-        FastForwardTimeSource,
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::*;
+    use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -532,7 +529,7 @@ mod test {
 
             assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
             let mut block = pool.make_next_block();
-            let time = mock_time() + Duration::from_secs(10);
+            let time = UNIX_EPOCH + Duration::from_secs(10);
             block.content.as_mut().context.time = time;
             // recompute the hash to make sure it's still correct
             block.update_content();

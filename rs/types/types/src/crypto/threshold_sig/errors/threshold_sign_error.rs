@@ -5,7 +5,7 @@ use crate::crypto::{AlgorithmId, CryptoError};
 use std::fmt;
 
 /// A threshold signing error.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ThresholdSignError {
     ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
     SecretKeyNotFound {
@@ -13,6 +13,7 @@ pub enum ThresholdSignError {
         algorithm: AlgorithmId,
         key_id: String,
     },
+    KeyIdInstantiationError(String),
     TransientInternalError {
         internal_error: String,
     },
@@ -36,7 +37,12 @@ impl fmt::Display for ThresholdSignError {
             ThresholdSignError::TransientInternalError { internal_error } => write!(
                 f,
                 "Transient internal error in threshold signing: {}",
-                internal_error)
+                internal_error),
+            ThresholdSignError::KeyIdInstantiationError(internal_error) => write!{
+                f,
+                "Error instantiating KeyId from public coefficients: {}",
+                internal_error
+            }
         }
     }
 }
@@ -58,6 +64,9 @@ impl From<ThresholdSignError> for CryptoError {
             }
             ThresholdSignError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
+            }
+            ThresholdSignError::KeyIdInstantiationError(internal_error) => {
+                CryptoError::InternalError { internal_error }
             }
         }
     }

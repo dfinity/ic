@@ -1,7 +1,8 @@
 use std::{borrow::Cow, fmt::Display};
 
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_stable_structures::{BoundedStorable, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::Storable;
 
 const BYTE: u32 = 1;
 const KB: u32 = 1024 * BYTE;
@@ -30,14 +31,13 @@ impl Storable for EncryptedPair {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
+    const BOUND: Bound = Bound::Bounded {
+        max_size: ENCRYPTED_PAIR_LEN,
+        is_fixed_size: false,
+    };
 }
 
-impl BoundedStorable for EncryptedPair {
-    const MAX_SIZE: u32 = ENCRYPTED_PAIR_LEN;
-    const IS_FIXED_SIZE: bool = false;
-}
-
-#[derive(CandidType, Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, CandidType, Deserialize)]
 pub struct BoundedString<const N: usize>(String);
 
 impl<const N: usize> Display for BoundedString<N> {
@@ -95,23 +95,23 @@ impl<const N: usize> Storable for BoundedString<N> {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         String::from_bytes(bytes).into()
     }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: N as u32,
+        is_fixed_size: false,
+    };
 }
 
-impl<const N: usize> BoundedStorable for BoundedString<N> {
-    const MAX_SIZE: u32 = N as u32;
-    const IS_FIXED_SIZE: bool = false;
-}
-
-#[derive(CandidType, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
 pub struct Name(String);
 
 // NAME_MAX_LEN is the maximum length a name is allowed to have.
 // Based on https://en.wikipedia.org/wiki/Domain_name#Domain_name_syntax
 pub const NAME_MAX_LEN: u32 = 253;
 
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(PartialEq, Debug, thiserror::Error)]
 pub enum NameError {
-    #[error("Name has size '{0}' but must not exceed size {}", NAME_MAX_LEN)]
+    #[error("Name has size '{0}' but must not exceed size {len}", len = NAME_MAX_LEN)]
     InvalidSize(usize),
 
     #[error("domains with a dot suffix are not supported")]
@@ -161,14 +161,14 @@ impl Storable for Name {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: NAME_MAX_LEN,
+        is_fixed_size: false,
+    };
 }
 
-impl BoundedStorable for Name {
-    const MAX_SIZE: u32 = NAME_MAX_LEN;
-    const IS_FIXED_SIZE: bool = false;
-}
-
-#[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub enum State {
     #[serde(rename = "failed")]
     Failed(BoundedString<127>),
@@ -186,7 +186,7 @@ pub enum State {
     Available,
 }
 
-#[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct Registration {
     pub name: Name,
     pub canister: Principal,
@@ -201,15 +201,15 @@ impl Storable for Registration {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
-}
 
-impl BoundedStorable for Registration {
-    // The MAX_SIZE for Registration was determined by building the biggest possible
-    // registration and calculating it's resulting Candid encoded size.
-    // This can be found below under the `max_registration_size` test.
-    // The final MAX_SIZE we use here provided plenty of padding for future growth
-    const MAX_SIZE: u32 = 1024;
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        // The MAX_SIZE for Registration was determined by building the biggest possible
+        // registration and calculating it's resulting Candid encoded size.
+        // This can be found below under the `max_registration_size` test.
+        // The final MAX_SIZE we use here provided plenty of padding for future growth
+        max_size: 1024,
+        is_fixed_size: false,
+    };
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -278,6 +278,18 @@ pub enum RemoveRegistrationError {
 pub enum RemoveRegistrationResponse {
     Ok(()),
     Err(RemoveRegistrationError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListRegistrationsError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListRegistrationsResponse {
+    Ok(Vec<(String, Registration)>),
+    Err(ListRegistrationsError),
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -369,6 +381,31 @@ pub enum DispenseTaskError {
 pub enum DispenseTaskResponse {
     Ok(Id),
     Err(DispenseTaskError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskError {
+    NotFound,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskResponse {
+    Ok,
+    Err(RemoveTaskError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListTasksError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListTasksResponse {
+    Ok(Vec<(String, u64, Registration)>),
+    Err(ListTasksError),
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

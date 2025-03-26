@@ -1,8 +1,10 @@
-load("//bazel:canisters.bzl", "inject_version_into_wasm")
+load("//bazel:canisters.bzl", "finalize_wasm")
 
 # Test subject
-inject_version_into_wasm(
+finalize_wasm(
     name = "stamped_trivial",
+    testonly = True,
+    service_file = "service.did",
     src_wasm = "trivial.wasm",
     version_file = "//bazel:version.txt",
 )

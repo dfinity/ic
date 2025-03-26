@@ -5,21 +5,23 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/protobuf",
     "//rs/types/base_types",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:prost",
     "@crate_index//:serde",
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/registry/keys",
+    # Keep sorted.
     "//rs/nervous_system/common/test_keys",
+    "//rs/registry/keys",
+    "@crate_index//:pretty_assertions",
 ]
 
 rust_library(
@@ -31,7 +33,7 @@ rust_library(
     crate_name = "ic_registry_transport",
     proc_macro_deps = [
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -50,6 +52,7 @@ generated_files_check(
     ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/transport",
     deps = [
+        # Keep sorted.
         "//rs/registry/transport/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

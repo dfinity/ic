@@ -2,21 +2,20 @@
 //! Consensus batches (PayloadBuilder). It is also used to validate the Ingress
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
-use crate::IngressManager;
-use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
+use crate::{CustomRandomState, IngressManager};
 use ic_cycles_account_manager::IngressInductionCost;
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::{
-    execution_environment::IngressHistoryReader,
+    execution_environment::{IngressHistoryError, IngressHistoryReader},
     ingress_manager::{
-        IngressPayloadValidationError, IngressPermanentError, IngressSelector, IngressSetQuery,
-        IngressTransientError,
+        IngressPayloadValidationError, IngressPayloadValidationFailure, IngressSelector,
+        IngressSetQuery, InvalidIngressPayloadReason,
     },
-    ingress_pool::{IngressPoolSelect, SelectResult},
+    ingress_pool::ValidatedIngressArtifact,
     validation::{ValidationError, ValidationResult},
 };
-use ic_interfaces_state_manager::StateManagerError;
+use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::warn;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -28,7 +27,22 @@ use ic_types::{
     CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
 };
 use ic_validator::RequestValidationError;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, collections::HashMap, sync::Arc};
+
+/// Number of round-robin iterations that need to happen, before we weaken the selection
+/// rule #2. This weakening helps the ingress selector progress when the quota is either
+/// not increasing fast enough or in the worst case stuck.
+///
+/// Strong inclusion rule:
+///       The quota is a hard limit, with the exception of a canister's *first* message.
+///
+/// Weak inclusion rule:
+///       The quota is a hard limit, with the exception of a canister's first *n*
+///       messages, where n is the current round-robin iteration count.
+///
+/// The weak rule compromises on fairness to ensure our ingress selector doesn't get
+/// stuck.
+const ITERATIONS_BEFORE_WEAKEN_INCLUDE_RULE: u32 = 4;
 
 impl IngressSelector for IngressManager {
     fn get_ingress_payload(
@@ -80,49 +94,157 @@ impl IngressSelector for IngressManager {
         // becomes greater than byte_limit.
         let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        let mut num_messages = 0;
 
-        let mut messages_in_payload = self.ingress_pool.select_validated(
-            expiry_range,
-            Box::new(move |ingress_obj| {
-                let result = self.validate_ingress(
-                    IngressMessageId::from(ingress_obj),
-                    &ingress_obj.signed_ingress,
-                    &state,
-                    context,
-                    &settings,
-                    &past_ingress_set,
-                    num_messages,
-                    &mut cycles_needed,
-                );
-                match result {
-                    Ok(()) => {
-                        num_messages += 1;
-                        // Calculate the size and abort once we have hit the limit
-                        accumulated_size += ingress_obj.signed_ingress.count_bytes();
-                        if accumulated_size > byte_limit.get() as usize {
-                            return SelectResult::Abort;
-                        }
+        let ingress_pool = self.ingress_pool.read().unwrap();
 
-                        SelectResult::Selected(ingress_obj.signed_ingress.clone())
-                    }
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::IngressPayloadTooBig(_, _),
-                    )) => SelectResult::Abort,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::IngressPayloadTooManyMessages(_, _),
-                    )) => SelectResult::Abort,
-                    _ => SelectResult::Skip,
-                }
-            }),
+        /* --------------------------------------------------------------------------- */
+        // BEGIN Building the Canister Queues
+        /* --------------------------------------------------------------------------- */
+        #[derive(Default)]
+        struct CanisterQueue<'a> {
+            /// Number of bytes the canister's queue that was included in ingress
+            bytes_included: usize,
+            msgs_included: u32,
+            msgs: Vec<&'a ValidatedIngressArtifact>,
+        }
+
+        let mut canister_queues = HashMap::<_, CanisterQueue, CustomRandomState>::with_hasher(
+            self.random_state.create_state(),
         );
+
+        let artifacts = ingress_pool
+            .validated()
+            .get_all_by_expiry_range(expiry_range);
+
+        for artifact in artifacts {
+            let pool_obj = canister_queues
+                .entry(artifact.msg.signed_ingress.canister_id())
+                .or_default();
+            pool_obj.msgs.push(artifact);
+        }
+        let canister_count = canister_queues.len();
+
+        // At this point messages are sorted by expiry time. In order to prevent malicious
+        // users from putting their messages ahead of others by carefully crafting the expiry
+        // times, we sort the ingress messages by the time they were delivered to the pool.
+        // NOTE: We sort in reverse order, because messages are pop()-ed from the back.
+        for v in canister_queues.values_mut() {
+            v.msgs.sort_unstable_by_key(|artifact| {
+                std::cmp::Reverse(artifact.timestamp.as_nanos_since_unix_epoch())
+            });
+        }
+        /* --------------------------------------------------------------------------- */
+        // END
+        /* --------------------------------------------------------------------------- */
+
+        // Initial per-canister quota of ingress bytes. If a canister doesn't have enough
+        // messages to fill the quota, the quota increases proportionally for subsequent
+        // canisters.
+        let mut quota = match canister_count {
+            0 => return IngressPayload::default(),
+            canister_count => byte_limit.get() as usize / canister_count,
+        };
+
+        let mut messages_in_payload = vec![];
+
+        let mut canisters: Vec<_> = canister_queues.keys().cloned().collect();
+
+        // Do round-robin iterations until the payload is full or no messages are left
+        let mut round_robin_iter: u32 = 0;
+        'outer: while !canister_queues.is_empty() {
+            round_robin_iter += 1;
+            // Execute a single round-robin iteration, by looping through the canisters
+            // and selecting messages up bound by per-canister quota and payload size.
+            let mut i = 0;
+            while i < canisters.len() {
+                let canister_id = canisters[i];
+                // For a given canister, add valid ingress messsages until quota is met
+                let queue = &mut canister_queues.get_mut(&canister_id).unwrap();
+                while let Some(msg) = queue.msgs.last() {
+                    let ingress = &msg.msg.signed_ingress;
+                    let result = self.validate_ingress(
+                        IngressMessageId::from(ingress),
+                        ingress,
+                        &state,
+                        context,
+                        &settings,
+                        &past_ingress_set,
+                        messages_in_payload.len(),
+                        &mut cycles_needed,
+                    );
+                    // Any message that generates validation errors gets removed from
+                    // the canister's queue.
+                    match result {
+                        Ok(()) => (),
+                        Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::IngressPayloadTooManyMessages(_, _),
+                        )) => break 'outer,
+                        _ => {
+                            queue.msgs.pop();
+                            continue;
+                        }
+                    };
+
+                    let ingress_size = ingress.count_bytes();
+
+                    // Break criterion #1: global byte limit
+                    if (accumulated_size + ingress_size) as u64 > byte_limit.get() {
+                        break 'outer;
+                    }
+
+                    // Break criterion #2: canister with at least max(1, n) included
+                    // messages crossed quota, where n is the number of round robin
+                    // iterations - ITERATIONS_BEFORE_WEAKEN_INCLUDE_RULE.
+                    // See documentation of [`ITERATIONS_BEFORE_WEAKEN_INCLUDE_RULE`].
+                    if queue.msgs_included
+                        >= std::cmp::max(
+                            1,
+                            round_robin_iter.saturating_sub(ITERATIONS_BEFORE_WEAKEN_INCLUDE_RULE),
+                        )
+                        && (queue.bytes_included + ingress_size) > quota
+                    {
+                        break;
+                    }
+
+                    accumulated_size += ingress_size;
+                    queue.msgs_included += 1;
+                    queue.bytes_included += ingress_size;
+                    // The quota is not a hard limit. We always include the first message
+                    // of each canister. This is why we check the third break criterion
+                    // after this line.
+                    messages_in_payload.push(ingress);
+                    queue.msgs.pop();
+                }
+
+                // Swap-remove canisters with an empty queue.
+                if queue.msgs.is_empty() {
+                    canisters.swap_remove(i);
+                    // iterate again over current index because of swap_remove
+                } else {
+                    i += 1;
+                }
+            }
+
+            if byte_limit.get() as usize <= accumulated_size {
+                // No remaining quota means the block is full. No more iterations needed.
+                break;
+            } else {
+                // Disperse excess quota amongst all remaining canisters.
+                match canisters.len() {
+                    0 => break,
+                    canister_count => {
+                        quota += (byte_limit.get() as usize - accumulated_size) / canister_count;
+                    }
+                };
+            }
+        }
 
         // NOTE: Since the `Vec<SignedIngress>` is deserialized and slightly smaller than the
         // serialized `IngressPayload`, we need to check the size of the latter.
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from(messages_in_payload.clone());
+            let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
             let payload_size = payload.count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;
@@ -169,12 +291,16 @@ impl IngressSelector for IngressManager {
             Ok(ingress_set) => ingress_set,
             Err(err) => {
                 warn!(
+                    every_n_seconds => 30,
                     self.log,
                     "IngressHistoryReader doesn't have state for height {} yet: {:?}",
                     certified_height,
                     err
                 );
-                return Err(err);
+
+                return Err(ValidationError::ValidationFailed(
+                    IngressPayloadValidationFailure::IngressHistoryError(certified_height, err),
+                ));
             }
         };
 
@@ -182,23 +308,20 @@ impl IngressSelector for IngressManager {
             Ok(state) => state.take(),
             Err(err) => {
                 warn!(
+                    every_n_seconds => 30,
                     self.log,
-                    "StateManager doesn't have state for height {}: {:?}", certified_height, err,
+                    "StateManager doesn't have state for height {}: {:?}", certified_height, err
                 );
-                return Err(match err {
-                    StateManagerError::StateRemoved(h) => {
-                        ValidationError::Permanent(IngressPermanentError::StateRemoved(h))
-                    }
-                    StateManagerError::StateNotCommittedYet(h) => {
-                        ValidationError::Transient(IngressTransientError::StateNotCommittedYet(h))
-                    }
-                });
+
+                return Err(ValidationError::ValidationFailed(
+                    IngressPayloadValidationFailure::StateManagerError(certified_height, err),
+                ));
             }
         };
 
         if payload.message_count() > settings.max_ingress_messages_per_block {
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressPayloadTooManyMessages(
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressPayloadTooManyMessages(
                     payload.message_count(),
                     settings.max_ingress_messages_per_block,
                 ),
@@ -207,10 +330,29 @@ impl IngressSelector for IngressManager {
 
         // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        for i in 0..payload.message_count() {
-            let (ingress_id, ingress) = payload
-                .get(i)
-                .map_err(IngressPermanentError::IngressPayloadError)?;
+
+        // Validate each ingress message in the payload
+        for (ingress_id, maybe_ingress) in payload.iter() {
+            let ingress = match maybe_ingress {
+                Ok(ingress) => ingress,
+                Err(deserialization_error) => {
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressMessageDeserializationFailure(
+                            ingress_id.clone(),
+                            deserialization_error.to_string(),
+                        ),
+                    ));
+                }
+            };
+
+            if IngressMessageId::from(&ingress) != *ingress_id {
+                return Err(ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::MismatchedMessageId {
+                        expected: ingress_id.clone(),
+                        computed: IngressMessageId::from(&ingress),
+                    },
+                ));
+            }
 
             self.validate_ingress(
                 ingress_id.clone(),
@@ -250,7 +392,7 @@ impl IngressSelector for IngressManager {
                     let ingress = ingress_payload_cache
                         .entry((*height, payload_hash.clone()))
                         .or_insert_with(|| {
-                            Arc::new(batch.ingress.message_ids().into_iter().collect())
+                            Arc::new(batch.ingress.message_ids().cloned().collect())
                         });
                     Some(ingress.clone())
                 }
@@ -304,8 +446,8 @@ impl IngressManager {
         let ingress_message_size = signed_ingress.count_bytes();
         // The message is invalid if its size is larger than the configured maximum.
         if ingress_message_size > settings.max_ingress_bytes_per_message {
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressMessageTooBig(
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressMessageTooBig(
                     ingress_message_size,
                     settings.max_ingress_bytes_per_message,
                 ),
@@ -313,8 +455,8 @@ impl IngressManager {
         }
 
         if num_messages >= settings.max_ingress_messages_per_block {
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressPayloadTooManyMessages(
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressPayloadTooManyMessages(
                     num_messages,
                     settings.max_ingress_messages_per_block,
                 ),
@@ -324,8 +466,8 @@ impl IngressManager {
         // Do not include the message if it's a duplicate.
         if past_ingress_set.contains(&ingress_id) {
             let message_id = MessageId::from(&ingress_id);
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::DuplicatedIngressMessage(message_id),
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::DuplicatedIngressMessage(message_id),
             ));
         }
 
@@ -334,18 +476,20 @@ impl IngressManager {
         if !msg.is_addressed_to_subnet(self.subnet_id) {
             let canister_id = msg.canister_id();
             let canister_state = state.canister_state(&canister_id).ok_or({
-                ValidationError::Permanent(IngressPermanentError::CanisterNotFound(canister_id))
+                ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(
+                    canister_id,
+                ))
             })?;
             match canister_state.status() {
                 CanisterStatusType::Running => {}
                 CanisterStatusType::Stopping => {
-                    return Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterStopping(canister_id),
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterStopping(canister_id),
                     ));
                 }
                 CanisterStatusType::Stopped => {
-                    return Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterStopped(canister_id),
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterStopped(canister_id),
                     ));
                 }
             }
@@ -354,7 +498,9 @@ impl IngressManager {
         // Skip the message if there aren't enough cycles to induct the message.
         let effective_canister_id =
             extract_effective_canister_id(msg, self.subnet_id).map_err(|_| {
-                ValidationError::Permanent(IngressPermanentError::InvalidManagementMessage)
+                ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::InvalidManagementMessage,
+                )
             })?;
         let subnet_size = state
             .metadata
@@ -380,16 +526,17 @@ impl IngressManager {
                         canister.message_memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
+                        false, // error here is not returned back to the user => no need to reveal top up balance
                     ) {
-                        return Err(ValidationError::Permanent(
-                            IngressPermanentError::InsufficientCycles(err),
+                        return Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::InsufficientCycles(err),
                         ));
                     }
                     *cumulative_ingress_cost += ingress_cost;
                 }
                 None => {
-                    return Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterNotFound(payer),
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterNotFound(payer),
                     ));
                 }
             },
@@ -406,14 +553,15 @@ impl IngressManager {
             &self.registry_root_of_trust_provider(context.registry_version),
         ) {
             let message_id = MessageId::from(&ingress_id);
-            return Err(ValidationError::Permanent(match err {
-                RequestValidationError::InvalidIngressExpiry(msg)
+            return Err(ValidationError::InvalidArtifact(match err {
+                RequestValidationError::InvalidRequestExpiry(msg)
                 | RequestValidationError::InvalidDelegationExpiry(msg) => {
-                    IngressPermanentError::IngressExpired(message_id, msg)
+                    InvalidIngressPayloadReason::IngressExpired(message_id, msg)
                 }
-                err => {
-                    IngressPermanentError::IngressValidationError(message_id, format!("{}", err))
-                }
+                err => InvalidIngressPayloadReason::IngressValidationError(
+                    message_id,
+                    format!("{}", err),
+                ),
             }));
         }
         Ok(())
@@ -429,12 +577,10 @@ impl IngressHistorySet {
     fn new(
         ingress_hist_reader: &dyn IngressHistoryReader,
         certified_height: Height,
-    ) -> Result<Self, IngressPayloadValidationError> {
-        let set = ingress_hist_reader
+    ) -> Result<Self, IngressHistoryError> {
+        ingress_hist_reader
             .get_status_at_height(certified_height)
             .map(|get_status| IngressHistorySet { get_status })
-            .map_err(IngressPermanentError::IngressHistoryError)?;
-        Ok(set)
     }
 }
 
@@ -481,7 +627,7 @@ impl<'a, T: IngressSetQuery> IngressSetChain<'a, T> {
     }
 }
 
-impl<'a, T: IngressSetQuery> IngressSetQuery for IngressSetChain<'a, T> {
+impl<T: IngressSetQuery> IngressSetQuery for IngressSetChain<'_, T> {
     fn contains(&self, msg_id: &IngressMessageId) -> bool {
         if self.first.contains(msg_id) {
             true
@@ -507,35 +653,49 @@ mod tests {
     // use the `RegistryClient` which spawns tokio tasks. Without tokio, the tests
     // would compile but panic at runtime.
     use super::*;
-    use crate::tests::{access_ingress_pool, setup, setup_registry, setup_with_params};
+    use crate::{
+        tests::{access_ingress_pool, setup, setup_registry, setup_with_params},
+        RandomStateKind,
+    };
     use assert_matches::assert_matches;
-    use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
+    use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
         p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         time_source::TimeSource,
     };
+    use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
+    use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
+    use ic_interfaces_state_manager_mocks::MockStateManager;
+    use ic_management_canister_types_private::{CanisterIdRecord, Payload, IC_00};
+    use ic_metrics::MetricsRegistry;
+    use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
+        artifact_pool_config::with_test_pool_config,
+        crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
-        history::MockIngressHistory,
-        mock_time,
-        state::{CanisterStateBuilder, ReplicatedStateBuilder},
-        types::{
-            ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-            messages::SignedIngressBuilder,
-        },
-        FastForwardTimeSource,
     };
-    use ic_types::crypto::crypto_hash;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_state::{
+        CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder,
+    };
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::{
+        ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
         artifact::IngressMessageId,
         batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
+        malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
-        time::expiry_time_from_now,
+        time::{expiry_time_from_now, UNIX_EPOCH},
         Height, RegistryVersion,
     };
+    use rand::RngCore;
+    use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
 
     const MAX_SIZE: usize = 1000;
@@ -547,7 +707,7 @@ mod tests {
             let ingress_msgs = ingress_manager.get_ingress_payload(
                 &HashSet::new(),
                 &ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 },
@@ -564,7 +724,7 @@ mod tests {
                 &IngressPayload::default(),
                 &HashSet::new(),
                 &ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 },
@@ -585,7 +745,7 @@ mod tests {
                 let ingress = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(i as u64)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
                 payload.push(ingress)
             }
@@ -594,7 +754,7 @@ mod tests {
                 &IngressPayload::from(payload),
                 &HashSet::new(),
                 &ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 },
@@ -602,8 +762,8 @@ mod tests {
 
             assert_matches!(
                 ingress_validation,
-                Err(ValidationError::Permanent(
-                    IngressPermanentError::IngressPayloadTooManyMessages(_, _),
+                Err(ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::IngressPayloadTooManyMessages(_, _),
                 ),)
             );
         })
@@ -624,8 +784,9 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
                     time: time + MAX_INGRESS_TTL,
@@ -661,15 +822,9 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                            message_id.clone(),
-                            node_test_id(0),
-                            m.count_bytes(),
-                            (),
-                            crypto_hash(m.binary()).get(),
-                        ))]);
+                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 
@@ -700,8 +855,9 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
-                let mut time = mock_time();
+                let mut time = UNIX_EPOCH;
                 let validation_context = ValidationContext {
                     time,
                     registry_version: RegistryVersion::from(1),
@@ -751,8 +907,8 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::IngressExpired(_, _)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressExpired(_, _)
                     ))
                 );
 
@@ -774,8 +930,8 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::IngressExpired(_, _)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressExpired(_, _)
                     ))
                 );
             },
@@ -788,7 +944,7 @@ mod tests {
         setup(|ingress_manager, _| {
             let ingress_msg1 = SignedIngressBuilder::new()
                 .nonce(2)
-                .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                 .build();
             let mut hash_set = HashSet::new();
             hash_set.insert(IngressMessageId::from(&ingress_msg1));
@@ -797,15 +953,15 @@ mod tests {
                 &payload,
                 &hash_set,
                 &ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 },
             );
             assert_matches!(
                 ingress_validation,
-                Err(ValidationError::Permanent(
-                    IngressPermanentError::DuplicatedIngressMessage(_)
+                Err(ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::DuplicatedIngressMessage(_)
                 ))
             );
         });
@@ -826,10 +982,11 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 };
@@ -837,7 +994,7 @@ mod tests {
                 // insert an ingress msg in ingress pool
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
                 let message_id = IngressMessageId::from(&ingress_msg1);
                 access_ingress_pool(&ingress_pool, |ingress_pool| {
@@ -846,14 +1003,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_size1,
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 // get ingress message in payload
@@ -882,10 +1032,11 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 };
@@ -893,7 +1044,7 @@ mod tests {
                 // insert an ingress msg in ingress pool
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
                 let message_id = IngressMessageId::from(&ingress_msg1);
                 access_ingress_pool(&ingress_pool, |ingress_pool| {
@@ -902,14 +1053,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_size1,
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 // get ingress message in payload
@@ -921,11 +1065,8 @@ mod tests {
                 assert_eq!(first_ingress_payload.message_count(), 1);
 
                 // we should not get it again because it is part of past payloads
-                let mut hash_set = HashSet::new();
-                for i in 0..first_ingress_payload.message_count() {
-                    let (id, _) = first_ingress_payload.get(i).unwrap();
-                    hash_set.insert(id);
-                }
+                let hash_set = HashSet::from_iter(first_ingress_payload.message_ids().cloned());
+
                 let second_ingress_payload = ingress_manager.get_ingress_payload(
                     &hash_set,
                     &validation_context,
@@ -952,6 +1093,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
 
@@ -959,12 +1101,12 @@ mod tests {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(2)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
                 let ingress_msg2 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(3)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
 
                 // add them to the pool
@@ -975,13 +1117,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg1.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -989,17 +1125,11 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg2.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg2.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 let validation_context = ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 };
@@ -1032,6 +1162,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
 
@@ -1039,13 +1170,13 @@ mod tests {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(1)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .method_payload(vec![0; MAX_SIZE / 2 + 2])
                     .build();
                 let ingress_msg2 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(2)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .method_payload(vec![0; MAX_SIZE / 2 + 2])
                     .build();
 
@@ -1057,13 +1188,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg1.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1071,17 +1196,11 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg2.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg2.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 let validation_context = ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 };
@@ -1106,7 +1225,7 @@ mod tests {
                 Ok(Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Received,
                 }))
             });
@@ -1115,25 +1234,26 @@ mod tests {
             None,
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .nonce(2)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
                 let payload = IngressPayload::from(vec![ingress_msg1]);
                 let ingress_validation = ingress_manager.validate_ingress_payload(
                     &payload,
                     &HashSet::new(),
                     &ValidationContext {
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         registry_version: RegistryVersion::from(1),
                         certified_height: Height::from(0),
                     },
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::DuplicatedIngressMessage(_),
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::DuplicatedIngressMessage(_),
                     ),)
                 );
             },
@@ -1153,26 +1273,27 @@ mod tests {
             None,
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .nonce(2)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
                 let payload = IngressPayload::from(vec![ingress_msg1]);
                 let ingress_validation = ingress_manager.validate_ingress_payload(
                     &payload,
                     &HashSet::new(),
                     &ValidationContext {
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         registry_version: RegistryVersion::from(1),
                         certified_height: Height::from(0),
                     },
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(IngressPermanentError::IngressHistoryError(
-                            IngressHistoryError::StateNotAvailableYet(h)
-                    ))) if h == Height::from(0)
+                    Err(ValidationError::ValidationFailed(IngressPayloadValidationFailure::IngressHistoryError(h1,
+                            IngressHistoryError::StateNotAvailableYet(h2)
+                    ))) if h1 == Height::from(0) && h2 == Height::from(0)
                 );
             },
         )
@@ -1185,7 +1306,7 @@ mod tests {
         let ingress_msg1 = SignedIngressBuilder::new()
             .canister_id(canister_test_id(0))
             .nonce(2)
-            .expiry_time(mock_time() + MAX_INGRESS_TTL)
+            .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
             .build();
         let message_id1 = IngressMessageId::from(&ingress_msg1);
         let message_id1_cl = message_id1.clone();
@@ -1199,7 +1320,7 @@ mod tests {
                         IngressStatus::Known {
                             receiver: canister_test_id(0).get(),
                             user_id: user_test_id(0),
-                            time: mock_time(),
+                            time: UNIX_EPOCH,
                             state: IngressState::Processing,
                         }
                     } else {
@@ -1221,12 +1342,13 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let ingress_msg2 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(3)
-                    .expiry_time(mock_time() + MAX_INGRESS_TTL)
+                    .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
                 let message_id2 = IngressMessageId::from(&ingress_msg2);
 
@@ -1236,29 +1358,17 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id1,
-                        node_test_id(0),
-                        ingress_msg1.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id1)]);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id2,
-                        node_test_id(0),
-                        ingress_msg2.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg2.binary()).get(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id2)]);
                 });
 
                 let validation_context = ValidationContext {
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 };
@@ -1291,6 +1401,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = expiry_time_from_now();
                 let ingress_message1 = SignedIngressBuilder::new()
@@ -1333,8 +1444,8 @@ mod tests {
                 assert_matches!(
                     ingress_validation,
                     Err(
-                        ValidationError::Permanent(
-                            IngressPermanentError::IngressValidationError(id, _),
+                        ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::IngressValidationError(id, _),
                         ),
                     ) if id == MessageId::from(&ingress_id2)
                 );
@@ -1346,7 +1457,7 @@ mod tests {
     async fn test_get_payload_canister_has_sufficient_cycles() {
         let subnet_id = subnet_test_id(0);
         let registry = setup_registry(subnet_id, MAX_SIZE);
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         // Canister 0 has enough to induct this message...
         let m1 = SignedIngressBuilder::new()
             .canister_id(canister_test_id(0))
@@ -1385,6 +1496,11 @@ mod tests {
             None,
             Some(
                 ReplicatedStateBuilder::default()
+                    .with_node_ids(
+                        (1..=SMALL_APP_SUBNET_MAX_SIZE as u64)
+                            .map(node_test_id)
+                            .collect(),
+                    )
                     .with_canister(
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(0))
@@ -1409,6 +1525,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
@@ -1417,7 +1534,7 @@ mod tests {
                     certified_height: Height::from(0),
                 };
 
-                let ingress_messages = vec![m1.clone(), m2, m3, m4];
+                let ingress_messages = vec![m1.clone(), m2.clone(), m3, m4];
 
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
@@ -1427,15 +1544,9 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                            message_id.clone(),
-                            node_test_id(0),
-                            m.count_bytes(),
-                            (),
-                            crypto_hash(m.binary()).get(),
-                        ))]);
+                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 
@@ -1446,7 +1557,8 @@ mod tests {
                 );
                 assert_eq!(payload.message_count(), 1);
                 let msgs: Vec<SignedIngress> = payload.try_into().unwrap();
-                assert!(msgs.contains(&m1));
+                // either m1 or m2, could be random. But not both.
+                assert!(msgs.contains(&m1) || msgs.contains(&m2));
             },
         )
     }
@@ -1471,8 +1583,9 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 let m1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .expiry_time(time + MAX_INGRESS_TTL)
@@ -1490,15 +1603,15 @@ mod tests {
                     &payload,
                     &HashSet::new(),
                     &ValidationContext {
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         registry_version: RegistryVersion::from(1),
                         certified_height: Height::from(0),
                     },
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::InsufficientCycles(_)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::InsufficientCycles(_)
                     ))
                 );
             },
@@ -1515,8 +1628,9 @@ mod tests {
             Some((registry, subnet_id)),
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 // Canister 0 doesn't exist.
                 let m1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
@@ -1529,15 +1643,15 @@ mod tests {
                     &payload,
                     &HashSet::new(),
                     &ValidationContext {
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         registry_version: RegistryVersion::from(1),
                         certified_height: Height::from(0),
                     },
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterNotFound(_)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterNotFound(_)
                     ))
                 );
             },
@@ -1557,8 +1671,9 @@ mod tests {
                     .with_subnet_id(subnet_id)
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
                     // Message to check the status of a canister that doesn't exist.
                     let msg = SignedIngressBuilder::new()
@@ -1574,14 +1689,14 @@ mod tests {
                             &payload,
                             &HashSet::new(),
                             &ValidationContext {
-                                time: mock_time(),
+                                time: UNIX_EPOCH,
                                 registry_version: RegistryVersion::from(1),
                                 certified_height: Height::from(0),
                             },
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't exist.
-                        Err(ValidationError::Permanent(IngressPermanentError::CanisterNotFound(canister_id)))
+                        Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(canister_id)))
                             if canister_id == canister_test_id(2)
                     );
                 }
@@ -1609,8 +1724,9 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
                     // Message to check the status of a canister that exists.
                     let msg = SignedIngressBuilder::new()
@@ -1628,7 +1744,7 @@ mod tests {
                             &payload,
                             &HashSet::new(),
                             &ValidationContext {
-                                time: mock_time(),
+                                time: UNIX_EPOCH,
                                 registry_version: RegistryVersion::from(1),
                                 certified_height: Height::from(0),
                             },
@@ -1658,8 +1774,9 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
                     // Message to check the status of a canister that exists.
                     let msg = SignedIngressBuilder::new()
@@ -1677,18 +1794,162 @@ mod tests {
                             &payload,
                             &HashSet::new(),
                             &ValidationContext {
-                                time: mock_time(),
+                                time: UNIX_EPOCH,
                                 registry_version: RegistryVersion::from(1),
                                 certified_height: Height::from(0),
                             },
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(IngressPermanentError::InsufficientCycles(err)))
+                        Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InsufficientCycles(err)))
                             if err.canister_id == canister_test_id(2)
                     );
                 }
             },
+        );
+    }
+
+    /// Sets up the ingress manager with all the dependencies and validates the provided payload.
+    fn payload_validation_test_case(
+        payload: IngressPayload,
+        past_ingress: HashSet<IngressMessageId>,
+        validation_context: ValidationContext,
+        ingress_history_response: Result<(), IngressHistoryError>,
+        state_manager_response: StateManagerResult<ReplicatedState>,
+    ) -> ValidationResult<IngressPayloadValidationError> {
+        with_test_replica_logger(|log| {
+            with_test_pool_config(|pool_config| {
+                let mut ingress_hist_reader = MockIngressHistory::new();
+
+                match ingress_history_response {
+                    Ok(()) => ingress_hist_reader
+                        .expect_get_status_at_height()
+                        .returning(|_| Ok(Box::new(|_| IngressStatus::Unknown))),
+                    Err(err) => ingress_hist_reader
+                        .expect_get_status_at_height()
+                        .returning(move |_| Err(err.clone())),
+                };
+
+                let subnet_id = subnet_test_id(0);
+                let node_id = node_test_id(1);
+
+                let registry = setup_registry(subnet_id, 60 * 1024 * 1024);
+
+                let consensus_time = MockConsensusTime::new();
+
+                let mut state_manager = MockStateManager::new();
+                state_manager
+                    .expect_get_state_at()
+                    .return_const(state_manager_response.map(|response| {
+                        ic_interfaces_state_manager::Labeled::new(
+                            Height::new(0),
+                            Arc::new(response),
+                        )
+                    }));
+
+                let metrics_registry = MetricsRegistry::new();
+                let ingress_signature_crypto =
+                    Arc::new(temp_crypto_component_with_fake_registry(node_id));
+                let cycles_account_manager = Arc::new(
+                    CyclesAccountManagerBuilder::new()
+                        .with_subnet_id(subnet_id)
+                        .build(),
+                );
+                let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+                    node_id,
+                    pool_config,
+                    metrics_registry.clone(),
+                    log.clone(),
+                )));
+                let time_source = FastForwardTimeSource::new();
+                time_source.set_time(UNIX_EPOCH).unwrap();
+                let ingress_manager = IngressManager::new(
+                    time_source,
+                    Arc::new(consensus_time),
+                    Box::new(ingress_hist_reader),
+                    ingress_pool.clone(),
+                    registry,
+                    ingress_signature_crypto,
+                    metrics_registry,
+                    subnet_id,
+                    log,
+                    Arc::new(state_manager),
+                    cycles_account_manager,
+                    MaliciousFlags::default(),
+                    RandomStateKind::Random,
+                );
+
+                ingress_manager.validate_ingress_payload(
+                    &payload,
+                    &past_ingress,
+                    &validation_context,
+                )
+            })
+        })
+    }
+
+    #[test]
+    fn test_validate_empty_payload_succeeds() {
+        let validation_result = payload_validation_test_case(
+            IngressPayload::from(vec![]),
+            HashSet::new(),
+            ValidationContext {
+                time: UNIX_EPOCH,
+                registry_version: RegistryVersion::from(1),
+                certified_height: Height::from(0),
+            },
+            /*history_reader_response=*/ Ok(()),
+            /*state_manager_response=*/ Ok(ReplicatedStateBuilder::default().build()),
+        );
+
+        assert_eq!(validation_result, Ok(()),);
+    }
+
+    #[test]
+    fn test_validate_history_error_results_in_failure() {
+        let certified_height = Height::new(0);
+        let error = IngressHistoryError::StateRemoved(Height::new(1));
+        let validation_result = payload_validation_test_case(
+            IngressPayload::from(vec![]),
+            HashSet::new(),
+            ValidationContext {
+                time: UNIX_EPOCH,
+                registry_version: RegistryVersion::from(1),
+                certified_height,
+            },
+            /*history_reader_response=*/ Err(error.clone()),
+            /*state_manager_response=*/ Ok(ReplicatedStateBuilder::default().build()),
+        );
+
+        assert_eq!(
+            validation_result,
+            Err(IngressPayloadValidationError::ValidationFailed(
+                IngressPayloadValidationFailure::IngressHistoryError(certified_height, error,)
+            ))
+        );
+    }
+
+    #[test]
+    fn test_validate_state_manager_error_results_in_failure() {
+        let certified_height = Height::new(0);
+        let error = StateManagerError::StateNotCommittedYet(Height::new(1));
+        let validation_result = payload_validation_test_case(
+            IngressPayload::from(vec![]),
+            HashSet::new(),
+            ValidationContext {
+                time: UNIX_EPOCH,
+                registry_version: RegistryVersion::from(1),
+                certified_height,
+            },
+            /*history_reader_response=*/ Ok(()),
+            /*state_manager_response=*/ Err(error.clone()),
+        );
+
+        assert_eq!(
+            validation_result,
+            Err(IngressPayloadValidationError::ValidationFailed(
+                IngressPayloadValidationFailure::StateManagerError(certified_height, error,)
+            ))
         );
     }
 
@@ -1705,8 +1966,9 @@ mod tests {
                     .with_subnet_id(subnet_id)
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
                     // Management message without a payload. This is invalid because then we don't
                     // know who pays for this.
@@ -1724,15 +1986,15 @@ mod tests {
                             &payload,
                             &HashSet::new(),
                             &ValidationContext {
-                                time: mock_time(),
+                                time: UNIX_EPOCH,
                                 registry_version: RegistryVersion::from(1),
                                 certified_height: Height::from(0),
                             },
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(
-                            IngressPermanentError::InvalidManagementMessage
+                        Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::InvalidManagementMessage
                         ))
                     );
 
@@ -1752,15 +2014,15 @@ mod tests {
                             &payload,
                             &HashSet::new(),
                             &ValidationContext {
-                                time: mock_time(),
+                                time: UNIX_EPOCH,
                                 registry_version: RegistryVersion::from(1),
                                 certified_height: Height::from(0),
                             },
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(
-                            IngressPermanentError::InvalidManagementMessage
+                        Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::InvalidManagementMessage
                         ))
                     );
                 }
@@ -1790,36 +2052,30 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let msg = SignedIngressBuilder::new()
                     .method_payload(vec![0; ALMOST_MAX_SIZE])
-                    .expiry_time(mock_time())
+                    .expiry_time(UNIX_EPOCH)
                     .build();
 
                 let msg_id = IngressMessageId::from(&msg);
-                let msg_hash = crypto_hash(msg.binary()).get();
                 let _payload = IngressPayload::from(vec![msg.clone()]);
 
                 ingress_pool.write().unwrap().insert(UnvalidatedArtifact {
                     message: msg,
                     peer_id: node_test_id(0),
-                    timestamp: mock_time(),
+                    timestamp: UNIX_EPOCH,
                 });
                 ingress_pool
                     .write()
                     .unwrap()
-                    .apply_changes(vec![ChangeAction::MoveToValidated((
-                        msg_id,
-                        node_test_id(0),
-                        0,
-                        (),
-                        msg_hash,
-                    ))]);
+                    .apply(vec![ChangeAction::MoveToValidated(msg_id)]);
 
                 let validation_context = ValidationContext {
                     registry_version: RegistryVersion::new(1),
                     certified_height: Height::new(0),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 };
 
                 let _payload = ingress_manager.get_ingress_payload(
@@ -1829,5 +2085,205 @@ mod tests {
                 );
             },
         );
+    }
+
+    fn insert_unvalidated_ingress_with_timestamp(
+        msgs: Vec<SignedIngress>,
+        pool: &Arc<RwLock<IngressPoolImpl>>,
+        timestamp: Time,
+    ) {
+        for m in msgs.iter() {
+            let message_id = IngressMessageId::from(m);
+            access_ingress_pool(pool, |ingress_pool| {
+                ingress_pool.insert(UnvalidatedArtifact {
+                    message: m.clone(),
+                    peer_id: node_test_id(0),
+                    timestamp,
+                });
+                ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
+                // check that message is indeed in the pool
+                assert!(ingress_pool.get(&message_id).is_some());
+            });
+        }
+    }
+
+    /// Generates a list of ingress messages with given parameters, and 500 billion cycles
+    fn generate_ingress_with_params(
+        cid: CanisterId,
+        msg_count: usize,
+        bytes: usize,
+        expiry: Time,
+    ) -> (Vec<SignedIngress>, CanisterState) {
+        let msgs: Vec<_> = (0..msg_count)
+            .map(|_| {
+                SignedIngressBuilder::new()
+                    .canister_id(cid)
+                    .expiry_time(expiry)
+                    .nonce(rand::thread_rng().next_u64())
+                    .method_payload(vec![0xff; bytes])
+                    .build()
+            })
+            .collect();
+
+        (
+            msgs,
+            CanisterStateBuilder::default()
+                .with_canister_id(cid)
+                .with_cycles(Cycles::new(500_000_000_000))
+                .build(),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_ordering_fairness() {
+        const MAX_SIZE: usize = 300 * 30; // initial quota: 300 bytes per canister
+        let subnet_id = subnet_test_id(0);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
+        let time = UNIX_EPOCH;
+
+        let (messages_0, canister_0) = generate_ingress_with_params(
+            canister_test_id(0),
+            /* msg_count = */ 10,
+            /* bytes = */ 900,
+            time + Duration::from_secs(40),
+        );
+        let mut small_payloads = vec![(messages_0, canister_0)];
+
+        for canister_id in (1..3).map(canister_test_id) {
+            let (m, c) = generate_ingress_with_params(
+                canister_id,
+                /* msg_count = */ 2,
+                /* bytes = */ 246,
+                time + Duration::from_secs(10),
+            );
+            small_payloads.push((m, c))
+        }
+        small_payloads.push(generate_ingress_with_params(
+            canister_test_id(1),
+            /* msg_count = */ 1,
+            /* bytes = */ 246,
+            time + Duration::from_secs(25),
+        ));
+        small_payloads.push(generate_ingress_with_params(
+            canister_test_id(2),
+            /* msg_count = */ 1,
+            /* bytes = */ 446,
+            time + Duration::from_secs(35),
+        ));
+
+        // small ingress messages that fall below quota, to generate surplus that
+        // is later dispersed amongst the first three canisters.
+        for canister_id in (3..30).map(canister_test_id) {
+            small_payloads.push(generate_ingress_with_params(
+                canister_id,
+                /* msg_count = */ 1,
+                /* bytes = */ 1,
+                time + Duration::from_secs(30),
+            ))
+        }
+
+        let mut replicated_state = ReplicatedStateBuilder::new().with_subnet_id(subnet_id);
+        for p in small_payloads.iter() {
+            replicated_state = replicated_state.with_canister(p.1.clone());
+        }
+
+        setup_with_params(
+            None,
+            Some((registry, subnet_id)),
+            None,
+            Some(replicated_state.build()),
+            /*ingress_pool_max_count=*/ None,
+            |ingress_manager, ingress_pool| {
+                let validation_context = ValidationContext {
+                    time,
+                    registry_version: RegistryVersion::from(1),
+                    certified_height: Height::from(0),
+                };
+                for p in small_payloads.into_iter() {
+                    let timestamp = p.0[0].expiry_time();
+                    insert_unvalidated_ingress_with_timestamp(p.0, &ingress_pool, timestamp);
+                }
+                let payload = ingress_manager.get_ingress_payload(
+                    &HashSet::new(),
+                    &validation_context,
+                    NumBytes::new(MAX_SIZE as u64),
+                );
+                let msgs: Vec<SignedIngress> = payload.try_into().unwrap();
+
+                assert_eq!(
+                    2,
+                    msgs.iter()
+                        .filter(|m| m.canister_id() == canister_test_id(0))
+                        .count()
+                );
+                assert_eq!(
+                    3,
+                    msgs.iter()
+                        .filter(|m| m.canister_id() == canister_test_id(1))
+                        .count()
+                );
+                // Greater-equals, because we can't rely on the order in which canisters
+                // are iterated over. If the canister_id(0) is earlier in the iteration
+                // order, we'll include 2 messages from canister_id(2) - otherwise it's 3.
+                assert!(
+                    msgs.iter()
+                        .filter(|m| m.canister_id() == canister_test_id(2))
+                        .count()
+                        >= 2
+                );
+            },
+        )
+    }
+    #[tokio::test]
+    async fn test_not_stuck() {
+        const MSG_SIZE: usize = 154;
+        const CANISTER_COUNT: usize = MSG_SIZE + 1;
+        const MAX_SIZE: usize = MSG_SIZE * (CANISTER_COUNT + 1);
+        let subnet_id = subnet_test_id(0);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
+        let time = UNIX_EPOCH;
+
+        let mut small_payloads = Vec::new();
+
+        for i in 0..CANISTER_COUNT {
+            let (messages_0, canister_0) = generate_ingress_with_params(
+                canister_test_id(i as u64),
+                /* msg_count = */ 10,
+                /* bytes = */ 1,
+                time + Duration::from_secs(40),
+            );
+
+            small_payloads.push((messages_0, canister_0));
+        }
+
+        let mut replicated_state = ReplicatedStateBuilder::new().with_subnet_id(subnet_id);
+        for p in small_payloads.iter() {
+            replicated_state = replicated_state.with_canister(p.1.clone());
+        }
+
+        setup_with_params(
+            None,
+            Some((registry, subnet_id)),
+            None,
+            Some(replicated_state.build()),
+            /*ingress_pool_max_count=*/ None,
+            |ingress_manager, ingress_pool| {
+                let validation_context = ValidationContext {
+                    time,
+                    registry_version: RegistryVersion::from(1),
+                    certified_height: Height::from(0),
+                };
+                for p in small_payloads.into_iter() {
+                    let timestamp = p.0[0].expiry_time();
+                    insert_unvalidated_ingress_with_timestamp(p.0, &ingress_pool, timestamp);
+                }
+                // This should not get stuck. If it does, the ingress selector has a bug.
+                ingress_manager.get_ingress_payload(
+                    &HashSet::new(),
+                    &validation_context,
+                    NumBytes::new(MAX_SIZE as u64),
+                );
+            },
+        )
     }
 }

@@ -2,11 +2,12 @@ use crate::deserialize_registry_value;
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
+use ic_limits::{INITIAL_NOTARY_DELAY, UNIT_DELAY_APP_SUBNET};
 use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
         replica_version::v1::ReplicaVersionRecord,
-        subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetListRecord, SubnetRecord},
+        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::SubnetId as SubnetIdProto,
 };
@@ -14,20 +15,26 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
     make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_types::{
     registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId,
     PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion, SubnetId,
 };
-use std::{
-    convert::{TryFrom, TryInto},
-    time::Duration,
-};
+use std::{convert::TryFrom, time::Duration};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NotarizationDelaySettings {
     pub unit_delay: Duration,
     pub initial_notary_delay: Duration,
+}
+
+impl Default for NotarizationDelaySettings {
+    fn default() -> Self {
+        Self {
+            initial_notary_delay: INITIAL_NOTARY_DELAY,
+            unit_delay: UNIT_DELAY_APP_SUBNET,
+        }
+    }
 }
 
 pub struct IngressMessageSettings {
@@ -69,13 +76,6 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<IngressMessageSettings>;
 
-    /// Returns gossip config
-    fn get_gossip_config(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Option<GossipConfig>>;
-
     /// Returns SubnetFeatures
     fn get_features(
         &self,
@@ -83,17 +83,17 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<SubnetFeatures>;
 
-    /// Returns ecdsa config
-    fn get_ecdsa_config(
+    /// Returns chain key config
+    fn get_chain_key_config(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<EcdsaConfig>;
+    ) -> RegistryClientResult<ChainKeyConfig>;
 
     /// Returns notarization delay settings:
     /// - the unit delay for blockmaker;
     /// - the initial delay for notary, to give time to rank-0 block
-    /// propagation.
+    ///   propagation.
     fn get_notarization_delay_settings(
         &self,
         subnet_id: SubnetId,
@@ -185,6 +185,13 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<u64>;
+
+    /// Returns the subnet type (e.g., application, system, ...)
+    fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetType>;
 }
 
 impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
@@ -254,16 +261,6 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         )
     }
 
-    fn get_gossip_config(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Option<GossipConfig>> {
-        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
-        Ok(subnet.map(|subnet| subnet.gossip_config))
-    }
-
     fn get_features(
         &self,
         subnet_id: SubnetId,
@@ -276,14 +273,19 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             .map(SubnetFeatures::from))
     }
 
-    fn get_ecdsa_config(
+    fn get_chain_key_config(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<EcdsaConfig> {
+    ) -> RegistryClientResult<ChainKeyConfig> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
-        Ok(subnet.and_then(|subnet| subnet.ecdsa_config.map(|config| config.try_into().unwrap())))
+        subnet
+            .and_then(|subnet| subnet.chain_key_config.map(ChainKeyConfig::try_from))
+            .transpose()
+            .map_err(|err| DecodeError {
+                error: format!("get_chain_key_config() failed with {}", err),
+            })
     }
 
     fn get_notarization_delay_settings(
@@ -456,6 +458,15 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
             .map(|subnet| subnet.max_block_payload_size))
     }
+
+    fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetType> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| subnet.subnet_type()))
+    }
 }
 
 pub fn get_node_ids_from_subnet_record(
@@ -472,6 +483,10 @@ pub fn get_node_ids_from_subnet_record(
 /// of the current topology of the IC.
 pub trait SubnetListRegistry {
     fn get_subnet_ids(&self, version: RegistryVersion) -> RegistryClientResult<Vec<SubnetId>>;
+    fn get_system_subnet_ids(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<SubnetId>>;
 }
 
 impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
@@ -492,6 +507,24 @@ impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()
+    }
+
+    fn get_system_subnet_ids(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<SubnetId>> {
+        let subnet_ids = self.get_subnet_ids(version)?;
+        let system_subnet_ids = subnet_ids.map(|ids| {
+            ids.into_iter()
+                .filter(|subnet_id| {
+                    matches!(
+                        self.get_subnet_type(*subnet_id, version),
+                        Ok(Some(SubnetType::System))
+                    )
+                })
+                .collect()
+        });
+        Ok(system_subnet_ids)
     }
 }
 

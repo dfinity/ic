@@ -48,6 +48,7 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     build_messaging_proto(def, out);
     build_state_proto(def, out);
     build_p2p_proto(def, out);
+    build_transport_proto(def, out);
     build_bitcoin_proto(def, out);
     build_determinism_test_proto(def, out);
     rustfmt(out).unwrap_or_else(|e| {
@@ -114,23 +115,6 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        P2PLogEntry,
-        "log.p2p_log_entry.v1",
-        p2p,
-        event,
-        src,
-        dest,
-        artifact_id,
-        chunk_id,
-        advert,
-        request,
-        artifact,
-        height,
-        disconnect_elapsed
-    );
-
-    add_log_proto_derives!(
-        config,
         MessagingLogEntry,
         "log.messaging_log_entry.v1",
         messaging,
@@ -177,14 +161,6 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        ExecutionLogEntry,
-        "log.execution_log_entry.v1",
-        execution,
-        canister_id
-    );
-
-    add_log_proto_derives!(
-        config,
         MaliciousBehaviourLogEntry,
         "log.malicious_behaviour_log_entry.v1",
         malicious_behaviour
@@ -208,14 +184,6 @@ fn build_registry_proto(def: &Path, out: &Path) {
     config.type_attribute(
         ".registry.crypto.v1.X509PublicKeyCert",
         "#[derive(Eq, Hash, PartialOrd, Ord)]",
-    );
-    config.type_attribute(
-        ".registry.crypto.v1.EcdsaCurve",
-        "#[derive(candid::CandidType)]",
-    );
-    config.type_attribute(
-        ".registry.crypto.v1.EcdsaKeyId",
-        "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(
         ".registry.node_operator",
@@ -347,6 +315,7 @@ fn build_state_proto(def: &Path, out: &Path) {
         def.join("state/ingress/v1/ingress.proto"),
         def.join("state/metadata/v1/metadata.proto"),
         def.join("state/canister_state_bits/v1/canister_state_bits.proto"),
+        def.join("state/canister_snapshot_bits/v1/canister_snapshot_bits.proto"),
         def.join("state/queues/v1/queues.proto"),
         def.join("state/sync/v1/manifest.proto"),
         def.join("state/stats/v1/stats.proto"),
@@ -359,20 +328,48 @@ fn build_state_proto(def: &Path, out: &Path) {
 /// Generates Rust structs from types Protobuf messages.
 fn build_types_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "types");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    for path in [
+        ".types.v1.CanisterId",
+        ".types.v1.CatchUpPackage",
+        ".types.v1.NiDkgId",
+        ".types.v1.NodeId",
+        ".types.v1.PrincipalId",
+        ".types.v1.SubnetId",
+        ".types.v1.ThresholdSignature",
+        ".types.v1.ThresholdSignatureShare",
+        ".types.v1.EcdsaKeyId",
+        ".types.v1.SchnorrKeyId",
+        ".types.v1.VetKdKeyId",
+        ".types.v1.EcdsaCurve",
+        ".types.v1.SchnorrAlgorithm",
+        ".types.v1.VetKdCurve",
+        ".types.v1.MasterPublicKeyId",
+    ] {
+        config.type_attribute(path, "#[derive(serde::Serialize, serde::Deserialize)]");
+    }
     config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.MasterPublicKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.SchnorrKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.VetKdKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.EcdsaCurve", "#[derive(candid::CandidType)]");
+    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(candid::CandidType)]");
     config.type_attribute(
         ".types.v1.ConsensusMessage",
         "#[allow(clippy::large_enum_variant)]",
     );
-    config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
     config.type_attribute(
-        ".types.v1.ArtifactChunk",
+        ".types.v1.StrippedConsensusMessage",
         "#[allow(clippy::large_enum_variant)]",
     );
+    config.type_attribute(
+        ".types.v1.PreSignatureInCreation",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
     config.type_attribute(
         ".types.v1.GossipChunk",
         "#[allow(clippy::large_enum_variant)]",
@@ -382,15 +379,15 @@ fn build_types_proto(def: &Path, out: &Path) {
         "#[allow(clippy::large_enum_variant)]",
     );
     let files = [
-        def.join("types/v1/ic00_types.proto"),
+        def.join("types/v1/management_canister_types.proto"),
         def.join("types/v1/types.proto"),
         def.join("types/v1/dkg.proto"),
         def.join("types/v1/consensus.proto"),
-        def.join("types/v1/ecdsa.proto"),
+        def.join("types/v1/idkg.proto"),
         def.join("types/v1/signature.proto"),
-        def.join("types/v1/p2p.proto"),
         def.join("types/v1/canister_http.proto"),
         def.join("types/v1/artifact.proto"),
+        def.join("types/v1/errors.proto"),
     ];
     compile_protos(config, def, &files);
 }
@@ -403,14 +400,20 @@ fn build_crypto_proto(def: &Path, out: &Path) {
     compile_protos(config, def, &files);
 }
 
-/// Generates Rust structs from crypto Protobuf messages.
+/// Generates Rust structs from p2p Protobuf messages.
 fn build_p2p_proto(def: &Path, out: &Path) {
-    let mut config = base_config(out, "p2p");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    let config = base_config(out, "p2p");
     let files = [
         def.join("p2p/v1/state_sync_manager.proto"),
         def.join("p2p/v1/consensus_manager.proto"),
     ];
+    compile_protos(config, def, &files);
+}
+
+/// Generates Rust structs from transport Protobuf messages.
+fn build_transport_proto(def: &Path, out: &Path) {
+    let config = base_config(out, "transport");
+    let files = [def.join("transport/v1/quic.proto")];
     compile_protos(config, def, &files);
 }
 

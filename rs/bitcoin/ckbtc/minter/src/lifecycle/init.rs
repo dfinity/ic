@@ -7,7 +7,7 @@ use ic_btc_interface::Network;
 use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
-pub const DEFAULT_KYT_FEE: u64 = 1000;
+pub const DEFAULT_CHECK_FEE: u64 = 1000;
 
 #[derive(CandidType, serde::Deserialize)]
 pub enum MinterArg {
@@ -20,7 +20,7 @@ pub enum MinterArg {
 // (refer to [PR171](https://github.com/dfinity/bitcoin-canister/pull/171)),
 // instead it uses lower-case candid variants.
 // A temporary fix for ckbtc minter is to create a new enum with capital letter variants.
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum BtcNetwork {
     Mainnet,
     Testnet,
@@ -47,9 +47,9 @@ impl From<Network> for BtcNetwork {
     }
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct InitArgs {
-    /// The bitcoin network that the minter will connect to
+    /// The Bitcoin network that the minter will connect to
     pub btc_network: BtcNetwork,
 
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
@@ -75,14 +75,25 @@ pub struct InitArgs {
     #[serde(default)]
     pub mode: Mode,
 
-    /// The fee that the minter will pay for each KYT check.
+    /// The fee that the minter will pay for each Bitcoin check.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_fee: Option<u64>,
+
+    /// The fee that the minter will pay for each KYT check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use check_fee instead")]
     pub kyt_fee: Option<u64>,
 
-    /// The principal of the KYT canister.
+    /// The principal of the Bitcoin checker canister.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_checker_principal: Option<CanisterId>,
+
+    /// The principal of the kyt canister.
+    /// NOTE: this field is optional for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use btc_checker_principal instead")]
     pub kyt_principal: Option<CanisterId>,
 }
 

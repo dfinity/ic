@@ -68,6 +68,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_nns_governance.pb.v1.Topic",
         "#[derive(strum_macros::EnumIter)]",
     );
+    config.type_attribute(
+        "ic_nns_governance.pb.v1.NnsFunction",
+        "#[derive(strum_macros::EnumIter)]",
+    );
 
     // Eq
     // --
@@ -107,6 +111,31 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_nns_governance.pb.v1.KnownNeuronData",
         "#[compare_default]",
     );
+
+    // Add serde_bytes for efficiently parsing blobs.
+    let blob_fields = vec![
+        "NeuronStakeTransfer.from_subaccount",
+        "NeuronStakeTransfer.to_subaccount",
+        "Neuron.account",
+        "AbridgedNeuron.account",
+        "ExecuteNnsFunction.payload",
+        "ManageNeuron.neuron_id_or_subaccount.subaccount",
+        "SwapBackgroundInformation.CanisterStatusResultV2.module_hash",
+    ];
+    for field in blob_fields {
+        config.field_attribute(
+            format!(".ic_nns_governance.pb.v1.{}", field),
+            "#[serde(with = \"serde_bytes\")]",
+        );
+    }
+
+    let option_blob_fields = vec!["InstallCode.wasm_module", "InstallCode.arg"];
+    for field in option_blob_fields {
+        config.field_attribute(
+            format!(".ic_nns_governance.pb.v1.{}", field),
+            "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
+        );
+    }
 
     // END type_attribute.
 

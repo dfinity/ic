@@ -7,50 +7,51 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
+ic-consensus-certification = { path = "./certification" }
+ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
-ic-constants = { path = "../constants" }
+ic-consensus-vetkd = { path = "./vetkd" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
-ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
-ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-replicated-state = { path = "../replicated_state" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
+num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
-proptest = { version = "1.0.0", optional = true }
-rand = "0.8"
-rand_chacha = "0.3"
-rayon = "1.5.1"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+slog = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
-criterion = "0.5"
+assert_matches = { workspace = true }
+criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
+ic-consensus = { path = ".", features = ["malicious_code"] }
 ic-consensus-mocks = { path = "./mocks" }
-ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
-ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
+ic-limits = { path = "../limits" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
+ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
@@ -60,20 +61,27 @@ ic-messaging = { path = "../messaging" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
-ic-replicated-state = { path = "../replicated_state" }
-ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-state-manager = { path = "../state_manager" }
+ic-sys = { path = "../sys" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
-ic-utils = { path = "../utils" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
-slog-async = "2.5.0"
-slog-envlogger = "2.2.0"
-slog-term = "2.6.0"
-tempfile = "3.1.0"
+ic-test-utilities-state = { path = "../test_utilities/state" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
+proptest = { workspace = true }
 prost = { workspace = true }
+rstest = { workspace = true }
 serde_cbor = { workspace = true }
+slog-async = { workspace = true }
+slog-envlogger = "2.2.0"
+slog-term = { workspace = true }
+strum = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [[bench]]
 name = "validate_payload"
@@ -81,4 +89,5 @@ harness = false
 
 [features]
 default = []
-malicious_code = ["ic-crypto-test-utils-canister-threshold-sigs"]
+malicious_code = []
+proptest = []

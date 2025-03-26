@@ -1,6 +1,7 @@
 ///
 /// WAT templates and snippets.
 //
+use crate::common::Wasm64;
 
 /// Number of internal loop iterations for a benchmark.
 pub enum LoopIterations {
@@ -31,7 +32,13 @@ pub enum Module {
 impl Module {
     /// Render a complete WAT module for a system call executing in a loop, with params and result.
     #[allow(clippy::wrong_self_convention)]
-    pub fn from_ic0<N, P>(&self, name: N, params: P, result: Result) -> String
+    pub fn from_ic0<N, P>(
+        &self,
+        name: N,
+        params: P,
+        result: Result,
+        wasm64_status: Wasm64,
+    ) -> String
     where
         N: std::fmt::Display,
         P: RenderParams,
@@ -45,16 +52,49 @@ impl Module {
             // The call new module has a built-in loop with a `ic0_call_new()`
             Module::CallNewLoop => LoopIterations::One,
         };
-        self.from_sections(Self::sections(loop_iterations, name, params, result))
+        self.from_sections(
+            Self::sections(loop_iterations, name, params, result, wasm64_status),
+            wasm64_status,
+        )
     }
 
     /// Render a complete WAT module from imports and body.
     #[allow(clippy::wrong_self_convention)]
-    pub fn from_sections<I, B>(&self, (imports, body): (I, B)) -> String
+    pub fn from_sections<I, B>(&self, (imports, body): (I, B), wasm64_status: Wasm64) -> String
     where
         I: core::fmt::Display,
         B: core::fmt::Display,
     {
+        let memory = if wasm64_status == Wasm64::Enabled {
+            "(memory i64 131072)"
+        } else {
+            "(memory 1)"
+        };
+        let ty = if wasm64_status == Wasm64::Enabled {
+            "i64"
+        } else {
+            "i32"
+        };
+        let call_new_params = format!(
+            r#"(call $ic0_call_new
+                ({ty}.const 0)   ({ty}.const 10)
+                ({ty}.const 100) ({ty}.const 18)
+                ({ty}.const 11)  ({ty}.const 0) ;; non-existent function
+                ({ty}.const 22)  ({ty}.const 0) ;; non-existent function
+            )"#,
+            ty = ty
+        );
+        let call_new_signature = format!(
+            r#"(import "ic0" "call_new"
+                (func $ic0_call_new
+                (param $callee_src {ty})         (param $callee_size {ty})
+                (param $name_src {ty})           (param $name_size {ty})
+                (param $reply_fun {ty})          (param $reply_env {ty})
+                (param $reject_fun {ty})         (param $reject_env {ty})
+                ))"#,
+            ty = ty
+        );
+
         match self {
             Module::Test => {
                 format!(
@@ -62,14 +102,20 @@ impl Module {
                     r#"
         (module
             {IMPORTS}
-            (memory $mem 1)
+            {MEMORY}
             (func $test (export "canister_update test")
-                (local $i i32) (local $s i32)
+                {VARS_DECLARATION}
                 {BODY}
             )
         )
             "#,
                     IMPORTS = imports,
+                    MEMORY = memory,
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
+                        "(local $i i64) (local $s i64)"
+                    } else {
+                        "(local $i i32) (local $s i32)"
+                    },
                     BODY = body
                 )
             }
@@ -77,18 +123,35 @@ impl Module {
                 format!(
                     r#"
         (module
-            (import "ic0" "stable_grow"
-                (func $ic0_stable_grow (param $additional_pages i32) (result i32)))
+            {STABLE_GROW_IMPORT}
             {IMPORTS}
-            (memory $mem 1)
+            {MEMORY}
             (func $test (export "canister_update test")
-                (local $i i32) (local $s i32)
-                (drop (call $ic0_stable_grow (i32.const 1)))
+                {LOCAL_COUNTER_DECLARATION}
+                {CALL_STABLE_GROW}
                 {BODY}
             )
         )
             "#,
+                    STABLE_GROW_IMPORT = if wasm64_status == Wasm64::Enabled {
+                        r#"(import "ic0" "stable64_grow"
+                            (func $ic0_stable64_grow (param $additional_pages i64) (result i64)))"#
+                    } else {
+                        r#"(import "ic0" "stable_grow"
+                            (func $ic0_stable_grow (param $additional_pages i32) (result i32)))"#
+                    },
                     IMPORTS = imports,
+                    MEMORY = memory,
+                    LOCAL_COUNTER_DECLARATION = if wasm64_status == Wasm64::Enabled {
+                        "(local $i i64) (local $s i64)"
+                    } else {
+                        "(local $i i32) (local $s i32)"
+                    },
+                    CALL_STABLE_GROW = if wasm64_status == Wasm64::Enabled {
+                        "(drop (call $ic0_stable64_grow (i64.const 1)))"
+                    } else {
+                        "(drop (call $ic0_stable_grow (i32.const 1)))"
+                    },
                     BODY = body
                 )
             }
@@ -97,35 +160,33 @@ impl Module {
                     LoopIterations::Mi,
                     format!(
                         r#"
-                            (call $ic0_call_new
-                                (i32.const 0)   (i32.const 10)
-                                (i32.const 100) (i32.const 18)
-                                (i32.const 11)  (i32.const 0) ;; non-existent function
-                                (i32.const 22)  (i32.const 0) ;; non-existent function
-                            )
+                            {CALL_NEW_PARAMS}
                             {BODY}"#,
+                        CALL_NEW_PARAMS = call_new_params,
                         BODY = body
                     ),
+                    wasm64_status,
                 );
                 format!(
                     r#"
         (module
-            (import "ic0" "call_new"
-                (func $ic0_call_new
-                (param $callee_src i32)         (param $callee_size i32)
-                (param $name_src i32)           (param $name_size i32)
-                (param $reply_fun i32)          (param $reply_env i32)
-                (param $reject_fun i32)         (param $reject_env i32)
-            ))
+            {CALL_NEW_SIGNATURE}
             {IMPORTS}
-            (memory $mem 1)
+            {MEMORY}
             (func $test (export "canister_update test")
-                (local $i i32) (local $s i32)
+                {VARS_DECLARATION}
                 {BODY}
             )
         )
             "#,
+                    CALL_NEW_SIGNATURE = call_new_signature,
                     IMPORTS = imports,
+                    MEMORY = memory,
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
+                        "(local $i i64) (local $s i64)"
+                    } else {
+                        "(local $i i32) (local $s i32)"
+                    },
                     BODY = body
                 )
             }
@@ -135,15 +196,21 @@ impl Module {
         (module
             (import "ic0" "accept_message" (func $ic0_accept_message))
             {IMPORTS}
-            (memory $mem 1)
+            {MEMORY}
             (func (export "canister_inspect_message")
-                (local $i i32) (local $s i32)
+                {VARS_DECLARATION}
                 {BODY}
                 (call $ic0_accept_message)
             )
         )
             "#,
                     IMPORTS = imports,
+                    MEMORY = memory,
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
+                        "(local $i i64) (local $s i64)"
+                    } else {
+                        "(local $i i32) (local $s i32)"
+                    },
                     BODY = body
                 )
             }
@@ -152,7 +219,7 @@ impl Module {
                     r#"
         (module
             {IMPORTS}
-            (memory $mem 1)
+            {MEMORY}
             (table funcref (elem $test))
             (func $test (param $env i32)
                 (local $i i32) (local $s i32)
@@ -161,6 +228,7 @@ impl Module {
         )
             "#,
                     IMPORTS = imports,
+                    MEMORY = memory,
                     BODY = body
                 )
             }
@@ -170,14 +238,20 @@ impl Module {
                     r#"
         (module
             {IMPORTS}
-            (memory $mem 1)
+            {MEMORY}
             (func $test (export "canister_query test")
-                (local $i i32) (local $s i32)
+                {VARS_DECLARATION}
                 {BODY}
             )
         )
             "#,
                     IMPORTS = imports,
+                    MEMORY = memory,
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
+                        "(local $i i64) (local $s i64)"
+                    } else {
+                        "(local $i i32) (local $s i32)"
+                    },
                     BODY = body
                 )
             }
@@ -190,6 +264,7 @@ impl Module {
         name: N,
         params: P,
         result: Result,
+        wasm64_status: Wasm64,
     ) -> (String, String)
     where
         N: std::fmt::Display,
@@ -211,12 +286,17 @@ impl Module {
                 NAME = name,
                 PARAMS = params.call()
             )),
+            wasm64_status,
         );
         (imports, body)
     }
 
     /// Return WAT for a simple loop.
-    pub fn render_loop<B>(loop_iterations: LoopIterations, loop_body: B) -> String
+    pub fn render_loop<B>(
+        loop_iterations: LoopIterations,
+        loop_body: B,
+        wasm64_status: Wasm64,
+    ) -> String
     where
         B: core::fmt::Display,
     {
@@ -229,9 +309,9 @@ impl Module {
             LoopIterations::Mi => format!(
                 r#"
                 (loop $loop
-                    (if (i32.lt_s (get_local $i) (i32.const {LOOP_ITERATIONS}))
+                    (if {BRANCH_CONDITION} {LOOP_ITERATIONS}))
                         (then
-                            (set_local $i (i32.add (get_local $i) (i32.const 1)))
+                            {INCREMENT_COUNTER}
 
                             {LOOP_BODY}
 
@@ -240,7 +320,17 @@ impl Module {
                     )
                 )
         "#,
+                BRANCH_CONDITION = if wasm64_status == Wasm64::Enabled {
+                    "(i64.lt_s (local.get $i) (i64.const"
+                } else {
+                    "(i32.lt_s (local.get $i) (i32.const"
+                },
                 LOOP_ITERATIONS = 1_000_000,
+                INCREMENT_COUNTER = if wasm64_status == Wasm64::Enabled {
+                    "(local.set $i (i64.add (local.get $i) (i64.const 1)))"
+                } else {
+                    "(local.set $i (i32.add (local.get $i) (i32.const 1)))"
+                },
                 LOOP_BODY = loop_body
             ),
         }
@@ -258,6 +348,9 @@ pub struct Params2<P1, P2>(pub P1, pub P2);
 
 /// System API call with 3 parameters.
 pub struct Params3<P1, P2, P3>(pub P1, pub P2, pub P3);
+
+/// System API call with 4 parameters.
+pub struct Params4<P1, P2, P3, P4>(pub P1, pub P2, pub P3, pub P4);
 
 /// Trait to render System API call parameters.
 pub trait RenderParams {
@@ -333,6 +426,30 @@ impl<P1: RenderParams, P2: RenderParams, P3: RenderParams> RenderParams for Para
             P1 = self.0.call(),
             P2 = self.1.call(),
             P3 = self.2.call()
+        )
+    }
+}
+
+/// Implement RenderParams trait for a System API call with 4 parameters.
+impl<P1: RenderParams, P2: RenderParams, P3: RenderParams, P4: RenderParams> RenderParams
+    for Params4<P1, P2, P3, P4>
+{
+    fn import(&self) -> String {
+        format!(
+            "{P1} {P2} {P3} {P4}",
+            P1 = self.0.import(),
+            P2 = self.1.import(),
+            P3 = self.2.import(),
+            P4 = self.3.import(),
+        )
+    }
+    fn call(&self) -> String {
+        format!(
+            "{P1} {P2} {P3} {P4}",
+            P1 = self.0.call(),
+            P2 = self.1.call(),
+            P3 = self.2.call(),
+            P4 = self.3.call()
         )
     }
 }

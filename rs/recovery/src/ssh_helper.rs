@@ -1,13 +1,8 @@
-use crate::cli::wait_for_confirmation;
-use crate::command_helper::exec_cmd;
-use crate::error::RecoveryError;
-use crate::RecoveryResult;
+use crate::{
+    cli::wait_for_confirmation, command_helper::exec_cmd, error::RecoveryError, RecoveryResult,
+};
 use slog::{info, warn, Logger};
-use std::net::IpAddr;
-use std::path::PathBuf;
-use std::process::Command;
-use std::thread;
-use std::time;
+use std::{net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 const SSH_ARGS: &[&str] = &[
     "-o",
@@ -15,9 +10,9 @@ const SSH_ARGS: &[&str] = &[
     "-o",
     "NumberOfPasswordPrompts=0",
     "-o",
-    "ConnectionAttempts=30",
+    "ConnectionAttempts=4",
     "-o",
-    "ConnectTimeout=60",
+    "ConnectTimeout=15",
     "-A",
 ];
 

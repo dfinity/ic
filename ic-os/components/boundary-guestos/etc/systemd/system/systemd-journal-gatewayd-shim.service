@@ -1,0 +1,13 @@
+[Unit]
+Description=systemd-journal-gatewayd-shim
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+ExecStart=/opt/ic/bin/systemd-journal-gatewayd-shim \
+    --addr [::]:19532 \
+    --units vector.service
+
+[Install]
+WantedBy=multi-user.target

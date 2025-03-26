@@ -12,15 +12,18 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
+use ic_types::consensus::certification::CertificationMessageHash;
+use ic_types::consensus::{BlockPayload, DataPayload, HasHash};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId},
     batch::BatchPayload,
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
-        dkg::Dealings,
+        dkg::DkgDataPayload,
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
-        ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight, Notarization,
-        NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
+        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
+        RandomTapeShare,
     },
     crypto::CryptoHashable,
     Height, Time,
@@ -326,8 +329,8 @@ impl<T: HasCFInfos> PersistentHeightIndexedPool<T> {
     }
 
     /// Returns the key to use for looking up the given consensus message
-    fn lookup_key(&self, msg_id: &ConsensusMessageId) -> Option<Vec<u8>> {
-        let key = make_key(msg_id.height.get(), &msg_id.hash.digest().0);
+    fn lookup_key<K: HasHeight + HasHash>(&self, msg_id: &K) -> Option<Vec<u8>> {
+        let key = make_key(msg_id.height().get(), &msg_id.hash().0);
         let watermark = make_min_key(self.watermark.read().unwrap().get());
         if key < watermark {
             // Skip read if key is below watermark
@@ -426,12 +429,11 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 block.payload.get_hash().clone(),
                                 block.payload.payload_type(),
                                 Box::new(move || {
-                                    (
-                                        BatchPayload::default(),
-                                        Dealings::new_empty(start_height),
-                                        None,
-                                    )
-                                        .into()
+                                    BlockPayload::Data(DataPayload {
+                                        batch: BatchPayload::default(),
+                                        dkg: DkgDataPayload::new_empty(start_height),
+                                        idkg: None,
+                                    })
                                 }),
                             );
                             artifact.msg = proposal.into_message();
@@ -473,7 +475,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                     }
                 }
                 PoolSectionOp::PurgeBelow(height) => self.purge_below_height(height),
-                PoolSectionOp::PurgeSharesBelow(_) => (), // not implemented
+                PoolSectionOp::PurgeTypeBelow(_, _) => (), // not implemented
             }
         }
         check_ok!(self.db.write(batch));
@@ -566,7 +568,7 @@ fn deserialize_consensus_artifact(
 
 impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<ConsensusMessage> {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.lookup_key(msg_id).map_or(false, |key| {
+        self.lookup_key(msg_id).is_some_and(|key| {
             let info = info_for_msg_id(msg_id);
             let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
             check_ok_uw!(self.db.get_pinned_cf(cf_handle, &key)).is_some()
@@ -640,6 +642,10 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
     }
 
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare> {
+        self
+    }
+
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
         self
     }
 
@@ -720,6 +726,11 @@ impl<Message: ConsensusMessageHashable + PerTypeCFInfo + 'static> HeightIndexedP
             _ => Err(OnlyError::MultipleValues),
         }
     }
+
+    // not implemented
+    fn size(&self) -> usize {
+        0
+    }
 }
 
 pub fn new_pool_snapshot_iterator<Message: ConsensusMessageHashable + PerTypeCFInfo>(
@@ -762,7 +773,7 @@ fn make_compaction_filter_fn(watermark: Watermark) -> impl CompactionFilterFn + 
 
 /// Encapsulates the information needed to build a ColumnFamilyDescriptor,
 /// per type.
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ArtifactCFInfo {
     name: &'static str,
 }
@@ -797,8 +808,9 @@ const RANDOM_TAPE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("RT");
 const RANDOM_TAPE_SHARE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("RTS");
 const CATCH_UP_PACKAGE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("CUP");
 const CATCH_UP_PACKAGE_SHARE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("CUS");
+const EQUIVOCATION_PROOF_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("EQ");
 
-const CONSENSUS_CF_INFOS: [ArtifactCFInfo; 12] = [
+const CONSENSUS_CF_INFOS: [ArtifactCFInfo; 13] = [
     RANDOM_BEACON_CF_INFO,
     FINALIZATION_CF_INFO,
     NOTARIZATION_CF_INFO,
@@ -811,6 +823,7 @@ const CONSENSUS_CF_INFOS: [ArtifactCFInfo; 12] = [
     RANDOM_TAPE_SHARE_CF_INFO,
     CATCH_UP_PACKAGE_CF_INFO,
     CATCH_UP_PACKAGE_SHARE_CF_INFO,
+    EQUIVOCATION_PROOF_CF_INFO,
 ];
 
 impl HasCFInfos for ConsensusMessage {
@@ -836,6 +849,7 @@ fn info_and_height_for_msg(msg: &ConsensusMessage) -> (&'static ArtifactCFInfo, 
         ConsensusMessage::CatchUpPackageShare(msg) => {
             (&CATCH_UP_PACKAGE_SHARE_CF_INFO, msg.height())
         }
+        ConsensusMessage::EquivocationProof(msg) => (&EQUIVOCATION_PROOF_CF_INFO, msg.height()),
     }
 }
 
@@ -853,6 +867,7 @@ fn info_for_msg_id(msg_id: &ConsensusMessageId) -> &ArtifactCFInfo {
         ConsensusMessageHash::RandomTapeShare(_) => &RANDOM_TAPE_SHARE_CF_INFO,
         ConsensusMessageHash::CatchUpPackage(_) => &CATCH_UP_PACKAGE_CF_INFO,
         ConsensusMessageHash::CatchUpPackageShare(_) => &CATCH_UP_PACKAGE_SHARE_CF_INFO,
+        ConsensusMessageHash::EquivocationProof(_) => &EQUIVOCATION_PROOF_CF_INFO,
     }
 }
 
@@ -919,6 +934,12 @@ impl PerTypeCFInfo for CatchUpPackage {
 impl PerTypeCFInfo for CatchUpPackageShare {
     fn info() -> ArtifactCFInfo {
         CATCH_UP_PACKAGE_SHARE_CF_INFO
+    }
+}
+
+impl PerTypeCFInfo for EquivocationProof {
+    fn info() -> ArtifactCFInfo {
+        EQUIVOCATION_PROOF_CF_INFO
     }
 }
 
@@ -1073,6 +1094,34 @@ impl crate::certification_pool::MutablePoolSection
         }
     }
 
+    fn get(&self, msg_id: &CertificationMessageId) -> Option<CertificationMessage> {
+        let key = self.lookup_key(msg_id)?;
+        let info = match msg_id.hash {
+            CertificationMessageHash::Certification(_) => CERTIFICATION_CF_INFO,
+            CertificationMessageHash::CertificationShare(_) => CERTIFICATION_SHARE_CF_INFO,
+        };
+        let cf_handle = self
+            .db
+            .cf_handle(info.name)
+            .unwrap_or_else(|| panic!("column family {} doesn't exist", info.name));
+        let bytes = self.db.get_cf(cf_handle, key).expect("retrieve db entry")?;
+
+        Some(match msg_id.hash {
+            CertificationMessageHash::Certification(_) => {
+                CertificationMessage::Certification(deserialize_certification_artifact(
+                    Arc::new(StandaloneSnapshot::new(self.db.clone())),
+                    &bytes,
+                )?)
+            }
+            CertificationMessageHash::CertificationShare(_) => {
+                CertificationMessage::CertificationShare(deserialize_certification_artifact(
+                    Arc::new(StandaloneSnapshot::new(self.db.clone())),
+                    &bytes,
+                )?)
+            }
+        })
+    }
+
     fn certifications(&self) -> &dyn HeightIndexedPool<Certification> {
         self
     }
@@ -1142,13 +1191,17 @@ impl<Message: CertificationType + PerTypeCFInfo + 'static> HeightIndexedPool<Mes
             _ => Err(OnlyError::MultipleValues),
         }
     }
+
+    fn size(&self) -> usize {
+        0
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_utils::*;
-    use ic_test_utilities::consensus::make_genesis;
+    use ic_test_utilities_consensus::make_genesis;
     use slog::Drain;
     use std::panic;
 
@@ -1273,7 +1326,7 @@ mod tests {
                 let mut pool =
                     PersistentHeightIndexedPool::new_consensus_pool(config.clone(), log.clone());
                 // insert a few things
-                let rb_ops = random_beacon_ops();
+                let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
                 pool.mutate(rb_ops.clone());
                 let iter = pool.random_beacon().get_all();
                 let msgs_from_pool = iter;

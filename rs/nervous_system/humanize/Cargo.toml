@@ -9,8 +9,8 @@ documentation.workspace = true
 [dependencies]
 humantime = "2.1.0"
 ic-nervous-system-proto = { path = "../proto" }
-lazy_static = "1.4.0"
-regex = "1.3.0"
+lazy_static = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

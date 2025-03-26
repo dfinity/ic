@@ -1,4 +1,5 @@
 use candid::{candid_method, CandidType, Encode};
+use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
@@ -14,27 +15,33 @@ use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
-use ic_ic00_types::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CreateCanisterArgs, Method, IC_00,
+use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
+// TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
+use ic_management_canister_types_private::{
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
+    IC_00,
 };
-use ic_ledger_core::block::BlockType;
-use ic_ledger_core::tokens::CheckedSub;
+use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
-    Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    Subaccount, Tokens, Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
+use icrc_ledger_types::icrc1::account::Account;
+use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
@@ -58,13 +65,21 @@ const ONE_MINUTE_SECONDS: u64 = 60;
 const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
+/// The maximum memo length.
+const MAX_MEMO_LENGTH: usize = 32;
 
 /// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
 /// This is the minimum amount needed for creating a canister as of October 2023.
 const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 
+/// Prior to 2024-12-10, we used 50e15, but legitimate users started running
+/// into this. At that time, prices had recently gone up, so we resolved to
+/// increase this by 3x.
+const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
+
 thread_local! {
-    static STATE: RefCell<Option<State>> = RefCell::new(None);
+    static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    static LIMITER_REJECT_COUNT: Cell<u64> = const { Cell::new(0_u64) };
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -114,7 +129,7 @@ impl Environment for CanisterEnvironment {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum NotificationStatus {
     /// We are waiting for a reply from ledger to complete the notification processing.
     Processing,
@@ -122,10 +137,61 @@ pub enum NotificationStatus {
     NotifiedTopUp(Result<Cycles, NotifyError>),
     /// The cached result of a completed canister creation.
     NotifiedCreateCanister(Result<CanisterId, NotifyError>),
+    /// The cached result of a completed cycles mint.
+    NotifiedMint(NotifyMintCyclesResult),
+    /// The transaction did not have a supported memo (or icrc1_memo).
+    /// Therefore, we decided to send the ICP back to its source (minus fee).
+    NotMeaningfulMemo(NotMeaningfulMemo),
 }
 
-#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
-pub struct State {
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct NotMeaningfulMemo {
+    refund_block_index: Option<BlockIndex>,
+}
+
+/// Version of the State type.
+///
+/// Each generation of the State type has an associated version.
+/// The version of the State type currently stored in stable storage
+/// is also stored in stable storage as a candid encoded number
+/// just before the candid encoded State value itself.
+///
+/// Let
+///   v         = version of the current (expected) State
+///   State     = current State type
+///   StateVn   = State type of version n
+///   v_s       = version stored in stable storage, the next argument in stable storage
+///               should then contain the candid encoded StateVv_s
+///
+/// If v = v_s + 1 then decode the stable storage as StateVv_s and migrate it to State
+/// If v = v_s     then decode the stable storage as State
+/// If v = v_s - 1 then it means a rollback probably happened because the stored version
+///                is one bigger than the expected version.
+///                To be safe we don't support this and will panic.
+///                Instead a hotfix should be performed.
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+)]
+struct StateVersion(u64);
+
+/// Current state type.
+///
+/// IMPORTANT: when changing the state type in a backwards incompatible way make sure to:
+///
+/// * Introduce a new StateV(n+1) type where n is the version of the current State type.
+///
+/// * Set the State type alias to StateV(n+1).
+///
+/// * Introduce a migration function from StateVn -> StateV(n+1).
+///
+/// * Perform this migration in State::decode(...).
+///
+/// * Optionally remove older State types (StateVm where m < n)
+///   because they are no longer needed.
+type State = StateV1;
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct StateV1 {
     pub ledger_canister_id: CanisterId,
 
     pub governance_canister_id: CanisterId,
@@ -133,6 +199,8 @@ pub struct State {
     /// An ID that provides an interface to a canister that provides exchange
     /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
     pub exchange_rate_canister_id: Option<CanisterId>,
+
+    pub cycles_ledger_canister_id: Option<CanisterId>,
 
     /// Account used to burn funds.
     pub minting_account_id: Option<AccountIdentifier>,
@@ -164,8 +232,22 @@ pub struct State {
 
     pub total_cycles_minted: Cycles,
 
-    pub blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
-    pub last_purged_notification: Option<BlockIndex>,
+    // We use this for synchronization.
+    //
+    // Because our operations (e.g. minting cycles) require calling other
+    // canister(s), in particular ledger, it is possible for duplicate requests
+    // to interleave. In such cases, we want subsequent operations to see that
+    // an operation is already in flight. Therefore, before making any canister
+    // calls, we check that the block does not already have a status. If it
+    // already has a status, do not proceed. If it dos not already have a
+    // status, set it to Processing. Then, we can proceed with calling the other
+    // canister (i.e. ledger). Once that comes back, we update the block's
+    // status. This avoids using the same ICP to perform multiple operations.
+    pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
+    // The status of blocks not new than this is ambiguous. This is because we
+    // must bound how much memory we use; in particular, blocks_notified must
+    // not grow without bound.
+    pub last_purged_notification: BlockIndex,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
@@ -192,14 +274,50 @@ pub struct State {
     pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
 }
 
+impl StateV1 {
+    fn state_version() -> StateVersion {
+        StateVersion(1)
+    }
+}
+
 impl State {
     fn encode(&self) -> Vec<u8> {
-        candid::encode_one(self).unwrap()
+        Encode!(&Self::state_version(), &self).unwrap()
     }
 
     fn decode(bytes: &[u8]) -> Result<Self, String> {
-        candid::decode_one(bytes)
-            .map_err(|err| format!("Decoding cycles minting canister state failed: {}", err))
+        let mut deserializer = candid::de::IDLDeserialize::new(bytes).unwrap();
+        let stored_state_version: StateVersion =
+            deserializer.get_value().expect("state version is missing");
+        let current_state_version: StateVersion = Self::state_version();
+        match stored_state_version.cmp(&current_state_version) {
+            Ordering::Greater => {
+                return Err(format!(
+                    "[cycles] ERROR: stored state version {:?} is greater than the current state \
+                     version {:?}!  This likely means a rollback happened. This is not supported. \
+                     Please upgrade to a hotfix instead.",
+                    stored_state_version, current_state_version
+                ))
+            }
+            Ordering::Less => {
+                // Since the version 1 is the latest version and also the first one encoded along
+                // with the state version, this should never happen. When we have a higher version
+                // than 1, we should add migration code here.
+                return Err(format!(
+                    "[cycles] ERROR: stored state version {:?} is lesser than the current state \
+                     version {:?}! Did you forget to migrate the old to the current type?",
+                    stored_state_version, current_state_version
+                ));
+            }
+            Ordering::Equal => print(format!(
+                "[cycles] INFO: stored state version {:?} equals the current state version {:?}. \
+                Continuing to decode the stable storage ... ",
+                stored_state_version, current_state_version,
+            )),
+        };
+        let state = deserializer.get_value::<State>().unwrap();
+        deserializer.done().unwrap();
+        Ok(state)
     }
 
     // Keep the size of blocks_notified map not larger than max_history.
@@ -209,23 +327,15 @@ impl State {
         let mut cnt = 0;
         // Remove elements from the beginning of self.blocks_notified until either
         // it is small enough, or MAX_NOTIFY_PURGE entries have been removed.
-        while self.blocks_notified.as_ref().unwrap().len() > max_history && cnt < MAX_NOTIFY_PURGE {
+        while self.blocks_notified.len() > max_history && cnt < MAX_NOTIFY_PURGE {
             // pop_first is nightly only
-            let block_height = *self
-                .blocks_notified
-                .as_ref()
-                .unwrap()
-                .iter()
-                .next()
-                .unwrap()
-                .0;
-            self.blocks_notified.as_mut().unwrap().remove(&block_height);
+            let block_height = *self.blocks_notified.iter().next().unwrap().0;
+            self.blocks_notified.remove(&block_height);
             last_purged = block_height;
             cnt += 1;
         }
         // make sure this grows monotonically (a delayed callback might have added older status)
-        last_purged = last_purged.max(self.last_purged_notification.unwrap());
-        self.last_purged_notification = Some(last_purged);
+        self.last_purged_notification = last_purged.max(self.last_purged_notification);
     }
 }
 
@@ -233,29 +343,31 @@ impl Default for State {
     fn default() -> Self {
         let resolution = Duration::from_secs(60);
         let max_age = Duration::from_secs(60 * 60);
+        let initial_icp_xdr_conversion_rate = IcpXdrConversionRate {
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
+        };
 
         Self {
             ledger_canister_id: CanisterId::ic_00(),
             governance_canister_id: CanisterId::ic_00(),
             exchange_rate_canister_id: None,
+            cycles_ledger_canister_id: None,
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
-            icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
-                timestamp_seconds: 1620633600,    // 10 May 2021 10:00:00 AM CEST
-                xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
-            }),
-            average_icp_xdr_conversion_rate: None,
+            icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
+            average_icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
             recent_icp_xdr_rates: Some(vec![
                 IcpXdrConversionRate::default();
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
+            cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: Cycles::zero(),
-            blocks_notified: Some(BTreeMap::new()),
-            last_purged_notification: Some(0),
+            blocks_notified: BTreeMap::new(),
+            last_purged_notification: 0,
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
             update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
@@ -276,11 +388,12 @@ fn main() {
     over_init(|CandidOne(args)| init(args))
 }
 
+#[candid_method(init)]
 fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
     let args =
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
-        "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, and minting account {}",
+        "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, minting account {}, and cycles ledger canister {}",
         args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.exchange_rate_canister.as_ref()
@@ -291,7 +404,10 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
             .unwrap_or_else(|| "<none>".to_string()),
         args.minting_account_id
             .map(|x| x.to_string())
-            .unwrap_or_else(|| "<none>".to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.cycles_ledger_canister_id.as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
     ));
 
     STATE.with(|state| state.replace(Some(State::default())));
@@ -303,9 +419,14 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
             .governance_canister_id
             .expect("Governance canister ID must be set!");
         state.minting_account_id = args.minting_account_id;
-        state.last_purged_notification = args.last_purged_notification;
+        if let Some(last_purged_notification) = args.last_purged_notification {
+            state.last_purged_notification = last_purged_notification;
+        }
         if let Some(xrc_flag) = args.exchange_rate_canister {
             state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+        }
+        if args.cycles_ledger_canister_id.is_some() {
+            state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
         }
     });
 }
@@ -636,6 +757,24 @@ fn get_principals_authorized_to_create_canisters_to_subnets_() {
     })
 }
 
+#[candid_method(query, rename = "get_default_subnets")]
+fn get_default_subnets() -> Vec<PrincipalId> {
+    with_state(|state| {
+        state
+            .default_subnets
+            .clone()
+            .iter()
+            .map(|s| s.get())
+            .collect()
+    })
+}
+
+/// Returns the list of default subnets to which anyone can deploy canisters to.
+#[export_name = "canister_query get_default_subnets"]
+fn get_default_subnets_() {
+    over(candid_one, |_: ()| get_default_subnets())
+}
+
 /// Constructs a hash tree that can be used to certify requests for the
 /// conversion rate (both the current and the average, if they are set).
 ///
@@ -678,13 +817,14 @@ fn convert_data_to_mixed_hash_tree(state: &State) -> WitnessGeneratorImpl {
 /// Candid-encoded IcpXdrConversionRate
 fn convert_conversion_rate_to_payload(
     conversion_rate: &IcpXdrConversionRate,
+    label: Label,
     witness_generator: WitnessGeneratorImpl,
 ) -> Vec<u8> {
     let icp_xdr_conversion_rate_buf = Encode!(&conversion_rate).unwrap();
 
     let mixed_hash_tree = witness_generator
-        .mixed_hash_tree(&LabeledTree::SubTree(flatmap!{
-            Label::from(LABEL_ICP_XDR_CONVERSION_RATE) => LabeledTree::Leaf(icp_xdr_conversion_rate_buf)
+        .mixed_hash_tree(&LabeledTree::SubTree(flatmap! {
+            label => LabeledTree::Leaf(icp_xdr_conversion_rate_buf)
         }))
         .expect("failed to produce a hash tree");
 
@@ -708,8 +848,11 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
             .as_ref()
             .expect("icp_xdr_conversion_rate is not set");
 
-        let payload =
-            convert_conversion_rate_to_payload(icp_xdr_conversion_rate, witness_generator);
+        let payload = convert_conversion_rate_to_payload(
+            icp_xdr_conversion_rate,
+            Label::from(LABEL_ICP_XDR_CONVERSION_RATE),
+            witness_generator,
+        );
 
         IcpXdrConversionRateCertifiedResponse {
             data: icp_xdr_conversion_rate.clone(),
@@ -734,8 +877,11 @@ fn get_average_icp_xdr_conversion_rate_() {
             .as_ref()
             .expect("average_icp_xdr_conversion_rate is not set");
 
-        let payload =
-            convert_conversion_rate_to_payload(average_icp_xdr_conversion_rate, witness_generator);
+        let payload = convert_conversion_rate_to_payload(
+            average_icp_xdr_conversion_rate,
+            Label::from(LABEL_AVERAGE_ICP_XDR_CONVERSION_RATE),
+            witness_generator,
+        );
 
         over(
             candid_one,
@@ -1017,6 +1163,11 @@ fn create_canister_() {
     over_async(candid_one, create_canister)
 }
 
+#[export_name = "canister_update notify_mint_cycles"]
+fn notify_mint_cycles_() {
+    over_async(candid_one, notify_mint_cycles)
+}
+
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1038,28 +1189,48 @@ async fn notify_top_up(
         canister_id,
     }: NotifyTopUp,
 ) -> Result<Cycles, NotifyError> {
-    let cmc_id = dfn_core::api::id();
-    let sub = Subaccount::from(&canister_id);
-    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let (amount, from) = fetch_transaction(
+        block_index,
+        Subaccount::from(&canister_id),
+        MEMO_TOP_UP_CANISTER,
+    )
+    .await?;
 
-    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_TOP_UP_CANISTER).await?;
-
+    // Try to set the status of this block to Processing. In order for this to
+    // succeed, two conditions must hold:
+    //
+    //     1. It must not already have a status.
+    //
+    //     2. The block is "sufficiently recent". More precisely, it must be
+    //        more recent than last_purged_notification. (To avoid unbounded
+    //        growth of the blocks_notified.)
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
-        if block_index <= state.last_purged_notification.unwrap() {
+        if block_index <= state.last_purged_notification {
             return Some(Err(NotifyError::TransactionTooOld(
-                state.last_purged_notification.unwrap() + 1,
+                state.last_purged_notification + 1,
             )));
         }
 
-        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+        match state.blocks_notified.entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
                 NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
+
+                // If the user makes a duplicate request, we respond as though
+                // the current request is the original one.
                 NotificationStatus::NotifiedTopUp(result) => Some(result.clone()),
                 NotificationStatus::NotifiedCreateCanister(_) => {
                     Some(Err(NotifyError::InvalidTransaction(
                         "The same payment is already processed as create canister request".into(),
+                    )))
+                }
+                NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as mint request".into(),
+                ))),
+                NotificationStatus::NotMeaningfulMemo(_) => {
+                    Some(Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as automatic refund".into(),
                     )))
                 }
             },
@@ -1076,12 +1247,104 @@ async fn notify_top_up(
             let result = process_top_up(canister_id, from, amount).await;
 
             with_state_mut(|state| {
-                state.blocks_notified.as_mut().unwrap().insert(
+                state.blocks_notified.insert(
                     block_index,
                     NotificationStatus::NotifiedTopUp(result.clone()),
                 );
                 if is_transient_error(&result) {
-                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                    state.blocks_notified.remove(&block_index);
+                }
+            });
+
+            result
+        }
+    }
+}
+
+/// Mints cycles from ICP and deposits the cycles into the cycles ledger
+///
+/// If the cycles are supposed to be deposited to a different canister use `notify_top_up` instead.
+///
+/// # Arguments
+///
+/// * `block_height` -  The height of the block you would like to send a
+///   notification about.
+/// * `to_subaccount` - Cycles ledger subaccount to which the cycles are minted to.
+#[candid_method(update, rename = "notify_mint_cycles")]
+async fn notify_mint_cycles(
+    NotifyMintCyclesArg {
+        block_index,
+        to_subaccount,
+        deposit_memo,
+    }: NotifyMintCyclesArg,
+) -> NotifyMintCyclesResult {
+    let subaccount = Subaccount::from(&caller());
+    let to_account = Account {
+        owner: caller().into(),
+        subaccount: to_subaccount,
+    };
+
+    let deposit_memo_len = deposit_memo.as_ref().map_or(0, |memo| memo.len());
+    if deposit_memo_len > MAX_MEMO_LENGTH {
+        return Err(NotifyError::Other {
+            error_code: NotifyErrorCode::DepositMemoTooLong as u64,
+            error_message: format!(
+                "Memo length {} exceeds the maximum length of {}",
+                deposit_memo_len, MAX_MEMO_LENGTH
+            ),
+        });
+    }
+
+    let (amount, from) = fetch_transaction(block_index, subaccount, MEMO_MINT_CYCLES).await?;
+
+    let maybe_early_result = with_state_mut(|state| {
+        state.purge_old_notifications(MAX_NOTIFY_HISTORY);
+
+        if block_index <= state.last_purged_notification {
+            return Some(Err(NotifyError::TransactionTooOld(
+                state.last_purged_notification + 1,
+            )));
+        }
+
+        match state.blocks_notified.entry(block_index) {
+            Entry::Occupied(entry) => match entry.get() {
+                NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
+                NotificationStatus::NotifiedMint(resp) => Some(resp.clone()),
+                NotificationStatus::NotifiedCreateCanister(_) => {
+                    Some(Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as a create canister request."
+                            .into(),
+                    )))
+                }
+                NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as a top up request.".into(),
+                ))),
+                NotificationStatus::NotMeaningfulMemo(_) => {
+                    Some(Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as an automatic refund.".into(),
+                    )))
+                }
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+                None
+            }
+        }
+    });
+
+    match maybe_early_result {
+        Some(result) => result,
+        None => {
+            let result =
+                process_mint_cycles(to_account, amount, deposit_memo, from, subaccount).await;
+
+            with_state_mut(|state| {
+                state.blocks_notified.insert(
+                    block_index,
+                    NotificationStatus::NotifiedMint(result.clone()),
+                );
+                if is_transient_error(&result) {
+                    state.blocks_notified.remove(&block_index);
                 }
             });
 
@@ -1092,11 +1355,29 @@ async fn notify_top_up(
 
 /// Notify about create canister transaction
 ///
+/// Calling this is the second step in a 2 step canister creation flow, which
+/// goes as follows:
+///
+///   1. ICP is sent to a subaccount of the Cycles Minting Canister
+///      corresponding to creator principal C. Note that while the sender of the
+///      ICP is typically C, it makes no difference who sends the ICP. The only
+///      thing that matters is the destination (sub)account.
+///
+///   2. C calls notify_create_canister.
+///
 /// # Arguments
 ///
 /// * `block_height` -  The height of the block you would like to send a
 ///   notification about.
-/// * `controller` - PrincipalId of the canister controller.
+/// * `controller` - The creator of the canister. Must match caller; otherwise,
+///   Err is returned. This is also used when checking that the creator is
+///   authorized to create canisters in subnets where authorization is required.
+///   This is also used when `settings` does not specify `controllers`.
+/// * `settings` - The settings of the canister. If controllers is not
+///   populated, it will be initialized with a (singleton) vec containing just
+///   `controller`.
+/// * `subnet_selection` - Where to create the canister.
+/// * `subnet_type` - Deprecated. Use subnet_selection instead.
 #[candid_method(update, rename = "notify_create_canister")]
 #[allow(deprecated)]
 async fn notify_create_canister(
@@ -1108,9 +1389,8 @@ async fn notify_create_canister(
         settings,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
-    let cmc_id = dfn_core::api::id();
-    let sub = Subaccount::from(&controller);
-    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(caller(), controller)?;
+
     let subnet_selection =
         get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
             NotifyError::Other {
@@ -1119,24 +1399,37 @@ async fn notify_create_canister(
             }
         })?;
 
-    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_CREATE_CANISTER).await?;
+    let (amount, from) = fetch_transaction(
+        block_index,
+        Subaccount::from(&controller),
+        MEMO_CREATE_CANISTER,
+    )
+    .await?;
 
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
-        if block_index <= state.last_purged_notification.unwrap() {
+        if block_index <= state.last_purged_notification {
             return Some(Err(NotifyError::TransactionTooOld(
-                state.last_purged_notification.unwrap() + 1,
+                state.last_purged_notification + 1,
             )));
         }
 
-        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+        match state.blocks_notified.entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
                 NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
                 NotificationStatus::NotifiedCreateCanister(resp) => Some(resp.clone()),
                 NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
                     "The same payment is already processed as a top up request.".into(),
                 ))),
+                NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as a mint request.".into(),
+                ))),
+                NotificationStatus::NotMeaningfulMemo(_) => {
+                    Some(Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as an automatic refund.".into(),
+                    )))
+                }
             },
             Entry::Vacant(entry) => {
                 entry.insert(NotificationStatus::Processing);
@@ -1152,18 +1445,70 @@ async fn notify_create_canister(
                 process_create_canister(controller, from, amount, subnet_selection, settings).await;
 
             with_state_mut(|state| {
-                state.blocks_notified.as_mut().unwrap().insert(
+                state.blocks_notified.insert(
                     block_index,
                     NotificationStatus::NotifiedCreateCanister(result.clone()),
                 );
                 if is_transient_error(&result) {
-                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                    state.blocks_notified.remove(&block_index);
                 }
             });
 
             result
         }
     }
+}
+
+/// Returns Err if caller is not authorized to call notify_create_canister on
+/// behalf of creator.
+///
+/// Of course, a principal can act on its own behalf. In other words, this
+/// allows calls when caller == creator.
+///
+/// In additional to that, there is another case where calls are allowed: the
+/// nns-dapp backend canister is allowed to call notify_create_canister on
+/// behalf of others.
+///
+/// If Err is returned, the value will be NotifyError::Other with code
+/// Unauthorized.
+fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
+    caller: PrincipalId,
+    creator: PrincipalId,
+) -> Result<(), NotifyError> {
+    if caller == creator {
+        return Ok(());
+    }
+
+    // This is a hack to enable testing (related features) of nns-dapp. In
+    // tests, the nns-dapp backend canister happens to use ID of the production
+    // ICP ledger archive 1 canister. Ideally, the test nns-dapp backend
+    // canister would have the same ID as the production nns-dapp backend
+    // canister. This difference should probably be considered a bug. This hack
+    // can be removed after that bug is fixed.
+    const TEST_NNS_DAPP_BACKEND_CANISTER_ID: CanisterId = ICP_LEDGER_ARCHIVE_1_CANISTER_ID;
+    lazy_static! {
+        static ref ALLOWED_CALLERS: [PrincipalId; 2] = [
+            PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID),
+            PrincipalId::from(TEST_NNS_DAPP_BACKEND_CANISTER_ID),
+        ];
+    }
+
+    if ALLOWED_CALLERS.contains(&caller) {
+        return Ok(());
+    }
+
+    // Other is used, because adding a Unauthorized variant to NotifyError would
+    // confuse old clients.
+    let err = NotifyError::Other {
+        error_code: NotifyErrorCode::Unauthorized as u64,
+        error_message: format!(
+            "{} is not authorized to call notify_create_canister on behalf \
+             of {}. (Do not retry, because the same result will occur.)",
+            caller, creator,
+        ),
+    };
+
+    Err(err)
 }
 
 #[candid_method(update, rename = "create_canister")]
@@ -1176,6 +1521,7 @@ async fn create_canister(
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
     let cycles = dfn_core::api::msg_cycles_available();
+
     if cycles < CREATE_CANISTER_MIN_CYCLES {
         return Err(CreateCanisterError::Refunded {
             refund_amount: cycles.into(),
@@ -1190,24 +1536,18 @@ async fn create_canister(
             }
         })?;
 
-    // will always succeed because only calls from canisters can have cycles attached
-    let calling_canister = caller().try_into().unwrap();
-
-    dfn_core::api::msg_cycles_accept(cycles);
-    match do_create_canister(caller(), cycles.into(), subnet_selection, settings, false).await {
-        Ok(canister_id) => Ok(canister_id),
+    match do_create_canister(caller(), cycles.into(), subnet_selection, settings).await {
+        Ok(canister_id) => {
+            dfn_core::api::msg_cycles_accept(cycles);
+            Ok(canister_id)
+        }
         Err(create_error) => {
-            let refund_amount = cycles.saturating_sub(BAD_REQUEST_CYCLES_PENALTY as u64);
-            match deposit_cycles(calling_canister, refund_amount.into(), false).await {
-                Ok(()) => Err(CreateCanisterError::Refunded {
-                    refund_amount: refund_amount.into(),
-                    create_error,
-                }),
-                Err(refund_error) => Err(CreateCanisterError::RefundFailed {
-                    create_error,
-                    refund_error,
-                }),
-            }
+            dfn_core::api::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
+            let refund_amount = dfn_core::api::msg_cycles_available();
+            Err(CreateCanisterError::Refunded {
+                refund_amount: refund_amount.into(),
+                create_error,
+            })
         }
     }
 }
@@ -1262,13 +1602,41 @@ fn memo_to_intent_str(memo: Memo) -> String {
     match memo {
         MEMO_CREATE_CANISTER => "CreateCanister".into(),
         MEMO_TOP_UP_CANISTER => "TopUp".into(),
+        MEMO_MINT_CYCLES => "MintCycles".into(),
         a => format!("unrecognized: {a:?}"),
     }
 }
 
+/// Returns Ok if transaction matches expected_memo.
+///
+/// memo and icrc1_memo are used. See get_u64_memo.
+fn transaction_has_expected_memo(
+    transaction: &Transaction,
+    expected_memo: Memo,
+) -> Result<(), NotifyError> {
+    fn stringify_memo(memo: Memo) -> String {
+        format!("{} ({})", memo_to_intent_str(memo), memo.0)
+    }
+
+    let observed_memo = get_u64_memo(transaction);
+    if observed_memo == expected_memo {
+        return Ok(());
+    }
+
+    Err(NotifyError::InvalidTransaction(format!(
+        "The memo ({}) in the transaction does not match the expected memo \
+         ({}) for the operation.",
+        stringify_memo(observed_memo),
+        stringify_memo(expected_memo),
+    )))
+}
+
+/// Returns amount, and source of the transfer in (ICP) ledger.
+///
+/// Returns Ok if the arguments are matched. (Otherwise, returns Err).
 async fn fetch_transaction(
     block_index: BlockIndex,
-    expected_to: AccountIdentifier,
+    expected_to_subaccount: Subaccount,
     expected_memo: Memo,
 ) -> Result<(Tokens, AccountIdentifier), NotifyError> {
     let ledger_id = with_state(|state| state.ledger_canister_id);
@@ -1285,24 +1653,285 @@ async fn fetch_transaction(
             ))
         }
     };
+
+    let expected_to =
+        AccountIdentifier::new(dfn_core::api::id().get(), Some(expected_to_subaccount));
     if to != expected_to {
         return Err(NotifyError::InvalidTransaction(format!(
             "Destination account in the block ({}) different than in the notification ({})",
-            to, expected_to
-        )));
-    }
-    let memo = block.transaction().memo;
-    if memo != expected_memo {
-        return Err(NotifyError::InvalidTransaction(format!(
-            "Intent in the block ({} == {}) different than in the notification ({} == {})",
-            memo.0,
-            memo_to_intent_str(memo),
-            expected_memo.0,
-            memo_to_intent_str(expected_memo),
+            to, expected_to_subaccount,
         )));
     }
 
+    issue_automatic_refund_if_memo_not_offerred(
+        block_index,
+        expected_to_subaccount,
+        block.transaction().as_ref(),
+    )
+    .await?;
+
+    transaction_has_expected_memo(block.transaction().as_ref(), expected_memo)?;
+
     Ok((amount, from))
+}
+
+/// If transaction.memo is nonzero, returns that. Otherwise, falls back to
+/// icrc1_memo. More precisely, if icrc1_memo is of length 8 (64 bits), then,
+/// then that is returned, assuming little-endian. Otherwise, Memo(0) is
+/// returned.
+fn get_u64_memo(transaction: &Transaction) -> Memo {
+    if transaction.memo != Memo(0) {
+        return transaction.memo;
+    }
+
+    // Fall back to icrc1_memo.
+
+    let Some(icrc1_memo) = transaction.icrc1_memo.as_ref() else {
+        // icrc1_memo is absent.
+        return Memo(0);
+    };
+
+    type U64Array = [u8; std::mem::size_of::<u64>()];
+    let Ok(icrc1_memo) = U64Array::try_from(icrc1_memo.as_ref()) else {
+        // icrc1_memo has the wrong size.
+        return Memo(0);
+    };
+
+    Memo(u64::from_le_bytes(icrc1_memo))
+}
+
+/// "Normally", sets the block's status to Processing. However, if the block is
+/// too old (<= last_purged_notification), or it already has a status, no
+/// changes are made, and the block's current status is returned. (None
+/// indicates that the block is too old to have a status.)
+fn set_block_status_to_processing(
+    block_index: BlockIndex,
+) -> Result<(), Option<NotificationStatus>> {
+    with_state_mut(|state| {
+        if block_index <= state.last_purged_notification {
+            return Err(None);
+        }
+
+        match state.blocks_notified.entry(block_index) {
+            Entry::Occupied(entry) => Err(Some(entry.get().clone())),
+
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+                Ok(())
+            }
+        }
+    })
+}
+
+/// If the block's status in blocks_notified is Processing, clear it. Otherwise,
+/// makes no changes (and logs an error).
+fn clear_block_processing_status(block_index: BlockIndex) {
+    with_state_mut(|state| {
+        // Fetch the block's status.
+        let occupied_entry = match state.blocks_notified.entry(block_index) {
+            Entry::Occupied(ok) => ok,
+
+            Entry::Vacant(_entry) => {
+                println!(
+                    "[cycles] ERROR: Tried to clear the status of block {}, \
+                     but it already has no status?!",
+                    block_index,
+                );
+                return;
+            }
+        };
+
+        // Make sure the block's status is currently Processing.
+        if &NotificationStatus::Processing != occupied_entry.get() {
+            // Otherwise, do not touch the block's status (and log).
+            println!(
+                "[cycles] ERROR: Tried to clear Processing status of block {} \
+                 but its current status is {:?}",
+                block_index,
+                occupied_entry.get(),
+            );
+            return;
+        }
+
+        occupied_entry.remove();
+    });
+}
+
+/// Ok is returned if the transaction is not eligible for an automatic refund
+/// (because its memo indicates one of the supported operations). This is so
+/// that the caller can use the `?` operator to return early in the case where
+/// automatic refund should be issued.
+///
+/// Otherwise, transaction is eligible for an automatic refund. The rest of
+/// these comments assume that we are in this (interesting) case.
+///
+/// Attempts to transfer the ICP (minus fees) back to the sender (by calling
+/// ledger).
+///
+/// Regardless of whether that ledger call succeeds, Err is returned, but the
+/// value in the Err depends on how the ledger call turns out.
+///
+/// If the ledger call failed, the user can retry.
+///
+/// Like the rest of this canister, uses blocks_notified for synchronization.
+/// More precisely, before calling ledger, there are two things:
+///
+///     1. The block MUST have no status. If it does, this returns Err, and no
+///        ledger call is attempted.
+///
+///     2. The block's status is set to Processing.
+///
+/// If the ledger call succeeds, then the block's status is updated to
+/// NotMeaningfulMemo. Otherwise, if the ledger call fails, then the block's
+/// status is cleared to allow the user to try again. Some reasons the call
+/// might fail:
+///
+///     1. Ledger is unavailable. This could be cause by it being upgraded.
+///
+///     2. Ledger is up, but there is something wrong with our request (e.g.
+///        wrong fee).
+///
+/// It is generally assumed that the arguments are consistent with one another.
+/// E.g. we assume that fetching the block (using incoming_block_index), would
+/// give us the same value as incoming_transaction.
+async fn issue_automatic_refund_if_memo_not_offerred(
+    incoming_block_index: BlockIndex,
+    // This is needed because transaction only has an AccountIdentifier.
+    // Although it is possible to go from PrincipalId + Subaccount to
+    // AccountIdentifier, the reverse is not possible. The reader might find it
+    // surprising that conversion in only one direction is possible, but this
+    // really is how it works, for better or worse.
+    incoming_to_subaccount: Subaccount,
+    incoming_transaction: &Transaction,
+) -> Result<(), NotifyError> {
+    let memo = get_u64_memo(incoming_transaction);
+    if MEANINGFUL_MEMOS.contains(&memo) {
+        // Not eligible for refund.
+        return Ok(());
+    }
+
+    // Extract (from incoming_transaction) where the ICP came from, and how much
+    // was transferred.
+    let (incoming_from, incoming_amount) = match &incoming_transaction.operation {
+        Operation::Transfer {
+            from,
+            to,
+            amount,
+
+            fee: _,
+            spender: _,
+        } => {
+            let incoming_to_account_identifier =
+                AccountIdentifier::new(dfn_core::api::id().get(), Some(incoming_to_subaccount));
+            if to != &incoming_to_account_identifier {
+                // As long as callers always pass us Transfers where the
+                // destination matches incoming_to_subaccount, this code will
+                // never be executed.
+                println!(
+                    "[cycles] WARNING: Destination in transfer ({}) passed to
+                     issue_automatic_refund_if_memo_not_offerred does NOT match. \
+                     This indicates that we have some kind of bug. No refund will \
+                     be issued. {} (AccountIdentifier) vs. {:?} (Subaccount)",
+                    incoming_block_index, to, incoming_to_subaccount,
+                );
+                return Ok(());
+            }
+
+            (*from, *amount)
+        }
+
+        _invalid_operation => {
+            // As long as callers always pass us Transfers, this code will never
+            // be executed.
+            println!(
+                "[cycles] WARNING: A non-transfer transaction ({}) was passed to \
+                 issue_automatic_refund_if_memo_not_offerred. This indicates that \
+                 we have some kind of bug. No refund will be issued.",
+                incoming_block_index,
+            );
+
+            return Ok(());
+        }
+    };
+
+    // Set block's status to Processing before calling ledger.
+    let reason_for_refund = format!(
+        "Memo ({:#08X}) in the incoming ICP transfer does not correspond to \
+         any of the operations that the Cycles Minting canister offers.",
+        memo.0,
+    );
+    if let Err(prior_block_status) = set_block_status_to_processing(incoming_block_index) {
+        let Some(prior_block_status) = prior_block_status else {
+            // Callers of fetch_transaction generally do this already.
+            return Err(NotifyError::TransactionTooOld(with_state(|state| {
+                state.last_purged_notification + 1
+            })));
+        };
+
+        // Do not proceed, because block is either being processed, or was
+        // finished being processed earlier.
+        use NotificationStatus::{
+            self as Status, NotifiedCreateCanister, NotifiedMint, NotifiedTopUp, Processing,
+        };
+        return match prior_block_status {
+            Processing => Err(NotifyError::Processing),
+
+            Status::NotMeaningfulMemo(NotMeaningfulMemo { refund_block_index }) => {
+                Err(NotifyError::Refunded {
+                    block_index: refund_block_index,
+                    reason: reason_for_refund,
+                })
+            }
+
+            // There is no (known) way to reach this case, since a check
+            // earlier in this function ensures by this point, memo is not one
+            // of the special meaningful values.
+            NotifiedCreateCanister(_) | NotifiedMint(_) | NotifiedTopUp(_) => {
+                Err(NotifyError::InvalidTransaction(format!(
+                    "Block has already been processed: {:?}",
+                    prior_block_status,
+                )))
+            }
+        };
+    }
+
+    // Now, it is safe to call ledger to send the ICP back, so do it.
+    let refund_block_index = refund_icp(
+        incoming_to_subaccount,
+        incoming_from,
+        incoming_amount,
+        Tokens::from_e8s(0), // extra_fee
+    )
+    .await
+    .inspect_err(|_err| {
+        // This allows the user to retry.
+        clear_block_processing_status(incoming_block_index);
+    })?;
+
+    // Sending the ICP back succeeded. Therefore, update the block's status to
+    // NotMeaningfulMemo.
+    let old_entry_value = with_state_mut(|state| {
+        state.blocks_notified.insert(
+            incoming_block_index,
+            NotificationStatus::NotMeaningfulMemo(NotMeaningfulMemo { refund_block_index }),
+        )
+    });
+    // Log if the block's previous status somehow changed out from under us
+    // while we were waiting for the ledger call to return. There is no known
+    // way for this to happen (except, ofc, bugs).
+    if old_entry_value != Some(NotificationStatus::Processing) {
+        println!(
+            "[cycles] ERROR: After issuing an automatic refund, the \
+             incoming block's status was not Processing, even though \
+             we checked this before calling ledger! {:?}",
+            old_entry_value,
+        );
+    }
+
+    Err(NotifyError::Refunded {
+        reason: reason_for_refund,
+        block_index: refund_block_index,
+    })
 }
 
 /// Processes a legacy notification from the Ledger canister.
@@ -1325,39 +1954,35 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
     // the ledger can process within 24h
-    let last_purged_notification = with_state(|state| state.last_purged_notification.unwrap());
+    let last_purged_notification = with_state(|state| state.last_purged_notification);
 
     if tn.block_height <= last_purged_notification {
         return Err(NotifyError::TransactionTooOld(last_purged_notification + 1).to_string());
     }
 
     let block_height = tn.block_height;
-    with_state_mut(
-        |state| match state.blocks_notified.as_mut().unwrap().entry(block_height) {
-            Entry::Occupied(entry) => match entry.get() {
-                NotificationStatus::Processing => Err("Another notification is in progress".into()),
-                NotificationStatus::NotifiedTopUp(resp) => {
-                    Err(format!("Already notified: {:?}", resp))
-                }
-                NotificationStatus::NotifiedCreateCanister(resp) => {
-                    Err(format!("Already notified: {:?}", resp))
-                }
-            },
-            Entry::Vacant(entry) => {
-                entry.insert(NotificationStatus::Processing);
-                Ok(())
+    with_state_mut(|state| match state.blocks_notified.entry(block_height) {
+        Entry::Occupied(entry) => match entry.get() {
+            NotificationStatus::Processing => Err("Another notification is in progress".into()),
+            NotificationStatus::NotifiedTopUp(resp) => Err(format!("Already notified: {:?}", resp)),
+            NotificationStatus::NotifiedCreateCanister(resp) => {
+                Err(format!("Already notified: {:?}", resp))
+            }
+            NotificationStatus::NotifiedMint(resp) => Err(format!("Already notified: {:?}", resp)),
+            NotificationStatus::NotMeaningfulMemo(resp) => {
+                Err(format!("Already notified: {:?}", resp))
             }
         },
-    )?;
+        Entry::Vacant(entry) => {
+            entry.insert(NotificationStatus::Processing);
+            Ok(())
+        }
+    })?;
 
     let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
 
     let (cycles_response, notification_status) = if tn.memo == MEMO_CREATE_CANISTER {
-        let controller = (&tn
-            .to_subaccount
-            .ok_or_else(|| "Reserving requires a principal.".to_string())?)
-            .try_into()
-            .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
+        let controller = authorize_sender_to_create_canister_via_ledger_notify(&tn)?;
         match process_create_canister(controller, from, tn.amount, None, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
@@ -1412,22 +2037,60 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     with_state_mut(|state| {
         if let Some(status) = notification_status {
-            state
-                .blocks_notified
-                .as_mut()
-                .unwrap()
-                .insert(block_height, status);
+            state.blocks_notified.insert(block_height, status);
         }
         if is_transient_error(&cycles_response) {
-            state
-                .blocks_notified
-                .as_mut()
-                .unwrap()
-                .remove(&block_height);
+            state.blocks_notified.remove(&block_height);
         }
     });
 
     cycles_response.map_err(|e| e.to_string())
+}
+
+/// Returns Ok(controller/creator/sender) if sender == creator (aka controller).
+///
+/// That is, we disallow sending ICP on behalf of someone else; whereas, we used to allow it.
+///
+/// The reason for this restriction is that the creator might be authorized to create canisters on
+/// restricted subnets.
+///
+/// The only fields used are
+///     * from: This is taken as the sender.
+///     * to_subaccount: This is used to infer the creator/controller.
+///
+/// It is assumed that memo == MEMO_CREATE_CANISTER. (However, behavior is the same if that
+/// assumption does not hold.)
+fn authorize_sender_to_create_canister_via_ledger_notify(
+    transaction_notification: &TransactionNotification,
+) -> Result<PrincipalId, String> {
+    let sender = transaction_notification.from;
+
+    let creator = {
+        let to_subaccount = transaction_notification.to_subaccount.ok_or_else(|| {
+            format!(
+                "Transfer has no destination subaccount:\n{:#?}",
+                transaction_notification,
+            )
+        })?;
+
+        PrincipalId::try_from(&to_subaccount).map_err(|err| {
+            format!(
+                "Cannot determine creator principal from ICP transfer to Cycles \
+                 Minting Canister destination subaccount {}: {}",
+                to_subaccount, err,
+            )
+        })?
+    };
+
+    if sender == creator {
+        return Ok(creator);
+    }
+
+    Err(format!(
+        "Principal {} sent ICP to the Cycles Minting Canister on behalf of {} \
+         in order to create a canister, but this is not allowed (anymore).",
+        sender, creator,
+    ))
 }
 
 // If conversion fails, log and return an error
@@ -1475,13 +2138,40 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match do_create_canister(controller, cycles, subnet_selection, settings, true).await {
+    match do_create_canister(controller, cycles, subnet_selection, settings).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
         }
         Err(err) => {
             let refund_block = refund_icp(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            Err(NotifyError::Refunded {
+                reason: err,
+                block_index: refund_block,
+            })
+        }
+    }
+}
+
+async fn process_mint_cycles(
+    to_account: Account,
+    amount: Tokens,
+    deposit_memo: Option<Vec<u8>>,
+    from: AccountIdentifier,
+    sub: Subaccount,
+) -> NotifyMintCyclesResult {
+    let cycles = tokens_to_cycles(amount)?;
+    match do_mint_cycles(to_account, cycles, deposit_memo).await {
+        Ok(deposit_result) => {
+            burn_and_log(sub, amount).await;
+            Ok(NotifyMintCyclesSuccess {
+                block_index: deposit_result.block_index,
+                minted: cycles.into(),
+                balance: deposit_result.balance,
+            })
+        }
+        Err(err) => {
+            let refund_block = refund_icp(sub, from, amount, MINT_CYCLES_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err,
                 block_index: refund_block,
@@ -1649,12 +2339,46 @@ async fn deposit_cycles(
     Ok(())
 }
 
+async fn do_mint_cycles(
+    account: Account,
+    cycles: Cycles,
+    deposit_memo: Option<Vec<u8>>,
+) -> Result<CyclesLedgerDepositResult, String> {
+    let Some(cycles_ledger_canister_id) = with_state(|state| state.cycles_ledger_canister_id)
+    else {
+        return Err("No cycles ledger canister id configured.".to_string());
+    };
+
+    ensure_balance(cycles)?;
+
+    let arg = CyclesLedgerDepositArgs {
+        to: account,
+        memo: deposit_memo,
+    };
+    let result: Result<(CyclesLedgerDepositResult,), (Option<i32>, String)> =
+        dfn_core::api::call_with_funds_and_cleanup(
+            cycles_ledger_canister_id,
+            "deposit",
+            dfn_candid::candid_multi_arity,
+            (arg,),
+            dfn_core::api::Funds::new(u128::from(cycles) as u64),
+        )
+        .await;
+
+    result.map(|r| r.0).map_err(|(code, msg)| {
+        format!(
+            "Cycles ledger rejected deposit call with code {}: {:?}",
+            code.unwrap_or_default(),
+            msg
+        )
+    })
+}
+
 async fn do_create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
     subnet_selection: Option<SubnetSelection>,
     settings: Option<CanisterSettingsArgs>,
-    mint_cycles: bool,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -1718,11 +2442,12 @@ async fn do_create_canister(
 
     let mut last_err = None;
 
-    if mint_cycles && !subnets.is_empty() {
-        // TODO(NNS1-503): If CreateCanister fails, then we still have minted
-        // these cycles.
-        ensure_balance(cycles)?;
+    if subnets.is_empty() {
+        return Err("No subnets in which to create a canister.".to_owned());
     }
+
+    // We have subnets available, so we can now mint the cycles and create the canister.
+    ensure_balance(cycles)?;
 
     let canister_settings = settings
         .map(|mut settings| {
@@ -1732,9 +2457,11 @@ async fn do_create_canister(
             settings
         })
         .unwrap_or_else(|| {
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
-                .build()
+            CanisterSettingsArgs::from(
+                Ic00CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![controller_id])
+                    .build(),
+            )
         });
 
     for subnet_id in subnets {
@@ -1743,7 +2470,7 @@ async fn do_create_canister(
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(canister_settings.clone()),
+                settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
@@ -1773,17 +2500,24 @@ async fn do_create_canister(
         return Ok(canister_id);
     }
 
-    Err(last_err.unwrap_or_else(|| "No subnets in which to create a canister.".to_owned()))
+    Err(last_err.unwrap_or_else(|| "Unknown problem attempting to create a canister.".to_owned()))
 }
 
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {
     let now = dfn_core::api::now();
 
+    let current_balance = Cycles::from(dfn_core::api::canister_cycle_balance());
+    let cycles_to_mint = cycles - current_balance;
+
     with_state_mut(|state| {
         state.limiter.purge_old(now);
         let count = state.limiter.get_count();
 
-        if count + cycles > state.cycles_limit {
+        if count + cycles_to_mint > state.cycles_limit {
+            LIMITER_REJECT_COUNT.with(|count| {
+                count.set(count.get().saturating_add(1));
+            });
+
             return Err(format!(
                 "More than {} cycles have been minted in the last {} seconds, please try again later.",
                 state.cycles_limit,
@@ -1791,13 +2525,13 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
             ));
         }
 
-        state.limiter.add(now, cycles);
-        state.total_cycles_minted += cycles;
+        state.limiter.add(now, cycles_to_mint);
+        state.total_cycles_minted += cycles_to_mint;
         Ok(())
     })?;
 
     dfn_core::api::mint_cycles(
-        cycles
+        cycles_to_mint
             .get()
             .try_into()
             .map_err(|_| "Cycles u64 overflow".to_owned())?,
@@ -1876,7 +2610,11 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         if let Some(xrc_flag) = args.exchange_rate_canister {
             new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
         }
+        new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
+
+    // Delete after release.
+    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
 
     STATE.with(|state| state.replace(Some(new_state)));
 }
@@ -1925,12 +2663,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     with_state(|state| {
         w.encode_gauge(
             "cmc_last_purged_notification",
-            state.last_purged_notification.unwrap() as f64,
+            state.last_purged_notification as f64,
             "Block index of the last purged notification.",
         )?;
         w.encode_gauge(
             "cmc_blocks_notified_count",
-            state.blocks_notified.as_ref().unwrap().len() as f64,
+            state.blocks_notified.len() as f64,
             "Number of notifications stored in the cache.",
         )?;
         w.encode_gauge(
@@ -1986,6 +2724,30 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             u8::from(state.update_exchange_rate_canister_state.as_ref().unwrap()) as f64,
             "The current state of the CMC calling the exchange rate canister.",
         )?;
+
+        w.encode_gauge(
+            "cmc_limiter_reject_count",
+            LIMITER_REJECT_COUNT.with(|count| count.get()) as f64,
+            "The number of times that the limiter has blocked a minting request \
+             (since the last upgrade of this canister, or when it was first \
+             installed).",
+        )?;
+        w.encode_gauge(
+            "cmc_limiter_cycles",
+            state.limiter.get_count().get() as f64,
+            "The amount of cycles minted in the recent past. If someone tries \
+             to mint N cycles, but N + the value of this metric exceeds \
+             cmc_cycles_limit, then the request will be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_cycles_limit",
+            state.cycles_limit.get() as f64,
+            "The maximum amount of cycles that can be minted in the recent past. \
+             More precisely, if someone tries to mint N cycles, and \
+             N + cmc_limiter_cycles > cmc_cycles_limit, then the request will \
+             be rejected.",
+        )?;
+
         Ok(())
     })
 }
@@ -2009,8 +2771,10 @@ fn get_subnet_selection(
 mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
+    use maplit::btreemap;
     use rand::Rng;
-    use std::cmp::{max, min};
+    use serde_bytes::ByteBuf;
+    use std::str::FromStr;
 
     pub(crate) fn init_test_state() {
         init(Some(CyclesCanisterInitPayload {
@@ -2018,6 +2782,7 @@ mod tests {
             governance_canister_id: Some(CanisterId::ic_00()),
             exchange_rate_canister: None,
             minting_account_id: None,
+            cycles_ledger_canister_id: None,
             last_purged_notification: Some(0),
         }))
     }
@@ -2031,7 +2796,7 @@ mod tests {
             )),
             default_subnets: vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))],
             total_cycles_minted: Cycles::new(1234),
-            last_purged_notification: Some(33),
+            last_purged_notification: 33,
             ..Default::default()
         };
         state.authorized_subnets.insert(
@@ -2051,7 +2816,7 @@ mod tests {
                 PrincipalId::new_user_test_id(4),
             ))),
         );
-        state.blocks_notified = Some(blocks_notified);
+        state.blocks_notified = blocks_notified;
 
         let bytes = state.encode();
 
@@ -2061,12 +2826,177 @@ mod tests {
     }
 
     #[test]
+    fn test_authorize_caller_to_call_notify_create_canister_on_behalf_of_creator() {
+        let creator = PrincipalId::new_user_test_id(519_167_122);
+        let authorize = |caller| {
+            authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(caller, creator)
+        };
+
+        let on_behalf_of_self_result = authorize(creator);
+        assert!(
+            on_behalf_of_self_result.is_ok(),
+            "{:#?}",
+            on_behalf_of_self_result,
+        );
+
+        let eve = PrincipalId::new_user_test_id(898_071_769);
+        let on_behalf_of_other_result = authorize(eve);
+        assert!(
+            on_behalf_of_other_result.is_err(),
+            "{:#?}",
+            on_behalf_of_other_result,
+        );
+        let err = on_behalf_of_other_result.unwrap_err();
+        match &err {
+            NotifyError::Other {
+                error_code,
+                error_message,
+            } => {
+                assert_eq!(
+                    *error_code,
+                    NotifyErrorCode::Unauthorized as u64,
+                    "{:#?}",
+                    err,
+                );
+
+                let error_message = error_message.to_lowercase();
+                for key_word in ["authorize", "on behalf"] {
+                    assert!(
+                        error_message.contains(key_word),
+                        "{} not in {:#?}",
+                        key_word,
+                        err,
+                    );
+                }
+            }
+
+            _ => panic!("{:#?}", err),
+        }
+
+        let caller_is_nns_dapp_result = authorize(PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID));
+        assert!(
+            caller_is_nns_dapp_result.is_ok(),
+            "{:#?}",
+            caller_is_nns_dapp_result,
+        );
+
+        // Also allow nns-dapp backend canister ID used in test.
+        let caller_is_nns_dapp_result =
+            authorize(PrincipalId::from_str("qsgjb-riaaa-aaaaa-aaaga-cai").unwrap());
+        assert!(
+            caller_is_nns_dapp_result.is_ok(),
+            "{:#?}",
+            caller_is_nns_dapp_result,
+        );
+    }
+
+    #[test]
+    fn test_authorize_sender_to_create_canister_via_ledger_notify() {
+        // Happy case.
+        let creator = PrincipalId::new_user_test_id(777);
+        let ok_transaction_notification = TransactionNotification {
+            from: creator,
+            to_subaccount: Some(Subaccount::from(&creator)),
+
+            // These are not used.
+            memo: MEMO_CREATE_CANISTER, // Just for realism.
+            from_subaccount: None,
+            to: CanisterId::from_u64(111),
+            block_height: 222,
+            amount: Tokens::from_e8s(333),
+        };
+
+        // Evil case.
+        assert_eq!(
+            authorize_sender_to_create_canister_via_ledger_notify(&ok_transaction_notification,),
+            Ok(creator),
+        );
+
+        let evil = PrincipalId::new_user_test_id(666);
+        let evil_transaction_notification = TransactionNotification {
+            from: evil,
+            ..ok_transaction_notification.clone()
+        };
+
+        let evil_result =
+            authorize_sender_to_create_canister_via_ledger_notify(&evil_transaction_notification);
+
+        let evil_result = match evil_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!("Evil result is supposed to be Err, but was {:?}", wrong),
+        };
+        for key_word in ["create", "canister", "on behalf of", "not allowed"] {
+            assert!(
+                evil_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                evil_result
+            );
+        }
+
+        // Invalid transfer case 1: no destination subaccount.
+        let no_destination_subaccount_transaction_notification = TransactionNotification {
+            to_subaccount: None,
+            ..ok_transaction_notification.clone()
+        };
+
+        let no_destination_subaccount_result =
+            authorize_sender_to_create_canister_via_ledger_notify(
+                &no_destination_subaccount_transaction_notification,
+            );
+
+        let no_destination_subaccount_result = match no_destination_subaccount_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!(
+                "No destination subaccount result is supposed to be Err, but was {:?}",
+                wrong,
+            ),
+        };
+        for key_word in ["has no", "destination", "subaccount"] {
+            assert!(
+                no_destination_subaccount_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                no_destination_subaccount_result,
+            );
+        }
+
+        // Invalid transfer case 2: destination subaccount present, but does not map to (creator)
+        // principal.
+        let garbage_subaccount = [42_u8; 32];
+        let no_creator_transaction_notification = TransactionNotification {
+            to_subaccount: Some(Subaccount(garbage_subaccount)),
+            ..ok_transaction_notification
+        };
+
+        let no_creator_result = authorize_sender_to_create_canister_via_ledger_notify(
+            &no_creator_transaction_notification,
+        );
+
+        let no_creator_result = match no_creator_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!(
+                "No destination subaccount result is supposed to be Err, but was {:?}",
+                wrong,
+            ),
+        };
+        for key_word in ["determine", "creator", "subaccount"] {
+            assert!(
+                no_creator_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                no_creator_result,
+            );
+        }
+    }
+
+    #[test]
     fn test_purge_notifications() {
         fn block_index_to_cycles(block_index: BlockIndex) -> Cycles {
             Cycles::new(block_index as u128)
         }
         let mut state = State {
-            last_purged_notification: Some(0),
+            last_purged_notification: 0,
             ..Default::default()
         };
         let initial_number_of_notifications = 100;
@@ -2077,7 +3007,7 @@ mod tests {
                 NotificationStatus::NotifiedTopUp(Ok(block_index_to_cycles(i))),
             );
         }
-        state.blocks_notified = Some(blocks_notified);
+        state.blocks_notified = blocks_notified;
 
         let target_history_len = 30;
         state.purge_old_notifications(target_history_len);
@@ -2085,31 +3015,18 @@ mod tests {
         let expected_oldest_transaction_index =
             initial_number_of_notifications - target_history_len as u64;
         let expected_last_purged = expected_oldest_transaction_index - 1;
-        assert_eq!(state.last_purged_notification, Some(expected_last_purged));
+        assert_eq!(state.last_purged_notification, expected_last_purged);
+        assert_eq!(state.blocks_notified.get(&expected_last_purged), None);
         assert_eq!(
             state
                 .blocks_notified
-                .as_ref()
-                .unwrap()
-                .get(&expected_last_purged),
-            None
-        );
-        assert_eq!(
-            state
-                .blocks_notified
-                .as_ref()
-                .unwrap()
                 .get(&expected_oldest_transaction_index),
             Some(&NotificationStatus::NotifiedTopUp(Ok(
                 block_index_to_cycles(expected_oldest_transaction_index)
             )))
         );
         assert_eq!(
-            state
-                .blocks_notified
-                .as_ref()
-                .unwrap()
-                .get(&most_recent_transaction_index),
+            state.blocks_notified.get(&most_recent_transaction_index),
             Some(&NotificationStatus::NotifiedTopUp(Ok(
                 block_index_to_cycles(most_recent_transaction_index)
             )))
@@ -2170,13 +3087,20 @@ mod tests {
     #[test]
     /// The function verifies that a default ICP/XDR conversion rate is set.
     fn test_default_icp_xdr_conversion_rate() {
-        let state = State::default();
-        let conversion_rate = state.icp_xdr_conversion_rate;
-        let default_rate = IcpXdrConversionRate {
-            timestamp_seconds: 1620633600,
-            xdr_permyriad_per_icp: 1_000_000,
+        let expected_initial_rate = IcpXdrConversionRate {
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
         };
-        assert!(matches!(conversion_rate, Some(rate) if rate == default_rate));
+
+        let state = State::default();
+        assert_eq!(
+            state.icp_xdr_conversion_rate,
+            Some(expected_initial_rate.clone()),
+        );
+        assert_eq!(
+            state.average_icp_xdr_conversion_rate,
+            Some(expected_initial_rate),
+        );
     }
 
     #[test]
@@ -2364,27 +3288,21 @@ mod tests {
             .sum::<u64>() as i32)
             / (interval as i32);
 
-        let term1 = max(
-            min(10_000 * (a0 - a7) / a7, MAX_MATURITY_MODULATION_PERMYRIAD),
+        let term1 = (10_000 * (a0 - a7) / a7).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term2 = max(
-            min(10_000 * (a7 - a14) / a14, MAX_MATURITY_MODULATION_PERMYRIAD),
+        let term2 = (10_000 * (a7 - a14) / a14).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term3 = max(
-            min(
-                10_000 * (a14 - a21) / a21,
-                MAX_MATURITY_MODULATION_PERMYRIAD,
-            ),
+        let term3 = (10_000 * (a14 - a21) / a21).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term4 = max(
-            min(
-                10_000 * (a21 - a28) / a28,
-                MAX_MATURITY_MODULATION_PERMYRIAD,
-            ),
+        let term4 = (10_000 * (a21 - a28) / a28).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
 
         let maturity_modulation = (term1 + term2 + term3 + term4) / 4;
@@ -2556,7 +3474,7 @@ mod tests {
 
     #[test]
     fn test_candid_interface_compatibility() {
-        use candid::utils::{service_compatible, CandidSource};
+        use candid_parser::utils::{service_equal, CandidSource};
         use std::path::PathBuf;
 
         candid::export_service!();
@@ -2565,10 +3483,329 @@ mod tests {
         let old_interface =
             PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("cmc.did");
 
-        service_compatible(
+        service_equal(
             CandidSource::Text(&new_interface),
             CandidSource::File(old_interface.as_path()),
         )
         .expect("The CMC canister interface is not compatible with the cmc.did file");
+    }
+
+    #[test]
+    fn test_transaction_has_expected_memo_happy() {
+        // Not relevant to this test.
+        let operation = Operation::Mint {
+            to: AccountIdentifier::new(PrincipalId::new_user_test_id(668_857_347), None),
+            amount: Tokens::from_e8s(123_456),
+        };
+
+        // Case A: Legacy memo is used.
+        let transaction_with_legacy_memo = Transaction {
+            memo: Memo(42),
+            icrc1_memo: None,
+
+            // Irrelevant to this test.
+            operation: operation.clone(),
+            created_at_time: None,
+        };
+
+        assert_eq!(
+            transaction_has_expected_memo(&transaction_with_legacy_memo, Memo(42),),
+            Ok(()),
+        );
+
+        // Case B: When the user uses icrc1's memo to indicate the purpose of
+        // the transfer, and as a result the legacy memo field is implicitly set
+        // to 0.
+        let transaction_with_icrc1_memo = Transaction {
+            memo: Memo(0),
+            icrc1_memo: Some(ByteBuf::from(43_u64.to_le_bytes().to_vec())),
+
+            // Irrelevant to this test.
+            operation: operation.clone(),
+            created_at_time: None,
+        };
+
+        assert_eq!(
+            transaction_has_expected_memo(&transaction_with_icrc1_memo, Memo(43),),
+            Ok(()),
+        );
+    }
+
+    #[test]
+    fn test_transaction_has_expected_memo_sad() {
+        // Not relevant to this test.
+        let operation = Operation::Mint {
+            to: AccountIdentifier::new(PrincipalId::new_user_test_id(668_857_347), None),
+            amount: Tokens::from_e8s(123_456),
+        };
+
+        // Case A: Legacy memo is used.
+        {
+            let transaction = Transaction {
+                memo: Memo(77),
+                icrc1_memo: None,
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "77", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case B: When the user uses icrc1's memo to indicate the purpose of
+        // the transfer, and as a result the legacy memo field is implicitly set
+        // to 0.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: Some(ByteBuf::from(78_u64.to_le_bytes().to_vec())),
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "78", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case C: icrc1's memo is used, but is not of length 8, and we
+        // therefore do not consider it to contain a (little endian) u64.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: Some(ByteBuf::from(vec![1, 2, 3])),
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "0", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+
+        // Case D: legacy memo is 0, and ircr1_memo is None.
+        {
+            let transaction = Transaction {
+                memo: Memo(0),
+                icrc1_memo: None,
+
+                // Irrelevant to this test.
+                operation: operation.clone(),
+                created_at_time: None,
+            };
+
+            let result = transaction_has_expected_memo(&transaction, Memo(42));
+
+            let original_err = match result {
+                Err(NotifyError::InvalidTransaction(err)) => err,
+                wrong => panic!("{:?}", wrong),
+            };
+
+            let lower_err = original_err.to_lowercase();
+            for key_word in ["memo", "0", "42"] {
+                assert!(
+                    lower_err.contains(key_word),
+                    "{} not in {:?}",
+                    key_word,
+                    original_err
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_block_status_to_processing_happy() {
+        let red_herring_block_index = 0xDEADBEEF;
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: btreemap! {
+                    red_herring_block_index => NotificationStatus::Processing,
+                },
+                ..Default::default()
+            }))
+        });
+
+        let target_block_index = 42;
+        let result = set_block_status_to_processing(target_block_index);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            btreemap! {
+                // Existing data untouched.
+                red_herring_block_index => NotificationStatus::Processing,
+                // New entry.
+                target_block_index => NotificationStatus::Processing,
+            },
+        );
+    }
+
+    #[test]
+    fn test_set_block_status_to_processing_already_has_status() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+            // Danger! Block ALREADY has status.
+            target_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        let result = set_block_status_to_processing(target_block_index);
+
+        assert_eq!(result, Err(Some(NotificationStatus::Processing)));
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
+    }
+
+    #[test]
+    fn test_set_block_status_to_processing_too_old() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                // We only know the status of blocks that are newer than this.
+                last_purged_notification: 42,
+                ..Default::default()
+            }))
+        });
+
+        let result = set_block_status_to_processing(target_block_index);
+
+        assert_eq!(result, Err(None));
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
+    }
+
+    #[test]
+    fn test_clear_block_processing_status_happy() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+            target_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        clear_block_processing_status(target_block_index);
+
+        // Assert that target block was deleted.
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            btreemap! {
+                red_herring_block_index => NotificationStatus::Processing,
+                // target_block_index no longer present.
+            },
+        );
+    }
+
+    #[test]
+    fn test_clear_block_processing_status_not_processing() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+            target_block_index => NotificationStatus::NotifiedTopUp(Ok(Cycles::new(1_000_000_000_000))),
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        clear_block_processing_status(target_block_index);
+
+        // Assert that blocks_notified not changed.
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
+    }
+
+    #[test]
+    fn test_clear_block_processing_status_absent_entirely() {
+        let target_block_index = 42;
+        let red_herring_block_index = 0xDEADBEEF;
+        let original_blocks_notified = btreemap! {
+            red_herring_block_index => NotificationStatus::Processing,
+        };
+        STATE.with(|state| {
+            state.replace(Some(State {
+                blocks_notified: original_blocks_notified.clone(),
+                ..Default::default()
+            }))
+        });
+
+        clear_block_processing_status(target_block_index);
+
+        // Assert that blocks_notified not changed.
+        assert_eq!(
+            with_state(|state| state.blocks_notified.clone()),
+            original_blocks_notified,
+        );
     }
 }

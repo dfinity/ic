@@ -7,10 +7,11 @@ use std::{
 };
 
 use crate::common::{
-    create_node, empty_artifact_chunk, latency_30ms_throughput_1000mbits,
-    latency_50ms_throughput_300mbits, SharableMockChunkable, State,
+    create_node, latency_30ms_throughput_1000mbits, latency_50ms_throughput_300mbits,
+    SharableMockChunkable, State,
 };
 use common::SharableMockStateSync;
+use ic_interfaces::p2p::state_sync::{AddChunkError, ChunkId, StateSyncArtifactId};
 use ic_logger::info;
 use ic_memory_transport::TransportRouter;
 use ic_p2p_test_utils::{
@@ -22,12 +23,7 @@ use ic_p2p_test_utils::{
     ConnectivityChecker,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::{ArtifactErrorCode, ChunkId},
-    crypto::CryptoHash,
-    CryptoHashOfState, Height, RegistryVersion,
-};
+use ic_types::{crypto::CryptoHash, Height, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use tokio::sync::Notify;
 use turmoil::Builder;
@@ -329,11 +325,11 @@ fn test_single_advert_between_two_nodes() {
         let received_advert_n2_a1 = Arc::new(AtomicBool::new(false));
         let state_sync_id_1 = StateSyncArtifactId {
             height: Height::from(1),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2 = StateSyncArtifactId {
             height: Height::from(2),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
@@ -346,7 +342,7 @@ fn test_single_advert_between_two_nodes() {
             .expect_available_states()
             .return_const(vec![state_sync_id_1]);
         state_sync_n1
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_2_clone {
                     received_advert_n1_a2_clone.store(true, Ordering::SeqCst);
@@ -362,7 +358,7 @@ fn test_single_advert_between_two_nodes() {
             .expect_available_states()
             .return_const(vec![state_sync_id_2]);
         state_sync_n2
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_1_clone {
                     received_advert_n2_a1_clone.store(true, Ordering::SeqCst);
@@ -384,7 +380,6 @@ fn test_single_advert_between_two_nodes() {
             topology_watcher.clone(),
             None,
             None,
-            None,
             Some(Arc::new(state_sync_n1)),
             None,
             waiter_fut(),
@@ -396,7 +391,6 @@ fn test_single_advert_between_two_nodes() {
             NODE_2,
             registry_handle.clone(),
             topology_watcher,
-            None,
             None,
             None,
             Some(Arc::new(state_sync_n2)),
@@ -444,11 +438,11 @@ fn test_multiple_advert_between_two_nodes() {
         let received_advert_n2_a2 = Arc::new(AtomicBool::new(false));
         let state_sync_id_1 = StateSyncArtifactId {
             height: Height::from(1),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2 = StateSyncArtifactId {
             height: Height::from(2),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
@@ -465,7 +459,7 @@ fn test_multiple_advert_between_two_nodes() {
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
         state_sync_n1
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_1_clone {
                     received_advert_n2_a1_clone.store(true, Ordering::SeqCst);
@@ -486,7 +480,7 @@ fn test_multiple_advert_between_two_nodes() {
             .expect_available_states()
             .return_const(vec![state_sync_id_1, state_sync_id_2]);
         state_sync_n2
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_1_clone {
                     received_advert_n1_a1_clone.store(true, Ordering::SeqCst);
@@ -511,7 +505,6 @@ fn test_multiple_advert_between_two_nodes() {
             topology_watcher.clone(),
             None,
             None,
-            None,
             Some(Arc::new(state_sync_n1)),
             None,
             waiter_fut(),
@@ -523,7 +516,6 @@ fn test_multiple_advert_between_two_nodes() {
             NODE_2,
             registry_handle.clone(),
             topology_watcher,
-            None,
             None,
             None,
             Some(Arc::new(state_sync_n2)),
@@ -586,7 +578,6 @@ fn test_state_sync_abortion() {
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
             None,
-            None,
             Some(Arc::new(s1.clone())),
             None,
             conn_checker.check_fut(),
@@ -600,7 +591,6 @@ fn test_state_sync_abortion() {
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
             None,
-            None,
             Some(Arc::new(s2.clone())),
             None,
             conn_checker.check_fut(),
@@ -613,7 +603,6 @@ fn test_state_sync_abortion() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
-            None,
             None,
             Some(Arc::new(s3.clone())),
             None,
@@ -648,7 +637,7 @@ fn test_state_sync_abortion() {
                 vec![
                     StateSyncArtifactId {
                         height: Height::from(1),
-                        hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                        hash: CryptoHash(vec![]),
                     };
                     10
                 ]
@@ -656,16 +645,16 @@ fn test_state_sync_abortion() {
         s1.get_mut().expect_available_states().return_const(vec![]);
         s1.get_mut()
             .expect_chunk()
-            .returning(|_, _| Some(empty_artifact_chunk(ChunkId::from(1))));
+            .returning(|_, _| Some(vec![].into()));
 
         // Verify that peers got expected number of adverts. The last advert on node 2
         // is used to start the state sync.
         s2.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .times(9)
             .returning(|_| None);
         s3.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .times(10)
             .returning(|_| None);
 
@@ -674,21 +663,19 @@ fn test_state_sync_abortion() {
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
-        c2.get_mut()
-            .expect_add_chunk()
-            .return_const(Err(ArtifactErrorCode::ChunksMoreNeeded));
+        c2.get_mut().expect_add_chunk().return_const(Ok(()));
         {
             let c2 = c2.clone();
             s2.get_mut()
-                .expect_start_state_sync()
+                .expect_maybe_start_state_sync()
                 .times(1)
                 .return_once(|_| Some(Box::new(c2)));
         }
-        s2.get_mut().expect_should_cancel().returning(|_| false);
+        s2.get_mut().expect_cancel_if_running().returning(|_| false);
 
         // Wait until both peers have receive one state advert
         wait_for(&mut sim, || {
-            s2.start_state_sync_calls() == 10 && s3.start_state_sync_calls() == 10
+            s2.maybe_start_state_sync_calls() == 10 && s3.maybe_start_state_sync_calls() == 10
         })
         .expect("Node did not receive advert from other peer");
 
@@ -701,22 +688,22 @@ fn test_state_sync_abortion() {
         s3.get_mut().checkpoint();
         s3.get_mut()
             .expect_chunk()
-            .returning(|_, _| Some(empty_artifact_chunk(ChunkId::from(1))));
+            .returning(|_, _| Some(vec![].into()));
         s3.get_mut()
             .expect_available_states()
             .once()
             .return_once(|| {
                 vec![StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                    hash: CryptoHash(vec![]),
                 }]
             });
         s1.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .once()
             .returning(|_| None);
         s2.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .never()
             .returning(|_| None);
         s3.get_mut().expect_available_states().return_const(vec![]);
@@ -726,7 +713,7 @@ fn test_state_sync_abortion() {
         s2.clear();
         s3.clear();
         wait_for(&mut sim, || {
-            s1.start_state_sync_calls() == 1 && s2.start_state_sync_calls() == 0
+            s1.maybe_start_state_sync_calls() == 1 && s2.maybe_start_state_sync_calls() == 0
         })
         .unwrap();
 
@@ -739,13 +726,13 @@ fn test_state_sync_abortion() {
         c2.clear();
         c2.get_mut()
             .expect_add_chunk()
-            .returning(|_| Err(ArtifactErrorCode::ChunkVerificationFailed));
+            .returning(|_, _| Err(AddChunkError::Invalid));
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
         wait_for(&mut sim, || c2.add_chunks_calls() >= 1).unwrap();
 
-        // State sync should now be stopped. This means new incoming adverts will invoke `start_state_sync`
+        // State sync should now be stopped. This means new incoming adverts will invoke `maybe_start_state_sync`
         s2.clear();
         s3.clear();
         s3.get_mut().checkpoint();
@@ -756,15 +743,15 @@ fn test_state_sync_abortion() {
             .return_once(|| {
                 vec![StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                    hash: CryptoHash(vec![]),
                 }]
             });
         s2.get_mut().expect_available_states().return_const(vec![]);
         s2.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .once()
             .returning(|_| None);
-        wait_for(&mut sim, || s2.start_state_sync_calls() == 1).unwrap();
+        wait_for(&mut sim, || s2.maybe_start_state_sync_calls() == 1).unwrap();
 
         exit_notify.notify_waiters();
         // Check that all expectations are met.

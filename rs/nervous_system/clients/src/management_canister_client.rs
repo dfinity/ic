@@ -5,7 +5,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use candid::Encode;
-use ic_ic00_types::IC_00;
+use ic_error_types::RejectCode;
+use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_runtime::Runtime;
 use std::{
@@ -92,7 +93,114 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
     }
 
     fn canister_version(&self) -> Option<u64> {
-        Some(dfn_core::api::canister_version())
+        Some(Rt::canister_version())
+    }
+}
+
+/// A ManagementCanisterClient that wraps another ManagementCanisterClient.
+///
+/// As the name says, this limits the number of outstanding calls that are made to the management
+/// canister.
+///
+/// The number of allowed outstanding calls is controlled by available_slot_count.
+///
+/// When there are not enough slots, Err((SysTransient, message)) is returned. Otherwise, the call
+/// is simply forwarded to inner.
+// This was perhaps a mistake. A possibly superior alternative would be to implement a Runtime
+// (named RuntimeThatLimitsCallsFromNonNnnsCanisterPrincipals or something like that) that wraps
+// another Runtime. This would be better, because then it could be used more broadly (i.e. anywhere
+// that Runtime is used), not just in the special case of ManagementCanisterClient.
+pub struct LimitedOutstandingCallsManagementCanisterClient<Inner>
+where
+    Inner: ManagementCanisterClient + Send + Sync,
+{
+    inner: Inner,
+    available_slot_count: &'static LocalKey<RefCell<u64>>,
+    is_caller_vip: bool,
+}
+
+impl<Inner> LimitedOutstandingCallsManagementCanisterClient<Inner>
+where
+    Inner: ManagementCanisterClient + Send + Sync,
+{
+    pub fn new(
+        inner: Inner,
+        available_slot_count: &'static LocalKey<RefCell<u64>>,
+        is_caller_vip: bool,
+    ) -> Self {
+        Self {
+            inner,
+            available_slot_count,
+            is_caller_vip,
+        }
+    }
+
+    fn try_borrow_slot(&self) -> Result<SlotLoan, (i32, String)> {
+        let used_slot_count = if self.is_caller_vip { 0 } else { 1 };
+
+        self.available_slot_count
+            .with_borrow_mut(|available_slot_count| {
+                if *available_slot_count == 0 {
+                    // This is somewhat of a lie, but is the best fit.
+                    let code = RejectCode::SysTransient as i32;
+
+                    let message = "Unavailable. Maybe, try again later?".to_string();
+
+                    return Err((code, message));
+                }
+
+                *available_slot_count = available_slot_count.saturating_sub(used_slot_count);
+                Ok(())
+            })?;
+
+        let available_slot_count = self.available_slot_count;
+        Ok(SlotLoan {
+            available_slot_count,
+            used_slot_count,
+        })
+    }
+}
+
+#[async_trait]
+impl<Inner> ManagementCanisterClient for LimitedOutstandingCallsManagementCanisterClient<Inner>
+where
+    Inner: ManagementCanisterClient + Send + Sync,
+{
+    async fn canister_status(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<CanisterStatusResultFromManagementCanister, (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.canister_status(canister_id_record).await
+    }
+
+    async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.update_settings(settings).await
+    }
+
+    fn canister_version(&self) -> Option<u64> {
+        // This does not actually call the management canister. This implies a few things:
+        //
+        //   1. No need to call try_borrow_slot, as is done elsewhere.
+        //   2. It was a mistake for this method to be included in this trait.
+        //   3. No need for this method to be async.
+        self.inner.canister_version()
+    }
+}
+
+/// Increments available_slot_count by used_slot_count when dropped.
+struct SlotLoan {
+    available_slot_count: &'static LocalKey<RefCell<u64>>,
+    used_slot_count: u64,
+}
+
+impl Drop for SlotLoan {
+    fn drop(&mut self) {
+        self.available_slot_count
+            .with_borrow_mut(|available_slot_count| {
+                *available_slot_count = available_slot_count.saturating_add(self.used_slot_count);
+            });
     }
 }
 
@@ -115,6 +223,7 @@ impl MockManagementCanisterClient {
         self.calls.lock().unwrap().clone().into()
     }
 
+    #[track_caller]
     pub fn assert_all_replies_consumed(&self) {
         assert!(self.replies.lock().unwrap().is_empty())
     }
@@ -124,13 +233,14 @@ impl MockManagementCanisterClient {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum MockManagementCanisterClientCall {
     CanisterStatus(CanisterIdRecord),
     UpdateSettings(UpdateSettings),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),
     UpdateSettings(Result<(), (i32, String)>),
@@ -199,3 +309,6 @@ impl Drop for MockManagementCanisterClient {
         self.assert_all_replies_consumed()
     }
 }
+
+#[cfg(test)]
+mod tests;

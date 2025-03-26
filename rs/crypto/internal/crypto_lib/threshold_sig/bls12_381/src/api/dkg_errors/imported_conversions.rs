@@ -7,7 +7,7 @@
 mod create_dealing_error_conversions_v2 {
     // TODO (CRP-818): Remove the v2 and merge.
     use crate::api::ni_dkg_errors::{CspDkgCreateDealingError, CspDkgCreateReshareDealingError};
-    use ic_types::crypto::error::InternalError;
+    use ic_types::crypto::error::{InternalError, InvalidArgumentError};
     use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
 
@@ -86,6 +86,11 @@ mod create_dealing_error_conversions_v2 {
                         internal_error: error.internal_error,
                     })
                 }
+                CspDkgCreateReshareDealingError::ReshareKeyIdComputationError(
+                    crate::api::dkg_errors::InternalError { internal_error },
+                ) => DkgCreateDealingError::ReshareKeyIdComputationError(InvalidArgumentError {
+                    message: internal_error,
+                }),
             }
         }
     }
@@ -217,6 +222,9 @@ mod retain_active_keys_error_conversions {
                     DkgKeyRemovalError::TransientInternalError(InternalError {
                         internal_error: e.internal_error,
                     })
+                }
+                CspDkgRetainThresholdKeysError::KeyIdInstantiationError(internal_error) => {
+                    DkgKeyRemovalError::KeyIdInstantiationError(InternalError { internal_error })
                 }
             }
         }

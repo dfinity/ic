@@ -3,14 +3,15 @@ name = "network"
 version = "1.0.0"
 edition = "2021"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-config = {path = "../config"}
-utils = {path = "../utils"}
-anyhow = {version = "^1"} 
-hex = {version = "^0.4.3"}
-ping = {version = "^0.5.0"}
-regex = {version = "^1.3.9"}
-serde = {version = "^1.0.171"}
-serde_json = {version = "^1.0.40"}
-serde_with = {version = "^1.6.2"}
-sha2 = {version = "^0.10.2"}
+[dependencies]
+anyhow = { workspace = true }
+config_types = { path = "../config_types" }
+deterministic_ips = { path = "../deterministic_ips" }
+macaddr = { workspace = true }
+ping = { version = "^0.5.0" }
+rayon = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { version = "^1.6.2" }
+utils = { path = "../utils" }

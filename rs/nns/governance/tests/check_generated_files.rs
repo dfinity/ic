@@ -15,7 +15,7 @@ fn check_generated_files() {
     let governance_proto = manifest_dir.join("proto");
 
     let base_types_proto = manifest_dir.join("../../types/base_types/proto");
-    let ledger_proto = manifest_dir.join("../../rosetta-api/icp_ledger/proto");
+    let ledger_proto = manifest_dir.join("../../ledger_suite/icp/proto");
     let nervous_system_proto = manifest_dir.join("../../nervous_system/proto/proto");
     let nns_common_proto = manifest_dir.join("../common/proto");
     let sns_root_proto = manifest_dir.join("../../sns/root/proto");
@@ -37,7 +37,7 @@ fn check_generated_files() {
 
     let gen = manifest_dir.join("src/gen");
 
-    match compare(&gen, out_dir.path()) {
+    match compare(out_dir.path(), &gen) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
             panic!(

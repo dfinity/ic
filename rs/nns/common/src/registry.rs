@@ -1,5 +1,5 @@
-use dfn_core::api::call;
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_cdk::api::call::call_raw;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
@@ -8,23 +8,10 @@ use ic_registry_transport::{
     pb::v1::{Precondition, RegistryAtomicMutateResponse, RegistryMutation},
     serialize_atomic_mutate_request, serialize_get_value_request, Error,
 };
-use on_wire::bytes;
 use prost::Message;
 use std::convert::TryFrom;
 
 pub const MAX_NUM_SSH_KEYS: usize = 50;
-
-/// Wraps around Message::encode and panics on error.
-pub fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
-    let mut buf = Vec::<u8>::new();
-    msg.encode(&mut buf)
-        .expect("Encoding input as Protobuf failed");
-    buf
-}
-
-pub fn decode_or_panic<T: Message + Default>(msg: Vec<u8>) -> T {
-    T::decode(msg.as_slice()).expect("could not decode byte vector as PB Message")
-}
 
 /// Returns the deserialized value associated with the given key and version.
 /// If the version is `None`, then the "latest" version is returned.
@@ -37,11 +24,11 @@ pub async fn get_value<T: Message + Default>(
     key: &[u8],
     version: Option<u64>,
 ) -> Result<(T, u64), Error> {
-    let current_result: Vec<u8> = call(
-        REGISTRY_CANISTER_ID,
+    let current_result: Vec<u8> = call_raw(
+        REGISTRY_CANISTER_ID.get().0,
         "get_value",
-        bytes,
         serialize_get_value_request(key.to_vec(), version).unwrap(),
+        0,
     )
     .await
     .unwrap();
@@ -60,14 +47,19 @@ pub async fn mutate_registry(
     preconditions: Vec<Precondition>,
 ) -> Result<u64, String> {
     let mutation_bytes = serialize_atomic_mutate_request(mutations, preconditions);
-    let response_bytes = call(REGISTRY_CANISTER_ID, "atomic_mutate", bytes, mutation_bytes)
-        .await
-        .map_err(|e| {
-            format!(
-                "The call to the registry's 'atomic_mutate' method failed due to: {}",
-                e.1
-            )
-        })?;
+    let response_bytes = call_raw(
+        REGISTRY_CANISTER_ID.get().0,
+        "atomic_mutate",
+        mutation_bytes,
+        0,
+    )
+    .await
+    .map_err(|e| {
+        format!(
+            "The call to the registry's 'atomic_mutate' method failed due to: {}",
+            e.1
+        )
+    })?;
     let response = RegistryAtomicMutateResponse::decode(response_bytes.as_slice())
         .map_err(|e| format!("The registry's response to 'atomic_mutate' could not be decoded as a RegistryAtomicMutateResponse due to: {} ", e))?;
     match response.errors.len() {
@@ -115,8 +107,13 @@ pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<Sub
 
 /// Returns the latest version of the registry
 pub async fn get_latest_version() -> u64 {
-    let response: Vec<u8> = call(REGISTRY_CANISTER_ID, "get_latest_version", bytes, vec![])
-        .await
-        .unwrap();
+    let response: Vec<u8> = call_raw(
+        REGISTRY_CANISTER_ID.get().0,
+        "get_latest_version",
+        vec![],
+        0,
+    )
+    .await
+    .unwrap();
     deserialize_get_latest_version_response(response).unwrap()
 }

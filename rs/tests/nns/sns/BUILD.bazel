@@ -1,43 +1,11 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
-
-system_test(
-    name = "sale_participation",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2658]: re-enable this test
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "sale_mass_participation",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2658]: re-enable this test with the following tags:
-    # tags = [
-    #     "system_test_hourly",
-    #     "system_test_nightly",
-    # ],
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "sns_sale_load_test_1",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
     tags = [
         "manual",
     ],
@@ -45,13 +13,16 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "sns_sale_load_test_2",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
     tags = [
         "manual",
     ],
@@ -59,13 +30,16 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "sns_sale_load_test_3",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
     tags = [
         "manual",
     ],
@@ -73,12 +47,18 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "aggregation_canister_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     # TODO[NNS1-2658]: re-enable this test
     tags = [
         "manual",
@@ -88,13 +68,16 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "workload_static_testnet",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
     tags = [
         "manual",
     ],
@@ -102,13 +85,19 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test(
     name = "launchpad_direct_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     tags = [
         "manual",
     ],
@@ -118,13 +107,18 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "launchpad_direct_auth_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     tags = [
         "manual",
     ],
@@ -134,13 +128,18 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
     name = "launchpad_aggregator_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV | {
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+    },
     tags = [
         "manual",
     ],
@@ -150,79 +149,16 @@ system_test(
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "payment_flow_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2658]: re-enable this test
-    tags = [
-        "manual",
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "payment_flow_with_finalization_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2590]: re-enable this test
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "one_proposal_payment_flow_with_finalization_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2590]: re-enable this test
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "one_proposal_neurons_fund_swap_participation_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "one_proposal_overpayment_fail_test",
-    # TODO[NNS1-2590]: re-enable this test
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "payment_flow_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = NNS_CANISTER_ENV | SNS_CANISTER_ENV,
     tags = [
         "manual",
     ],
@@ -230,5 +166,9 @@ system_test(
     test_timeout = "eternal",  # TODO: consider removing this
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/sns/lib:sns_system_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )

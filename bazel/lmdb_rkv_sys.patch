@@ -1,0 +1,29 @@
+# patch our fork of the lmdb-rkv-sys to allow specifying the path
+# to the built static archive
+diff --git a/build.rs b/build.rs
+index c422d52..b779ee0 100644
+--- a/build.rs
++++ b/build.rs
+@@ -57,7 +57,21 @@ fn main() {
+         warn!("Building with `-fsanitize=fuzzer`.");
+     }
+
+-    if let Err(_) = std::env::var("LMDB_NO_BUILD") {
++    if let Ok(lmdb) = std::env::var("LMDB_OVERRIDE") {
++        let lmdb = PathBuf::from(lmdb);
++        assert!(
++            lmdb.exists(),
++            "Path to `lmdb` '{}' does not exist",
++            lmdb.display()
++        );
++        println!(
++            "cargo:rustc-link-search=native={}",
++            lmdb.parent().unwrap().display()
++        );
++        let stem = lmdb.file_stem().unwrap().to_str().unwrap();
++        println!("cargo:rustc-link-lib=static={}", &stem[3..]);
++        return;
++    } else {
+         if pkg_config::probe_library("lmdb").is_err() {
+             let mut lmdb = PathBuf::from(&env::var("CARGO_MANIFEST_DIR").unwrap());
+             lmdb.push("lmdb");

@@ -470,7 +470,7 @@ fn modify_label_modifies_correct_label() {
 
 #[test]
 fn cmp_paths_works_correctly_for_1_depth_trees() {
-    let equal_trees_in_root = vec![
+    let equal_trees_in_root = [
         subtree!(),
         LabeledTree::Leaf(vec![]),
         LabeledTree::Leaf(vec![0u8]),

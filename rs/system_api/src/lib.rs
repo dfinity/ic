@@ -1,10 +1,7 @@
-pub mod cycles_balance_change;
-mod request_in_prep;
-mod routing;
-pub mod sandbox_safe_system_state;
-mod stable_memory;
-
-use ic_base_types::PrincipalIdBlobParseError;
+use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
+use ic_config::embedders::{
+    BestEffortResponsesFeature, Config as EmbeddersConfig, StableMemoryPageLimit,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
@@ -12,36 +9,53 @@ use ic_interfaces::execution_environment::{
     ExecutionMode,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, StableGrowOutcome,
-    StableMemoryApi, SubnetAvailableMemory, SystemApi,
+    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types_private::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
+};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
-    PageIndex,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
+    NumWasmPages, PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, NumPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
+use ic_wasm_types::doc_ref;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{
+    CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
+    collections::BTreeMap,
     convert::{From, TryFrom},
     rc::Rc,
+    str,
 };
+
+pub mod cycles_balance_change;
+use cycles_balance_change::CyclesBalanceChange;
+mod request_in_prep;
+mod routing;
+pub mod sandbox_safe_system_state;
+mod stable_memory;
 
 pub const MULTIPLIER_MAX_SIZE_LOCAL_SUBNET: u64 = 5;
 const MAX_NON_REPLICATED_QUERY_REPLY_SIZE: NumBytes = NumBytes::new(3 << 20);
-const CERTIFIED_DATA_MAX_LENGTH: u32 = 32;
+const CERTIFIED_DATA_MAX_LENGTH: usize = 32;
 
 // Enables tracing of system calls for local debugging.
 const TRACE_SYSCALLS: bool = false;
@@ -51,6 +65,10 @@ const TRACE_SYSCALLS: bool = false;
 const WASM_NATIVE_STABLE_MEMORY_ERROR: &str = "Stable memory cannot be accessed through the System API when Wasm-native stable memory is enabled.";
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
+
+/// Upper bound on `timeout` when using calls with
+/// best-effort responses represented in seconds.
+pub const MAX_CALL_TIMEOUT_SECONDS: u32 = 300;
 
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
@@ -78,10 +96,10 @@ macro_rules! trace_syscall {
 
 // This helper is used in system calls for displaying a summary hash of a heap region.
 #[inline]
-fn summarize(heap: &[u8], start: u32, size: u32) -> u64 {
+fn summarize(heap: &[u8], start: usize, size: usize) -> u64 {
     if TRACE_SYSCALLS {
-        let start = (start as usize).min(heap.len());
-        let end = (start + (size as usize)).min(heap.len());
+        let start = start.min(heap.len());
+        let end = (start + size).min(heap.len());
         // The actual hash function doesn't matter much as long as it is
         // cheap to compute and maps the input to u64 reasonably well.
         let mut sum = 0;
@@ -98,13 +116,16 @@ fn summarize(heap: &[u8], start: u32, size: u32) -> u64 {
 /// Supports operations to reduce the message limit while keeping the maximum
 /// slice limit the same, which is useful for messages that have multiple
 /// execution steps such as install, upgrade, and response.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InstructionLimits {
     /// The total instruction limit for message execution. With deterministic
     /// time slicing this limit may exceed the per-round instruction limit.  The
     /// message fails with an `InstructionLimitExceeded` error if it executes
     /// more instructions than this limit.
     message: NumInstructions,
+
+    /// The instruction limit to report in case of an error.
+    limit_to_report: NumInstructions,
 
     /// The number of instructions in the largest possible slice. It may
     /// exceed `self.message()` if the latter was reduced or updated by the
@@ -118,6 +139,7 @@ impl InstructionLimits {
     pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
         Self {
             message,
+            limit_to_report: message,
             max_slice: match dts {
                 FlagStatus::Enabled => max_slice,
                 FlagStatus::Disabled => message,
@@ -128,6 +150,11 @@ impl InstructionLimits {
     /// See the comments of the corresponding field.
     pub fn message(&self) -> NumInstructions {
         self.message
+    }
+
+    /// See the comments of the corresponding field.
+    pub fn limit_to_report(&self) -> NumInstructions {
+        self.limit_to_report
     }
 
     /// Returns the effective slice size, which is the smallest of
@@ -147,21 +174,29 @@ impl InstructionLimits {
     pub fn update(&mut self, left: NumInstructions) {
         self.message = left;
     }
+
+    /// Checks if DTS is enabled.
+    pub fn slicing_enabled(self) -> bool {
+        self.max_slice < self.message
+    }
 }
 
 // Canister and subnet configuration parameters required for execution.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
+    // The limit on the Wasm memory set by the developer in canister settings.
+    pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
+    pub canister_guaranteed_callback_quota: u64,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
     pub subnet_memory_saturation: ResourceSaturation,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[doc(hidden)]
 pub enum ResponseStatus {
     // Indicates that the current call context was never replied.
@@ -177,7 +212,8 @@ pub enum ResponseStatus {
 /// should keep track of the state or not. The distinction is necessary
 /// because some non-replicated queries can call other queries. In such
 /// a case the caller has too keep the state until the callee returns.
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum NonReplicatedQueryKind {
     Stateful {
         call_context_id: CallContextId,
@@ -190,7 +226,7 @@ pub enum NonReplicatedQueryKind {
 
 /// This enum indicates whether state modifications are important for
 /// an API type or not.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ModificationTracking {
     Ignore,
     Track,
@@ -203,7 +239,7 @@ pub enum ModificationTracking {
 /// deserializing will result in duplication of the data, but no issues in
 /// correctness.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ApiType {
     /// For executing the `canister_start` method
     Start {
@@ -242,10 +278,10 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
+        call_context_id: CallContextId,
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
-        data_certificate: Option<Vec<u8>>,
         max_reply_size: NumBytes,
     },
 
@@ -322,11 +358,11 @@ pub enum ApiType {
         message_accepted: bool,
     },
 
-    // For executing the `canister_heartbeat` or `canister_global_timer` methods
+    // For executing the `canister_heartbeat` or `canister_global_timer` or `canister_on_low_wasm_memory` methods
     SystemTask {
         caller: PrincipalId,
         /// System task to execute.
-        /// Only `canister_heartbeat` and `canister_global_timer` are allowed.
+        /// Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.
         system_task: SystemMethod,
         time: Time,
         call_context_id: CallContextId,
@@ -340,10 +376,11 @@ pub enum ApiType {
     /// The `call_on_cleanup` callback is executed iff the `reply` or the
     /// `reject` callback was executed and trapped (for any reason).
     ///
-    /// See https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call
+    /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call
     Cleanup {
         caller: PrincipalId,
         time: Time,
+        execution_mode: ExecutionMode,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
     },
@@ -402,15 +439,15 @@ impl ApiType {
         time: Time,
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
-        data_certificate: Option<Vec<u8>>,
+        call_context_id: CallContextId,
     ) -> Self {
         Self::ReplicatedQuery {
             time,
             incoming_payload,
             caller,
+            call_context_id,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
-            data_certificate,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
     }
@@ -541,6 +578,58 @@ impl ApiType {
         }
     }
 
+    pub fn execution_mode(&self) -> ExecutionMode {
+        match self {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. } => ExecutionMode::Replicated,
+            ApiType::NonReplicatedQuery { .. } => ExecutionMode::NonReplicated,
+            ApiType::ReplyCallback { execution_mode, .. } => execution_mode.clone(),
+            ApiType::RejectCallback { execution_mode, .. } => execution_mode.clone(),
+            ApiType::PreUpgrade { .. } => ExecutionMode::Replicated,
+            ApiType::InspectMessage { .. } => ExecutionMode::NonReplicated,
+            ApiType::Cleanup { execution_mode, .. } => execution_mode.clone(),
+        }
+    }
+
+    pub fn call_context_id(&self) -> Option<CallContextId> {
+        match *self {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            } => None,
+            ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::ReplicatedQuery {
+                call_context_id, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id, ..
+                    },
+                ..
+            }
+            | ApiType::ReplyCallback {
+                call_context_id, ..
+            }
+            | ApiType::RejectCallback {
+                call_context_id, ..
+            }
+            | ApiType::SystemTask {
+                call_context_id, ..
+            } => Some(call_context_id),
+        }
+    }
+
     /// Returns a string slice representation of the enum variant name for use
     /// e.g. as a metric label.
     pub fn as_str(&self) -> &'static str {
@@ -550,7 +639,14 @@ impl ApiType {
             ApiType::SystemTask { system_task, .. } => match system_task {
                 SystemMethod::CanisterHeartbeat => "heartbeat",
                 SystemMethod::CanisterGlobalTimer => "global timer",
-                _ => panic!("Only `canister_heartbeat` and `canister_global_timer` are allowed."),
+                SystemMethod::CanisterOnLowWasmMemory => "on low Wasm memory",
+                SystemMethod::CanisterStart
+                | SystemMethod::CanisterInit
+                | SystemMethod::CanisterPreUpgrade
+                | SystemMethod::CanisterPostUpgrade
+                | SystemMethod::CanisterInspectMessage => {
+                    panic!("Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.")
+                }
             },
             ApiType::Update { .. } => "update",
             ApiType::ReplicatedQuery { .. } => "replicated query",
@@ -568,6 +664,38 @@ impl ApiType {
             ApiType::Cleanup { .. } => "cleanup",
         }
     }
+
+    pub fn caller(&self) -> Option<PrincipalId> {
+        match self {
+            ApiType::Start { .. } => None,
+            ApiType::Init { caller, .. } => Some(*caller),
+            ApiType::SystemTask { .. } => None,
+            ApiType::Update { caller, .. } => Some(*caller),
+            ApiType::ReplicatedQuery { caller, .. } => Some(*caller),
+            ApiType::NonReplicatedQuery { caller, .. } => Some(*caller),
+            ApiType::ReplyCallback { caller, .. } => Some(*caller),
+            ApiType::RejectCallback { caller, .. } => Some(*caller),
+            ApiType::PreUpgrade { caller, .. } => Some(*caller),
+            ApiType::InspectMessage { caller, .. } => Some(*caller),
+            ApiType::Cleanup { caller, .. } => Some(*caller),
+        }
+    }
+
+    pub fn time(&self) -> &Time {
+        match self {
+            ApiType::Start { time }
+            | ApiType::Init { time, .. }
+            | ApiType::SystemTask { time, .. }
+            | ApiType::Update { time, .. }
+            | ApiType::Cleanup { time, .. }
+            | ApiType::NonReplicatedQuery { time, .. }
+            | ApiType::ReplicatedQuery { time, .. }
+            | ApiType::PreUpgrade { time, .. }
+            | ApiType::ReplyCallback { time, .. }
+            | ApiType::RejectCallback { time, .. }
+            | ApiType::InspectMessage { time, .. } => time,
+        }
+    }
 }
 
 // This type is potentially serialized and exposed to the external world.  We
@@ -578,17 +706,40 @@ impl std::fmt::Display for ApiType {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ExecutionMemoryType {
+    WasmMemory,
+    StableMemory,
+}
+
+#[derive(Debug, Clone, Copy)]
+/// Some cost API endpoints can fail in various ways. A return value of this
+/// type must be used by the caller to determine success or failure.
+pub enum CostReturnCode {
+    Success = 0,
+    UnknownCurveOrAlgorithm = 1,
+    UnknownKey = 2,
+}
 /// A struct to gather the relevant fields that correspond to a canister's
 /// memory consumption.
 struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
 
+    /// The Wasm memory limit set by the developer in canister settings.
+    wasm_memory_limit: Option<NumBytes>,
+
     /// The current amount of execution memory that the canister is using.
     current_usage: NumBytes,
 
+    /// The current amount of stable memory that the canister is using.
+    stable_memory_usage: NumBytes,
+
+    /// The current amount of Wasm memory that the canister is using.
+    wasm_memory_usage: NumBytes,
+
     /// The current amount of message memory that the canister is using.
-    current_message_usage: NumBytes,
+    current_message_usage: MessageMemoryUsage,
 
     // This is the amount of memory that the subnet has available. Any
     // expansions in the canister's memory need to be deducted from here.
@@ -599,7 +750,7 @@ struct MemoryUsage {
     allocated_execution_memory: NumBytes,
 
     /// Message memory allocated during this message execution.
-    allocated_message_memory: NumBytes,
+    allocated_message_memory: MessageMemoryUsage,
 
     /// The memory allocation of the canister.
     memory_allocation: MemoryAllocation,
@@ -610,8 +761,11 @@ impl MemoryUsage {
         log: ReplicaLogger,
         canister_id: CanisterId,
         limit: NumBytes,
+        wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
-        current_message_usage: NumBytes,
+        stable_memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
+        current_message_usage: MessageMemoryUsage,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
     ) -> Self {
@@ -628,14 +782,62 @@ impl MemoryUsage {
                 limit
             );
         }
+
         Self {
             limit,
+            wasm_memory_limit,
             current_usage,
+            stable_memory_usage,
+            wasm_memory_usage,
             current_message_usage,
             subnet_available_memory,
-            allocated_execution_memory: NumBytes::from(0),
-            allocated_message_memory: NumBytes::from(0),
+            allocated_execution_memory: NumBytes::new(0),
+            allocated_message_memory: MessageMemoryUsage::ZERO,
             memory_allocation,
+        }
+    }
+
+    /// Returns the effective Wasm memory limit depending on the message type.
+    /// If the result is `None`, then this means that the limit is not enforced
+    /// for this message type even if the corresponding field in canister
+    /// settings is not empty.
+    fn effective_wasm_memory_limit(&self, api_type: &ApiType) -> Option<NumBytes> {
+        match api_type {
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => {
+                // The Wasm memory limit is not enforced on query in order to
+                // allow developers to download data from the canister via the
+                // query endpoints.
+                None
+            }
+            ApiType::ReplyCallback { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::RejectCallback { .. } => {
+                // The Wasm memory limit is not enforced in response execution.
+                // The canister has already made a call to another canister, so
+                // introducing a new failure mode here might break canister
+                // invariants for existing canisters that were implemented before
+                // the Wasm memory limit was introduced.
+                None
+            }
+            ApiType::SystemTask { .. } => {
+                // The Wasm memory limit is not enforced in system tasks (timers
+                // and heartbeats) until canister logging is implemented.
+                // Without canister logging developers do not get error messages
+                // from system tasks.
+                // TODO(RUN-957): Enforce the limit after canister logging ships.
+                None
+            }
+            ApiType::PreUpgrade { .. } => {
+                // The Wasm memory limit is not enforced in pre-upgrade
+                // execution in order to allow the developer to upgrade a
+                // canister to a new version that uses less memory.
+                None
+            }
+            ApiType::Init { .. } | ApiType::Start { .. } | ApiType::Update { .. } => {
+                self.wasm_memory_limit
+            }
         }
     }
 
@@ -657,6 +859,7 @@ impl MemoryUsage {
         api_type: &ApiType,
         sandbox_safe_system_state: &mut SandboxSafeSystemState,
         subnet_memory_saturation: &ResourceSaturation,
+        execution_memory_type: ExecutionMemoryType,
     ) -> HypervisorResult<()> {
         let (new_usage, overflow) = self
             .current_usage
@@ -677,8 +880,8 @@ impl MemoryUsage {
             MemoryAllocation::BestEffort => {
                 match self.subnet_available_memory.check_available_memory(
                     execution_bytes,
-                    NumBytes::from(0),
-                    NumBytes::from(0),
+                    NumBytes::new(0),
+                    NumBytes::new(0),
                 ) {
                     Ok(()) => {
                         sandbox_safe_system_state.reserve_storage_cycles(
@@ -689,13 +892,23 @@ impl MemoryUsage {
                         // All state changes after this point should not fail
                         // because the cycles have already been reserved.
                         self.subnet_available_memory
-                            .try_decrement(execution_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .try_decrement(execution_bytes, NumBytes::new(0), NumBytes::new(0))
                             .expect(
                                 "Decrementing subnet available memory is \
                                  guaranteed to succeed by check_available_memory().",
                             );
-                        self.current_usage = NumBytes::from(new_usage);
+                        self.current_usage = NumBytes::new(new_usage);
                         self.allocated_execution_memory += execution_bytes;
+
+                        self.add_execution_memory(execution_bytes, execution_memory_type)?;
+
+                        sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
+                            None,
+                            self.wasm_memory_limit,
+                            self.current_usage,
+                            self.wasm_memory_usage,
+                        );
+
                         Ok(())
                     }
                     Err(_err) => Err(HypervisorError::OutOfMemory),
@@ -713,8 +926,31 @@ impl MemoryUsage {
                     // keep code robust, we repeat the check here again.
                     return Err(HypervisorError::OutOfMemory);
                 }
-                self.current_usage = NumBytes::from(new_usage);
+                self.current_usage = NumBytes::new(new_usage);
+                self.add_execution_memory(execution_bytes, execution_memory_type)?;
+
+                sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
+                    Some(reserved_bytes),
+                    self.wasm_memory_limit,
+                    self.current_usage,
+                    self.wasm_memory_usage,
+                );
                 Ok(())
+            }
+        }
+    }
+
+    fn add_execution_memory(
+        &mut self,
+        execution_bytes: NumBytes,
+        execution_memory_type: ExecutionMemoryType,
+    ) -> Result<(), HypervisorError> {
+        match execution_memory_type {
+            ExecutionMemoryType::WasmMemory => {
+                add_memory(&mut self.wasm_memory_usage, execution_bytes)
+            }
+            ExecutionMemoryType::StableMemory => {
+                add_memory(&mut self.stable_memory_usage, execution_bytes)
             }
         }
     }
@@ -722,7 +958,7 @@ impl MemoryUsage {
     /// Tries to allocate the requested amount of message memory.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if the message memory limit would be exceeded.
+    /// if the guaranteed response message memory limit would be exceeded.
     ///
     /// Returns `Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow)`
     /// and leaves `self` unchanged if freezing threshold check is needed
@@ -730,14 +966,13 @@ impl MemoryUsage {
     /// allocation.
     fn allocate_message_memory(
         &mut self,
-        message_bytes: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         api_type: &ApiType,
         sandbox_safe_system_state: &SandboxSafeSystemState,
     ) -> HypervisorResult<()> {
-        let (new_usage, overflow) = self
+        let (new_message_usage, overflow) = self
             .current_message_usage
-            .get()
-            .overflowing_add(message_bytes.get());
+            .overflowing_add(&message_memory_usage);
         if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
@@ -746,44 +981,63 @@ impl MemoryUsage {
             api_type,
             self.current_usage,
             self.current_message_usage,
-            NumBytes::new(new_usage),
+            new_message_usage,
         )?;
 
-        match self.subnet_available_memory.try_decrement(
-            NumBytes::from(0),
-            message_bytes,
-            NumBytes::from(0),
-        ) {
-            Ok(()) => {
-                self.allocated_message_memory += message_bytes;
-                self.current_message_usage = NumBytes::from(new_usage);
-                Ok(())
+        if message_memory_usage.guaranteed_response.get() != 0 {
+            if let Err(_err) = self.subnet_available_memory.try_decrement(
+                NumBytes::new(0),
+                message_memory_usage.guaranteed_response,
+                NumBytes::new(0),
+            ) {
+                return Err(HypervisorError::OutOfMemory);
             }
-            Err(_err) => Err(HypervisorError::OutOfMemory),
         }
+
+        self.allocated_message_memory += message_memory_usage;
+        self.current_message_usage = new_message_usage;
+        Ok(())
     }
 
-    /// Deallocates the given number of message bytes.
+    /// Deallocates the given amount of message memory.
+    ///
     /// Should only be called immediately after `allocate_message_memory()`, with the
     /// same number of bytes, in case allocation failed.
-    fn deallocate_message_memory(&mut self, message_bytes: NumBytes) {
+    fn deallocate_message_memory(&mut self, message_memory_usage: MessageMemoryUsage) {
         assert!(
-            self.allocated_message_memory >= message_bytes,
-            "Precondition of self.allocated_message_memory in deallocate_message_memory failed: {} >= {}",
+            self.allocated_message_memory.ge(message_memory_usage),
+            "Precondition of self.allocated_message_memory in deallocate_message_memory failed: {:?} >= {:?}",
             self.allocated_message_memory,
-            message_bytes
+            message_memory_usage
         );
         assert!(
-            self.current_message_usage >= message_bytes,
-            "Precondition of self.current_message_usage in deallocate_message_memory failed: {} >= {}",
+            self.current_message_usage.ge(message_memory_usage),
+            "Precondition of self.current_message_usage in deallocate_message_memory failed: {:?} >= {:?}",
             self.current_message_usage,
-            message_bytes
+            message_memory_usage
         );
-        self.subnet_available_memory
-            .increment(NumBytes::from(0), message_bytes, NumBytes::from(0));
-        self.allocated_message_memory -= message_bytes;
-        self.current_message_usage -= message_bytes;
+        self.subnet_available_memory.increment(
+            NumBytes::new(0),
+            message_memory_usage.guaranteed_response,
+            NumBytes::new(0),
+        );
+        self.allocated_message_memory -= message_memory_usage;
+        self.current_message_usage -= message_memory_usage;
     }
+}
+
+fn add_memory(
+    memory_size: &mut NumBytes,
+    additional_memory: NumBytes,
+) -> Result<(), HypervisorError> {
+    let (new_usage, overflow) = memory_size.get().overflowing_add(additional_memory.get());
+
+    if overflow {
+        return Err(HypervisorError::OutOfMemory);
+    }
+
+    *memory_size = NumBytes::new(new_usage);
+    Ok(())
 }
 
 /// Struct that implements the SystemApi trait. This trait enables a canister to
@@ -805,6 +1059,14 @@ pub struct SystemApiImpl {
     /// should not be accessed through the public stable memory APIs. It can
     /// still be read through the hidden read API for speed on the first access.
     wasm_native_stable_memory: FlagStatus,
+
+    /// Canister backtraces are enabled. This means we should attempt to collect
+    /// a backtrace if the canister calls the trap API.
+    #[allow(unused)]
+    canister_backtrace: FlagStatus,
+
+    /// Rollout stage of the best-effort responses feature.
+    best_effort_responses: BestEffortResponsesFeature,
 
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
@@ -833,6 +1095,9 @@ pub struct SystemApiImpl {
     /// is initialized to 0 and updated after each out-of-instructions call that
     /// starts a new slice.
     instructions_executed_before_current_slice: i64,
+
+    /// How many times each tracked System API call was invoked.
+    call_counters: SystemApiCallCounters,
 }
 
 impl SystemApiImpl {
@@ -841,20 +1106,36 @@ impl SystemApiImpl {
         api_type: ApiType,
         sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
-        wasm_native_stable_memory: FlagStatus,
-        max_sum_exported_function_name_lengths: usize,
+        embedders_config: &EmbeddersConfig,
         stable_memory: Memory,
+        wasm_memory_size: NumWasmPages,
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
+        let stable_memory_usage = stable_memory
+            .size
+            .get()
+            .checked_mul(WASM_PAGE_SIZE_IN_BYTES)
+            .map(|v| NumBytes::new(v as u64))
+            .expect("Stable memory size is larger than maximal allowed.");
+
+        let wasm_memory_usage = wasm_memory_size
+            .get()
+            .checked_mul(WASM_PAGE_SIZE_IN_BYTES)
+            .map(|v| NumBytes::new(v as u64))
+            .expect("Wasm memory size is larger than maximal allowed.");
+
         let memory_usage = MemoryUsage::new(
             log.clone(),
             sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
+            execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
+            stable_memory_usage,
+            wasm_memory_usage,
             canister_current_message_memory_usage,
             subnet_available_memory,
             execution_parameters.memory_allocation,
@@ -866,14 +1147,18 @@ impl SystemApiImpl {
             api_type,
             memory_usage,
             execution_parameters,
-            wasm_native_stable_memory,
-            max_sum_exported_function_name_lengths,
+            wasm_native_stable_memory: embedders_config.feature_flags.wasm_native_stable_memory,
+            canister_backtrace: embedders_config.feature_flags.canister_backtrace,
+            best_effort_responses: embedders_config.feature_flags.best_effort_responses.clone(),
+            max_sum_exported_function_name_lengths: embedders_config
+                .max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
             out_of_instructions_handler,
             log,
             current_slice_instruction_limit: i64::try_from(slice_limit).unwrap_or(i64::MAX),
             instructions_executed_before_current_slice: 0,
+            call_counters: SystemApiCallCounters::default(),
         }
     }
 
@@ -964,16 +1249,24 @@ impl SystemApiImpl {
         self.memory_usage.allocated_execution_memory
     }
 
-    /// Bytes allocated in messages.
-    pub fn get_allocated_message_bytes(&self) -> NumBytes {
-        self.memory_usage.allocated_message_memory
+    /// Bytes used by or reserved for for guaranteed response messages.
+    pub fn get_allocated_guaranteed_response_message_bytes(&self) -> NumBytes {
+        self.memory_usage
+            .allocated_message_memory
+            .guaranteed_response
     }
 
     fn error_for(&self, method_name: &str) -> HypervisorError {
-        HypervisorError::ContractViolation(format!(
-            "\"{}\" cannot be executed in {} mode",
-            method_name, self.api_type
-        ))
+        HypervisorError::UserContractViolation {
+            error: format!(
+                "\"{}\" cannot be executed in {} mode",
+                method_name, self.api_type
+            ),
+            suggestion: "Check the ICP documentation to make sure APIs are \
+            being called in the correct message types."
+                .to_string(),
+            doc_link: doc_ref("calling-a-system-api-from-the-wrong-mode"),
+        }
     }
 
     fn get_msg_caller_id(&self, method_name: &str) -> Result<PrincipalId, HypervisorError> {
@@ -1097,16 +1390,19 @@ impl SystemApiImpl {
                 }
 
                 match outgoing_request {
-                    None => Err(HypervisorError::ContractViolation(format!(
-                        "{} called when no call is under construction.",
-                        method_name
-                    ))),
+                    None => Err(HypervisorError::ToolchainContractViolation {
+                        error: format!(
+                            "{} called when no call is under construction.",
+                            method_name
+                        ),
+                    }),
                     Some(request) => {
                         self.sandbox_safe_system_state
                             .withdraw_cycles_for_transfer(
                                 self.memory_usage.current_usage,
                                 self.memory_usage.current_message_usage,
                                 amount,
+                                false, // synchronous error => no need to reveal top up balance
                             )?;
                         request.add_cycles(amount);
                         Ok(())
@@ -1141,27 +1437,19 @@ impl SystemApiImpl {
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => {
+            ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
                     // Non-replicated mode means we are handling a composite query.
                     // Access to this syscall not permitted.
                     Err(self.error_for(method_name))
                 } else {
-                    Ok(self
-                        .sandbox_safe_system_state
-                        .msg_cycles_available(*call_context_id))
+                    Ok(self.sandbox_safe_system_state.msg_cycles_available())
                 }
             }
         }
@@ -1201,50 +1489,196 @@ impl SystemApiImpl {
         max_amount: Cycles,
     ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
-            ApiType::ReplyCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            }
-            | ApiType::RejectCallback {
-                response_status: ResponseStatus::AlreadyReplied,
-                ..
-            } => Ok(Cycles::new(0)),
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => {
+            ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
                     // Non-replicated mode means we are handling a composite query.
                     // Access to this syscall not permitted.
                     Err(self.error_for(method_name))
                 } else {
-                    Ok(self
-                        .sandbox_safe_system_state
-                        .msg_cycles_accept(*call_context_id, max_amount))
+                    Ok(self.sandbox_safe_system_state.msg_cycles_accept(max_amount))
                 }
             }
         }
     }
 
-    pub fn into_system_state_changes(self) -> SystemStateChanges {
-        self.sandbox_safe_system_state.system_state_changes
+    fn add_canister_log_for_trap(
+        &self,
+        err: &HypervisorError,
+        time: Time,
+        system_state_modifications: &mut SystemStateModifications,
+    ) {
+        if let Some(log_message) = match err {
+            HypervisorError::Trapped {
+                trap_code,
+                backtrace,
+            } => match backtrace {
+                Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
+                None => Some(format!("[TRAP]: {}", trap_code)),
+            },
+            HypervisorError::CalledTrap { message, backtrace } => {
+                let message = if message.is_empty() {
+                    "(no message)"
+                } else {
+                    message
+                };
+                match backtrace {
+                    Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
+                    None => Some(format!("[TRAP]: {}", message)),
+                }
+            }
+            _ => None,
+        } {
+            system_state_modifications
+                .canister_log
+                .add_record(time.as_nanos_since_unix_epoch(), log_message.into_bytes());
+        }
     }
 
-    pub fn take_system_state_changes(&mut self) -> SystemStateChanges {
-        self.sandbox_safe_system_state.take_changes()
+    pub fn take_system_state_modifications(&mut self) -> SystemStateModifications {
+        let mut system_state_modifications = self.sandbox_safe_system_state.take_changes();
+        // In the below, we explicitly list all fields of `SystemStateModifications`
+        // so that an explicit decision needs to be made for each context and
+        // and execution result combination when a new field is added to the struct.
+        match self.api_type {
+            // Inspect message runs in non-replicated mode, not persisting any changes.
+            ApiType::InspectMessage { .. } => SystemStateModifications {
+                new_certified_data: None,
+                callback_updates: vec![],
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: BTreeMap::new(),
+                requests: vec![],
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
+                should_bump_canister_version: false,
+            },
+            // Non-replicated query context includes composite queries, so in that case
+            // the changes to output queues, callbacks and slot reservations should be
+            // returned to properly handle the execution of the query graph.
+            ApiType::NonReplicatedQuery { .. } => SystemStateModifications {
+                new_certified_data: None,
+                callback_updates: system_state_modifications.callback_updates,
+                cycles_balance_change: CyclesBalanceChange::zero(),
+                reserved_cycles: Cycles::zero(),
+                consumed_cycles_by_use_case: BTreeMap::new(),
+                call_context_balance_taken: None,
+                request_slots_used: system_state_modifications.request_slots_used,
+                requests: system_state_modifications.requests,
+                new_global_timer: None,
+                canister_log: Default::default(),
+                on_low_wasm_memory_hook_condition_check_result: None,
+                should_bump_canister_version: false,
+            },
+            // Replicated queries return changes to the logs and cycles balance,
+            // as well as bumping the canister's version in case there was no trap.
+            // In case of a trap, only changes to logs should be returned.
+            ApiType::ReplicatedQuery { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => SystemStateModifications {
+                    new_certified_data: None,
+                    callback_updates: vec![],
+                    cycles_balance_change: system_state_modifications.cycles_balance_change,
+                    reserved_cycles: Cycles::zero(),
+                    consumed_cycles_by_use_case: system_state_modifications
+                        .consumed_cycles_by_use_case,
+                    call_context_balance_taken: system_state_modifications
+                        .call_context_balance_taken,
+                    request_slots_used: BTreeMap::new(),
+                    requests: vec![],
+                    new_global_timer: None,
+                    canister_log: system_state_modifications.canister_log,
+                    on_low_wasm_memory_hook_condition_check_result: None,
+                    should_bump_canister_version: true,
+                },
+            },
+            // Replicated executions (except queries), should return all changes and bump
+            // the canister version in case there was no trap. Otherwise, only changes
+            // to logs are returned.
+            ApiType::SystemTask { time, .. }
+            | ApiType::Update { time, .. }
+            | ApiType::Cleanup { time, .. }
+            | ApiType::ReplyCallback { time, .. }
+            | ApiType::RejectCallback { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => {
+                    system_state_modifications.should_bump_canister_version = true;
+                    system_state_modifications
+                }
+            },
+            // Start, init and pre-upgrade are very similar to replicated executions
+            // except that they don't bump the canister's version when the execution
+            // was successful. This is because these are part of canister `install_code`
+            // which bumps the version once for the whole `install_code` request as
+            // opposed to per message execution involved during the `install_code`
+            // request.
+            ApiType::Start { time, .. }
+            | ApiType::Init { time, .. }
+            | ApiType::PreUpgrade { time, .. } => match &self.execution_error {
+                Some(err) => {
+                    self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
+                    SystemStateModifications {
+                        new_certified_data: None,
+                        callback_updates: vec![],
+                        cycles_balance_change: CyclesBalanceChange::zero(),
+                        reserved_cycles: Cycles::zero(),
+                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        call_context_balance_taken: None,
+                        request_slots_used: BTreeMap::new(),
+                        requests: vec![],
+                        new_global_timer: None,
+                        canister_log: system_state_modifications.canister_log,
+                        on_low_wasm_memory_hook_condition_check_result: None,
+                        should_bump_canister_version: false,
+                    }
+                }
+                None => system_state_modifications,
+            },
+        }
     }
 
     pub fn stable_memory_size(&self) -> NumWasmPages {
@@ -1270,26 +1704,22 @@ impl SystemApiImpl {
             sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
         };
 
-        let reservation_bytes = if self.execution_parameters.subnet_type == SubnetType::System {
+        let memory_usage_of_request = if self.execution_parameters.subnet_type == SubnetType::System
+        {
             // Effectively disable the memory limit checks on system subnets.
-            NumBytes::from(0)
+            MessageMemoryUsage::ZERO
         } else {
-            (memory_required_to_push_request(&req) as u64).into()
+            memory_usage_of_request(&req)
         };
-        if let Err(err) = self.memory_usage.allocate_message_memory(
-            reservation_bytes,
+        if let Err(_err) = self.memory_usage.allocate_message_memory(
+            memory_usage_of_request,
             &self.api_type,
             &self.sandbox_safe_system_state,
         ) {
             abort(req, &mut self.sandbox_safe_system_state);
-            match err {
-                err @ HypervisorError::InsufficientCyclesInMessageMemoryGrow { .. } => {
-                    // Return an the out-of-cycles error in this case for a better
-                    // error message to be relayed to the caller.
-                    return Err(err);
-                }
-                _ => return Ok(RejectCode::SysTransient as i32),
-            }
+            // Return an error code instead of trapping here in order to allow
+            // the user code to handle the error gracefully.
+            return Ok(RejectCode::SysTransient as i32);
         }
 
         match self.sandbox_safe_system_state.push_output_request(
@@ -1302,7 +1732,7 @@ impl SystemApiImpl {
             Ok(()) => Ok(0),
             Err(request) => {
                 self.memory_usage
-                    .deallocate_message_memory(reservation_bytes);
+                    .deallocate_message_memory(memory_usage_of_request);
                 abort(request, &mut self.sandbox_safe_system_state);
                 Ok(RejectCode::SysTransient as i32)
             }
@@ -1324,6 +1754,77 @@ impl SystemApiImpl {
             panic!("{}", WASM_NATIVE_STABLE_MEMORY_ERROR)
         }
     }
+
+    /// Return tracked System API call counters.
+    pub fn call_counters(&self) -> SystemApiCallCounters {
+        self.call_counters.clone()
+    }
+
+    /// Appends the specified bytes on the heap as a string to the canister's logs.
+    pub fn save_log_message(&mut self, src: usize, size: usize, heap: &[u8]) {
+        self.sandbox_safe_system_state.append_canister_log(
+            self.api_type.time(),
+            valid_subslice(
+                "save_log_message",
+                InternalAddress::new(src),
+                InternalAddress::new(size),
+                heap,
+            )
+            .unwrap_or(
+                // Do not trap here!
+                // If the specified memory range is invalid, ignore it and log the error message.
+                b"(debug_print message out of memory bounds)",
+            )
+            .to_vec(),
+        );
+    }
+
+    /// Takes collected canister log records.
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        self.sandbox_safe_system_state.take_canister_log()
+    }
+
+    /// Returns collected canister log records.
+    pub fn canister_log(&self) -> &CanisterLog {
+        self.sandbox_safe_system_state.canister_log()
+    }
+
+    /// Checks if the current API type is an install or upgrade message.
+    /// This is relevant when enforcing the stable memory dirty page limit.
+    pub fn is_install_or_upgrade_message(&self) -> bool {
+        matches!(
+            self.api_type,
+            ApiType::Init { .. } | ApiType::PreUpgrade { .. }
+        )
+    }
+
+    /// Based on the page limit object, returns the page limit for the current
+    /// system API type. Can be called with the limit for dirty pages or accessed pages.
+    pub fn get_page_limit(&self, page_limit: &StableMemoryPageLimit) -> NumOsPages {
+        match &self.api_type {
+            // Longer-running messages make use of a different, possibly higher limit.
+            ApiType::Init { .. } | ApiType::PreUpgrade { .. } => page_limit.upgrade,
+            // Queries have a separate limit.
+            ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => page_limit.query,
+            // Callbacks and cleanup for composite queries (non-replicated execution) need to be treated as queries,
+            // whereas in replicated mode they are treated as regular messages.
+            ApiType::ReplyCallback { execution_mode, .. }
+            | ApiType::RejectCallback { execution_mode, .. }
+            | ApiType::Cleanup { execution_mode, .. } => {
+                if *execution_mode == ExecutionMode::NonReplicated {
+                    page_limit.query
+                } else {
+                    page_limit.message
+                }
+            }
+            // All other API types get the replicated message limit.
+            ApiType::Update { .. } | ApiType::Start { .. } | ApiType::SystemTask { .. } => {
+                page_limit.message
+            }
+        }
+    }
 }
 
 impl SystemApi for SystemApiImpl {
@@ -1336,12 +1837,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
-        match self.sandbox_safe_system_state.subnet_type {
-            SubnetType::System => NumInstructions::from(0),
-            SubnetType::VerifiedApplication | SubnetType::Application => {
-                NumInstructions::from(num_bytes.get())
-            }
-        }
+        NumInstructions::from(num_bytes.get())
     }
 
     fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
@@ -1412,27 +1908,36 @@ impl SystemApi for SystemApiImpl {
         self.sandbox_safe_system_state.canister_id
     }
 
-    fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
+    fn ic0_msg_caller_size(&self) -> HypervisorResult<usize> {
         let result = self
             .get_msg_caller_id("ic0_msg_caller_size")
-            .map(|caller_id| caller_id.as_slice().len() as u32);
-        trace_syscall!(self, ic0_msg_caller_size, result);
+            .map(|caller_id| caller_id.as_slice().len());
+        trace_syscall!(self, MsgCallerSize, result);
         result
     }
 
     fn ic0_msg_caller_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match self.get_msg_caller_id("ic0_msg_caller_copy") {
             Ok(caller_id) => {
                 let id_bytes = caller_id.as_slice();
-                valid_subslice("ic0.msg_caller_copy heap", dst, size, heap)?;
-                let slice = valid_subslice("ic0.msg_caller_copy id", offset, size, id_bytes)?;
-                let (dst, size) = (dst as usize, size as usize);
+                valid_subslice(
+                    "ic0.msg_caller_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
@@ -1440,7 +1945,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_msg_caller_copy,
+            MsgCallerCopy,
             result,
             dst,
             offset,
@@ -1450,7 +1955,7 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_msg_arg_data_size(&self) -> HypervisorResult<u32> {
+    fn ic0_msg_arg_data_size(&self) -> HypervisorResult<usize> {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Cleanup { .. }
@@ -1474,17 +1979,17 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 incoming_payload, ..
-            } => Ok(incoming_payload.len() as u32),
+            } => Ok(incoming_payload.len()),
         };
-        trace_syscall!(self, ic0_msg_arg_data_size, result);
+        trace_syscall!(self, MsgArgDataSize, result);
         result
     }
 
     fn ic0_msg_arg_data_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
@@ -1511,21 +2016,25 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery {
                 incoming_payload, ..
             } => {
-                valid_subslice("ic0.msg_arg_data_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.msg_arg_data_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let payload_subslice = valid_subslice(
                     "ic0.msg_arg_data_copy payload",
-                    offset,
-                    size,
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
                     incoming_payload,
                 )?;
-                let (dst, size) = (dst as usize, size as usize);
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
                 Ok(())
             }
         };
         trace_syscall!(
             self,
-            ic0_msg_arg_data_copy,
+            MsgArgDataCopy,
             result,
             dst,
             offset,
@@ -1535,7 +2044,7 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_msg_method_name_size(&self) -> HypervisorResult<u32> {
+    fn ic0_msg_method_name_size(&self) -> HypervisorResult<usize> {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::RejectCallback { .. }
@@ -1547,17 +2056,17 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_size")),
-            ApiType::InspectMessage { method_name, .. } => Ok(method_name.len() as u32),
+            ApiType::InspectMessage { method_name, .. } => Ok(method_name.len()),
         };
-        trace_syscall!(self, ic0_msg_method_name_size, result);
+        trace_syscall!(self, MsgMethodNameSize, result);
         result
     }
 
     fn ic0_msg_method_name_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
@@ -1572,21 +2081,25 @@ impl SystemApi for SystemApiImpl {
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::Init { .. } => Err(self.error_for("ic0_msg_method_name_copy")),
             ApiType::InspectMessage { method_name, .. } => {
-                valid_subslice("ic0.msg_method_name_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.msg_method_name_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let payload_subslice = valid_subslice(
                     "ic0.msg_method_name_copy payload",
-                    offset,
-                    size,
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
                     method_name.as_bytes(),
                 )?;
-                let (dst, size) = (dst as usize, size as usize);
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], payload_subslice);
                 Ok(())
             }
         };
         trace_syscall!(
             self,
-            ic0_msg_method_name_copy,
+            MsgMethodNameCopy,
             result,
             dst,
             offset,
@@ -1612,16 +2125,16 @@ impl SystemApi for SystemApiImpl {
                 message_accepted, ..
             } => {
                 if *message_accepted {
-                    Err(ContractViolation(
-                        "ic0.accept_message: the function was already called.".to_string(),
-                    ))
+                    Err(ToolchainContractViolation {
+                        error: "ic0.accept_message: the function was already called.".to_string(),
+                    })
                 } else {
                     *message_accepted = true;
                     Ok(())
                 }
             }
         };
-        trace_syscall!(self, ic0_accept_message, result);
+        trace_syscall!(self, AcceptMessage, result);
         result
     }
 
@@ -1635,47 +2148,62 @@ impl SystemApi for SystemApiImpl {
                     )));
                     Ok(())
                 }
-                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => Err(
-                    ContractViolation("ic0.msg_reply: the call is already replied".to_string()),
-                ),
+                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
+                    Err(ToolchainContractViolation {
+                        error: "ic0.msg_reply: the call is already replied".to_string(),
+                    })
+                }
             },
         };
-        trace_syscall!(self, ic0_msg_reply, result);
+        trace_syscall!(self, MsgReply, result);
         result
     }
 
     fn ic0_msg_reply_data_append(
         &mut self,
-        src: u32,
-        size: u32,
+        src: usize,
+        size: usize,
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match self.get_response_info() {
             None => Err(self.error_for("ic0_msg_reply_data_append")),
             Some((data, max_reply_size, response_status)) => match response_status {
                 ResponseStatus::NotRepliedYet => {
-                    let payload_size = (data.len() + size as usize) as u64;
+                    let payload_size = data.len().saturating_add(size) as u64;
                     if payload_size > max_reply_size.get() {
                         let string = format!(
-                            "ic0.msg_reply_data_append: application payload size ({}) cannot be larger than {}",
+                            "ic0.msg_reply_data_append: application payload size ({}) cannot be larger than {}.",
                             payload_size,
                             max_reply_size,
                         );
-                        return Err(ContractViolation(string));
+                        return Err(UserContractViolation {
+                            error: string,
+                            suggestion:
+                                "Consider checking the response size and returning an error if \
+                                it is too long."
+                                    .to_string(),
+                            doc_link: doc_ref("msg_reply_data_append-payload-too-large"),
+                        });
                     }
-                    data.extend_from_slice(valid_subslice("msg.reply", src, size, heap)?);
+                    data.extend_from_slice(valid_subslice(
+                        "msg.reply",
+                        InternalAddress::new(src),
+                        InternalAddress::new(size),
+                        heap,
+                    )?);
                     Ok(())
                 }
                 ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
-                    Err(ContractViolation(
-                        "ic0.msg_reply_data_append: the call is already replied".to_string(),
-                    ))
+                    Err(ToolchainContractViolation {
+                        error: "ic0.msg_reply_data_append: the call is already replied."
+                            .to_string(),
+                    })
                 }
             },
         };
         trace_syscall!(
             self,
-            ic0_msg_reply_data_append,
+            MsgReplyDataAppend,
             result,
             src,
             size,
@@ -1684,36 +2212,48 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_msg_reject(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
+    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
         let result = match self.get_response_info() {
             None => Err(self.error_for("ic0_msg_reject")),
             Some((_, max_reply_size, response_status)) => match response_status {
                 ResponseStatus::NotRepliedYet => {
                     if size as u64 > max_reply_size.get() {
                         let string = format!(
-                        "ic0.msg_reject: application payload size ({}) cannot be larger than {}",
-                        size, max_reply_size
-                    );
-                        return Err(ContractViolation(string));
+                            "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
+                            size, max_reply_size
+                        );
+                        return Err(UserContractViolation {
+                            error: string,
+                            suggestion: "Try truncating the error messages that are too long."
+                                .to_string(),
+                            doc_link: doc_ref("msg_reject-payload-too-large"),
+                        });
                     }
-                    let msg_bytes = valid_subslice("ic0.msg_reject", src, size, heap)?;
+                    let msg_bytes = valid_subslice(
+                        "ic0.msg_reject",
+                        InternalAddress::new(src),
+                        InternalAddress::new(size),
+                        heap,
+                    )?;
                     let msg = String::from_utf8(msg_bytes.to_vec()).map_err(|_| {
-                        ContractViolation(
-                            "ic0.msg_reject: invalid UTF-8 string provided".to_string(),
-                        )
+                        ToolchainContractViolation {
+                            error: "ic0.msg_reject: invalid UTF-8 string provided".to_string(),
+                        }
                     })?;
                     *response_status =
                         ResponseStatus::JustRepliedWith(Some(WasmResult::Reject(msg)));
                     Ok(())
                 }
-                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => Err(
-                    ContractViolation("ic0.msg_reject: the call is already replied".to_string()),
-                ),
+                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
+                    Err(ToolchainContractViolation {
+                        error: "ic0.msg_reject: the call is already replied".to_string(),
+                    })
+                }
             },
         };
         trace_syscall!(
             self,
-            ic0_msg_reject,
+            MsgReject,
             result,
             src,
             size,
@@ -1726,43 +2266,50 @@ impl SystemApi for SystemApiImpl {
         let result = self
             .get_reject_code()
             .ok_or_else(|| self.error_for("ic0_msg_reject_code"));
-        trace_syscall!(self, ic0_msg_reject_code, result);
+        trace_syscall!(self, MsgRejectCode, result);
         result
     }
 
-    fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<u32> {
+    fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<usize> {
         let reject_context = self
             .get_reject_context()
             .ok_or_else(|| self.error_for("ic0_msg_reject_msg_size"))?;
-        let result = Ok(reject_context.message().len() as u32);
-        trace_syscall!(self, ic0_msg_reject_msg_size, result);
+        let result = Ok(reject_context.message().len());
+        trace_syscall!(self, MsgRejectMsgSize, result);
         result
     }
 
     fn ic0_msg_reject_msg_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = {
             let reject_context = self
                 .get_reject_context()
                 .ok_or_else(|| self.error_for("ic0_msg_reject_msg_copy"))?;
-            valid_subslice("ic0.msg_reject_msg_copy heap", dst, size, heap)?;
+            valid_subslice(
+                "ic0.msg_reject_msg_copy heap",
+                InternalAddress::new(dst),
+                InternalAddress::new(size),
+                heap,
+            )?;
 
             let msg = reject_context.message();
-            let dst = dst as usize;
-            let msg_bytes =
-                valid_subslice("ic0.msg_reject_msg_copy msg", offset, size, msg.as_bytes())?;
-            let size = size as usize;
+            let msg_bytes = valid_subslice(
+                "ic0.msg_reject_msg_copy msg",
+                InternalAddress::new(offset),
+                InternalAddress::new(size),
+                msg.as_bytes(),
+            )?;
             deterministic_copy_from_slice(&mut heap[dst..dst + size], msg_bytes);
             Ok(())
         };
         trace_syscall!(
             self,
-            ic0_msg_reject_msg_copy,
+            MsgRejectMsgCopy,
             result,
             dst,
             offset,
@@ -1791,15 +2338,15 @@ impl SystemApi for SystemApiImpl {
                 .as_slice()
                 .len()),
         };
-        trace_syscall!(self, ic0_canister_self_size, result);
+        trace_syscall!(self, CanisterSelfSize, result);
         result
     }
 
     fn ic0_canister_self_copy(
         &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
@@ -1814,18 +2361,27 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                valid_subslice("ic0.canister_self_copy heap", dst, size, heap)?;
+                valid_subslice(
+                    "ic0.canister_self_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 let canister_id = self.sandbox_safe_system_state.canister_id;
                 let id_bytes = canister_id.get_ref().as_slice();
-                let slice = valid_subslice("ic0.canister_self_copy id", offset, size, id_bytes)?;
-                let (dst, size) = (dst as usize, size as usize);
+                let slice = valid_subslice(
+                    "ic0.canister_self_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
             }
         };
         trace_syscall!(
             self,
-            ic0_canister_self_copy,
+            CanisterSelfCopy,
             result,
             dst,
             offset,
@@ -1837,14 +2393,14 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_call_new(
         &mut self,
-        callee_src: u32,
-        callee_size: u32,
-        name_src: u32,
-        name_len: u32,
+        callee_src: usize,
+        callee_size: usize,
+        name_src: usize,
+        name_len: usize,
         reply_fun: u32,
-        reply_env: u32,
+        reply_env: u64,
         reject_fun: u32,
-        reject_env: u32,
+        reject_env: u64,
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
@@ -1901,7 +2457,7 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            ic0_call_new,
+            CallNew,
             result,
             callee_src,
             callee_size,
@@ -1916,7 +2472,12 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_call_data_append(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
+    fn ic0_call_data_append(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -1947,23 +2508,18 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation(
-                    "ic0.call_data_append called when no call is under construction.".to_string(),
-                )),
+                None => Err(HypervisorError::ToolchainContractViolation {
+                    error: "ic0.call_data_append called when no call is under construction."
+                        .to_string(),
+                }),
                 Some(request) => request.extend_method_payload(src, size, heap),
             },
         };
-        trace_syscall!(
-            self,
-            ic0_call_data_append,
-            src,
-            size,
-            summarize(heap, src, size)
-        );
+        trace_syscall!(self, CallDataAppend, src, size, summarize(heap, src, size));
         result
     }
 
-    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()> {
+    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u64) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -1994,25 +2550,26 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation(
-                    "ic0.call_on_cleanup called when no call is under construction.".to_string(),
-                )),
+                None => Err(HypervisorError::ToolchainContractViolation {
+                    error: "ic0.call_on_cleanup called when no call is under construction."
+                        .to_string(),
+                }),
                 Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env)),
             },
         };
-        trace_syscall!(self, ic0_call_on_cleanup, fun, env);
+        trace_syscall!(self, CallOnCleanup, fun, env);
         result
     }
 
     fn ic0_call_cycles_add(&mut self, amount: u64) -> HypervisorResult<()> {
         let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount));
-        trace_syscall!(self, ic0_call_cycles_add, result, amount);
+        trace_syscall!(self, CallCyclesAdd, result, amount);
         result
     }
 
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()> {
         let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount);
-        trace_syscall!(self, ic0_call_cycles_add128, result, amount);
+        trace_syscall!(self, CallCyclesAdd128, result, amount);
         result
     }
 
@@ -2038,26 +2595,31 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_perform")),
             ApiType::Update {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::SystemTask {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::ReplyCallback {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::RejectCallback {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::NonReplicatedQuery {
+                time,
                 query_kind:
                     NonReplicatedQueryKind::Stateful {
                         call_context_id,
@@ -2065,17 +2627,20 @@ impl SystemApi for SystemApiImpl {
                     },
                 ..
             } => {
-                let req_in_prep = outgoing_request.take().ok_or_else(|| {
-                    ContractViolation(
-                        "ic0.call_perform called when no call is under construction.".to_string(),
-                    )
-                })?;
+                let req_in_prep =
+                    outgoing_request
+                        .take()
+                        .ok_or_else(|| ToolchainContractViolation {
+                            error: "ic0.call_perform called when no call is under construction."
+                                .to_string(),
+                        })?;
 
                 let req = into_request(
                     req_in_prep,
                     *call_context_id,
                     &mut self.sandbox_safe_system_state,
                     &self.log,
+                    *time,
                 )?;
 
                 self.push_output_request(
@@ -2085,7 +2650,7 @@ impl SystemApi for SystemApiImpl {
                 )
             }
         };
-        trace_syscall!(self, ic0_call_perform, result);
+        trace_syscall!(self, CallPerform, result);
         result
     }
 
@@ -2103,7 +2668,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. } => self.stable_memory().stable_size(),
         };
-        trace_syscall!(self, ic0_stable_size, result);
+        trace_syscall!(self, StableSize, result);
         result
     }
 
@@ -2124,7 +2689,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(old_size.get().try_into().unwrap())
             }
         };
-        trace_syscall!(self, ic0_stable_grow, result, additional_pages);
+        trace_syscall!(self, StableGrow, result, additional_pages);
         result
     }
 
@@ -2138,12 +2703,12 @@ impl SystemApi for SystemApiImpl {
         let result = self.stable_memory().stable_read(dst, offset, size, heap);
         trace_syscall!(
             self,
-            ic0_stable_read,
+            StableRead,
             result,
             dst,
             offset,
             size,
-            summarize(heap, dst, size)
+            summarize(heap, dst as usize, size as usize)
         );
         result
     }
@@ -2160,19 +2725,19 @@ impl SystemApi for SystemApiImpl {
             .stable_write(offset, src, size, heap);
         trace_syscall!(
             self,
-            ic0_stable_write,
+            StableWrite,
             result,
             offset,
             src,
             size,
-            summarize(heap, src, size)
+            summarize(heap, src as usize, size as usize)
         );
         result
     }
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         let result = self.stable_memory().stable_memory_size.get() as u64;
-        trace_syscall!(self, ic0_stable64_size, result);
+        trace_syscall!(self, Stable64Size, result);
         Ok(result)
     }
 
@@ -2193,7 +2758,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(old_size.get().try_into().unwrap())
             }
         };
-        trace_syscall!(self, ic0_stable64_grow, result, additional_pages);
+        trace_syscall!(self, Stable64Grow, result, additional_pages);
         result
     }
 
@@ -2207,12 +2772,12 @@ impl SystemApi for SystemApiImpl {
         let result = self.stable_memory().stable64_read(dst, offset, size, heap);
         trace_syscall!(
             self,
-            ic0_stable64_read,
+            Stable64Read,
             result,
             dst,
             offset,
             size,
-            summarize(heap, dst as u32, size as u32)
+            summarize(heap, dst as usize, size as usize)
         );
         result
     }
@@ -2240,12 +2805,12 @@ impl SystemApi for SystemApiImpl {
             .stable64_write(offset, src, size, heap);
         trace_syscall!(
             self,
-            ic0_stable64_write,
+            Stable64Write,
             result,
             offset,
             src,
             size,
-            summarize(heap, src as u32, size as u32)
+            summarize(heap, src as usize, size as usize)
         );
         result
     }
@@ -2254,7 +2819,7 @@ impl SystemApi for SystemApiImpl {
         &self,
         offset: u64,
         size: u64,
-    ) -> HypervisorResult<(NumPages, NumInstructions)> {
+    ) -> HypervisorResult<(NumOsPages, NumInstructions)> {
         let dirty_pages = self.stable_memory().dirty_pages_from_write(offset, size);
         let cost = self
             .sandbox_safe_system_state
@@ -2262,7 +2827,8 @@ impl SystemApi for SystemApiImpl {
         Ok((dirty_pages, cost))
     }
 
-    fn ic0_time(&self) -> HypervisorResult<Time> {
+    fn ic0_time(&mut self) -> HypervisorResult<Time> {
+        self.call_counters.time += 1;
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_time")),
             ApiType::Init { time, .. }
@@ -2276,7 +2842,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { time, .. }
             | ApiType::InspectMessage { time, .. } => Ok(*time),
         };
-        trace_syscall!(self, ic0_time, result);
+        trace_syscall!(self, Time, result);
         result
     }
 
@@ -2305,7 +2871,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(prev_time)
             }
         };
-        trace_syscall!(self, ic0_global_timer_set, result);
+        trace_syscall!(self, GlobalTimerSet, result);
         result
     }
 
@@ -2325,7 +2891,7 @@ impl SystemApi for SystemApiImpl {
                         .get(),
                 )),
         };
-        trace_syscall!(self, ic0_performance_counter, result);
+        trace_syscall!(self, PerformanceCounter, result);
         result
     }
 
@@ -2345,7 +2911,7 @@ impl SystemApi for SystemApiImpl {
                 Ok(self.sandbox_safe_system_state.canister_version())
             }
         };
-        trace_syscall!(self, ic0_canister_version, result);
+        trace_syscall!(self, CanisterVersion, result);
         result
     }
 
@@ -2362,30 +2928,71 @@ impl SystemApi for SystemApiImpl {
             self.instructions_executed_before_current_slice += slice_instructions;
             self.current_slice_instruction_limit = new_slice_instruction_limit;
         }
-        trace_syscall!(self, out_of_instructions, result, instruction_counter);
+        trace_syscall!(self, OutOfInstructions, result, instruction_counter);
         result
     }
 
-    fn update_available_memory(
+    /// Performance improvement:
+    /// This function is called after a message execution succeeded but the number of
+    /// dirty pages is large enough to warrant an extra round of execution.
+    /// Therefore, we yield control back to the replica and we wait for the
+    /// next round to start copying dirty pages.
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64> {
+        let result = self
+            .out_of_instructions_handler
+            .yield_for_dirty_memory_copy();
+        if let Ok(new_slice_instruction_limit) = result {
+            // A new slice has started, update the instruction sum and limit.
+            self.instructions_executed_before_current_slice += self.current_slice_instruction_limit;
+            self.current_slice_instruction_limit = new_slice_instruction_limit;
+        }
+        trace_syscall!(self, yield_for_dirty_memory_copy, result);
+        result
+    }
+
+    fn try_grow_wasm_memory(
         &mut self,
         native_memory_grow_res: i64,
-        additional_elements: u64,
-        element_size: u64,
+        additional_wasm_pages: u64,
     ) -> HypervisorResult<()> {
         let result = {
             if native_memory_grow_res == -1 {
                 return Ok(());
             }
-            let bytes = additional_elements
-                .checked_mul(element_size)
+            let new_bytes = additional_wasm_pages
+                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
+            // The `memory.grow` instruction returns the previous size of the
+            // Wasm memory in pages.
+            let old_bytes = (native_memory_grow_res as u64)
+                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                .map(NumBytes::new)
+                .ok_or(HypervisorError::OutOfMemory)?;
+
+            if let Some(wasm_memory_limit) = self
+                .memory_usage
+                .effective_wasm_memory_limit(&self.api_type)
+            {
+                let wasm_memory_usage =
+                    NumBytes::new(new_bytes.get().saturating_add(old_bytes.get()));
+
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                    return Err(HypervisorError::WasmMemoryLimitExceeded {
+                        bytes: wasm_memory_usage,
+                        limit: wasm_memory_limit,
+                    });
+                }
+            }
+
             match self.memory_usage.allocate_execution_memory(
-                bytes,
+                new_bytes,
                 &self.api_type,
                 &mut self.sandbox_safe_system_state,
                 &self.execution_parameters.subnet_memory_saturation,
+                ExecutionMemoryType::WasmMemory,
             ) {
                 Ok(()) => Ok(()),
                 Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
@@ -2401,11 +3008,10 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            update_available_memory,
+            TryGrowWasmMemory,
             result,
             native_memory_grow_res,
-            additional_elements,
-            element_size
+            additional_wasm_pages
         );
         result
     }
@@ -2419,9 +3025,10 @@ impl SystemApi for SystemApiImpl {
         let resulting_size = current_size.saturating_add(additional_pages);
         if let StableMemoryApi::Stable32 = stable_memory_api {
             if current_size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
-                return Err(HypervisorError::Trapped(
-                    TrapCode::StableMemoryTooBigFor32Bit,
-                ));
+                return Err(HypervisorError::Trapped {
+                    trap_code: TrapCode::StableMemoryTooBigFor32Bit,
+                    backtrace: None,
+                });
             }
             if resulting_size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
                 return Ok(StableGrowOutcome::Failure);
@@ -2438,6 +3045,7 @@ impl SystemApi for SystemApiImpl {
             &self.api_type,
             &mut self.sandbox_safe_system_state,
             &self.execution_parameters.subnet_memory_saturation,
+            ExecutionMemoryType::StableMemory,
         ) {
             Ok(()) => Ok(StableGrowOutcome::Success),
             Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
@@ -2456,30 +3064,70 @@ impl SystemApi for SystemApiImpl {
         }
     }
 
-    fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
+    fn ic0_canister_cycle_balance(&mut self) -> HypervisorResult<u64> {
+        self.call_counters.canister_cycle_balance += 1;
         let result = {
             let (high_amount, low_amount) = self
                 .ic0_canister_cycle_balance_helper("ic0_canister_cycle_balance")?
                 .into_parts();
             if high_amount != 0 {
-                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+                return Err(HypervisorError::Trapped {
+                    trap_code: CyclesAmountTooBigFor64Bit,
+                    backtrace: None,
+                });
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_canister_cycle_balance, result);
+        trace_syscall!(self, CanisterCycleBalance, result);
         result
     }
 
-    fn ic0_canister_cycle_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+    fn ic0_canister_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        self.call_counters.canister_cycle_balance128 += 1;
         let result = {
             let method_name = "ic0_canister_cycle_balance128";
             let cycles = self.ic0_canister_cycle_balance_helper(method_name)?;
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
+        trace_syscall!(self, CanisterCycleBalance128, dst, summarize(heap, dst, 16));
+        result
+    }
+
+    fn ic0_canister_liquid_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        self.call_counters.canister_liquid_cycle_balance128 += 1;
+        let method_name = "ic0_canister_liquid_cycle_balance128";
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for(method_name)),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                let cycles = self.sandbox_safe_system_state.liquid_cycles_balance(
+                    self.memory_usage.current_usage,
+                    self.memory_usage.current_message_usage,
+                );
+                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                Ok(())
+            }
+        };
         trace_syscall!(
             self,
-            ic0_canister_cycle_balance128,
+            CanisterLiquidCycleBalance128,
             dst,
             summarize(heap, dst, 16)
         );
@@ -2492,22 +3140,25 @@ impl SystemApi for SystemApiImpl {
                 .ic0_msg_cycles_available_helper("ic0_msg_cycles_available")?
                 .into_parts();
             if high_amount != 0 {
-                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+                return Err(HypervisorError::Trapped {
+                    trap_code: CyclesAmountTooBigFor64Bit,
+                    backtrace: None,
+                });
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_msg_cycles_available, result);
+        trace_syscall!(self, MsgCyclesAvailable, result);
         result
     }
 
-    fn ic0_msg_cycles_available128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+    fn ic0_msg_cycles_available128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
         let result = {
             let method_name = "ic0_msg_cycles_available128";
             let cycles = self.ic0_msg_cycles_available_helper(method_name)?;
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
-        trace_syscall!(self, ic0_msg_cycles_available128, result);
+        trace_syscall!(self, MsgCyclesAvailable128, result);
         result
     }
 
@@ -2517,27 +3168,25 @@ impl SystemApi for SystemApiImpl {
                 .ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded")?
                 .into_parts();
             if high_amount != 0 {
-                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+                return Err(HypervisorError::Trapped {
+                    trap_code: CyclesAmountTooBigFor64Bit,
+                    backtrace: None,
+                });
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_msg_cycles_refunded, result);
+        trace_syscall!(self, MsgCyclesRefunded, result);
         result
     }
 
-    fn ic0_msg_cycles_refunded128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+    fn ic0_msg_cycles_refunded128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
         let result = {
             let method_name = "ic0_msg_cycles_refunded128";
             let cycles = self.ic0_msg_cycles_refunded_helper(method_name)?;
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
-        trace_syscall!(
-            self,
-            ic0_msg_cycles_refunded128,
-            result,
-            summarize(heap, dst, 16)
-        );
+        trace_syscall!(self, MsgCyclesRefunded128, result, summarize(heap, dst, 16));
         result
     }
 
@@ -2557,14 +3206,14 @@ impl SystemApi for SystemApiImpl {
             }
             Ok(low_amount)
         };
-        trace_syscall!(self, ic0_msg_cycles_accept, result, max_amount);
+        trace_syscall!(self, MsgCyclesAccept, result, max_amount);
         result
     }
 
     fn ic0_msg_cycles_accept128(
         &mut self,
         max_amount: Cycles,
-        dst: u32,
+        dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = {
@@ -2573,7 +3222,7 @@ impl SystemApi for SystemApiImpl {
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
-        trace_syscall!(self, ic0_msg_cycles_accept128, result);
+        trace_syscall!(self, MsgCyclesAccept128, result);
         result
     }
 
@@ -2587,22 +3236,20 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
-            | ApiType::SystemTask { .. } => Ok(0),
-            ApiType::ReplicatedQuery {
-                data_certificate, ..
-            }
-            | ApiType::NonReplicatedQuery {
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplicatedQuery { .. } => Ok(0),
+            ApiType::NonReplicatedQuery {
                 data_certificate, ..
             } => match data_certificate {
                 Some(_) => Ok(1),
                 None => Ok(0),
             },
         };
-        trace_syscall!(self, ic0_data_certificate_present, result);
+        trace_syscall!(self, DataCertificatePresent, result);
         result
     }
 
-    fn ic0_data_certificate_size(&self) -> HypervisorResult<i32> {
+    fn ic0_data_certificate_size(&self) -> HypervisorResult<usize> {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2612,28 +3259,27 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_data_certificate_size")),
-            ApiType::ReplicatedQuery {
-                data_certificate, ..
-            }
-            | ApiType::NonReplicatedQuery {
+            | ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. } => Err(self.error_for("ic0_data_certificate_size")),
+            ApiType::NonReplicatedQuery {
                 data_certificate, ..
             } => match data_certificate {
-                Some(data_certificate) => Ok(data_certificate.len() as i32),
+                Some(data_certificate) => Ok(data_certificate.len()),
                 None => Err(self.error_for("ic0_data_certificate_size")),
             },
         };
-        trace_syscall!(self, ic0_data_certificate_size, result);
+        trace_syscall!(self, DataCertificateSize, result);
         result
     }
 
     fn ic0_data_certificate_copy(
-        &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        &mut self,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        self.call_counters.data_certificate_copy += 1;
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2643,53 +3289,55 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_data_certificate_copy")),
-            ApiType::ReplicatedQuery {
+            | ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. } => Err(self.error_for("ic0_data_certificate_copy")),
+            ApiType::NonReplicatedQuery {
                 data_certificate, ..
-            }
-            | ApiType::NonReplicatedQuery {
-                data_certificate, ..
-            } => match data_certificate {
-                Some(data_certificate) => {
-                    let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            } => {
+                match data_certificate {
+                    Some(data_certificate) => {
+                        let (upper_bound, overflow) = offset.overflowing_add(size);
+                        if overflow || upper_bound > data_certificate.len() {
+                            return Err(ToolchainContractViolation {
+                                error: format!(
+                                    "ic0_data_certificate_copy failed because offset + size is out \
+                        of bounds. Found offset = {} and size = {} while offset + size \
+                        must be <= {}",
+                                    offset,
+                                    size,
+                                    data_certificate.len()
+                                ),
+                            });
+                        }
 
-                    let (upper_bound, overflow) = offset.overflowing_add(size);
-                    if overflow || upper_bound > data_certificate.len() {
-                        return Err(ContractViolation(format!(
-                            "ic0_data_certificate_copy failed because offset + size is out \
-                                 of bounds. Found offset = {} and size = {} while offset + size \
-                                 must be <= {}",
-                            offset,
-                            size,
-                            data_certificate.len(),
-                        )));
+                        let (upper_bound, overflow) = dst.overflowing_add(size);
+                        if overflow || upper_bound > heap.len() {
+                            return Err(ToolchainContractViolation {
+                                error: format!(
+                                    "ic0_data_certificate_copy failed because dst + size is out \
+                        of bounds. Found dst = {} and size = {} while dst + size \
+                        must be <= {}",
+                                    dst,
+                                    size,
+                                    heap.len()
+                                ),
+                            });
+                        }
+
+                        // Copy the certificate into the canister.
+                        deterministic_copy_from_slice(
+                            &mut heap[dst..dst + size],
+                            &data_certificate[offset..offset + size],
+                        );
+                        Ok(())
                     }
-
-                    let (upper_bound, overflow) = dst.overflowing_add(size);
-                    if overflow || upper_bound > heap.len() {
-                        return Err(ContractViolation(format!(
-                            "ic0_data_certificate_copy failed because dst + size is out \
-                                 of bounds. Found dst = {} and size = {} while dst + size \
-                                 must be <= {}",
-                            dst,
-                            size,
-                            heap.len(),
-                        )));
-                    }
-
-                    // Copy the certificate into the canister.
-                    deterministic_copy_from_slice(
-                        &mut heap[dst..dst + size],
-                        &data_certificate[offset..offset + size],
-                    );
-                    Ok(())
+                    None => Err(self.error_for("ic0_data_certificate_copy")),
                 }
-                None => Err(self.error_for("ic0_data_certificate_size")),
-            },
+            }
         };
         trace_syscall!(
             self,
-            ic0_data_certificate_copy,
+            DataCertificateCopy,
             dst,
             offset,
             size,
@@ -2698,7 +3346,12 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_certified_data_set(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
+    fn ic0_certified_data_set(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::ReplicatedQuery { .. }
@@ -2718,36 +3371,43 @@ impl SystemApi for SystemApiImpl {
                 }
 
                 if size > CERTIFIED_DATA_MAX_LENGTH {
-                    return Err(ContractViolation(format!(
-                        "ic0_certified_data_set failed because the passed data must be \
-                        no larger than 32 bytes. Found {} bytes",
-                        size
-                    )));
+                    return Err(UserContractViolation {
+                        error: format!(
+                            "ic0_certified_data_set failed because the passed data must be \
+                    no larger than {} bytes. Found {} bytes.",
+                            CERTIFIED_DATA_MAX_LENGTH, size
+                        ),
+                        suggestion: "Try certifying just the hash of your data instead of \
+                        the full contents."
+                            .to_string(),
+                        doc_link: doc_ref("certified_data_set-payload-too-large"),
+                    });
                 }
 
-                let (src, size) = (src as usize, size as usize);
                 let (upper_bound, overflow) = src.overflowing_add(size);
                 if overflow || upper_bound > heap.len() {
-                    return Err(ContractViolation(format!(
-                        "ic0_certified_data_set failed because src + size is out \
-                                 of bounds. Found src = {} and size = {} while src + size \
-                                 must be <= {}",
-                        src,
-                        size,
-                        heap.len(),
-                    )));
+                    return Err(ToolchainContractViolation {
+                        error: format!(
+                            "ic0_certified_data_set failed because src + size is out \
+                    of bounds. Found src = {} and size = {} while src + size \
+                    must be <= {}",
+                            src,
+                            size,
+                            heap.len()
+                        ),
+                    });
                 }
 
                 // Update the certified data.
                 self.sandbox_safe_system_state
-                    .system_state_changes
+                    .system_state_modifications
                     .new_certified_data = Some(heap[src..src + size].to_vec());
                 Ok(())
             }
         };
         trace_syscall!(
             self,
-            ic0_certified_data_set,
+            CertifiedDataSet,
             result,
             src,
             size,
@@ -2774,10 +3434,11 @@ impl SystemApi for SystemApiImpl {
                 CanisterStatusView::Stopped => Ok(3),
             },
         };
-        trace_syscall!(self, ic0_canister_status, result);
+        trace_syscall!(self, CanisterStatus, result);
         result
     }
-
+    // TODO(EXC-1806): This can be removed (in favour of ic0_mint_cycles128) once the CMC is upgraded, so it
+    // doesn't make sense to deduplicate the shared code.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64> {
         let result = match self.api_type {
             ApiType::Start { .. }
@@ -2791,26 +3452,70 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                self.sandbox_safe_system_state
-                    .mint_cycles(Cycles::from(amount))?;
-                Ok(amount)
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for("ic0_mint_cycles"))
+                } else {
+                    let actually_minted = self
+                        .sandbox_safe_system_state
+                        .mint_cycles(Cycles::from(amount))?;
+                    // the actually minted amount cannot be larger than the argument, which is a u64.
+                    debug_assert_eq!(actually_minted.high64(), 0, "ic0_mint_cycles was called with u64 but minted more cycles than fit into 64 bit");
+                    Ok(actually_minted.low64())
+                }
             }
         };
-        trace_syscall!(self, ic0_mint_cycles, result, amount);
+        trace_syscall!(self, MintCycles, result, amount);
         result
     }
 
-    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
-        const MAX_DEBUG_MESSAGE_SIZE: u32 = 32 * 1024;
-        let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
-        let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
-            Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
-            Err(_) => {
-                // Do not trap here!
-                // debug.print should never fail, so if the specified memory range
-                // is invalid, we ignore it and print the error message
-                "(debug message out of memory bounds)".to_string()
+    fn ic0_mint_cycles128(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles128")),
+            ApiType::Update { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for("ic0_mint_cycles128"))
+                } else {
+                    let actually_minted = self.sandbox_safe_system_state.mint_cycles(amount)?;
+                    copy_cycles_to_heap(actually_minted, dst, heap, "ic0_mint_cycles_128")?;
+                    Ok(())
+                }
             }
+        };
+        trace_syscall!(self, MintCycles128, result, amount);
+        result
+    }
+
+    fn ic0_debug_print(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
+        const MAX_DEBUG_MESSAGE_SIZE: usize = 32 * 1024;
+        let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
+        let msg = match valid_subslice(
+            "ic0.debug_print",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        ) {
+            Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
+            // Do not trap here! `ic0_debug_print` should never fail!
+            // If the specified memory range is invalid, ignore it and print the error message.
+            Err(_) => "(debug message out of memory bounds)".to_string(),
         };
         match &self.api_type {
             ApiType::Start { time }
@@ -2828,24 +3533,32 @@ impl SystemApi for SystemApiImpl {
                 time, self.sandbox_safe_system_state.canister_id, msg
             ),
         }
-        trace_syscall!(self, ic0_debug_print, src, size, summarize(heap, src, size));
+        trace_syscall!(self, DebugPrint, src, size, summarize(heap, src, size));
         Ok(())
     }
 
-    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
-        const MAX_ERROR_MESSAGE_SIZE: u32 = 16 * 1024;
+    fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
+        const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
-            let msg = valid_subslice("trap", src, size, heap)
-                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
-                .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
-            CalledTrap(msg)
+            let message = valid_subslice(
+                "trap",
+                InternalAddress::new(src),
+                InternalAddress::new(size),
+                heap,
+            )
+            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+            .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
+            CalledTrap {
+                message,
+                backtrace: None,
+            }
         };
-        trace_syscall!(self, ic0_trap, src, size, summarize(heap, src, size));
+        trace_syscall!(self, Trap, src, size, summarize(heap, src, size));
         Err(result)
     }
 
-    fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32> {
+    fn ic0_is_controller(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<u32> {
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2858,7 +3571,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. } => {
-                let msg_bytes = valid_subslice("ic0.is_controller", src, size, heap)?;
+                let msg_bytes = valid_subslice(
+                    "ic0.is_controller",
+                    InternalAddress::new(src),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
                 PrincipalId::try_from(msg_bytes)
                     .map(|principal_id| {
                         self.sandbox_safe_system_state
@@ -2873,7 +3591,7 @@ impl SystemApi for SystemApiImpl {
 
         trace_syscall!(
             self,
-            ic0_is_controller,
+            IsController,
             src,
             size,
             summarize(heap, src, size),
@@ -2882,52 +3600,429 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    /// Sets `timeout_seconds` to the provided value if not yet set, making this a best-effort call.
+    /// The timeout is bounded from above by `MAX_CALL_TIMEOUT_SECONDS`.
+    ///
+    /// Fails and returns an error if `set_timeout()` was already called.
+    fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
+        let subnet_id = &self.sandbox_safe_system_state.get_subnet_id();
+        let subnet_type = self.subnet_type();
+        let result = match &mut self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. } => {
+                Err(self.error_for("ic0_call_with_best_effort_response"))
+            }
+            ApiType::Update {
+                outgoing_request, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                query_kind:
+                NonReplicatedQueryKind::Stateful {
+                    outgoing_request, ..
+                },
+                ..
+            }
+            | ApiType::SystemTask {
+                outgoing_request, ..
+            }
+            | ApiType::ReplyCallback {
+                outgoing_request, ..
+            }
+            | ApiType::RejectCallback {
+                outgoing_request, ..
+            } => match outgoing_request {
+                None => Err(HypervisorError::ToolchainContractViolation {
+                    error: "ic0.call_with_best_effort_response called when no call is under construction."
+                        .to_string(),
+                }),
+
+                Some(request) if request.is_timeout_set() =>
+                    Err(HypervisorError::ToolchainContractViolation {
+                        error: "ic0_call_with_best_effort_response failed because a timeout is already set."
+                            .to_string(),
+                    }),
+
+                Some(request) => {
+                    // No-op if the feature is disabled on this subnet.
+                    if self.best_effort_responses.is_enabled_on(subnet_id, subnet_type) {
+                        let bounded_timeout =
+                            std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
+                        request.set_timeout(bounded_timeout);
+                    }
+                    Ok(())
+                }
+            },
+        };
+        trace_syscall!(self, CallWithBestEffortResponse, result, timeout_seconds);
+        result
+    }
+
+    fn ic0_msg_deadline(&self) -> HypervisorResult<u64> {
+        let result = match self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_deadline")),
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::Update { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
+                let deadline = self.sandbox_safe_system_state.msg_deadline();
+                Ok(Time::from(deadline).as_nanos_since_unix_epoch())
+            }
+        };
+
+        trace_syscall!(self, CallWithBestEffortResponse, result);
+        result
+    }
+
+    fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32> {
+        let result = match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Update { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplicatedQuery { .. } => Ok(1),
+            ApiType::ReplyCallback { .. } | ApiType::RejectCallback { .. } => {
+                match self.execution_parameters.execution_mode {
+                    ExecutionMode::NonReplicated => Ok(0),
+                    ExecutionMode::Replicated => Ok(1),
+                }
+            }
+            ApiType::InspectMessage { .. } | ApiType::NonReplicatedQuery { .. } => Ok(0),
+        };
+        trace_syscall!(self, ic0_in_replicated_execution, result);
+        result
+    }
+
     fn ic0_cycles_burn128(
         &mut self,
         amount: Cycles,
-        dst: u32,
+        dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let method_name = "ic0_cycles_burn128";
         let result = match self.api_type {
             ApiType::Start { .. }
-            | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
             ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::Cleanup { .. }
             | ApiType::Update { .. }
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                let cycles = self.sandbox_safe_system_state.cycles_burn128(
-                    amount,
-                    self.memory_usage.current_usage,
-                    self.memory_usage.current_message_usage,
-                );
-                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for(method_name))
+                } else {
+                    let cycles = self.sandbox_safe_system_state.cycles_burn128(
+                        amount,
+                        self.memory_usage.current_usage,
+                        self.memory_usage.current_message_usage,
+                    );
+                    copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                    Ok(())
+                }
+            }
+        };
+        trace_syscall!(self, CyclesBurn128, result, amount);
+        result
+    }
+
+    fn ic0_cost_call(
+        &self,
+        method_name_size: u64,
+        payload_size: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let execution_mode =
+            WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .xnet_call_total_fee(
+                (method_name_size.saturating_add(payload_size)).into(),
+                execution_mode,
+            );
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
+        trace_syscall!(self, CostCall, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .canister_creation_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
+        trace_syscall!(self, CostCreateCanister, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_http_request(
+        &self,
+        request_size: u64,
+        max_res_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
+        trace_syscall!(self, CostHttpRequest, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_sign_with_ecdsa(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32> {
+        let key_bytes = valid_subslice(
+            "ic0.cost_sign_with_ecdsa heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let Ok(curve) = EcdsaCurve::try_from(curve) else {
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
+        };
+        let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
+            return Ok(CostReturnCode::UnknownKey as u32);
+        };
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .ecdsa_signature_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
+        trace_syscall!(self, CostSignWithEcdsa, cost);
+        Ok(CostReturnCode::Success as u32)
+    }
+
+    fn ic0_cost_sign_with_schnorr(
+        &self,
+        src: usize,
+        size: usize,
+        algorithm: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32> {
+        let key_bytes = valid_subslice(
+            "ic0.cost_sign_with_schnorr heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let Ok(algorithm) = SchnorrAlgorithm::try_from(algorithm) else {
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
+        };
+        let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
+            return Ok(CostReturnCode::UnknownKey as u32);
+        };
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .schnorr_signature_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
+        trace_syscall!(self, CostSignWithSchnorr, cost);
+        Ok(CostReturnCode::Success as u32)
+    }
+
+    fn ic0_cost_vetkd_derive_key(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32> {
+        let key_bytes = valid_subslice(
+            "ic0.cost_vetkd_derive_key heap",
+            InternalAddress::new(src),
+            InternalAddress::new(size),
+            heap,
+        )?;
+        let name = str::from_utf8(key_bytes)
+            .map_err(|_| HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Failed to decode key name {}",
+                    String::from_utf8_lossy(key_bytes)
+                ),
+            })?
+            .to_string();
+        let Ok(curve) = VetKdCurve::try_from(curve) else {
+            return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
+        };
+        let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
+        let Some(subnet_size) = self
+            .sandbox_safe_system_state
+            .get_key_replication_factor(key)
+        else {
+            return Ok(CostReturnCode::UnknownKey as u32);
+        };
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .vetkd_fee(subnet_size);
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
+        trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
+        Ok(CostReturnCode::Success as u32)
+    }
+
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0_subnet_self_size")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::InspectMessage { .. } => {
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                Ok(subnet_id.get_ref().as_slice().len())
+            }
+        };
+
+        trace_syscall!(self, SubnetSelfSize, result);
+        result
+    }
+
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match &self.api_type {
+            ApiType::Start { .. } => Err(self.error_for("ic0.subnet_self_copy")),
+            ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::InspectMessage { .. } => {
+                valid_subslice(
+                    "ic0.subnet_self_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let subnet_id = self.sandbox_safe_system_state.get_subnet_id();
+                let id_bytes = subnet_id.get_ref().as_slice();
+                let slice = valid_subslice(
+                    "ic0.subnet_self_copy id",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+
                 Ok(())
             }
         };
-        trace_syscall!(self, ic0_cycles_burn128, result, amount);
+        trace_syscall!(
+            self,
+            SubnetSelfCopy,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+
         result
     }
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.
 /// It simply returns an out-of-instructions error.
-pub struct DefaultOutOfInstructionsHandler {}
+#[derive(Default)]
+pub struct DefaultOutOfInstructionsHandler {
+    message_instruction_limit: NumInstructions,
+}
+
+impl DefaultOutOfInstructionsHandler {
+    pub fn new(message_instruction_limit: NumInstructions) -> Self {
+        Self {
+            message_instruction_limit,
+        }
+    }
+}
 
 impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
     fn out_of_instructions(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
-        Err(HypervisorError::InstructionLimitExceeded)
+        Err(HypervisorError::InstructionLimitExceeded(
+            self.message_instruction_limit,
+        ))
+    }
+
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64> {
+        // This is a no-op, should only happen if it is called on a subnet where DTS is completely disabled.
+        // 0 instructions were executed as a result.
+        Ok(0)
     }
 }
 
 pub(crate) fn copy_cycles_to_heap(
     cycles: Cycles,
-    dst: u32,
+    dst: usize,
     heap: &mut [u8],
     method_name: &str,
 ) -> HypervisorResult<()> {
@@ -2936,17 +4031,18 @@ pub(crate) fn copy_cycles_to_heap(
     let size = bytes.len();
     assert_eq!(size, 16);
 
-    let dst = dst as usize;
     let (upper_bound, overflow) = dst.overflowing_add(size);
     if overflow || upper_bound > heap.len() {
-        return Err(ContractViolation(format!(
-            "{} failed because dst + size is out of bounds.\
-                Found dst = {} and size = {} while must be <= {}",
-            method_name,
-            dst,
-            size,
-            heap.len(),
-        )));
+        return Err(ToolchainContractViolation {
+            error: format!(
+                "{} failed because dst + size is out of bounds.\
+        Found dst = {} and size = {} while must be <= {}",
+                method_name,
+                dst,
+                size,
+                heap.len()
+            ),
+        });
     }
     deterministic_copy_from_slice(&mut heap[dst..dst + size], &bytes);
     Ok(())
@@ -2954,22 +4050,37 @@ pub(crate) fn copy_cycles_to_heap(
 
 pub(crate) fn valid_subslice<'a>(
     ctx: &str,
-    src: u32,
-    len: u32,
+    src: InternalAddress,
+    len: InternalAddress,
     slice: &'a [u8],
 ) -> HypervisorResult<&'a [u8]> {
-    let len = len as usize;
-    let src = src as usize;
-    if slice.len() < src + len {
-        return Err(ContractViolation(format!(
-            "{}: src={} + length={} exceeds the slice size={}",
-            ctx,
-            src,
-            len,
-            slice.len()
-        )));
+    let result_address = src.checked_add(len);
+
+    match result_address {
+        Ok(addr) => {
+            if slice.len() < addr.get() {
+                Err(ToolchainContractViolation {
+                    error: format!(
+                        "{}: src={} + length={} exceeds the slice size={}",
+                        ctx,
+                        src.get(),
+                        len.get(),
+                        slice.len()
+                    ),
+                })
+            } else {
+                Ok(&slice[src.get()..addr.get()])
+            }
+        }
+        Err(_) => Err(ToolchainContractViolation {
+            error: format!(
+                "{}: src={} + length={} is an invalid address",
+                ctx,
+                src.get(),
+                len.get()
+            ),
+        }),
     }
-    Ok(&slice[src..src + len])
 }
 
 #[cfg(test)]
@@ -2979,20 +4090,56 @@ mod test {
     #[test]
     fn test_valid_subslice() {
         // empty slice
-        assert!(valid_subslice("", 0, 0, &[]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(0), InternalAddress::new(0), &[]).is_ok());
         // the only possible non-empty slice
-        assert!(valid_subslice("", 0, 1, &[1]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(0), InternalAddress::new(1), &[1]).is_ok());
         // valid empty slice
-        assert!(valid_subslice("", 1, 0, &[1]).is_ok());
+        assert!(valid_subslice("", InternalAddress::new(1), InternalAddress::new(0), &[1]).is_ok());
 
         // just some valid cases
-        assert!(valid_subslice("", 0, 4, &[1, 2, 3, 4]).is_ok());
-        assert!(valid_subslice("", 1, 3, &[1, 2, 3, 4]).is_ok());
-        assert!(valid_subslice("", 2, 2, &[1, 2, 3, 4]).is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(0),
+            InternalAddress::new(4),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(1),
+            InternalAddress::new(3),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(2),
+            InternalAddress::new(2),
+            &[1, 2, 3, 4]
+        )
+        .is_ok());
 
         // invalid longer-than-the-heap subslices
-        assert!(valid_subslice("", 3, 2, &[1, 2, 3, 4]).is_err());
-        assert!(valid_subslice("", 0, 5, &[1, 2, 3, 4]).is_err());
-        assert!(valid_subslice("", 4, 1, &[1, 2, 3, 4]).is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(3),
+            InternalAddress::new(2),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(0),
+            InternalAddress::new(5),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
+        assert!(valid_subslice(
+            "",
+            InternalAddress::new(4),
+            InternalAddress::new(1),
+            &[1, 2, 3, 4]
+        )
+        .is_err());
     }
 }

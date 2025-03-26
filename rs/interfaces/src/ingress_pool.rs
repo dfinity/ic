@@ -2,10 +2,10 @@
 use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{
     artifact::IngressMessageId,
-    crypto::CryptoHash,
     messages::{MessageId, SignedIngress},
     CountBytes, NodeId, Time,
 };
+
 // tag::interface[]
 
 /// IngressObject is the format stored in the unvalidated/validated sections of
@@ -19,25 +19,32 @@ pub struct IngressPoolObject {
     /// The MessageId of the RawIngress message
     pub message_id: MessageId,
 
+    // TODO: Once/if we start signing ingress messages, determine the `originator_id` by extracting
+    // the signer from the signature.
+    /// Which the ingress message originates from.
+    pub originator_id: NodeId,
+
     /// Byte size of the ingress message.
     byte_size: usize,
+}
+
+impl IngressPoolObject {
+    pub fn new(originator_id: NodeId, signed_ingress: SignedIngress) -> Self {
+        let message_id = signed_ingress.id();
+        let byte_size = signed_ingress.count_bytes();
+
+        Self {
+            signed_ingress,
+            message_id,
+            originator_id,
+            byte_size,
+        }
+    }
 }
 
 impl CountBytes for IngressPoolObject {
     fn count_bytes(&self) -> usize {
         self.byte_size
-    }
-}
-
-impl From<SignedIngress> for IngressPoolObject {
-    fn from(signed_ingress: SignedIngress) -> Self {
-        let message_id = signed_ingress.id();
-        let byte_size = signed_ingress.count_bytes();
-        Self {
-            signed_ingress,
-            message_id,
-            byte_size,
-        }
     }
 }
 
@@ -53,17 +60,15 @@ pub type ValidatedIngressArtifact = ValidatedArtifact<IngressPoolObject>;
 /// Unvalidated ingress artifact
 pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 
-/// Change set for processing unvalidated ingress messages
-pub type ChangeSet = Vec<ChangeAction>;
-
-pub type IngressChangeArtifact = (IngressMessageId, NodeId, usize, (), CryptoHash);
+/// List of mutations
+pub type Mutations = Vec<ChangeAction>;
 
 /// Change actions applicable to the ingress pool.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum ChangeAction {
     /// Moves an artifact from the unvalidated to validated section of the pool
-    MoveToValidated(IngressChangeArtifact),
+    MoveToValidated(IngressMessageId),
     /// Removes an artifact from the unvalidated pool section.
     RemoveFromUnvalidated(IngressMessageId),
     /// Removes an artifact from the validated pool section.
@@ -102,34 +107,15 @@ pub trait PoolSection<T> {
 ///
 /// - The unvalidated section contains artifacts that have been received but
 ///   haven't yet been validated.
-pub trait IngressPool {
+pub trait IngressPool: Send + Sync {
     /// Validated Ingress Pool Section
     fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact>;
 
     /// Unvalidated Ingress Pool Section
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
-}
 
-/// Indicate whether something should be selected, and whether selection should
-/// continue:
-/// - 'Selected': select the object and continue;
-/// - 'Skip': skip the object and continue;
-/// - 'Abort': abort the selection process.
-pub enum SelectResult<T> {
-    Selected(T),
-    Skip,
-    Abort,
-}
-
-/// A query interface that selects qualifying artifacts from the validated pool.
-#[allow(clippy::type_complexity)]
-pub trait IngressPoolSelect: Send + Sync {
-    /// Select qualifying objects from the validated pool.
-    fn select_validated<'a>(
-        &self,
-        range: std::ops::RangeInclusive<Time>,
-        f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress>;
+    /// Check whether we already have too many messages from the node.
+    fn exceeds_limit(&self, originator_id: &NodeId) -> bool;
 }
 
 /// Interface to throttle user ingress messages

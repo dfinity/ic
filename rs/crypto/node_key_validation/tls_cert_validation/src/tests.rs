@@ -1,6 +1,7 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::x509_certificates::{
     ed25519_key_pair, prime256v1_key_pair, CertBuilder, CertWithPrivateKey,
 };
@@ -60,11 +61,12 @@ fn should_fail_if_tls_certificate_der_encoding_has_remainder() {
 /// Tests the error class of invalid subject CNs by means
 /// of a duplicate subject CN.
 fn should_fail_if_tls_certificate_has_invalid_subject_cn() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .with_duplicate_subject_cn()
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -77,11 +79,12 @@ fn should_fail_if_tls_certificate_has_invalid_subject_cn() {
 
 #[test]
 fn should_fail_if_tls_certificate_subject_cn_is_not_node_id() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: CertWithPrivateKey::builder()
             .cn("incorrect node ID".to_string())
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -96,11 +99,12 @@ fn should_fail_if_tls_certificate_subject_cn_is_not_node_id() {
 /// Tests the error class of invalid issuer CNs by means
 /// of a duplicate issuer CN.
 fn should_fail_if_tls_certificate_has_invalid_issuer_cn() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .with_duplicate_issuer_cn()
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -113,11 +117,12 @@ fn should_fail_if_tls_certificate_has_invalid_issuer_cn() {
 
 #[test]
 fn should_fail_if_tls_certificate_issuer_cn_not_equal_subject_cn() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
-            .with_ca_signing(ed25519_key_pair(), "issuer CN not node ID".to_string())
-            .build_ed25519()
+            .with_ca_signing(ed25519_key_pair(rng), "issuer CN not node ID".to_string())
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -131,11 +136,12 @@ fn should_fail_if_tls_certificate_issuer_cn_not_equal_subject_cn() {
 
 #[test]
 fn should_fail_if_tls_certificate_version_is_not_3() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .version_1()
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -148,11 +154,12 @@ fn should_fail_if_tls_certificate_version_is_not_3() {
 
 #[test]
 fn should_fail_if_tls_certificate_notbefore_date_is_in_the_future() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(1)
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -175,12 +182,13 @@ fn should_succeed_for_hard_coded_valid_certificate() {
 
 #[test]
 fn should_fail_if_tls_certificate_notafter_date_is_not_99991231235959z() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(0)
             .validity_days(42)
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -193,12 +201,13 @@ fn should_fail_if_tls_certificate_notafter_date_is_not_99991231235959z() {
 
 #[test]
 fn should_fail_if_tls_certificate_has_expired() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(0)
             .validity_days(0)
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 
@@ -211,11 +220,12 @@ fn should_fail_if_tls_certificate_has_expired() {
 
 #[test]
 fn should_fail_if_tls_certificate_signature_alg_is_not_ed25519() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(0)
-            .build_prime256v1()
+            .build_prime256v1(rng)
             .cert_der(),
     };
 
@@ -228,9 +238,10 @@ fn should_fail_if_tls_certificate_signature_alg_is_not_ed25519() {
 
 #[test]
 fn should_fail_if_tls_certificate_pubkey_is_malformed() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
-    let key_pair_for_signing = ed25519_key_pair();
-    let non_ed25519_key_pair = prime256v1_key_pair();
+    let key_pair_for_signing = ed25519_key_pair(rng);
+    let non_ed25519_key_pair = prime256v1_key_pair(rng);
     assert_ne!(
         non_ed25519_key_pair.public_key_der(),
         key_pair_for_signing.public_key_der()
@@ -252,11 +263,12 @@ fn should_fail_if_tls_certificate_pubkey_is_malformed() {
 
 #[test]
 fn should_fail_if_tls_certificate_pubkey_verification_fails() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let mut cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(0)
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
     replace_tls_certificate_pubkey_with_invalid_one(&mut cert);
@@ -270,9 +282,10 @@ fn should_fail_if_tls_certificate_pubkey_verification_fails() {
 
 #[test]
 fn should_fail_if_tls_certificate_signature_verification_fails() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
-    let key_pair_for_signing = ed25519_key_pair();
-    let key_pair = ed25519_key_pair();
+    let key_pair_for_signing = ed25519_key_pair(rng);
+    let key_pair = ed25519_key_pair(rng);
     assert_ne!(
         key_pair.public_key_der(),
         key_pair_for_signing.public_key_der()
@@ -294,11 +307,12 @@ fn should_fail_if_tls_certificate_signature_verification_fails() {
 
 #[test]
 fn should_fail_if_tls_certificate_is_ca() {
+    let rng = &mut reproducible_rng();
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .set_ca_key_usage_extension()
-            .build_ed25519()
+            .build_ed25519(rng)
             .cert_der(),
     };
 

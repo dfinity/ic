@@ -40,7 +40,7 @@ impl fmt::Display for UpgradeError {
             UpgradeError::IoError(msg, e) => {
                 write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
             }
-            UpgradeError::FileDownloadError(e) => write!(f, "File download error: {:?}", e),
+            UpgradeError::FileDownloadError(e) => write!(f, "File download error: {}", e),
             UpgradeError::RebootTimeError(msg) => {
                 write!(f, "Failed to read or write reboot time: {}", msg)
             }

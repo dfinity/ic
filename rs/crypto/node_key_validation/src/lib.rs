@@ -39,7 +39,9 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
-use ic_crypto_internal_threshold_sig_ecdsa::{verify_mega_public_key, EccCurveType};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    verify_mega_public_key, EccCurveType,
+};
 pub use ic_crypto_tls_cert_validation::TlsCertValidationError;
 pub use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -63,7 +65,7 @@ mod proto_conversions;
 /// valid.
 ///
 /// Use `try_from` to create an instance from unvalidated `NodePublicKeys`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ValidNodePublicKeys {
     node_signing_public_key: ValidNodeSigningPublicKey,
     committee_signing_public_key: ValidCommitteeSigningPublicKey,
@@ -205,7 +207,7 @@ impl ValidNodePublicKeys {
 ///
 /// See `try_from((PublicKey, NodeId))` if you need to validate the [`derived_node_id`] against an
 /// expected trustworthy node id.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ValidNodeSigningPublicKey {
     public_key: PublicKey,
     derived_node_id: NodeId,
@@ -257,7 +259,7 @@ impl ValidNodeSigningPublicKey {
 ///
 /// The [`public_key`] contained is guaranteed to be immutable and a valid node committee signing public key.
 /// Use `try_from` to create an instance from an unvalidated public key.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ValidCommitteeSigningPublicKey {
     public_key: PublicKey,
 }
@@ -293,7 +295,7 @@ impl ValidCommitteeSigningPublicKey {
 /// The [`public_key`] contained is guaranteed to be immutable and
 /// a valid NIDGK dealing encryption public key.
 /// Use `try_from((PublicKey, NodeId))` to create an instance from an unvalidated public key and node id.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ValidDkgDealingEncryptionPublicKey {
     public_key: PublicKey,
 }
@@ -328,7 +330,7 @@ impl ValidDkgDealingEncryptionPublicKey {
 /// i.e., the contained public key material is guaranteed to be valid.
 ///
 /// Use `try_from` to create an instance from an unvalidated public key.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ValidIDkgDealingEncryptionPublicKey {
     public_key: PublicKey,
 }
@@ -363,7 +365,7 @@ impl ValidIDkgDealingEncryptionPublicKey {
 }
 
 /// A key validation error.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct KeyValidationError {
     pub error: String,
 }

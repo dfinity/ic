@@ -45,3 +45,18 @@ mod payment_flow;
 
 #[cfg(test)]
 mod initialization_flow;
+
+#[cfg(test)]
+mod manage_ledger_parameters;
+
+#[cfg(test)]
+mod manage_dapp_canister_settings;
+
+#[cfg(test)]
+mod http_request;
+
+#[cfg(test)]
+mod timers;
+
+#[cfg(test)]
+mod golden_state_swap_upgrade_twice;

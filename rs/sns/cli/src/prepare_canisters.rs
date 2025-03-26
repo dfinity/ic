@@ -1,4 +1,5 @@
 use crate::call_dfx_or_panic;
+use anyhow::Result;
 use clap::Parser;
 use ic_base_types::PrincipalId;
 use ic_nns_constants::ROOT_CANISTER_ID;
@@ -16,7 +17,7 @@ pub struct PrepareCanistersArgs {
 #[derive(Debug, Parser)]
 pub struct SubCommandArgs {
     /// The canisters you want to operate on
-    #[clap(name = "CANISTER", multiple_values(true), required = true)]
+    #[clap(name = "CANISTER", required = true, num_args = 1..)]
     canisters: Vec<PrincipalId>,
 }
 
@@ -28,7 +29,7 @@ enum SubCommand {
     RemoveNnsRoot(SubCommandArgs),
 }
 
-pub fn exec(args: PrepareCanistersArgs) {
+pub fn exec(args: PrepareCanistersArgs) -> Result<()> {
     let (operation, sub_args) = match &args.sub_command {
         SubCommand::AddNnsRoot(sub_args) => ("--add-controller", sub_args),
         SubCommand::RemoveNnsRoot(sub_args) => ("--remove-controller", sub_args),
@@ -45,4 +46,6 @@ pub fn exec(args: PrepareCanistersArgs) {
             &canister.to_string(),
         ]);
     }
+
+    Ok(())
 }

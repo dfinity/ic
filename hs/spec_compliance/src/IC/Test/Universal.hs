@@ -279,6 +279,9 @@ oneWayCallNew = op 76
 isController :: Exp 'B -> Exp 'I
 isController = op 77
 
+inReplicatedExecution :: Exp 'I
+inReplicatedExecution = op 81
+
 -- Some convenience combinators
 
 -- This allows us to write byte expressions as plain string literals

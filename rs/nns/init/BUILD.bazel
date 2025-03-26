@@ -6,14 +6,14 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/interfaces/registry",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/nns/test_utils",
     "//rs/registry/local_store",
     "//rs/registry/proto_data_provider",
     "//rs/registry/transport",
-    "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/canister_test",
     "//rs/sys",
     "//rs/test_utilities/identity",
@@ -38,16 +38,18 @@ MACRO_DEV_DEPENDENCIES = []
 
 rust_library(
     name = "init",
-    srcs = glob(["src/**"]),
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nns_init",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "ic-nns-init",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -56,6 +58,7 @@ rust_binary(
 
 rust_binary(
     name = "ic-get-neuron-ids",
+    testonly = True,
     srcs = ["src/get_neuron_ids.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

@@ -1,0 +1,59 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/sns/governance:__subpackages__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nervous_system/common",
+    "//rs/nervous_system/initial_supply",
+    "//rs/nervous_system/runtime",
+    "//rs/nns/cmc",
+    "//rs/nns/constants",
+    "//rs/sns/swap/proto_library",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:mockall",
+    "@crate_index//:num-traits",
+    "@crate_index//:rust_decimal",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+]
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    # Ensures that we do not need to rebuild just because a _test.rs file
+    # changed.
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "token_valuation",
+    srcs = LIB_SRCS,
+    crate_name = "ic_sns_governance_token_valuation",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "token_valuation_test",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

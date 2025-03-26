@@ -1,7 +1,6 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/hostos:defs.bzl", "image_deps")
-
-exports_files(["build_container_filesystem_config.txt"])
+load("//publish:defs.bzl", "checksum_rule")
 
 # The macro contains several targets.
 # Check
@@ -10,7 +9,18 @@ exports_files(["build_container_filesystem_config.txt"])
 icos_build(
     name = "prod",
     image_deps_func = image_deps,
+    max_file_sizes = {
+        "disk-img.tar.zst": 900 * 1000 * 1000,  # 837 MB on 2025-03-21
+        "update-img.tar.zst": 900 * 1000 * 1000,  # 835 MB on 2025-03-21
+        "update-img-test.tar.zst": 900 * 1000 * 1000,  # 835 MB on 2025-03-21
+    },
     upload_prefix = "host-os",
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:ic-os-pkg"],
     vuln_scan = False,
+)
+
+# Export checksums & build artifacts
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":prod"],
 )

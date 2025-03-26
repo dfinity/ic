@@ -7,12 +7,13 @@
 
 use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
-use crate::{Hypervisor, NonReplicatedQueryKind};
+use crate::{metrics::CallTreeMetricsNoOp, Hypervisor, NonReplicatedQueryKind};
 use ic_error_types::UserError;
+use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
-use ic_types::messages::CallContextId;
+use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{Cycles, NumInstructions, Time};
 use prometheus::IntCounter;
@@ -36,6 +37,7 @@ pub fn execute_non_replicated_query(
     NumInstructions,
     Result<Option<WasmResult>, UserError>,
     Option<CallContextId>,
+    SystemApiCallCounters,
 ) {
     // Validate that the canister is running.
     if let Err(err) = validate_canister(&canister) {
@@ -44,6 +46,7 @@ pub fn execute_non_replicated_query(
             execution_parameters.instruction_limits.message(),
             Err(err),
             None,
+            SystemApiCallCounters::default(),
         );
     }
 
@@ -58,6 +61,7 @@ pub fn execute_non_replicated_query(
             execution_parameters.instruction_limits.message(),
             Err(err.into_user_error(&canister_id)),
             None,
+            SystemApiCallCounters::default(),
         );
     }
 
@@ -75,9 +79,13 @@ pub fn execute_non_replicated_query(
             };
             let call_context_id = canister
                 .system_state
-                .call_context_manager_mut()
-                .unwrap()
-                .new_call_context(call_origin, Cycles::zero(), time);
+                .new_call_context(
+                    call_origin,
+                    Cycles::zero(),
+                    time,
+                    RequestMetadata::for_new_call_tree(time),
+                )
+                .unwrap();
             (
                 ic_system_api::NonReplicatedQueryKind::Stateful {
                     call_context_id,
@@ -97,6 +105,7 @@ pub fn execute_non_replicated_query(
         data_certificate,
         non_replicated_query_kind,
     );
+
     // As we are executing the query in non-replicated mode, we can
     // modify the canister as the caller is not going to be able to
     // commit modifications to the canister anyway.
@@ -112,6 +121,8 @@ pub fn execute_non_replicated_query(
         network_topology,
         round_limits,
         state_changes_error,
+        &CallTreeMetricsNoOp,
+        time,
     );
     canister.system_state = output_system_state;
     if preserve_changes {
@@ -126,5 +137,6 @@ pub fn execute_non_replicated_query(
         output.num_instructions_left,
         result,
         call_context_id,
+        output.system_api_call_counters,
     )
 }

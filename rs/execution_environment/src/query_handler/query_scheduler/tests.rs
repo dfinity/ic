@@ -30,7 +30,7 @@ fn query_scheduler_does_not_starve_canisters() {
     let execution_count = Arc::new(AtomicU32::default());
     let schedule = Arc::new(Mutex::new(vec![]));
     for c in 0..canister_count as u64 {
-        for _ in 0..100 {
+        for _ in 0..10 {
             let execution_count = Arc::clone(&execution_count);
             let schedule = Arc::clone(&schedule);
             scheduler.push(canister_test_id(c), move || {
@@ -43,7 +43,7 @@ fn query_scheduler_does_not_starve_canisters() {
         }
     }
     loop {
-        if execution_count.load(Ordering::SeqCst) > 2 * canister_count {
+        if execution_count.load(Ordering::SeqCst) > 4 * canister_count {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(1));

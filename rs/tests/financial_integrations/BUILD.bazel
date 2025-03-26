@@ -1,54 +1,77 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
-package(default_visibility = ["//visibility:public"])
-
-BTC_RUNTIME_DEPS = [
-    "@btc_canister//file",
-    "//rs/tests:btc_uvm_config_image",
-]
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 LEDGER_CANISTER_RUNTIME_DEPS = [
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    # Keep sorted.
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
-
-system_test(
-    name = "btc_get_balance_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        BTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
 
 system_test(
     name = "icrc1_agent_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = {
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    },
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//packages/icrc-ledger-agent:icrc_ledger_agent",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/on_wire",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
-system_test(
-    name = "token_fault_tolerance_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+system_test_nns(
+    name = "transaction_ledger_correctness_test",
+    compile_data = [
+        "transaction_ledger_correctness.wasm",
+    ],
+    proc_macro_deps = [
+        "@crate_index//:async-recursion",
+    ],
     tags = [
-        "system_test_hourly",
-        "system_test_nightly",
+        "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "transaction_ledger_correctness_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = [
+        "//rs/canister_client/sender",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:quickcheck",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )

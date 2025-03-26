@@ -6,16 +6,19 @@ use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager
 use crate::CanisterQueues;
 use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
 use ic_base_types::CanisterId;
-use ic_btc_types_internal::BlockBlob;
+use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
-use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::EcdsaKeyId;
+use ic_limits::MAX_INGRESS_TTL;
+use ic_management_canister_types_private::{
+    MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
+};
+use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
     state::{
-        canister_state_bits::v1::ConsumedCyclesByUseCase,
+        canister_state_bits::v1::{ConsumedCyclesByUseCase, CyclesUseCase as pbCyclesUseCase},
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
         system_metadata::v1::{self as pb_metadata},
@@ -40,9 +43,14 @@ use ic_types::{
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
     subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{
+        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+        StreamSlice,
+    },
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
@@ -58,14 +66,14 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
     pub ingress_history: IngressHistoryState,
 
     /// XNet stream state indexed by the _destination_ subnet id.
-    pub(super) streams: Arc<Streams>,
+    pub(super) streams: Arc<StreamMap>,
 
     /// The canister ID ranges from which this subnet generates canister IDs.
     canister_allocation_ranges: CanisterIdRanges,
@@ -95,6 +103,8 @@ pub struct SystemMetadata {
 
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
+
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
 
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
@@ -146,18 +156,19 @@ pub struct SystemMetadata {
 
     pub subnet_metrics: SubnetMetrics,
 
-    /// The set of WASM modules we expect to be present in the [`Hypervisor`]'s
+    /// The set of Wasm modules we expect to be present in the [`Hypervisor`]'s
     /// compilation cache. This allows us to deterministically decide when we
     /// expect a compilation to be fast and ignore the compilation cost when
     /// considering the round instruction limit.
     ///
-    /// Each time a canister is installed, its WASM is inserted and the set is
+    /// Each time a canister is installed, its Wasm is inserted and the set is
     /// cleared at each checkpoint.
     pub expected_compiled_wasms: BTreeSet<WasmHash>,
 
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
     /// response limit. To work around this limitation, large responses are paginated
     /// and are stored here temporarily until they're fetched by the calling canister.
+    #[validate_eq(Ignore)]
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
@@ -170,7 +181,7 @@ pub struct SystemMetadata {
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
 /// use.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NetworkTopology {
     pub subnets: BTreeMap<SubnetId, SubnetTopology>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
@@ -180,15 +191,31 @@ pub struct NetworkTopology {
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub canister_migrations: Arc<CanisterMigrations>,
     pub nns_subnet_id: SubnetId,
-    /// Mapping from ECDSA key_id to a list of subnets which can sign with the
-    /// given key. Keys without any signing subnets are not included in the map.
-    pub ecdsa_signing_subnets: BTreeMap<EcdsaKeyId, Vec<SubnetId>>,
+
+    /// Mapping from master public key_id to a list of subnets which can use the
+    /// given key. Keys without any chain-key enabled subnets are not included in the map.
+    pub chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
 
     /// The ID of the canister to forward bitcoin testnet requests to.
     pub bitcoin_testnet_canister_id: Option<CanisterId>,
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+}
+
+/// Full description of the API Boundary Node, which is saved in the metadata.
+/// This entry is formed from two registry records - ApiBoundaryNodeRecord and NodeRecord.
+/// If an ApiBoundaryNodeRecord exists, then a corresponding NodeRecord must exist.
+/// The converse statement is not true.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct ApiBoundaryNodeEntry {
+    /// Domain name, required field from NodeRecord
+    pub domain: String,
+    /// Ipv4, optional field from NodeRecord
+    pub ipv4_address: Option<String>,
+    /// Ipv6, required field from NodeRecord
+    pub ipv6_address: String,
+    pub pubkey: Option<Vec<u8>>,
 }
 
 impl Default for NetworkTopology {
@@ -198,7 +225,7 @@ impl Default for NetworkTopology {
             routing_table: Default::default(),
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
-            ecdsa_signing_subnets: Default::default(),
+            chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
         }
@@ -206,12 +233,11 @@ impl Default for NetworkTopology {
 }
 
 impl NetworkTopology {
-    /// Returns a list of subnets where the ecdsa feature is enabled.
-    pub fn ecdsa_signing_subnets(&self, key_id: &EcdsaKeyId) -> &[SubnetId] {
-        self.ecdsa_signing_subnets
+    /// Returns a list of subnets where the chain key feature is enabled.
+    pub fn chain_key_enabled_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
+        self.chain_key_enabled_subnets
             .get(key_id)
-            .map(|ids| &ids[..])
-            .unwrap_or(&[])
+            .map_or(&[], |ids| &ids[..])
     }
 
     /// Returns the size of the given subnet.
@@ -236,20 +262,6 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
             canister_migrations: Some(item.canister_migrations.as_ref().into()),
-            ecdsa_signing_subnets: item
-                .ecdsa_signing_subnets
-                .iter()
-                .map(|(key_id, subnet_ids)| {
-                    let subnet_ids = subnet_ids
-                        .iter()
-                        .map(|id| subnet_id_into_protobuf(*id))
-                        .collect();
-                    pb_metadata::EcdsaKeyEntry {
-                        key_id: Some(key_id.into()),
-                        subnet_ids,
-                    }
-                })
-                .collect(),
             bitcoin_testnet_canister_ids: match item.bitcoin_testnet_canister_id {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
@@ -258,6 +270,20 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
             },
+            chain_key_enabled_subnets: item
+                .chain_key_enabled_subnets
+                .iter()
+                .map(|(key_id, subnet_ids)| {
+                    let subnet_ids = subnet_ids
+                        .iter()
+                        .map(|id| subnet_id_into_protobuf(*id))
+                        .collect();
+                    pb_metadata::ChainKeySubnetEntry {
+                        key_id: Some(key_id.into()),
+                        subnet_ids,
+                    }
+                })
+                .collect(),
         }
     }
 }
@@ -275,21 +301,20 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 try_from_option_field(entry.subnet_topology, "NetworkTopology::subnets::V")?,
             );
         }
-        // NetworkTopology.nns_subnet_id will be removed in the following PR
-        // Currently, initialise nns_subnet_id with dummy value in case not found
-        let nns_subnet_id =
-            match try_from_option_field(item.nns_subnet_id, "NetworkTopology::nns_subnet_id") {
-                Ok(subnet_id) => subnet_id_try_from_protobuf(subnet_id)?,
-                Err(_) => SubnetId::new(PrincipalId::new_anonymous()),
-            };
-        let mut ecdsa_signing_subnets = BTreeMap::new();
-        for entry in item.ecdsa_signing_subnets {
+
+        let nns_subnet_id = subnet_id_try_from_protobuf(try_from_option_field(
+            item.nns_subnet_id,
+            "NetworkTopology::nns_subnet_id",
+        )?)?;
+
+        let mut chain_key_enabled_subnets = BTreeMap::new();
+        for entry in item.chain_key_enabled_subnets {
             let mut subnet_ids = vec![];
             for subnet_id in entry.subnet_ids {
                 subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
             }
-            ecdsa_signing_subnets.insert(
-                try_from_option_field(entry.key_id, "EcdsaKeyEntry::key_id")?,
+            chain_key_enabled_subnets.insert(
+                try_from_option_field(entry.key_id, "ChainKeySubnetEntry::key_id")?,
                 subnet_ids,
             );
         }
@@ -319,27 +344,27 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .unwrap_or_default()
                 .into(),
             nns_subnet_id,
-            ecdsa_signing_subnets,
+            chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
         })
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
-    /// https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
+    /// https://internetcomputer.org/docs/current/references/ic-interface-spec#certification)
     pub public_key: Vec<u8>,
     pub nodes: BTreeSet<NodeId>,
     pub subnet_type: SubnetType,
     pub subnet_features: SubnetFeatures,
-    /// ECDSA keys held by this subnet. Just because a subnet holds an ECDSA key
-    /// doesn't mean the subnet has been enabled to sign with that key. This
+    /// Chain keys held by this subnet. Just because a subnet holds a Chain key
+    /// doesn't mean the subnet has been enabled to use that key. This
     /// will happen when a key is shared with a second subnet which holds it as
     /// a backup. An additional NNS proposal will be needed to allow the subnet
-    /// holding the key as backup to actually produce signatures.
-    pub ecdsa_keys_held: BTreeSet<EcdsaKeyId>,
+    /// holding the key as backup to actually produce signatures or VetKd key derivations.
+    pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
 }
 
 impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
@@ -355,7 +380,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
-            ecdsa_keys_held: item.ecdsa_keys_held.iter().map(|k| k.into()).collect(),
+            chain_keys_held: item.chain_keys_held.iter().map(|k| k.into()).collect(),
         }
     }
 }
@@ -368,9 +393,9 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             nodes.insert(node_id_try_from_option(entry.node_id)?);
         }
 
-        let mut ecdsa_keys_held = BTreeSet::new();
-        for key in item.ecdsa_keys_held {
-            ecdsa_keys_held.insert(EcdsaKeyId::try_from(key)?);
+        let mut chain_keys_held = BTreeSet::new();
+        for key in item.chain_keys_held {
+            chain_keys_held.insert(MasterPublicKeyId::try_from(key)?);
         }
 
         Ok(Self {
@@ -384,18 +409,18 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .subnet_features
                 .map(SubnetFeatures::from)
                 .unwrap_or_default(),
-            ecdsa_keys_held,
+            chain_keys_held,
         })
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
     pub consumed_cycles_http_outcalls: NominalCycles,
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
-    pub ecdsa_signature_agreements: u64,
+    pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
     /// The total size of the state taken by canisters on this subnet in bytes.
@@ -412,6 +437,9 @@ impl SubnetMetrics {
         use_case: CyclesUseCase,
         cycles: NominalCycles,
     ) {
+        if cycles.get() == 0 {
+            return;
+        }
         *self
             .consumed_cycles_by_use_case
             .entry(use_case)
@@ -447,6 +475,9 @@ impl SubnetMetrics {
                 | CyclesUseCase::RequestAndResponseTransmission
                 | CyclesUseCase::Uninstall
                 | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::SchnorrOutcalls
+                | CyclesUseCase::VetKd
+                | CyclesUseCase::DroppedMessages
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }
@@ -463,14 +494,21 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             ),
             consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
             consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
-            ecdsa_signature_agreements: Some(item.ecdsa_signature_agreements),
+            threshold_signature_agreements: item
+                .threshold_signature_agreements
+                .iter()
+                .map(|(key_id, &count)| ThresholdSignatureAgreementsEntry {
+                    key_id: Some(key_id.into()),
+                    count,
+                })
+                .collect(),
             consumed_cycles_by_use_case: item
                 .consumed_cycles_by_use_case
                 .clone()
                 .into_iter()
-                .map(|entry| ConsumedCyclesByUseCase {
-                    use_case: entry.0.into(),
-                    cycles: Some((&entry.1).into()),
+                .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
+                    use_case: pbCyclesUseCase::from(use_case).into(),
+                    cycles: Some((&cycles).into()),
                 })
                 .collect(),
             num_canisters: Some(item.num_canisters),
@@ -483,6 +521,28 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
 impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_metadata::SubnetMetrics) -> Result<Self, Self::Error> {
+        let mut consumed_cycles_by_use_case = BTreeMap::new();
+        for x in item.consumed_cycles_by_use_case.into_iter() {
+            consumed_cycles_by_use_case.insert(
+                CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "CyclesUseCase",
+                        err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                    }
+                })?)?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
+        let mut threshold_signature_agreements = BTreeMap::new();
+        for x in item.threshold_signature_agreements.into_iter() {
+            threshold_signature_agreements.insert(
+                try_from_option_field(
+                    x.key_id,
+                    "SubnetMetrics::threshold_signature_agreements:key_id",
+                )?,
+                x.count,
+            );
+        }
         Ok(Self {
             consumed_cycles_by_deleted_canisters: try_from_option_field(
                 item.consumed_cycles_by_deleted_canisters,
@@ -498,17 +558,8 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
             .unwrap_or_else(|_| NominalCycles::from(0_u128)),
-            ecdsa_signature_agreements: item.ecdsa_signature_agreements.unwrap_or_default(),
-            consumed_cycles_by_use_case: item
-                .consumed_cycles_by_use_case
-                .into_iter()
-                .map(|ConsumedCyclesByUseCase { use_case, cycles }| {
-                    (
-                        CyclesUseCase::from(use_case),
-                        NominalCycles::try_from(cycles.unwrap_or_default()).unwrap_or_default(),
-                    )
-                })
-                .collect(),
+            threshold_signature_agreements,
+            consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
@@ -571,6 +622,19 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     node_id: Some(node_id_into_protobuf(*node_id)),
                     public_key: public_key.clone(),
                 })
+                .collect(),
+            api_boundary_nodes: item
+                .api_boundary_nodes
+                .iter()
+                .map(
+                    |(node_id, api_boundary_node_entry)| pb_metadata::ApiBoundaryNodeEntry {
+                        node_id: Some(node_id_into_protobuf(*node_id)),
+                        domain: api_boundary_node_entry.domain.clone(),
+                        ipv4_address: api_boundary_node_entry.ipv4_address.clone(),
+                        ipv6_address: api_boundary_node_entry.ipv6_address.clone(),
+                        pubkey: api_boundary_node_entry.pubkey.clone(),
+                    },
+                )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
         }
@@ -636,6 +700,19 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
         }
 
+        let mut api_boundary_nodes = BTreeMap::<NodeId, ApiBoundaryNodeEntry>::new();
+        for entry in item.api_boundary_nodes {
+            api_boundary_nodes.insert(
+                node_id_try_from_option(entry.node_id)?,
+                ApiBoundaryNodeEntry {
+                    domain: entry.domain,
+                    ipv4_address: entry.ipv4_address,
+                    ipv6_address: entry.ipv6_address,
+                    pubkey: entry.pubkey,
+                },
+            );
+        }
+
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -647,6 +724,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
             node_public_keys,
+            api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
@@ -657,10 +735,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // Ingress history is persisted separately. We rely on `load_checkpoint()` to
             // properly set this value.
             ingress_history: Default::default(),
-            streams: Arc::new(Streams {
-                responses_size_bytes: Streams::calculate_stats(&streams),
-                streams,
-            }),
+            streams: Arc::new(streams),
             network_topology: try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",
@@ -707,18 +782,13 @@ impl SystemMetadata {
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
             node_public_keys: Default::default(),
+            api_boundary_nodes: Default::default(),
             split_from: None,
             // StateManager populates proper values of these fields before
             // committing each state.
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
-            // NB. State manager relies on the root hash of the hash tree
-            // corresponding to the initial state to be a constant.  Thus we fix
-            // the certification version that we use for the initial state. If
-            // we used CURRENT_CERTIFICATION_VERSION here, the state hash would
-            // NOT be guaranteed to be constant, potentially leading to
-            // hard-to-track bugs in state manager.
-            certification_version: CertificationVersion::V0,
+            certification_version: CURRENT_CERTIFICATION_VERSION,
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
@@ -732,7 +802,7 @@ impl SystemMetadata {
     }
 
     /// Returns a reference to the streams.
-    pub fn streams(&self) -> &Streams {
+    pub fn streams(&self) -> &StreamMap {
         &self.streams
     }
 
@@ -981,6 +1051,7 @@ impl SystemMetadata {
             own_subnet_features: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             node_public_keys: _,
+            api_boundary_nodes: _,
             ref mut split_from,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
@@ -1097,6 +1168,7 @@ impl SystemMetadata {
                         RejectCode::SysTransient,
                         format!("Canister {} migrated during a subnet split", canister_id),
                     )),
+                    deadline: request.deadline,
                 };
                 subnet_queues.push_output_response(response.into());
             }
@@ -1138,8 +1210,8 @@ impl SystemMetadata {
 /// Conceptually we use a gap-free queue containing one signal for each inducted
 /// message; but because most signals are `Accept` we represent that queue as a
 /// combination of `signals_end` (pointing just beyond the last signal) plus a
-/// collection of `reject_signals`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// collection of exceptions, i.e. `reject_signals`.
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
     messages: StreamIndexedQueue<RequestOrResponse>,
@@ -1152,11 +1224,14 @@ pub struct Stream {
     /// represented by its end index (pointing just beyond the last signal).
     signals_end: StreamIndex,
 
-    /// Stream indices of rejected messages, in ascending order.
-    reject_signals: VecDeque<StreamIndex>,
+    /// Reject signals, in ascending stream index order.
+    reject_signals: VecDeque<RejectSignal>,
 
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
+
+    /// Stream flags observed in the header of the reverse stream.
+    reverse_stream_flags: StreamFlags,
 }
 
 impl Default for Stream {
@@ -1165,18 +1240,29 @@ impl Default for Stream {
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::size_bytes(&messages);
+        let reverse_stream_flags = StreamFlags {
+            deprecated_responses_only: false,
+        };
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags,
         }
     }
 }
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        let reject_signals = item.reject_signals.iter().map(|i| i.get()).collect();
+        let reject_signals = item
+            .reject_signals()
+            .iter()
+            .map(|signal| pb_queues::RejectSignal {
+                reason: pb_queues::RejectReason::from(signal.reason).into(),
+                index: signal.index.get(),
+            })
+            .collect();
         Self {
             messages_begin: item.messages.begin().get(),
             messages: item
@@ -1186,6 +1272,9 @@ impl From<&Stream> for pb_queues::Stream {
                 .collect(),
             signals_end: item.signals_end.get(),
             reject_signals,
+            reverse_stream_flags: Some(pb_queues::StreamFlags {
+                deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
+            }),
         }
     }
 }
@@ -1200,17 +1289,45 @@ impl TryFrom<pb_queues::Stream> for Stream {
         }
         let messages_size_bytes = Self::size_bytes(&messages);
 
+        let signals_end = item.signals_end.into();
         let reject_signals = item
             .reject_signals
             .iter()
-            .map(|i| StreamIndex::new(*i))
-            .collect();
+            .map(|signal| {
+                Ok(RejectSignal {
+                    reason: pb_queues::RejectReason::try_from(signal.reason)
+                        .map_err(|err| ProxyDecodeError::Other(err.to_string()))?
+                        .try_into()?,
+                    index: signal.index.into(),
+                })
+            })
+            .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
+
+        // Check reject signals are sorted and below `signals_end`.
+        let iter = reject_signals.iter().map(|signal| signal.index);
+        for (index, next_index) in iter
+            .clone()
+            .zip(iter.skip(1).chain(std::iter::once(item.signals_end.into())))
+        {
+            if index >= next_index {
+                return Err(ProxyDecodeError::Other(format!(
+                    "reject signals not strictly sorted, received [{:?}, {:?}]",
+                    index, next_index,
+                )));
+            }
+        }
 
         Ok(Self {
             messages,
-            signals_end: item.signals_end.into(),
+            signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags: item
+                .reverse_stream_flags
+                .map(|flags| StreamFlags {
+                    deprecated_responses_only: flags.deprecated_responses_only,
+                })
+                .unwrap_or_default(),
         })
     }
 }
@@ -1224,14 +1341,15 @@ impl Stream {
             signals_end,
             reject_signals: VecDeque::new(),
             messages_size_bytes,
+            reverse_stream_flags: Default::default(),
         }
     }
 
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
         messages: StreamIndexedQueue<RequestOrResponse>,
         signals_end: StreamIndex,
-        reject_signals: VecDeque<StreamIndex>,
+        reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
         Self {
@@ -1239,6 +1357,7 @@ impl Stream {
             signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags: Default::default(),
         }
     }
 
@@ -1251,12 +1370,13 @@ impl Stream {
 
     /// Creates a header for this stream.
     pub fn header(&self) -> StreamHeader {
-        StreamHeader {
-            begin: self.messages.begin(),
-            end: self.messages.end(),
-            signals_end: self.signals_end,
-            reject_signals: self.reject_signals.clone(),
-        }
+        StreamHeader::new(
+            self.messages.begin(),
+            self.messages.end(),
+            self.signals_end,
+            self.reject_signals.clone(),
+            StreamFlags::default(),
+        )
     }
 
     /// Returns a reference to the message queue.
@@ -1286,8 +1406,8 @@ impl Stream {
     pub fn discard_messages_before(
         &mut self,
         new_begin: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+        reject_signals: &VecDeque<RejectSignal>,
+    ) -> Vec<(RejectReason, RequestOrResponse)> {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -1308,8 +1428,8 @@ impl Stream {
         let messages_begin = self.messages.begin();
         let mut reject_signals = reject_signals
             .iter()
-            .skip_while(|&reject_signal| reject_signal < &messages_begin);
-        let mut next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            .skip_while(|reject_signal| reject_signal.index < messages_begin)
+            .peekable();
 
         // Garbage collect all messages up to `new_begin`.
         let mut rejected_messages = Vec::new();
@@ -1322,9 +1442,11 @@ impl Stream {
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
-            if next_reject_signal == &index {
-                rejected_messages.push(msg);
-                next_reject_signal = reject_signals.next().unwrap_or(&new_begin);
+            if let Some(reject_signal) = reject_signals.peek() {
+                if reject_signal.index == index {
+                    rejected_messages.push((reject_signal.reason, msg));
+                    reject_signals.next();
+                }
             }
         }
         rejected_messages
@@ -1332,8 +1454,8 @@ impl Stream {
 
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
-        while let Some(signal_index) = self.reject_signals.front() {
-            if *signal_index < new_signals_begin {
+        while let Some(reject_signal) = self.reject_signals.front() {
+            if reject_signal.index < new_signals_begin {
                 self.reject_signals.pop_front();
             } else {
                 break;
@@ -1342,7 +1464,7 @@ impl Stream {
     }
 
     /// Returns a reference to the reject signals.
-    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         &self.reject_signals
     }
 
@@ -1351,28 +1473,33 @@ impl Stream {
         self.signals_end
     }
 
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
+    /// Pushes an accept signal. Since these are not explicitly encoded, this
+    /// just increments `signals_end`.
+    pub fn push_accept_signal(&mut self) {
         self.signals_end.inc_assign()
     }
 
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        assert_eq!(index, self.signals_end);
-        if let Some(&last_signal) = self.reject_signals.back() {
-            assert!(
-                last_signal < index,
-                "The signal to be pushed ({}) should be larger than the last signal ({})",
-                index,
-                last_signal
-            );
-        }
-        self.reject_signals.push_back(index)
+    /// Appends a reject signal (the current `signals_end`) to the tail of the
+    /// reject signals; and then increments `signals_end`.
+    pub fn push_reject_signal(&mut self, reason: RejectReason) {
+        self.reject_signals
+            .push_back(RejectSignal::new(reason, self.signals_end));
+        self.signals_end.inc_assign();
     }
 
     /// Calculates the estimated byte size of the given messages.
     fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
+    }
+
+    /// Returns a reference to the reverse stream flags.
+    pub fn reverse_stream_flags(&self) -> &StreamFlags {
+        &self.reverse_stream_flags
+    }
+
+    /// Sets the reverse stream flags.
+    pub fn set_reverse_stream_flags(&mut self, flags: StreamFlags) {
+        self.reverse_stream_flags = flags;
     }
 }
 
@@ -1385,239 +1512,11 @@ impl CountBytes for Stream {
 
 impl From<Stream> for StreamSlice {
     fn from(val: Stream) -> Self {
-        StreamSlice::new(
-            StreamHeader {
-                begin: val.messages.begin(),
-                end: val.messages.end(),
-                signals_end: val.signals_end,
-                reject_signals: val.reject_signals,
-            },
-            val.messages,
-        )
+        StreamSlice::new(val.header(), val.messages)
     }
 }
 
-/// Wrapper around a private `StreamMap` plus stats.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Streams {
-    /// Map of streams by destination `SubnetId`.
-    streams: StreamMap,
-
-    /// Map of response sizes in bytes by respondent `CanisterId`.
-    responses_size_bytes: BTreeMap<CanisterId, usize>,
-}
-
-impl Streams {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Returns a reference to the wrapped `StreamMap`.
-    pub fn streams(&self) -> &StreamMap {
-        &self.streams
-    }
-
-    /// Returns a reference to the stream for the given destination subnet.
-    pub fn get(&self, destination: &SubnetId) -> Option<&Stream> {
-        self.streams.get(destination)
-    }
-
-    /// Returns an iterator over all `(&SubnetId, &Stream)` pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&SubnetId, &Stream)> {
-        self.streams.iter()
-    }
-
-    /// Returns an iterator over all `&SubnetId` keys.
-    pub fn keys(&self) -> impl Iterator<Item = &SubnetId> {
-        self.streams.keys()
-    }
-
-    /// Pushes the given message onto the stream for the given destination
-    /// subnet.
-    pub fn push(&mut self, destination: SubnetId, msg: RequestOrResponse) {
-        if let RequestOrResponse::Response(response) = &msg {
-            *self
-                .responses_size_bytes
-                .entry(response.respondent)
-                .or_default() += msg.count_bytes();
-        }
-        self.streams.entry(destination).or_default().push(msg);
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-    }
-
-    /// Returns a mutable reference to the stream for the given destination
-    /// subnet.
-    pub fn get_mut(&mut self, destination: &SubnetId) -> Option<StreamHandle> {
-        // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
-        // at least do it before.
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-
-        match self.streams.get_mut(destination) {
-            Some(stream) => Some(StreamHandle::new(stream, &mut self.responses_size_bytes)),
-            None => None,
-        }
-    }
-
-    /// Returns a mutable reference to the stream for the given destination
-    /// subnet, inserting it if it doesn't already exist.
-    pub fn get_mut_or_insert(&mut self, destination: SubnetId) -> StreamHandle {
-        // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
-        // at least do it before.
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-
-        StreamHandle::new(
-            self.streams.entry(destination).or_default(),
-            &mut self.responses_size_bytes,
-        )
-    }
-
-    /// Returns the response sizes by responder canister stat.
-    pub fn responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
-        &self.responses_size_bytes
-    }
-
-    /// Prunes zero-valued response sizes entries.
-    ///
-    /// This is triggered explicitly by `ReplicatedState` after it has updated the
-    /// canisters' copies of these values (including the zeroes).
-    pub fn prune_zero_responses_size_bytes(&mut self) {
-        self.responses_size_bytes.retain(|_, &mut value| value != 0);
-    }
-
-    /// Computes the `responses_size_bytes` map from scratch. Used when
-    /// deserializing and in asserts.
-    ///
-    /// Time complexity: O(num_messages).
-    pub fn calculate_stats(streams: &StreamMap) -> BTreeMap<CanisterId, usize> {
-        let mut responses_size_bytes: BTreeMap<CanisterId, usize> = BTreeMap::new();
-        for (_, stream) in streams.iter() {
-            for (_, msg) in stream.messages().iter() {
-                if let RequestOrResponse::Response(response) = msg {
-                    *responses_size_bytes.entry(response.respondent).or_default() +=
-                        msg.count_bytes();
-                }
-            }
-        }
-        responses_size_bytes
-    }
-
-    /// Checks that the running accounting of the sizes of responses in streams is
-    /// accurate.
-    #[cfg(debug_assertions)]
-    fn debug_validate_stats(&self) {
-        let mut nonzero_responses_size_bytes = self.responses_size_bytes.clone();
-        nonzero_responses_size_bytes.retain(|_, &mut value| value != 0);
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            nonzero_responses_size_bytes
-        );
-    }
-}
-
-/// A mutable reference to a stream owned by a `Streams` struct; bundled with
-/// the `Streams`' stats, to be updated on stream mutations.
-pub struct StreamHandle<'a> {
-    stream: &'a mut Stream,
-
-    responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
-}
-
-impl<'a> StreamHandle<'a> {
-    pub fn new(
-        stream: &'a mut Stream,
-        responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
-    ) -> Self {
-        Self {
-            stream,
-            responses_size_bytes,
-        }
-    }
-
-    /// Returns a reference to the message queue.
-    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
-        self.stream.messages()
-    }
-
-    /// Returns the stream's begin index.
-    pub fn messages_begin(&self) -> StreamIndex {
-        self.stream.messages_begin()
-    }
-
-    /// Returns the stream's end index.
-    pub fn messages_end(&self) -> StreamIndex {
-        self.stream.messages_end()
-    }
-
-    /// Returns a reference to the reject signals.
-    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
-        self.stream.reject_signals()
-    }
-
-    /// Returns the index just beyond the last sent signal.
-    pub fn signals_end(&self) -> StreamIndex {
-        self.stream.signals_end
-    }
-
-    /// Appends the given message to the tail of the stream.
-    ///
-    /// Returns the byte size of the pushed message.
-    pub fn push(&mut self, message: RequestOrResponse) -> usize {
-        let size_bytes = message.count_bytes();
-        if let RequestOrResponse::Response(response) = &message {
-            *self
-                .responses_size_bytes
-                .entry(response.respondent)
-                .or_default() += size_bytes;
-        }
-        self.stream.push(message);
-        size_bytes
-    }
-
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
-        self.stream.increment_signals_end();
-    }
-
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        self.stream.push_reject_signal(index)
-    }
-
-    /// Garbage collects messages before `new_begin`, collecting and returning all
-    /// messages for which a reject signal was received.
-    pub fn discard_messages_before(
-        &mut self,
-        new_begin: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
-        // Update stats for each discarded message.
-        for (index, msg) in self.stream.messages().iter() {
-            if index >= new_begin {
-                break;
-            }
-            if let RequestOrResponse::Response(response) = &msg {
-                let canister_responses_size_bytes = self
-                    .responses_size_bytes
-                    .get_mut(&response.respondent)
-                    .expect("No `responses_size_bytes` entry for discarded response");
-                *canister_responses_size_bytes -= msg.count_bytes();
-            }
-        }
-
-        self.stream
-            .discard_messages_before(new_begin, reject_signals)
-    }
-
-    /// Garbage collects signals before `new_signals_begin`.
-    pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
-        self.stream.discard_signals_before(new_signals_begin);
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
 pub struct IngressHistoryState {
@@ -1717,13 +1616,15 @@ impl IngressHistoryState {
     /// already present this entry will be overwritten. If `status` is a terminal
     /// status (`completed`, `failed`, or `done`) the entry will also be enrolled
     /// to be pruned at `time + MAX_INGRESS_TTL`.
+    ///
+    /// Returns the previous status associated with `message_id`.
     pub fn insert(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         time: Time,
         ingress_memory_capacity: NumBytes,
-    ) {
+    ) -> Arc<IngressStatus> {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -1743,7 +1644,8 @@ impl IngressHistoryState {
             }
         }
         self.memory_usage += status.payload_bytes();
-        if let Some(old) = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status)) {
+        let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
+        if let Some(old) = &old_status {
             self.memory_usage -= old.payload_bytes();
         }
 
@@ -1755,6 +1657,8 @@ impl IngressHistoryState {
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
         );
+
+        old_status.unwrap_or_else(|| IngressStatus::Unknown.into())
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
@@ -1817,11 +1721,6 @@ impl IngressHistoryState {
     /// called from within `insert` to ensure that `next_terminal_time`
     /// is consistently updated and we don't miss any completed statuses.
     fn forget_terminal_statuses(&mut self, target_size: NumBytes) {
-        // Before certification version 8 no done statuses are produced
-        if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-            return;
-        }
-
         // In debug builds we store the length of the statuses map here so that
         // we can later debug_assert that no status disappeared.
         #[cfg(debug_assertions)]
@@ -1961,10 +1860,10 @@ pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
 /// There is an invariant (including checks at deserialization):
 /// - Each timestamp corresponding to a snapshot maps onto a unique day (as determined
 ///   by `days_since_unix_epoch()`).
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerMetricsTimeSeries(BTreeMap<Time, BlockmakerStatsMap>);
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerStats {
     /// Successfully proposed blocks (blocks that became part of the blockchain).
     blocks_proposed_total: u64,
@@ -1974,7 +1873,7 @@ pub struct BlockmakerStats {
 }
 
 /// Per-node and overall blockmaker stats.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerStatsMap {
     /// Maps a node ID to it's blockmaker stats.
     node_stats: BTreeMap<NodeId, BlockmakerStats>,
@@ -2076,13 +1975,40 @@ impl BlockmakerMetricsTimeSeries {
         Ok(())
     }
 
+    /// Returns a reference to the running stats (if any).
+    pub fn running_stats(&self) -> Option<(&Time, &BlockmakerStatsMap)> {
+        self.0.last_key_value()
+    }
+
     /// Returns an iterator pointing at the first element of a chronologically sorted time series
-    /// whose timestamp is above or equal to the given time.
+    /// whose timestamp is above or equal to the given time (excluding the running stats for today).
     pub fn metrics_since(&self, time: Time) -> impl Iterator<Item = (&Time, &BlockmakerStatsMap)> {
-        use std::ops::Bound;
+        // TODO(MR-524): This could be made simpler if the internal data representation would be different. Consider changing this.
         self.0
-            .range((Bound::Included(&time), Bound::Unbounded))
+            .iter()
+            .take(self.0.len().saturating_sub(1))
+            .filter(move |(batch_time, _)| *batch_time >= &time)
             .take(BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS)
+    }
+
+    pub fn node_metrics_history(&self, time: Time) -> Vec<NodeMetricsHistoryResponse> {
+        self.metrics_since(time)
+            .map(|(time, stats_map)| {
+                let node_metrics = stats_map
+                    .node_stats
+                    .iter()
+                    .map(|(node_id, stats)| NodeMetrics {
+                        node_id: node_id.get(),
+                        num_blocks_proposed_total: stats.blocks_proposed_total,
+                        num_block_failures_total: stats.blocks_not_proposed_total,
+                    })
+                    .collect();
+                NodeMetricsHistoryResponse {
+                    timestamp_nanos: time.as_nanos_since_unix_epoch(),
+                    node_metrics,
+                }
+            })
+            .collect()
     }
 }
 
@@ -2182,23 +2108,6 @@ impl
 pub(crate) mod testing {
     use super::*;
 
-    /// Testing only: Exposes `Streams` internals for use in other modules'
-    /// tests.
-    pub trait StreamsTesting {
-        /// Testing only: Modifies `SystemMetadata::streams` by applying the
-        /// provided function.
-        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F);
-    }
-
-    impl StreamsTesting for Streams {
-        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
-            f(&mut self.streams);
-
-            // Recompute stats from scratch.
-            self.responses_size_bytes = Streams::calculate_stats(&self.streams);
-        }
-    }
-
     /// Early warning system / stumbling block forcing the authors of changes adding
     /// or removing replicated state fields to think about and/or ask the Message
     /// Routing team to think about any repercussions to the subnet splitting logic.
@@ -2240,10 +2149,11 @@ pub(crate) mod testing {
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
             node_public_keys: Default::default(),
+            api_boundary_nodes: Default::default(),
             split_from: None,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
-            certification_version: CertificationVersion::V0,
+            certification_version: CURRENT_CERTIFICATION_VERSION,
             heap_delta_estimate: Default::default(),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: Default::default(),

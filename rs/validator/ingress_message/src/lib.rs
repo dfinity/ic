@@ -8,6 +8,7 @@ mod internal;
 
 pub use internal::IngressMessageVerifier;
 pub use internal::IngressMessageVerifierBuilder;
+pub use internal::StandaloneIngressSigVerifier;
 pub use internal::TimeProvider;
 
 /// Validate an incoming HTTP request according to the
@@ -49,7 +50,7 @@ pub trait HttpRequestVerifier<C> {
 }
 /// Top-level error that occur when verifying an HTTP request
 /// with [`HttpRequestVerifier::validate_request`].
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum RequestValidationError {
     InvalidIngressExpiry(String),
     InvalidDelegationExpiry(String),
@@ -113,7 +114,7 @@ impl Display for RequestValidationError {
 
 /// Authentication-related error that can occur when verifying an HTTP request
 /// with [`HttpRequestVerifier::validate_request`].
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum AuthenticationError {
     /// The signature is invalid and cannot be verified.
     InvalidBasicSignature(String),

@@ -1,13 +1,12 @@
 //! Tests `ic_nervous_system_common::stable_mem_utils` using a canister
 
-use canister_test::{local_test_with_config_e, Canister};
+use canister_test::Canister;
 use dfn_candid::candid;
-use ic_nns_test_utils::itest_helpers::install_rust_canister;
+use ic_nns_test_utils::itest_helpers::{install_rust_canister, state_machine_test_on_nns_subnet};
 
 #[test]
 fn chunked_stable_mem_ser_deser_roundtrip() {
-    let (config, _tmpdir) = ic_config::Config::temp_config();
-    local_test_with_config_e(config, |runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         println!("Installing mem utils test canister...");
 
         let mut canister = runtime

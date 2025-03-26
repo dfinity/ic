@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 # The package is deprecated, NET-1274.
 package(default_visibility = [
+    "//rs/boundary_node/ic_boundary:__pkg__",
     "//rs/cup_explorer:__pkg__",
     "//rs/http_endpoints/public:__pkg__",
     "//rs/nns/init:__pkg__",
@@ -9,47 +10,48 @@ package(default_visibility = [
     "//rs/registry/admin:__pkg__",
     "//rs/registry/nns_data_provider:__pkg__",
     "//rs/replay:__pkg__",
-    "//rs/rosetta-api:__subpackages__",
     "//rs/rust_canisters/canister_test:__pkg__",
-    "//rs/scenario_tests:__pkg__",
     "//rs/tests:__subpackages__",
-    "//rs/workload_generator:__pkg__",
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-secp256k1",
+    "//rs/canister_client/read_state_response_parser",
     "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig_der",
     "//rs/protobuf",
     "//rs/tree_deserializer",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:backoff",
     "@crate_index//:futures-util",
+    "@crate_index//:http-body-util",
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
+    "@crate_index//:hyper-util",
     "@crate_index//:itertools",
     "@crate_index//:prost",
     "@crate_index//:rustls",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:tokio",
+    "@crate_index//:tower",
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification/test-utils",
-    "//rs/crypto/test_utils/tls",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/test_utils/root_of_trust",
+    "//rs/crypto/test_utils/tls",
     "//rs/test_utilities",
+    "//rs/test_utilities/types",
     "//rs/validator",
     "@crate_index//:hex",
     "@crate_index//:rand",
@@ -69,7 +71,7 @@ rust_library(
     # TODO(NET-1274)
     # deprecation = "Please consider https://crates.io/crates/ic-agent instead.",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

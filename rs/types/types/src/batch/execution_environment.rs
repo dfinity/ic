@@ -34,13 +34,27 @@ use ic_protobuf::{
 use prost::{bytes::BufMut, Message};
 use std::{collections::BTreeMap, hash::Hash};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct QueryStats {
     pub num_calls: u32,
     pub num_instructions: u64, // Want u128, but not supported in protobuf
     pub ingress_payload_size: u64,
     pub egress_payload_size: u64,
 }
+
+impl QueryStats {
+    pub fn saturating_accumulate(&mut self, rhs: &Self) {
+        self.num_calls = self.num_calls.saturating_add(rhs.num_calls);
+        self.num_instructions = self.num_instructions.saturating_add(rhs.num_instructions);
+        self.ingress_payload_size = self
+            .ingress_payload_size
+            .saturating_add(rhs.ingress_payload_size);
+        self.egress_payload_size = self
+            .egress_payload_size
+            .saturating_add(rhs.egress_payload_size);
+    }
+}
+
 /// Total number of query stats collected since creation of the canister.
 ///
 /// This is a separate struct since values contained in here are accumulated
@@ -51,7 +65,7 @@ pub struct QueryStats {
 /// a problem if the client side is polling frequently enough and handles those overflows.
 ///
 /// Given the size of these values, overflows sould be rare, though.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct TotalQueryStats {
     pub num_calls: u128,
     pub num_instructions: u128,
@@ -106,7 +120,7 @@ impl From<&TotalQueryStats> for TotalQueryStatsProto {
 ///
 /// [`LocalQueryStats`] are sent from execution to consensus for
 /// inclusion in blocks.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct LocalQueryStats {
     pub epoch: QueryStatsEpoch,
     pub stats: Vec<CanisterQueryStats>,
@@ -118,10 +132,10 @@ pub struct LocalQueryStats {
 /// so that they can survive a restart of the node.
 /// Need to remember the epoch this is for as well as the NodeId of the
 /// node proposing the block.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct RawQueryStats {
-    pub epoch: Option<QueryStatsEpoch>,
-    pub stats: BTreeMap<CanisterId, BTreeMap<NodeId, QueryStats>>,
+    pub highest_aggregated_epoch: Option<QueryStatsEpoch>,
+    pub stats: BTreeMap<NodeId, BTreeMap<QueryStatsEpoch, BTreeMap<CanisterId, QueryStats>>>,
 }
 
 impl RawQueryStats {
@@ -129,23 +143,30 @@ impl RawQueryStats {
         // Serialize BTreeMap as vector
         let mut query_stats = vec![];
 
-        for (canister_id, inner) in &self.stats {
-            for (node_id, stats) in inner {
-                query_stats.push(QueryStatsInner {
-                    proposer: Some(node_id_into_protobuf(*node_id)),
-                    canister: Some(pb::CanisterId::from(*canister_id)),
-                    num_calls: stats.num_calls,
-                    num_instructions: stats.num_instructions,
-                    ingress_payload_size: stats.ingress_payload_size,
-                    egress_payload_size: stats.egress_payload_size,
-                });
+        for (node_id, inner) in &self.stats {
+            for (epoch, inner) in inner {
+                for (canister_id, stats) in inner {
+                    query_stats.push(QueryStatsInner {
+                        proposer: Some(node_id_into_protobuf(*node_id)),
+                        epoch: epoch.get(),
+                        canister: Some(pb::CanisterId::from(*canister_id)),
+                        num_calls: stats.num_calls,
+                        num_instructions: stats.num_instructions,
+                        ingress_payload_size: stats.ingress_payload_size,
+                        egress_payload_size: stats.egress_payload_size,
+                    });
+                }
             }
         }
 
-        self.epoch.map(|epoch| QueryStatsProto {
-            epoch: epoch.get(),
-            query_stats,
-        })
+        if query_stats.is_empty() && self.highest_aggregated_epoch.is_none() {
+            None
+        } else {
+            Some(QueryStatsProto {
+                highest_aggregated_epoch: self.highest_aggregated_epoch.map(|epoch| epoch.get()),
+                query_stats,
+            })
+        }
     }
 }
 
@@ -154,21 +175,29 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
 
     fn try_from(value: QueryStatsProto) -> Result<Self, Self::Error> {
         let mut r = RawQueryStats {
-            epoch: Some(QueryStatsEpoch::from(value.epoch)),
+            highest_aggregated_epoch: value.highest_aggregated_epoch.map(QueryStatsEpoch::from),
             stats: BTreeMap::new(),
         };
         for entry in value.query_stats {
             if let Ok(proposer) = node_id_try_from_option(entry.proposer) {
-                let key = try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
-                r.stats.entry(key).or_default().insert(
-                    proposer,
-                    QueryStats {
-                        num_calls: entry.num_calls,
-                        num_instructions: entry.num_instructions,
-                        ingress_payload_size: entry.ingress_payload_size,
-                        egress_payload_size: entry.egress_payload_size,
-                    },
-                );
+                let epoch = QueryStatsEpoch::new(entry.epoch);
+                let canister: CanisterId =
+                    try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
+
+                r.stats
+                    .entry(proposer)
+                    .or_default()
+                    .entry(epoch)
+                    .or_default()
+                    .insert(
+                        canister,
+                        QueryStats {
+                            num_calls: entry.num_calls,
+                            num_instructions: entry.num_instructions,
+                            ingress_payload_size: entry.ingress_payload_size,
+                            egress_payload_size: entry.egress_payload_size,
+                        },
+                    );
             }
         }
         Ok(r)
@@ -181,7 +210,7 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
 /// data of the block itself, we want to keep metadata specific to query stats
 /// as part of the query stats payload. This way, consensus stays nice and generic and
 /// the query stats part is self contained.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct QueryStatsPayload {
     pub epoch: QueryStatsEpoch,
     pub proposer: NodeId,
@@ -271,7 +300,7 @@ impl QueryStatsPayload {
 }
 
 /// A message about the statistics of a specific canister.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterQueryStats {
     pub canister_id: CanisterId,
     pub stats: QueryStats,
@@ -312,6 +341,7 @@ impl TryFrom<&pb::CanisterQueryStats> for CanisterQueryStats {
 mod tests {
     use super::*;
     use ic_base_types::PrincipalId;
+    use ic_types_test_utils::ids::{canister_test_id, node_test_id};
     use rand::{Rng, RngCore, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
@@ -362,6 +392,29 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    /// Serialization and deserialization test
+    #[test]
+    fn serialization_roundtrip_raw_query_stats() {
+        let mut rng = ChaCha8Rng::seed_from_u64(1454);
+
+        let mut inner = BTreeMap::new();
+        inner.insert(canister_test_id(1), rng_epoch_stats(&mut rng));
+        let mut record = BTreeMap::new();
+        record.insert(QueryStatsEpoch::new(0), inner);
+        let mut stats = BTreeMap::new();
+        stats.insert(node_test_id(1), record);
+
+        let test = RawQueryStats {
+            highest_aggregated_epoch: None,
+            stats,
+        };
+
+        let pb_test = test.as_query_stats().unwrap();
+        let check_test = RawQueryStats::try_from(pb_test).unwrap();
+
+        assert_eq!(test, check_test);
     }
 
     fn rng_epoch_stats<R>(rng: &mut R) -> QueryStats

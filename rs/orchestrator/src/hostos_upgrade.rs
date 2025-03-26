@@ -1,14 +1,13 @@
-use std::sync::Arc;
-use std::time::Duration;
-
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::registry_helper::RegistryHelper;
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    registry_helper::RegistryHelper,
+};
+use backoff::{backoff::Backoff, ExponentialBackoff};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::hostos_version::HostosVersion;
-use ic_types::NodeId;
-
+use ic_types::{hostos_version::HostosVersion, NodeId};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::watch::Receiver;
 
 pub(crate) struct HostosUpgrader {
@@ -35,25 +34,30 @@ impl HostosUpgrader {
 }
 
 impl HostosUpgrader {
-    /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
-    /// Awaiting this function blocks until `exit_signal` is set to `true`.
-    /// For every execution of `check_for_upgrade()` the given handler is called with
-    /// the result returned by the check.
+    /// Calls `check_for_upgrade()`, timing out after `timeout`, and waiting
+    /// for `interval` between attempts. Awaiting this function blocks until
+    /// `exit_signal` is set to `true`.
     pub async fn upgrade_loop(
         &mut self,
         mut exit_signal: Receiver<bool>,
-        interval: Duration,
-        timeout: Duration,
+        mut backoff: ExponentialBackoff,
+        liveness_timeout: Duration,
     ) {
-        // Wait for a minute before starting the loop, to allow the registry
-        // some time to catch up, after starting.
-        tokio::time::sleep(Duration::from_secs(60)).await;
         while !*exit_signal.borrow() {
-            if let Err(e) = tokio::time::timeout(timeout, self.check_for_upgrade()).await {
-                warn!(&self.logger, "Check for upgrade failed: {:?}", e);
+            match tokio::time::timeout(liveness_timeout, self.check_for_upgrade()).await {
+                Ok(Ok(())) => backoff.reset(),
+                e => warn!(&self.logger, "Check for HostOS upgrade failed: {:?}", e),
             }
+
+            // NOTE: We currently do not and should not set `max_elapsed_time`,
+            // so that we never run out of backoffs. If `max_elapsed_time` _is_
+            // ever set, repeat the `max_interval` instead. This is technically
+            // not the same behavior as if `max_elapsed_time` was unset, because
+            // we will not be including jitter, but it should be close enough,
+            // and safe.
+            let safe_backoff = backoff.next_backoff().unwrap_or(backoff.max_interval);
             tokio::select! {
-                _ = tokio::time::sleep(interval) => {}
+                _ = tokio::time::sleep(safe_backoff) => {}
                 _ = exit_signal.changed() => {}
             };
         }
@@ -110,7 +114,8 @@ impl HostosUpgrader {
         for release_package_url in release_package_urls.iter() {
             // We only ever expect this command to exit in error. If the
             // upgrade call succeeds, the HostOS will reboot and shut us down.
-            if let Err(e) = UtilityCommand::request_hostos_upgrade(release_package_url, &hash) {
+            if let Err(e) = UtilityCommand::request_hostos_upgrade(release_package_url, &hash).await
+            {
                 info!(
                     &self.logger,
                     "HostOS upgrade failed using: '{release_package_url}'"

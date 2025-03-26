@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package types.v1;
+
+enum CanisterInstallMode {
+  CANISTER_INSTALL_MODE_UNSPECIFIED = 0;
+  CANISTER_INSTALL_MODE_INSTALL = 1;
+  CANISTER_INSTALL_MODE_REINSTALL = 2;
+  CANISTER_INSTALL_MODE_UPGRADE = 3;
+}
+
+enum WasmMemoryPersistence {
+  WASM_MEMORY_PERSISTENCE_UNSPECIFIED = 0;
+  WASM_MEMORY_PERSISTENCE_KEEP = 1;
+  WASM_MEMORY_PERSISTENCE_REPLACE = 2;
+}
+
+message CanisterUpgradeOptions {
+  optional bool skip_pre_upgrade = 1;
+  optional WasmMemoryPersistence wasm_memory_persistence = 2;
+}
+
+message CanisterInstallModeV2 {
+  oneof canister_install_mode_v2 {
+    CanisterInstallMode mode = 1;
+    CanisterUpgradeOptions mode2 = 2;
+  }
+}

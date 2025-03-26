@@ -16,8 +16,6 @@ pub fn run_server() -> Result<()> {
         stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
         stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
 
-        println!("\n\nReceived incoming connection. Spawning new thread...");
-
         std::thread::spawn(move || -> Result<()> { process_connection(&mut stream) });
     }
 
@@ -37,18 +35,15 @@ fn process_connection(stream: &mut VsockStream) -> Result<()> {
             return Err(err);
         }
     };
-    println!("Received request: {}", request);
+    println!("Received vsock request: {}", request);
 
-    println!("Verifying sender cid");
     if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
         send_response(stream, &Err(err.to_string()))?;
         return Err(err);
     };
 
-    println!("Dispatching command");
     let response: Response = dispatch(&request.command);
 
-    println!("Returning response to guest: {:?}", response);
     send_response(stream, &response)
 }
 

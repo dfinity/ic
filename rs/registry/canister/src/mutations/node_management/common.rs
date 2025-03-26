@@ -1,11 +1,8 @@
-use std::default::Default;
-use std::str::FromStr;
+use std::{default::Default, str::FromStr};
 
-use crate::mutations::common::encode_or_panic;
-use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
@@ -14,9 +11,13 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
     FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
 };
-use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
-use ic_registry_transport::{delete, insert, update};
+use ic_registry_transport::{
+    delete, insert,
+    pb::v1::{RegistryMutation, RegistryValue},
+    update,
+};
 use ic_types::crypto::KeyPurpose;
+use prost::Message;
 use std::convert::TryFrom;
 
 pub fn find_subnet_for_node(
@@ -45,16 +46,13 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
             make_subnet_list_record_key().as_bytes(),
             registry.latest_version(),
         )
-        .map_or(
-            Err(format!(
-                "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
-                LOG_PREFIX
-            )),
-            Ok,
-        )
+        .ok_or(format!(
+            "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
+            LOG_PREFIX
+        ))
         .unwrap();
 
-    decode_registry_value::<SubnetListRecord>(subnet_list_record_vec.to_vec())
+    SubnetListRecord::decode(subnet_list_record_vec.as_slice()).unwrap()
 }
 
 pub fn get_node_operator_id_for_node(
@@ -68,12 +66,47 @@ pub fn get_node_operator_id_for_node(
             Err(format!("Node Id {:} not found in the registry", node_id)),
             |result| {
                 PrincipalId::try_from(
-                    decode_registry_value::<NodeRecord>(result.value.to_vec()).node_operator_id,
+                    NodeRecord::decode(result.value.as_slice())
+                        .unwrap()
+                        .node_operator_id,
                 )
                 .map_err(|_| {
                     format!(
                         "Could not decode node_record's node_operator_id for Node Id {}",
                         node_id
+                    )
+                })
+            },
+        )
+}
+
+pub fn get_node_provider_id_for_operator_id(
+    registry: &Registry,
+    node_operator_id: PrincipalId,
+) -> Result<PrincipalId, String> {
+    let node_operator_key = make_node_operator_record_key(node_operator_id);
+    registry
+        .get(node_operator_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err(format!(
+                "Node Operator Id {:} not found in the registry.",
+                node_operator_key
+            )),
+            |result| {
+                PrincipalId::try_from(
+                    NodeOperatorRecord::decode(result.value.as_slice())
+                        .map_err(|_| {
+                            format!(
+                                "Could not decode node_operator_record for Node Operator Id {}",
+                                node_operator_id
+                            )
+                        })?
+                        .node_provider_principal_id,
+                )
+                .map_err(|_| {
+                    format!(
+                        "Could not decode node_provider_id from the Node Operator Record for the Id {}",
+                        node_operator_id
                     )
                 })
             },
@@ -93,7 +126,7 @@ pub fn get_node_operator_record(
                 node_operator_key
             )),
             |result| {
-                let decoded = decode_registry_value::<NodeOperatorRecord>(result.value.to_vec());
+                let decoded = NodeOperatorRecord::decode(result.value.as_slice()).unwrap();
                 Ok(decoded)
             },
         )
@@ -106,7 +139,7 @@ pub fn make_update_node_operator_mutation(
     let node_operator_key = make_node_operator_record_key(node_operator_id);
     update(
         node_operator_key.as_bytes(),
-        encode_or_panic(node_operator_record),
+        node_operator_record.encode_to_vec(),
     )
 }
 
@@ -118,29 +151,29 @@ pub fn make_add_node_registry_mutations(
     // Update registry with the new node data
     let add_node_entry = insert(
         make_node_record_key(node_id).as_bytes(),
-        encode_or_panic(&node_record),
+        node_record.encode_to_vec(),
     );
 
     // Add the crypto keys
     let add_committee_signing_key = insert(
         make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning).as_bytes(),
-        encode_or_panic(valid_node_pks.committee_signing_key()),
+        valid_node_pks.committee_signing_key().encode_to_vec(),
     );
     let add_node_signing_key = insert(
         make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
-        encode_or_panic(valid_node_pks.node_signing_key()),
+        valid_node_pks.node_signing_key().encode_to_vec(),
     );
     let add_dkg_dealing_key = insert(
         make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-        encode_or_panic(valid_node_pks.dkg_dealing_encryption_key()),
+        valid_node_pks.dkg_dealing_encryption_key().encode_to_vec(),
     );
     let add_tls_certificate = insert(
         make_crypto_tls_cert_key(node_id).as_bytes(),
-        encode_or_panic(valid_node_pks.tls_certificate()),
+        valid_node_pks.tls_certificate().encode_to_vec(),
     );
     let add_idkg_dealing_key = insert(
         make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-        encode_or_panic(valid_node_pks.idkg_dealing_encryption_key()),
+        valid_node_pks.idkg_dealing_encryption_key().encode_to_vec(),
     );
 
     vec![
@@ -168,7 +201,7 @@ pub fn make_remove_node_registry_mutations(
     let idkg_dealing_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
     let firewall_ruleset_key = make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id));
 
-    let keys_to_maybe_remove = vec![
+    let keys_to_maybe_remove = [
         node_key,
         committee_signing_key,
         node_signing_key,
@@ -207,30 +240,51 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
         .collect()
 }
 
+/// Checks if there is a node with the provided IPv4 address
+pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
+    get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
+        .into_iter()
+        .find_map(|(k, v)| {
+            v.public_ipv4_config.and_then(|config| {
+                (config.ip_addr == ipv4_addr)
+                    .then(|| NodeId::from(PrincipalId::from_str(&k).unwrap()))
+            })
+        })
+        .is_some()
+}
+
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
 /// tuples, (ID, value).
-fn get_key_family<T: prost::Message + Default>(
+pub(crate) fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
 ) -> Vec<(String, T)> {
+    get_key_family_iter(registry, prefix).collect()
+}
+
+pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
+    registry: &'a Registry,
+    prefix: &'a str,
+) -> impl Iterator<Item = (String, T)> + 'a {
+    let prefix_bytes = prefix.as_bytes();
+    let start = prefix_bytes.to_vec();
+
     registry
         .store
-        .iter()
-        // Get the most recent value for all keys that start with this prefix...
-        .filter(|(k, _)| k.starts_with(prefix.as_bytes()))
+        .range(start..)
+        .take_while(|(k, _)| k.starts_with(prefix_bytes))
         .map(|(k, v)| (k, v.back().unwrap()))
         // ...skipping any that have been deleted...
         .filter(|(_, v)| !v.deletion_marker)
         // ...and repack them into a tuple of (ID, value).
         .map(|(k, v)| {
             let id = k
-                .strip_prefix(prefix.as_bytes())
+                .strip_prefix(prefix_bytes)
                 .and_then(|v| std::str::from_utf8(v).ok())
                 .unwrap()
                 .to_string();
-            let value = decode_or_panic::<T>(v.value.clone());
+            let value = T::decode(v.value.as_slice()).unwrap();
 
             (id, value)
         })
-        .collect()
 }

@@ -119,7 +119,7 @@ mod common {
     use proptest::prelude::{prop, Strategy};
     use strum::IntoEnumIterator;
 
-    pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 17;
+    pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 20;
 
     prop_compose! {
         pub fn arb_key_id()(id in uniform32(any::<u8>())) -> KeyId {
@@ -326,6 +326,7 @@ mod csp_threshold_sign_error {
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {},
         MalformedSecretKey => {algorithm in arb_algorithm_id()},
+        KeyIdInstantiationError => (error in ".*"),
         TransientInternalError => {internal_error in ".*"}
     );
 }

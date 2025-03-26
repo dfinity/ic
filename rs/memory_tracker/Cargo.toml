@@ -1,38 +1,43 @@
 [package]
-name = "memory_tracker"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "memory_tracker"
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bit-vec = "0.6.3"
 ic-logger = { path = "../monitoring/logger" }
-ic-config = { path = "../config" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-utils = { path = "../utils" }
-libc = "0.2.91"
+ic-types = { path = "../types/types" }
+lazy_static = { workspace = true }
+libc = { workspace = true }
 nix = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
-lazy_static = "1.4.0"
+slog = { workspace = true }
 
 [features]
 default = []
 sigsegv_handler_checksum = []
 
 [dev-dependencies]
-ic-types = { path = "../types/types" }
-tempfile = "3.1.0"
-criterion = "0.5"
-proptest = "1.0"
+criterion = { workspace = true }
+memmap2 = { workspace = true }
+proptest = { workspace = true }
+rayon = { workspace = true }
+tempfile = { workspace = true }
 
 [[bench]]
-name = "traps"
 harness = false
+name = "traps"
+
+[[bench]]
+harness = false
+name = "memory_ops"
+
+[[bench]]
+harness = false
+name = "bit_vec"

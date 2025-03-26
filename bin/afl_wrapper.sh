@@ -21,9 +21,10 @@ fi
 cleanup() {
     echo "Input directory ${INPUT_DIR}"
     echo "Output directory ${OUTPUT_DIR}"
-}
 
-trap cleanup EXIT
+    # kill all detached fuzzers
+    ps -ax | grep afl | awk '{print $1}' | xargs -I {} kill -9 {}
+}
 
 # This allows us to skip false positive crashes for wasm runtime
 if [[ "$1" == *"wasmtime"* ]] || [[ "$1" == *"wasm_executor"* ]]; then
@@ -40,7 +41,8 @@ else
     HANDLE_SIGFPE=2
 fi
 
-ASAN_OPTIONS="abort_on_error=1:\
+function afl_env() {
+    ASAN_OPTIONS="abort_on_error=1:\
             alloc_dealloc_mismatch=0:\
             allocator_may_return_null=1:\
             allocator_release_to_os_interval_ms=500:\
@@ -65,27 +67,104 @@ ASAN_OPTIONS="abort_on_error=1:\
             symbolize=0:\
             use_sigaltstack=1"
 
-LSAN_OPTIONS="handle_abort=1:\
-            handle_segv=1:\
-            handle_sigbus=1:\
-            handle_sigfpe=1:\
-            handle_sigill=$HANDLE_SIGILL:\
-            print_summary=1:\
-            print_suppressions=0:\
-            symbolize=0:\
-            use_sigaltstack=1"
+    LSAN_OPTIONS="handle_abort=1:\
+                handle_segv=1:\
+                handle_sigbus=1:\
+                handle_sigfpe=1:\
+                handle_sigill=$HANDLE_SIGILL:\
+                print_summary=1:\
+                print_suppressions=0:\
+                symbolize=0:\
+                use_sigaltstack=1"
 
-ASAN_OPTIONS=$ASAN_OPTIONS \
-    LSAN_OPTIONS=$LSAN_OPTIONS \
-    AFL_FORKSRV_INIT_TMOUT=100 \
-    AFL_FAST_CAL=1 \
-    AFL_BENCH_UNTIL_CRASH=1 \
-    AFL_SKIP_CPUFREQ=1 \
-    AFL_CMPLOG_ONLY_NEW=1 \
-    AFL_IGNORE_PROBLEMS=1 \
-    AFL_IGNORE_TIMEOUTS=1 \
-    AFL_KEEP_TIMEOUTS=1 \
-    AFL_EXPAND_HAVOC_NOW=1 \
-    AFL_DRIVER_DONT_DEFER=1 \
-    AFL_DISABLE_TRIM=1 \
-    /usr/local/bin/afl-fuzz -i $INPUT_DIR -o $OUTPUT_DIR ${@:2} -- $1
+    # Keep them sorted
+    ASAN_OPTIONS=$ASAN_OPTIONS \
+        LSAN_OPTIONS=$LSAN_OPTIONS \
+        AFL_CMPLOG_ONLY_NEW=1 \
+        AFL_DEBUG_CHILD=1 \
+        AFL_DISABLE_TRIM=1 \
+        AFL_DRIVER_DONT_DEFER=1 \
+        AFL_EXPAND_HAVOC_NOW=1 \
+        AFL_FAST_CAL=1 \
+        AFL_FORKSRV_INIT_TMOUT=1000 \
+        AFL_IGNORE_PROBLEMS=1 \
+        AFL_IGNORE_TIMEOUTS=1 \
+        AFL_KEEP_TIMEOUTS=1 \
+        AFL_SKIP_CPUFREQ=1 \
+        /usr/local/bin/afl-fuzz -t +20000 $@
+}
+
+# Usage: stderr_file 42
+# OUTPUT_DIR will always be set
+stderr_file() {
+    FILEPATH="$OUTPUT_DIR/stderr$1.txt"
+    touch "$FILEPATH"
+    echo $FILEPATH
+}
+
+# To run multiple fuzzers in parallel, use the AFL_PARALLEL env variable
+# export AFL_PARALLEL=4
+# Make sure you have enough cores, as each job occupies a core.
+
+if [[ ! -z "$AFL_PARALLEL" ]]; then
+    trap cleanup EXIT
+    # master fuzzer
+    AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$(stderr_file 1) afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
+
+    for i in $(seq 2 $AFL_PARALLEL); do
+        probability=$((100 * $i / $AFL_PARALLEL))
+
+        # Strategy distribution
+        # 0.34 - exploit
+        # 0.67 - explore
+
+        # Power Schedule distribution
+        # 0.3 - fast
+        # 0.3 - explore
+        # 0.2 - exploit
+        # 0.1 - coe
+        # 0.1 - rare
+
+        # cummulative sum probability
+        if [[ $probability -le 10 ]]; then
+            power_schedule="fast"
+            strategy="exploit"
+        elif [[ $probability -le 30 ]]; then
+            power_schedule="fast"
+            strategy="explore"
+        elif [[ $probability -le 40 ]]; then
+            power_schedule="explore"
+            strategy="exploit"
+        elif [[ $probability -le 60 ]]; then
+            power_schedule="explore"
+            strategy="explore"
+        elif [[ $probability -le 67 ]]; then
+            power_schedule="exploit"
+            strategy="exploit"
+        elif [[ $probability -le 80 ]]; then
+            power_schedule="exploit"
+            strategy="explore"
+        elif [[ $probability -le 84 ]]; then
+            power_schedule="coe"
+            strategy="exploit"
+        elif [[ $probability -le 90 ]]; then
+            power_schedule="coe"
+            strategy="explore"
+        elif [[ $probability -le 94 ]]; then
+            power_schedule="rare"
+            strategy="exploit"
+        else
+            power_schedule="rare"
+            strategy="explore"
+        fi
+
+        AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$(stderr_file $i) afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P $strategy -p $power_schedule -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
+    done
+
+    watch -n 5 --color "afl-whatsup -s -d $OUTPUT_DIR"
+else
+    # if AFL_PARALLEL is not set
+    # run a single instance
+    # single instance will mimic the master fuzzer
+    AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$(stderr_file 1) afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore ${@:2} -- $1
+fi

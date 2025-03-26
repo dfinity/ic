@@ -1,0 +1,34 @@
+[package]
+name = "ic-boundary-nodes-custom-domains-test"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+chacha20poly1305 = "0.10.0"
+certificate_orchestrator_interface = { path = "../../../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
+ic-agent = { workspace = true }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
+ic-registry-routing-table = { path = "../../../registry/routing_table" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+indoc = "1.0.9"
+k256 = { workspace = true }
+pem = "1.0.1"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "ic-systest-custom-domains-integration"
+path = "custom_domains_integration_test.rs"

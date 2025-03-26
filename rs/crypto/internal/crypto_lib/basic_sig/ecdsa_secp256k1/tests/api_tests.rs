@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::{types, *};
 
 // SECP256K1_PK_1_DER_HEX was generated via the following commands:
@@ -17,7 +15,7 @@ fn new_keypair(
     rng: &mut (impl rand::RngCore + rand::CryptoRng),
 ) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
     let (sk, pk) = {
-        let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+        let sk = ic_secp256k1::PrivateKey::generate_using_rng(rng);
 
         let serialized_sk = sk.serialize_sec1();
         let serialized_pk = sk.public_key().serialize_sec1(false);

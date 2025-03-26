@@ -5,11 +5,11 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::log;
-use ic_ic00_types::DerivationPath;
+use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBtcAddressArgs {
     pub owner: Option<Principal>,
     pub subaccount: Option<Subaccount>,

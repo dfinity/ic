@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_binary(
+    name = "dflate",
+    srcs = ["src/main.rs"],
+    crate_name = "dflate",
+    deps = [
+        # Keep sorted.
+        ":dflate_lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:tar",
+    ],
+)
+
+rust_library(
+    name = "dflate_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "dflate",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:anyhow",
+        "@crate_index//:libc",
+        "@crate_index//:tar",
+    ],
+)
+
+rust_test(
+    name = "dflate_lib_test",
+    crate = ":dflate_lib",
+)

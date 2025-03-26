@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["dfx"])
 """
 
-VERSION = "0.15.1"
+VERSION = "0.20.1"
 SHA256 = {
-    "linux": "ee770bf47debb2b01f875fd5bbc4d759f8dbdd3f4bbeabaa1b1eb6a821a1a337",
-    "darwin": "c8698d4bf77d1a21809f0427158014a72a6f22602e0d5251a1f1d662c8d06833",
+    "linux": "011c8a6ff9af0578ee2c8b0a7af3abc5b3d5950cc64421b4c3a7acd1fc18265e",
+    "darwin": "4b1c24805f655576fb97f61aba019fbbe7c1bdca0598a5c1a9220a4bfe80f460",
 }
 
 URL = "https://github.com/dfinity/sdk/releases/download/{version}/dfx-{version}-{arch}-{platform}.tar.gz"

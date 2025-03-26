@@ -3,43 +3,58 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, Signer},
+    utils::http_endpoint_to_url,
 };
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{
     http_handler::Config as HttpConfig,
+    initial_ipv4_config::IPv4Config as InitialIPv4Config,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
     Config,
 };
-use ic_crypto::CryptoComponentForNonReplicaProcess;
-use ic_icos_sev::{get_chip_id, SnpError};
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
-    node_operator::ConnectionEndpoint,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
+use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::do_update_node_directly::UpdateNodeDirectlyPayload;
-use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use std::{net::IpAddr, str::FromStr};
+use std::{
+    net::IpAddr,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use url::Url;
 
 /// When calculating Gamma (frequency at which the registry accepts key updates from the subnet as a whole)
 /// we use a 15% time buffer compensating for a potential delay of the previous node.
 const DELAY_COMPENSATION: f64 = 0.85;
+
+pub trait NodeRegistrationCrypto:
+    ic_interfaces::crypto::KeyManager + ic_interfaces::crypto::BasicSigner<MessageId> + Send + Sync
+{
+}
+
+// Blanket implementation of `NodeRegistrationCrypto` for all types that fulfill the requirements.
+impl<T> NodeRegistrationCrypto for T where
+    T: ic_interfaces::crypto::KeyManager
+        + ic_interfaces::crypto::BasicSigner<MessageId>
+        + Send
+        + Sync
+{
+}
 
 /// Subcomponent used to register this node with the provided NNS.
 pub(crate) struct NodeRegistration {
@@ -48,7 +63,7 @@ pub(crate) struct NodeRegistration {
     registry_client: Arc<dyn RegistryClient>,
     metrics: Arc<OrchestratorMetrics>,
     node_id: NodeId,
-    key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
+    key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
 }
@@ -62,7 +77,7 @@ impl NodeRegistration {
         registry_client: Arc<dyn RegistryClient>,
         metrics: Arc<OrchestratorMetrics>,
         node_id: NodeId,
-        key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
+        key_handler: Arc<dyn NodeRegistrationCrypto>,
         local_store: Arc<dyn LocalStore>,
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
@@ -114,6 +129,8 @@ impl NodeRegistration {
         let add_node_payload = self.assemble_add_node_message().await;
 
         while !self.is_node_registered().await {
+            warn!(self.log, "Node registration failed. Trying again.");
+            UtilityCommand::notify_host("Node registration failed. Trying again.", 1);
             match self.signer.get() {
                 Ok(signer) => {
                     let nns_url = self
@@ -194,9 +211,25 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            p2p_flow_endpoints: vec![],
-            chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
-            prometheus_metrics_endpoint: "".to_string(),
+            chip_id: None,
+            public_ipv4_config: process_ipv4_config(
+                &self.log,
+                &self.node_config.initial_ipv4_config,
+            )
+            .expect("Invalid IPv4 configuration"),
+            domain: process_domain_name(&self.log, &self.node_config.domain)
+                .expect("Domain name is invalid"),
+            node_reward_type: if self.node_config.registration.node_reward_type.as_deref()
+                == Some("")
+            {
+                None
+            } else {
+                self.node_config.registration.node_reward_type.clone()
+            },
+
+            // The following fields are unused.
+            p2p_flow_endpoints: Default::default(), // unused field
+            prometheus_metrics_endpoint: Default::default(), // unused field
         }
     }
 
@@ -207,7 +240,7 @@ impl NodeRegistration {
     /// to generate or register keys are retried.
     pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) {
         let registry_version = self.registry_client.get_latest_version();
-        // If there is no ECDSA config or no key_ids, ECDSA is disabled.
+        // If there is no Chain key config or no key_ids, threshold signing is disabled.
         // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
         let delta = match self.get_key_rotation_period(registry_version, subnet_id) {
             Some(delta) => delta,
@@ -289,9 +322,9 @@ impl NodeRegistration {
     ) -> Option<Duration> {
         match self
             .registry_client
-            .get_ecdsa_config(subnet_id, registry_version)
+            .get_chain_key_config(subnet_id, registry_version)
         {
-            Ok(Some(config)) if !config.key_ids.is_empty() => config
+            Ok(Some(config)) if !config.key_configs.is_empty() => config
                 .idkg_key_rotation_period_ms
                 .map(Duration::from_millis),
             _ => None,
@@ -470,38 +503,13 @@ impl NodeRegistration {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| self.http_endpoint_to_url(h))
+                    .and_then(|h| http_endpoint_to_url(h, &self.log))
             })
             .collect();
 
         let mut rng = thread_rng();
         urls.shuffle(&mut rng);
         urls.pop()
-    }
-
-    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
-        let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) => {
-                if v.is_ipv6() {
-                    format!("[{}]", v)
-                } else {
-                    v.to_string()
-                }
-            }
-            Err(_) => {
-                // assume hostname
-                http.ip_addr.clone()
-            }
-        };
-
-        let url = format!("http://{}:{}/", host_str, http.port);
-        match Url::parse(&url) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                warn!(self.log, "Invalid url: {}: {:?}", url, e);
-                None
-            }
-        }
     }
 
     async fn is_node_registered(&self) -> bool {
@@ -515,9 +523,10 @@ impl NodeRegistration {
         {
             Ok(_) => true,
             Err(e) => {
-                warn!(
-                    self.log,
-                    "Node keys are not setup at version {}: {:?}", latest_version, e
+                warn!(self.log, "Node keys are not setup: {:?}", e);
+                UtilityCommand::notify_host(
+                    format!("Node keys are not setup: {:?}", e).as_str(),
+                    1,
                 );
                 false
             }
@@ -541,7 +550,7 @@ pub(crate) fn is_time_to_rotate_in_subnet(
     let now = SystemTime::now();
     timestamps
         .iter()
-        .all(|ts| now.duration_since(*ts).map_or(false, |d| d >= gamma))
+        .all(|ts| now.duration_since(*ts).is_ok_and(|d| d >= gamma))
 }
 
 pub(crate) fn http_config_to_endpoint(
@@ -619,6 +628,52 @@ fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> Orchestrator
     Ok(format!("{}:{}", ip_addr_str, port))
 }
 
+fn process_ipv4_config(
+    log: &ReplicaLogger,
+    ipv4_config: &InitialIPv4Config,
+) -> OrchestratorResult<Option<IPv4Config>> {
+    info!(log, "Reading ipv4 config for registration");
+    if !ipv4_config.public_address.is_empty() {
+        let (node_ip_address, prefix_length) = ipv4_config.public_address.split_once('/').ok_or(
+            OrchestratorError::invalid_configuration_error(format!(
+                "Failed to split the IPv4 public address into IP address and prefix: {}",
+                ipv4_config.public_address
+            )),
+        )?;
+
+        let prefix_length = prefix_length.parse::<u32>().map_err(|err| {
+            OrchestratorError::invalid_configuration_error(format!(
+                "IPv4 prefix length is malformed. It should be an integer: {err}",
+            ))
+        })?;
+
+        let ipv4_config = IPv4Config::try_new(
+            node_ip_address.to_string(),
+            ipv4_config.public_gateway.clone(),
+            prefix_length,
+        )
+        .map_err(|err| OrchestratorError::invalid_configuration_error(format!("{err}",)))?;
+
+        return Ok(Some(ipv4_config));
+    }
+    Ok(None)
+}
+
+fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<Option<String>> {
+    info!(log, "Reading domain name for registration");
+    if domain.is_empty() {
+        return Ok(None);
+    }
+
+    if !domain_to_ascii_strict(domain).is_ok_and(|s| s == domain) {
+        return Err(OrchestratorError::invalid_configuration_error(format!(
+            "Provided domain name {domain} is invalid",
+        )));
+    }
+
+    Ok(Some(domain.to_string()))
+}
+
 /// Create a nonce to be included with the ingress message sent to the node
 /// handler.
 fn generate_nonce() -> Vec<u8> {
@@ -628,27 +683,6 @@ fn generate_nonce() -> Vec<u8> {
         .as_nanos()
         .to_le_bytes()
         .to_vec()
-}
-
-/// Get a chip_id from SNP guest firmware via SEV library.
-/// If SEV-SNP in not enabled on the guest, return None.
-/// In other cases, return the error and notify the Node Provider.
-fn get_snp_chip_id() -> OrchestratorResult<Option<Vec<u8>>> {
-    match get_chip_id() {
-        // Chip_id returned successfully
-        Ok(chip_id) => Ok(Some(chip_id)),
-        // Snp is not enabled on the Guest, return None
-        Err(SnpError::SnpNotEnabled { .. }) => Ok(None),
-        // Propagate any other error
-        Err(error) => {
-            let snp_error = format!(
-                "Failed to retrieve chip_id from snp firmware, error: {}",
-                error
-            );
-            UtilityCommand::notify_host(&snp_error, 1);
-            Err(OrchestratorError::snp_error(snp_error))
-        }
-    }
 }
 
 fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
@@ -739,19 +773,12 @@ mod tests {
 
     mod idkg_dealing_encryption_key_rotation {
         use super::*;
-        use async_trait::async_trait;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
-        use ic_crypto_tls_interfaces::AuthenticatedPeer;
-        use ic_crypto_tls_interfaces::SomeOrAllNodes;
-        use ic_crypto_tls_interfaces::TlsClientHandshakeError;
-        use ic_crypto_tls_interfaces::TlsHandshake;
-        use ic_crypto_tls_interfaces::TlsServerHandshakeError;
-        use ic_crypto_tls_interfaces::TlsStream;
-        use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
-        use ic_interfaces::crypto::KeyManager;
-        use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-        use ic_interfaces::crypto::{BasicSigner, CheckKeysWithRegistryError};
-        use ic_interfaces::crypto::{CurrentNodePublicKeysError, KeyRotationOutcome};
+        use ic_interfaces::crypto::{
+            BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+            IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
+            ThresholdSigVerifierByPublicKey,
+        };
         use ic_logger::replica_logger::no_op_logger;
         use ic_metrics::MetricsRegistry;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
@@ -761,21 +788,22 @@ mod tests {
         };
         use ic_registry_local_store::LocalStoreImpl;
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-        use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
-        use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
-        use ic_types::consensus::CatchUpContentProtobufBytes;
-        use ic_types::crypto::CombinedThresholdSigOf;
-        use ic_types::crypto::CryptoResult;
-        use ic_types::crypto::CurrentNodePublicKeys;
-        use ic_types::crypto::{AlgorithmId, BasicSigOf};
-        use ic_types::registry::RegistryClientError;
-        use ic_types::PrincipalId;
-        use mockall::predicate::*;
-        use mockall::*;
+        use ic_test_utilities_in_memory_logger::{
+            assertions::LogEntriesAssert, InMemoryReplicaLogger,
+        };
+        use ic_types::{
+            consensus::CatchUpContentProtobufBytes,
+            crypto::{
+                AlgorithmId, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
+                CurrentNodePublicKeys,
+            },
+            registry::RegistryClientError,
+            PrincipalId,
+        };
+        use mockall::{predicate::*, *};
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
-        use tokio::net::TcpStream;
 
         const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
 
@@ -815,29 +843,6 @@ mod tests {
                     subnet_id: SubnetId,
                     registry_version: RegistryVersion,
                 ) -> CryptoResult<()>;
-            }
-
-            #[async_trait]
-            impl TlsHandshake for KeyRotationCryptoComponent {
-                async fn perform_tls_server_handshake(
-                    &self,
-                    tcp_stream: TcpStream,
-                    allowed_clients: SomeOrAllNodes,
-                    registry_version: RegistryVersion,
-                ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
-
-                async fn perform_tls_server_handshake_without_client_auth(
-                    &self,
-                    tcp_stream: TcpStream,
-                    registry_version: RegistryVersion,
-                ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError>;
-
-                async fn perform_tls_client_handshake(
-                    &self,
-                    tcp_stream: TcpStream,
-                    server: NodeId,
-                    registry_version: RegistryVersion,
-                ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError>;
             }
         }
 

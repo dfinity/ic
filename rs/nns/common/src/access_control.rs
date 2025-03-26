@@ -1,5 +1,8 @@
-use dfn_core::api::caller;
 use ic_base_types::PrincipalId;
+
+fn caller() -> PrincipalId {
+    PrincipalId::from(ic_cdk::caller())
+}
 
 pub fn check_caller_is_root() {
     if caller() != PrincipalId::from(ic_nns_constants::ROOT_CANISTER_ID) {
@@ -22,5 +25,11 @@ pub fn check_caller_is_gtc() {
 pub fn check_caller_is_governance() {
     if caller() != PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID) {
         panic!("Only the Governance canister is allowed to call this method");
+    }
+}
+
+pub fn check_caller_is_sns_w() {
+    if caller() != PrincipalId::from(ic_nns_constants::SNS_WASM_CANISTER_ID) {
+        panic!("Only the SNS-W canister is allowed to call this method");
     }
 }

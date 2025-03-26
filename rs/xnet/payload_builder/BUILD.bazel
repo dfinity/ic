@@ -5,15 +5,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/canonical_state",
-    "//rs/constants",
+    "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
     "//rs/interfaces",
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -25,11 +25,13 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/xnet/hyper",
     "//rs/xnet/uri",
+    "@crate_index//:http-body-util",
     "@crate_index//:hyper",
+    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
     "@crate_index//:slog",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
 ]
 
@@ -40,29 +42,34 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/config",
+    "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/certified_stream_store/mocks",
     "//rs/interfaces/state_manager/mocks",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
     "//rs/state_manager",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
+    "@crate_index//:axum",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:proptest",
     "@crate_index//:reqwest",
     "@crate_index//:tempfile",
-    "@crate_index//:tiny_http",
     "@crate_index//:url",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:test-strategy",
 ]
 
 rust_library(
@@ -70,7 +77,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_xnet_payload_builder",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

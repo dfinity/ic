@@ -7,44 +7,47 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
+bitcoin = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
 hashlink = "0.8.0"
-hex = "0.4.2"
-http = "0.2"
-ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
-ic-async-utils = { path = "../../async_utils" }
+hex = { workspace = true }
+http = { workspace = true }
+hyper-util = { workspace = true }
+ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-btc-service = { path = "../service" }
-ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "0e996988693f2d55fc9533c44dc20ae5310a1894" }
+ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
+primitive-types = "0.12"
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = "0.8.3"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = "2.7.0"
-slog-async = "2.7.0"
-thiserror = "1.0.26"
+slog = { workspace = true }
+slog-async = { workspace = true }
+static_assertions = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-socks = "0.5.1"
 tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
+bitcoincore-rpc = { workspace = true }
 bitcoind = "0.32.0"
-bitcoincore-rpc = "0.15.0"
-criterion = "0.5"
-ic-btc-adapter-test-utils = { path = "./test_utils" }
+criterion = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }
+ic-btc-adapter-test-utils = { path = "./test_utils" }
 ic-btc-interface = { workspace = true }
-ic-btc-types-internal = { path = "../types/internal" }
-ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-btc-replica-types = { path = "../replica_types" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
-tempfile = "^3.1.0"
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+tempfile = { workspace = true }
 
 [[bench]]
 name = "e2e"

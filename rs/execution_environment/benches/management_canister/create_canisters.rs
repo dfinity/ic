@@ -3,7 +3,7 @@ use candid::{CandidType, Encode, Principal};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct CreateCanistersArgs {
     pub canisters_number: u64,
     pub canisters_per_batch: u64,
@@ -19,7 +19,7 @@ fn run_bench<M: criterion::measurement::Measurement>(
     group.bench_function(bench_name, |b| {
         b.iter_batched(
             // Test setup.
-            || setup(),
+            setup,
             // Test measurement.
             |(env, test_canister)| {
                 let result = env.execute_ingress(

@@ -1,9 +1,11 @@
-use crate::{
-    metrics::HttpHandlerMetrics, state_reader_executor::StateReaderExecutor, RequestWithTimer,
-};
+use crate::metrics::HttpHandlerMetrics;
+use axum::body::Body;
 use crossbeam::atomic::AtomicCell;
+use http::Request;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_replicated_state::ReplicatedState;
 use ic_types::messages::ReplicaHealthStatus;
 use std::{
     sync::Arc,
@@ -17,7 +19,7 @@ pub(crate) struct HealthStatusRefreshLayer {
     metrics: HttpHandlerMetrics,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    state_reader_executor: StateReaderExecutor,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 impl HealthStatusRefreshLayer {
@@ -26,14 +28,14 @@ impl HealthStatusRefreshLayer {
         metrics: HttpHandlerMetrics,
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        state_reader_executor: StateReaderExecutor,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
             log,
             metrics,
             health_status,
             consensus_pool_cache,
-            state_reader_executor,
+            state_reader,
         }
     }
 }
@@ -47,7 +49,7 @@ impl<S> Layer<S> for HealthStatusRefreshLayer {
             metrics: self.metrics.clone(),
             health_status: self.health_status.clone(),
             consensus_pool_cache: self.consensus_pool_cache.clone(),
-            state_reader_executor: self.state_reader_executor.clone(),
+            state_reader: self.state_reader.clone(),
             inner,
         }
     }
@@ -59,13 +61,13 @@ pub struct HealthStatusRefreshService<S> {
     metrics: HttpHandlerMetrics,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    state_reader_executor: StateReaderExecutor,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     inner: S,
 }
 
-impl<S> Service<RequestWithTimer> for HealthStatusRefreshService<S>
+impl<S> Service<Request<Body>> for HealthStatusRefreshService<S>
 where
-    S: Service<RequestWithTimer> + Clone + Send + 'static,
+    S: Service<Request<Body>> + Clone + Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -75,7 +77,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, body: RequestWithTimer) -> Self::Future {
+    fn call(&mut self, body: Request<Body>) -> Self::Future {
         // If this replicas certified state height lags blocks behind the finalizied height,
         // we consider this replica unhealthy because it serves a old/stale state. This is a
         // best-effort check and does not detect any case where the replica is behind.
@@ -86,7 +88,7 @@ where
         // correct state (1st argument)
         if self
             .consensus_pool_cache
-            .is_replica_behind(self.state_reader_executor.latest_certified_height())
+            .is_replica_behind(self.state_reader.latest_certified_height())
         {
             self.health_status
                 .compare_exchange(
@@ -96,16 +98,16 @@ where
                 .map(|old| {
                     warn!(
                         self.log,
-                        "Replicas latest certified state {} is considerably behind last finalized height {} setting health status to {}",
-                        self.state_reader_executor.latest_certified_height(),
+                        "Replicas latest certified state {} is considerably behind last finalized height {} setting health status to {:?}",
+                        self.state_reader.latest_certified_height(),
                         self.consensus_pool_cache.finalized_block().height,
-                        ReplicaHealthStatus::CertifiedStateBehind.to_string(),
+                        ReplicaHealthStatus::CertifiedStateBehind,
                     );
                     self.metrics
                         .health_status_transitions_total
                         .with_label_values(&[
-                            &old.to_string(),
-                            &ReplicaHealthStatus::CertifiedStateBehind.to_string(),
+                            (old.as_ref()),
+                            (ReplicaHealthStatus::CertifiedStateBehind.as_ref()),
                         ])
                         .inc();
                 })
@@ -120,14 +122,14 @@ where
                     info!(
                         self.log,
                         "Replicas latest state {} has caught up to last finalized height: {}",
-                        self.state_reader_executor.latest_certified_height(),
+                        self.state_reader.latest_certified_height(),
                         self.consensus_pool_cache.finalized_block().height
                     );
                     self.metrics
                         .health_status_transitions_total
                         .with_label_values(&[
-                            &old.to_string(),
-                            &ReplicaHealthStatus::Healthy.to_string(),
+                            (old.as_ref()),
+                            (ReplicaHealthStatus::Healthy.as_ref()),
                         ])
                         .inc();
                 })

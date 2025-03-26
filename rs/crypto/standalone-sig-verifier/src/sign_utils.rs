@@ -9,7 +9,7 @@ use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
 
 /// Indicates the content type of serialised key bytes passed for parsing.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum KeyBytesContentType {
     Ed25519PublicKeyDer,
     EcdsaP256PublicKeyDer,

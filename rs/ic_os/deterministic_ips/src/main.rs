@@ -1,53 +1,38 @@
-use clap::{
-    builder::{EnumValueParser, TypedValueParser},
-    Parser, ValueEnum,
-};
-use deterministic_ips::{calculate_deterministic_mac, Deployment, HwAddr, IpVariant};
+use clap::Parser;
+use config_types::DeploymentEnvironment;
+use deterministic_ips::node_type::NodeType;
+use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use macaddr::MacAddr6;
 use std::net::Ipv6Addr;
 
-/// Map `Deployment` from `DeploymentArg` to avoid a dependency on `clap` in
-/// the lib.
-#[derive(Clone, Copy, ValueEnum)]
-enum DeploymentArg {
-    Mainnet,
-    Testnet,
-}
-
-impl From<DeploymentArg> for Deployment {
-    fn from(item: DeploymentArg) -> Self {
-        match item {
-            DeploymentArg::Mainnet => Deployment::Mainnet,
-            DeploymentArg::Testnet => Deployment::Testnet,
-        }
-    }
-}
-
-#[derive(Parser)]
 /// A small tool to generate the deterministic IP addresses used by IC-OS.
+#[derive(Parser)]
 struct Args {
     #[arg(long)]
     /// MAC address of the onboard IPMI.
-    mac: HwAddr,
+    mac: MacAddr6,
+
     #[arg(long)]
     /// IPv6 prefix for this DC.
     prefix: String,
-    #[arg(long, default_value_t = Deployment::Mainnet)]
-    #[arg(value_parser = EnumValueParser::new().map(|v: DeploymentArg| Deployment::from(v)))]
+
+    #[arg(long, default_value_t = DeploymentEnvironment::Mainnet)]
     /// Deployment type for this node.
-    deployment: Deployment,
-    #[arg(long)]
-    /// Index to use for MAC generation. If not specified, display IPs for HostOS and GuestOS.
-    index: Option<u8>,
+    deployment_environment: DeploymentEnvironment,
+
+    #[arg(short, long)]
+    /// Node type used for MAC generation. If not specified, display IPs for GuestOS and HostOS.
+    node_type: Option<NodeType>,
 }
 
 fn calculate_ip(
-    mac: HwAddr,
+    mac: MacAddr6,
     prefix: &str,
-    deployment: Deployment,
-    index: u8,
+    deployment_environment: DeploymentEnvironment,
+    node_type: NodeType,
 ) -> anyhow::Result<Ipv6Addr> {
     // For now, this tool only outputs IPv6
-    let mac = calculate_deterministic_mac(mac, deployment, IpVariant::V6, index)?;
+    let mac = calculate_deterministic_mac(&mac, deployment_environment, IpVariant::V6, node_type);
     let ip = mac.calculate_slaac(prefix)?;
 
     Ok(ip)
@@ -57,19 +42,19 @@ fn main() -> anyhow::Result<()> {
     let Args {
         mac,
         prefix,
-        deployment,
-        index,
+        deployment_environment,
+        node_type,
     } = Args::parse();
 
     // When given, only calculate one index
-    if let Some(index) = index {
-        let ip = calculate_ip(mac, &prefix, deployment, index)?;
+    if let Some(node_type) = node_type {
+        let ip = calculate_ip(mac, &prefix, deployment_environment, node_type)?;
 
         println!("IP: {}", ip);
     } else {
         // Otherwise, calculate and display for Guest and Host
-        let guest_ip = calculate_ip(mac, &prefix, deployment, 1)?;
-        let host_ip = calculate_ip(mac, &prefix, deployment, 0)?;
+        let guest_ip = calculate_ip(mac, &prefix, deployment_environment, NodeType::GuestOS)?;
+        let host_ip = calculate_ip(mac, &prefix, deployment_environment, NodeType::HostOS)?;
 
         println!("GuestOS IP: {}", guest_ip);
         println!("HostOS IP:  {}", host_ip);

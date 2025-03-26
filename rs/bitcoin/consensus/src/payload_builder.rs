@@ -9,7 +9,7 @@ mod proptests;
 
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject,
 };
@@ -17,9 +17,9 @@ use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    consensus::{PayloadPermanentError, PayloadValidationError},
+    consensus::{self, PayloadValidationError},
     self_validating_payload::{
-        InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
+        InvalidSelfValidatingPayloadReason, SelfValidatingPayloadBuilder,
         SelfValidatingPayloadValidationError,
     },
     validation::ValidationError,
@@ -28,14 +28,14 @@ use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{log, warn, ReplicaLogger};
-use ic_metrics::{MetricsRegistry, Timer};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
     messages::CallbackId,
     CountBytes, Height, NumBytes, SubnetId,
 };
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeSet, sync::Arc, time::Instant};
 use thiserror::Error;
 
 const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
@@ -44,7 +44,7 @@ const BUILD_PAYLOAD_STATUS_SUCCESS: &str = "success";
 const VALIDATION_STATUS_VALID: &str = "valid";
 
 // Internal error type, to simplify error handling.
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 enum GetPayloadError {
     #[error("Error retrieving state at height {0}: {1}")]
     GetStateFailed(Height, StateManagerError),
@@ -125,6 +125,7 @@ impl BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_callback_ids: BTreeSet<u64>,
         byte_limit: NumBytes,
+        priority: usize,
     ) -> Result<SelfValidatingPayload, GetPayloadError> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
         let state = self
@@ -149,7 +150,7 @@ impl BitcoinPayloadBuilder {
             };
 
             // Send request to the adapter.
-            let timer = Timer::start();
+            let since = Instant::now();
             let result = adapter_client.send_blocking(
                 request.clone(),
                 Options {
@@ -163,7 +164,7 @@ impl BitcoinPayloadBuilder {
                     self.metrics.observe_adapter_request_duration(
                         ADAPTER_REQUEST_STATUS_SUCCESS,
                         request.to_request_type_label(),
-                        timer,
+                        since,
                     );
 
                     if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
@@ -177,7 +178,7 @@ impl BitcoinPayloadBuilder {
                     self.metrics.observe_adapter_request_duration(
                         ADAPTER_REQUEST_STATUS_FAILURE,
                         request.to_request_type_label(),
-                        timer,
+                        since,
                     );
 
                     warn!(
@@ -223,10 +224,11 @@ impl BitcoinPayloadBuilder {
             // maximum block size of the IC is also 4MiB. This makes it impossible to transport a
             // BTC block via an IC block, since including the metadata would make the block too
             // large. We therefore allow a response to be oversized, if it is the first response in
-            // the block. Since we tolerate up to 2x the size margin currently, this will pass validation
+            // the block.
+            // Since we tolerate up to 2x the size margin currently, this will pass validation
             // but trigger a warning.
-            if response_size + current_payload_size > byte_limit.get() && current_payload_size != 0
-            {
+            let first_response_in_block = current_payload_size == 0 && priority == 0;
+            if response_size + current_payload_size > byte_limit.get() && !first_response_in_block {
                 // Stop if we're about to exceed the byte limit.
                 break;
             }
@@ -242,7 +244,7 @@ impl BitcoinPayloadBuilder {
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        let timer = Timer::start();
+        let since = Instant::now();
 
         // An empty block is always valid.
         if *payload == SelfValidatingPayload::default() {
@@ -250,7 +252,7 @@ impl BitcoinPayloadBuilder {
         }
 
         self.metrics
-            .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
+            .observe_validate_duration(VALIDATION_STATUS_VALID, since);
         let size = NumBytes::new(payload.count_bytes() as u64);
 
         Ok(size)
@@ -263,8 +265,9 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
+        priority: usize,
     ) -> (SelfValidatingPayload, NumBytes) {
-        let timer = Timer::start();
+        let since = Instant::now();
 
         let past_callback_ids: BTreeSet<u64> = past_payloads
             .iter()
@@ -276,16 +279,17 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
             validation_context,
             past_callback_ids,
             byte_limit,
+            priority,
         ) {
             Ok(payload) => {
                 self.metrics
-                    .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, timer);
+                    .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, since);
                 payload
             }
             Err(e) => {
                 log!(self.log, e.log_level(), "{}", e);
                 self.metrics
-                    .observe_build_duration(e.to_label_value(), timer);
+                    .observe_build_duration(e.to_label_value(), since);
 
                 SelfValidatingPayload::default()
             }
@@ -340,20 +344,20 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
-        let timer = Timer::start();
+        let since = Instant::now();
 
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
-        let payload = match self.get_self_validating_payload_impl(context, delivered_ids, max_size)
-        {
-            Ok(payload) => payload,
-            Err(e) => {
-                log!(self.log, e.log_level(), "{}", e);
-                self.metrics
-                    .observe_build_duration(e.to_label_value(), timer);
+        let payload =
+            match self.get_self_validating_payload_impl(context, delivered_ids, max_size, 0) {
+                Ok(payload) => payload,
+                Err(e) => {
+                    log!(self.log, e.log_level(), "{}", e);
+                    self.metrics
+                        .observe_build_duration(e.to_label_value(), since);
 
-                return vec![];
-            }
-        };
+                    return vec![];
+                }
+            };
 
         parse::payload_to_bytes(&payload, max_size, &self.log)
     }
@@ -372,9 +376,11 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
 
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = parse::bytes_to_payload(payload).map_err(|e| {
-            ValidationError::Permanent(PayloadPermanentError::SelfValidatingPayloadValidationError(
-                InvalidSelfValidatingPayload::DecodeError(e),
-            ))
+            ValidationError::InvalidArtifact(
+                consensus::InvalidPayloadReason::InvalidSelfValidatingPayload(
+                    InvalidSelfValidatingPayloadReason::DecodeError(e),
+                ),
+            )
         })?;
         let num_responses = payload.len();
 
@@ -387,9 +393,9 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
             if num_responses == 1 {
                 warn!(self.log, "Bitcoin Payload oversized");
             } else {
-                return Err(ValidationError::Permanent(
-                    PayloadPermanentError::SelfValidatingPayloadValidationError(
-                        InvalidSelfValidatingPayload::PayloadTooBig,
+                return Err(ValidationError::InvalidArtifact(
+                    consensus::InvalidPayloadReason::InvalidSelfValidatingPayload(
+                        InvalidSelfValidatingPayloadReason::PayloadTooBig,
                     ),
                 ));
             }

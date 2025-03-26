@@ -12,11 +12,11 @@ use std::{
     fmt,
 };
 
-/// The length of a [`MessageId`] is 32: `<https://sdk.dfinity.org/docs/interface-spec/index.html#api-request-id>`
+/// The length of a [`MessageId`] is 32: `<https://internetcomputer.org/docs/current/references/ic-interface-spec#request-id>`
 pub const EXPECTED_MESSAGE_ID_LENGTH: usize = 32;
 
 /// The ID used to uniquely identify a user's ingress message.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MessageId([u8; EXPECTED_MESSAGE_ID_LENGTH]);
 
@@ -32,7 +32,7 @@ impl<'a> Deserialize<'a> for MessageId {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
         struct MessageIdVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for MessageIdVisitor {
+        impl serde::de::Visitor<'_> for MessageIdVisitor {
             type Value = MessageId;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

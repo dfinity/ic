@@ -2,34 +2,30 @@
 
 use crate::crypto::ErrorReproducibility;
 
-/// Validation errors can be either permanent (invalid) or transient.
-#[derive(Debug)]
-pub enum ValidationError<P, T> {
-    Permanent(P),
-    Transient(T),
+/// Validation error can either mean that the validated object is invalid or that the validation
+/// failed to establish the validity of the object.
+#[derive(Eq, PartialEq, Debug)]
+pub enum ValidationError<Reason, Failure> {
+    /// The artifact was determined to be invalid.
+    InvalidArtifact(Reason),
+    /// The validation failed to determine whether the artifact is valid or invalid.
+    ValidationFailed(Failure),
 }
 
 impl<P, T> ValidationError<P, T> {
     /// The inner types of ValidationError can be mapped to another types by
-    /// applying two map functions for error and transient errors respectively.
+    /// applying two map functions for invalid artifacts and payload validation
+    /// failures respectively.
     pub fn map<Q, S, F: Fn(P) -> Q, G: Fn(T) -> S>(self, f: F, g: G) -> ValidationError<Q, S> {
         match self {
-            ValidationError::Permanent(p) => ValidationError::Permanent(f(p)),
-            ValidationError::Transient(t) => ValidationError::Transient(g(t)),
+            ValidationError::InvalidArtifact(p) => ValidationError::InvalidArtifact(f(p)),
+            ValidationError::ValidationFailed(t) => ValidationError::ValidationFailed(g(t)),
         }
-    }
-
-    /// Returns true, if the error is transient
-    pub fn is_transient(&self) -> bool {
-        matches!(self, Self::Transient(_))
     }
 }
 
 /// Validation result is result type where `Ok(())` means valid, and `Err(err)`
 /// means error, which is of the parameter type.
-///
-/// To differentiate between permanent and transient errors, we can use
-/// [ValidationError] as the `Error` type.
 pub type ValidationResult<Error> = Result<(), Error>;
 
 /// An error that implements the [`ErrorReproducibility`] trait can either be
@@ -41,12 +37,11 @@ impl<Error: ErrorReproducibility, P: From<Error>, T: From<Error>> From<Error>
     fn from(err: Error) -> ValidationError<P, T> {
         if err.is_reproducible() {
             // If an error was returned, which is not a transient one, we consider the
-            // validation as failed. There is no reason to retry such a
-            // validation.
-            ValidationError::Permanent(err.into())
+            // artifact to be invalid. There is no reason to retry such an error.
+            ValidationError::InvalidArtifact(err.into())
         } else {
             // A transient re-triable error.
-            ValidationError::Transient(err.into())
+            ValidationError::ValidationFailed(err.into())
         }
     }
 }

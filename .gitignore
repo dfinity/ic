@@ -83,14 +83,12 @@ disk.img
 dev-root-ca.crt
 
 # IC-OS binaries
-infogetty
-infogetty.o
-network_info.o
-prestorecon
-prestorecon.o
+cpp/**/infogetty
+cpp/**/infogetty.o
+cpp/**/network_info.o
 
 # Various build artifacts
-/artifacts/
+/artifacts
 **/build
 **/build-tmp
 **/build-out
@@ -106,17 +104,8 @@ prestorecon.o
 **/bin/state-tool
 **/bin/vsock_agent
 **/bin/sandbox_launcher
-**/bin/boundary-node-prober
-**/bin/ic-balance-exporter
 
-# Boundary node control plane binary
-boundary-node-control-plane
-
-# Boundary node prober binary
-boundary-node-prober
-
-# Scalability test results
-scalability/results/
+# Python pip file
 *Pipfile*
 
 # Bazel outdir dirs
@@ -124,8 +113,10 @@ scalability/results/
 bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
-bazel-timestamp.txt
 user.bazelrc
+
+# Bazel profile
+profile.json
 
 # Visual Studio Code
 .vscode
@@ -149,3 +140,8 @@ user.bazelrc
 .viminfo
 .local
 .config
+
+test_tmpdir/**
+
+# Bare metal deployment secrets files
+zh2-dll01.csv

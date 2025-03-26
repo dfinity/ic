@@ -1,7 +1,7 @@
 ---
 # Playbook for launching and destroying virtual machines
 
-- become: yes
+- become: true
   gather_facts: false
   roles:
     - role: ../ic_guest_prod

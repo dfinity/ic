@@ -34,14 +34,14 @@ function exit_usage() {
         err '    --hosts-ini <hosts_override.ini>      Override the default ansible hosts.ini to set different testnet configuration'
         err '    --no-api-nodes                        Do not deploy API boundary nodes even if they are declared in the hosts.ini file'
         err '    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file'
-        err '    --boundary-dev-image		           Use development image of the boundary node VM (includes development service worker'
+        err '    --boundary-dev-image		           Use development image of the boundary node VM'
         err '    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys'
         err '    --allow-specified-ids                 Allow installing canisters at specified IDs'
         err ''
-        err 'To get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh'
+        err 'To get the latest branch revision that has a disk image pre-built, you can use ci/src/artifacts/newest_sha_with_disk_image.sh'
         err 'Example (deploy latest master to small-a):'
         err ''
-        err '    testnet/tools/icos_deploy.sh small-a --git-revision $(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)'
+        err '    testnet/tools/icos_deploy.sh small-a --git-revision $(ci/src/artifacts/newest_sha_with_disk_image.sh master)'
         err ''
         exit 1
     fi
@@ -185,7 +185,6 @@ if command -v ip &>/dev/null; then
 fi
 
 MEDIA_PATH="${REPO_ROOT}/artifacts/guestos/${deployment}/${GIT_REVISION}"
-API_MEDIA_PATH="${REPO_ROOT}/artifacts/boundary-api-guestos/${deployment}/${GIT_REVISION}"
 BN_MEDIA_PATH="${REPO_ROOT}/artifacts/boundary-guestos/${deployment}/${GIT_REVISION}"
 INVENTORY="${REPO_ROOT}/testnet/env/${deployment}/hosts"
 USE_API_NODES="${USE_API_NODES:-true}"
@@ -290,14 +289,20 @@ mkdir "${BN_MEDIA_PATH}/certs"
 if [[ -z \${CERT_NAME+x} ]]; then
     err "'.boundary.vars.cert_name' was not defined"
 else
-    (for HOST in "\${HOSTS[@]}"; do
+    # succeed if at least one of the hosts has the necessary certificates
+    SUCCESS=0
+    for HOST in "\${HOSTS[@]}"; do
         echo >&2 "\$(date --rfc-3339=seconds): Copying \$CERT_NAME from server \$HOST"
-        scp -B -o "ConnectTimeout 30" -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/"
-    done) || {
+        if scp -B -o "ConnectTimeout 30" -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/"; then
+            SUCCESS=1
+            break
+        fi
+    done
+
+    if [[ \${SUCCESS} -eq 0 ]]; then
         err "failed to find certificate \${CERT_NAME} on any designated server"
         exit 1
-    }
-    echo "bar"
+    fi
 fi
 
 echo >&2 "$(date --rfc-3339=seconds): Running build-deployment.sh"
@@ -313,47 +318,6 @@ EOF
     echo ${COMMAND}
     SHELL="${BASH}" script --quiet --return "${BOUNDARY_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
     BOUNDARY_PID=$!
-fi
-
-if [[ "${USE_API_NODES}" == "true" ]]; then
-    API_OUT="${TMPDIR}/build-api.log"
-    echo "**** Build USB sticks for api nodes - ($(dateFromEpoch "$(date '+%s')"))"
-    COMMAND=$(
-        cat <<EOF
-set -x
-$(declare -f err)
-
-HOSTS=($(jq <"${BN_MEDIA_PATH}/list.json" -r '(.physical_hosts.hosts // [])[]'))
-CERT_NAME=$(jq <"${BN_MEDIA_PATH}/list.json" -r '.api.vars.cert_name // empty')
-
-echo "**** Trying to SCP using $(whoami)"
-
-mkdir -p "${API_MEDIA_PATH}/certs"
-if [[ -z \${CERT_NAME+x} ]]; then
-    err "'.api.vars.cert_name' was not defined"
-else
-    (for HOST in "\${HOSTS[@]}"; do
-        echo >&2 "\$(date --rfc-3339=seconds): Copying \$CERT_NAME from server \$HOST"
-        scp -B -o "ConnectTimeout 30" -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${API_MEDIA_PATH}/certs/"
-    done) || {
-        err "failed to find certificate \${CERT_NAME} on any designated server"
-        exit 1
-    }
-fi
-
-echo >&2 "$(date --rfc-3339=seconds): Running build-deployment.sh"
-
-"${REPO_ROOT}"/ic-os/boundary-api-guestos/scripts/build-deployment.sh \
-    --env=test \
-    --input="${MEDIA_PATH}/${deployment}.json" \
-    --output="${API_MEDIA_PATH}" \
-    --certdir="${API_MEDIA_PATH}/certs" \
-    --nns_public_key="${MEDIA_PATH}/nns-public-key.pem"
-EOF
-    )
-    echo ${COMMAND}
-    SHELL="${BASH}" script --quiet --return "${API_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
-    API_PID=$!
 fi
 
 echo "-------------------------------------------------------------------------------"
@@ -418,7 +382,7 @@ echo "**** Install NNS canisters - ($(dateFromEpoch "$(date '+%s')"))"
 ansible icos_network_redeploy.yml -e ic_state="install"
 
 echo "**** Start monitoring - ($(dateFromEpoch "$(date '+%s')"))"
-ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key="${NNS_PUBLIC_KEY}"
+ansible ic_p8s_service_discovery_install.yml -e nns_public_key="${NNS_PUBLIC_KEY}"
 
 endtime="$(date '+%s')"
 echo "**** Completed deployment at $(dateFromEpoch "${endtime}") (start time was $(dateFromEpoch "${starttime}"))"

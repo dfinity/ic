@@ -237,7 +237,7 @@ pub fn verify_resharing_dealing(
     let dealt_public_key = dealing
         .public_coefficients
         .coefficients
-        .get(0)
+        .first()
         .expect("verify_dealing guarantees that public_coefficients.len() == threshold > 0");
     let reshared_public_key =
         individual_public_key(resharing_public_coefficients, dealer_resharing_index).map_err(
@@ -268,7 +268,7 @@ fn number_of_receivers(
         message: format!(
             "Unsupported number of receivers:\n  Num receivers: {}\n  Max: {}",
             receiver_keys.len(),
-            NodeIndex::max_value()
+            NodeIndex::MAX
         ),
     })?;
     Ok(NumberOfNodes::from(size))

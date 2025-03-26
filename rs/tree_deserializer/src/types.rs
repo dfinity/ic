@@ -3,7 +3,7 @@ use std::fmt;
 
 /// 64-bit unsigned integer that is deserialized from a byte array using LEB-128
 /// encoding.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct Leb128EncodedU64(pub u64);
 
 /// Error indicating that conversion from bytes to an integer failed.
@@ -52,7 +52,7 @@ impl<'de> serde::Deserialize<'de> for Leb128EncodedU64 {
     {
         struct LebU64Visitor;
 
-        impl<'de> serde::de::Visitor<'de> for LebU64Visitor {
+        impl serde::de::Visitor<'_> for LebU64Visitor {
             type Value = Leb128EncodedU64;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

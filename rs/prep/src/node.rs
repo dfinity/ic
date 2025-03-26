@@ -2,9 +2,15 @@ use std::{
     fmt::Display,
     io,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::Result;
+use ic_interfaces::{
+    certification::{Verifier, VerifierError},
+    validation::ValidationResult,
+};
+use ic_state_manager::StateManagerImpl;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -12,20 +18,25 @@ use crate::util::{write_proto_to_file_raw, write_registry_entry};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{
-        ConnectionEndpoint as pbConnectionEndpoint, FlowEndpoint as pbFlowEndpoint,
-        NodeRecord as pbNodeRecord,
+        ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord, NodeRewardType,
     },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{crypto::KeyPurpose, NodeId, PrincipalId, RegistryVersion};
-use std::net::SocketAddr;
-use std::os::unix::fs::PermissionsExt;
+use ic_registry_subnet_type::SubnetType;
+use ic_types::{
+    consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
+    RegistryVersion, SubnetId,
+};
+use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 
 const CRYPTO_DIR: &str = "crypto";
+const STATE_DIR: &str = "state";
+
 pub type SubnetIndex = u64;
 pub type NodeIndex = u64;
 
@@ -62,6 +73,10 @@ impl InitializedNode {
 
     pub fn build_crypto_path<P: AsRef<Path>>(node_path: P) -> PathBuf {
         PathBuf::from(node_path.as_ref()).join(CRYPTO_DIR)
+    }
+
+    pub fn state_path(&self) -> PathBuf {
+        self.node_path.join(STATE_DIR)
     }
 
     pub fn write_registry_entries(
@@ -181,9 +196,55 @@ impl InitializedNode {
         let output = format!("{}", node_id);
         std::fs::write(path, output).map_err(|source| InitializeNodeError::SavingNodeId { source })
     }
+
+    /// Creates an empty initial state and returns state hash.
+    /// This is needed if the subnet should start from a height other than 0.
+    pub(crate) fn generate_initial_state(
+        &self,
+        subnet_id: SubnetId,
+        subnet_type: SubnetType,
+    ) -> Vec<u8> {
+        struct FakeVerifier;
+        impl Verifier for FakeVerifier {
+            fn validate(
+                &self,
+                _: SubnetId,
+                _: &Certification,
+                _: RegistryVersion,
+            ) -> ValidationResult<VerifierError> {
+                Ok(())
+            }
+        }
+
+        let state_path = self.state_path();
+        let config = ic_config::state_manager::Config::new(state_path);
+        let state_manager = StateManagerImpl::new(
+            Arc::new(FakeVerifier),
+            subnet_id,
+            subnet_type,
+            ic_logger::replica_logger::no_op_logger(),
+            &ic_metrics::MetricsRegistry::new(),
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        );
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Full, None);
+
+        loop {
+            match state_manager.get_state_hash_at(Height::new(1)) {
+                Ok(state_hash) => break state_hash.get().0,
+                Err(StateHashError::Transient(_)) => (),
+                Err(StateHashError::Permanent(err)) => {
+                    panic!("Failed to generate initial state {:?}", err)
+                }
+            }
+        }
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
     /// Node index
@@ -219,7 +280,7 @@ impl Display for Node {
 }
 
 /// Structured definition of a node provided by the `--node` flag.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
@@ -227,9 +288,6 @@ pub struct NodeConfiguration {
 
     /// Endpoints where the replica serves the public API interface
     pub public_api: SocketAddr,
-
-    /// The initial endpoint that P2P uses.
-    pub p2p_addr: SocketAddr,
 
     /// The principal id of the node operator that operates this node.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -247,43 +305,41 @@ pub struct NodeConfiguration {
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
 
-    /// The SEV-SNP chip_identifier for this node.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub chip_id: Option<Vec<u8>>,
+    /// The domain name of the node
+    #[serde(skip_serializing, skip_deserializing)]
+    pub domain: Option<String>,
+
+    /// The type of rewards that the node operator wants to receive for the node.
+    /// E.g. "type3.1" or "type1" or similar from the node reward table in the NNS.
+    pub node_reward_type: Option<String>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
     fn from(node_configuration: NodeConfiguration) -> Self {
-        let mut pb_node_record = pbNodeRecord::default();
-
-        // p2p
-        let p2p_base_endpoint = pbConnectionEndpoint {
-            ip_addr: node_configuration.p2p_addr.ip().to_string(),
-            port: node_configuration.p2p_addr.port() as u32,
-        };
-        pb_node_record.p2p_flow_endpoints = vec![pbFlowEndpoint {
-            endpoint: Some(p2p_base_endpoint),
-        }];
-        pb_node_record.http = Some(pbConnectionEndpoint {
-            ip_addr: node_configuration.public_api.ip().to_string(),
-            port: node_configuration.public_api.port() as u32,
-        });
-        pb_node_record.xnet = Some(pbConnectionEndpoint {
-            ip_addr: node_configuration.xnet_api.ip().to_string(),
-            port: node_configuration.xnet_api.port() as u32,
-        });
-
-        // node provider principal id
-        pb_node_record.node_operator_id = node_configuration
-            .node_operator_principal_id
-            .map(|id| id.to_vec())
-            .unwrap_or_default();
-
-        pb_node_record
+        pbNodeRecord {
+            http: Some(pbConnectionEndpoint {
+                ip_addr: node_configuration.public_api.ip().to_string(),
+                port: node_configuration.public_api.port() as u32,
+            }),
+            xnet: Some(pbConnectionEndpoint {
+                ip_addr: node_configuration.xnet_api.ip().to_string(),
+                port: node_configuration.xnet_api.port() as u32,
+            }),
+            node_operator_id: node_configuration
+                .node_operator_principal_id
+                .map(|id| id.to_vec())
+                .unwrap_or_default(),
+            domain: node_configuration.domain,
+            node_reward_type: node_configuration
+                .node_reward_type
+                .map(NodeRewardType::from)
+                .map(|t| t as i32),
+            ..Default::default()
+        }
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum InitializeNodeError {
     #[error("could not create node path: {path}: {source}")]
     CreateNodePathFailed { path: String, source: io::Error },
@@ -335,7 +391,7 @@ impl NodeConfiguration {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
 pub struct NodeSecretKeyStore {
     pub node_id: NodeId,
     pub node_pks: ValidNodePublicKeys,
@@ -384,30 +440,23 @@ impl NodeSecretKeyStore {
 mod node_configuration {
     use super::*;
     use pretty_assertions::assert_eq;
-    use std::net::SocketAddr;
-    use std::str::FromStr;
+    use std::{net::SocketAddr, str::FromStr};
 
     #[test]
     fn into_proto_http() {
         let node_configuration = NodeConfiguration {
             xnet_api: SocketAddr::from_str("1.2.3.4:8080").unwrap(),
             public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
-            p2p_addr: SocketAddr::from_str("1.2.3.4:1234").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: None,
+            domain: None,
+            node_reward_type: None,
         };
 
-        let got = pbNodeRecord::try_from(node_configuration).unwrap();
+        let got = pbNodeRecord::from(node_configuration);
 
         let want = pbNodeRecord {
             node_operator_id: vec![],
-            p2p_flow_endpoints: vec![pbFlowEndpoint {
-                endpoint: Some(pbConnectionEndpoint {
-                    ip_addr: "1.2.3.4".to_string(),
-                    port: 1234,
-                }),
-            }],
             http: Some(pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8081,
@@ -418,6 +467,9 @@ mod node_configuration {
             }),
             hostos_version_id: None,
             chip_id: None,
+            public_ipv4_config: None,
+            domain: None,
+            node_reward_type: None,
         };
 
         assert_eq!(got, want);

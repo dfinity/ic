@@ -17,10 +17,13 @@ pub use self::http::{
     SignedDelegation,
 };
 pub use crate::methods::SystemMethod;
+use crate::time::CoarseTime;
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterChangeOrigin;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types_private::CanisterChangeOrigin;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
@@ -30,16 +33,17 @@ pub use ingress_messages::{
 };
 pub use inter_canister::{
     CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, MAX_REJECT_MESSAGE_LEN_BYTES,
+    Response, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;
-pub use query::{AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, UserQuery};
+pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::mem::size_of;
 use std::{convert::TryFrom, sync::Arc};
+use strum_macros::EnumIter;
 pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
 
 /// Same as [MAX_INTER_CANISTER_PAYLOAD_IN_BYTES], but of a primitive type
@@ -75,11 +79,12 @@ pub const MAX_XNET_PAYLOAD_IN_BYTES: NumBytes =
 pub const MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT: u64 = 5;
 
 /// Maximum byte size of a valid inter-canister `Response`.
-pub const MAX_RESPONSE_COUNT_BYTES: usize =
-    size_of::<RequestOrResponse>() + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
+pub const MAX_RESPONSE_COUNT_BYTES: usize = size_of::<RequestOrResponse>()
+    + size_of::<Response>()
+    + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
 /// An end user's signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct UserSignature {
     /// The actual signature. End users should sign the `MessageId` computed
     /// from the message that they are signing.
@@ -96,7 +101,8 @@ pub type StopCanisterCallId = Id<StopCanisterCallIdTag, u64>;
 
 /// Stores info needed for processing and tracking requests to
 /// stop canisters.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum StopCanisterContext {
     Ingress {
         sender: UserId,
@@ -112,6 +118,8 @@ pub enum StopCanisterContext {
         /// here so that they can be returned to the caller in the eventual
         /// reply.
         cycles: Cycles,
+        /// Deadline of the the stop canister call, if any (copied from request).
+        deadline: CoarseTime,
     },
 }
 
@@ -148,6 +156,7 @@ impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
                 reply_callback: req.sender_reply_callback,
                 call_id: Some(call_id),
                 cycles: Arc::make_mut(&mut req).payment.take(),
+                deadline: req.deadline,
             },
             CanisterCall::Ingress(ingress) => StopCanisterContext::Ingress {
                 sender: ingress.source,
@@ -179,6 +188,7 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
                 reply_callback,
                 call_id,
                 cycles,
+                deadline,
             } => Self {
                 context: Some(pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
@@ -187,6 +197,7 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
                         call_id: call_id.map(|id| id.get()),
                         funds: Some((&Funds::new(*cycles)).into()),
                         cycles: Some((*cycles).into()),
+                        deadline_seconds: deadline.as_secs_since_unix_epoch(),
                     },
                 )),
             },
@@ -220,6 +231,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         call_id,
                         funds,
                         cycles,
+                        deadline_seconds,
                     },
                 ) => {
                     // To maintain backwards compatibility we fall back to reading from `funds` if
@@ -246,6 +258,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         reply_callback: CallbackId::from(reply_callback),
                         call_id: call_id.map(StopCanisterCallId::from),
                         cycles,
+                        deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
                     }
                 }
             };
@@ -256,7 +269,8 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
 /// Bytes representation of signed HTTP requests, using CBOR as a serialization
 /// format. Use `TryFrom` or `TryInto` to convert between `SignedRequestBytes`
 /// and other types, corresponding to serialization/deserialization.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SignedRequestBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl AsRef<[u8]> for SignedRequestBytes {
@@ -313,7 +327,7 @@ impl SignedRequestBytes {
 }
 
 /// A wrapper around ingress messages and canister requests/responses.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterMessage {
     Response(Arc<Response>),
     Request(Arc<Request>),
@@ -345,8 +359,17 @@ impl Display for CanisterMessage {
     }
 }
 
+impl From<RequestOrResponse> for CanisterMessage {
+    fn from(msg: RequestOrResponse) -> Self {
+        match msg {
+            RequestOrResponse::Request(request) => CanisterMessage::Request(request),
+            RequestOrResponse::Response(response) => CanisterMessage::Response(response),
+        }
+    }
+}
+
 /// A wrapper around a canister request and an ingress message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterCall {
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
@@ -398,6 +421,15 @@ impl CanisterCall {
             }
         }
     }
+
+    /// Returns the deadline of canister requests, `NO_DEADLINE` for ingress
+    /// messages.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            CanisterCall::Request(request) => request.deadline,
+            CanisterCall::Ingress(_) => NO_DEADLINE,
+        }
+    }
 }
 
 impl TryFrom<CanisterMessage> for CanisterCall {
@@ -414,10 +446,11 @@ impl TryFrom<CanisterMessage> for CanisterCall {
 
 /// A canister task can be thought of as a special system message that the IC
 /// sends to the canister to execute its heartbeat or the global timer method.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
 pub enum CanisterTask {
-    Heartbeat,
-    GlobalTimer,
+    Heartbeat = 1,
+    GlobalTimer = 2,
+    OnLowWasmMemory = 3,
 }
 
 impl From<CanisterTask> for SystemMethod {
@@ -425,6 +458,7 @@ impl From<CanisterTask> for SystemMethod {
         match task {
             CanisterTask::Heartbeat => SystemMethod::CanisterHeartbeat,
             CanisterTask::GlobalTimer => SystemMethod::CanisterGlobalTimer,
+            CanisterTask::OnLowWasmMemory => SystemMethod::CanisterOnLowWasmMemory,
         }
     }
 }
@@ -434,12 +468,41 @@ impl Display for CanisterTask {
         match self {
             Self::Heartbeat => write!(f, "Heartbeat task"),
             Self::GlobalTimer => write!(f, "Global timer task"),
+            Self::OnLowWasmMemory => write!(f, "On low Wasm memory task"),
+        }
+    }
+}
+
+impl From<&CanisterTask> for pb::execution_task::CanisterTask {
+    fn from(task: &CanisterTask) -> Self {
+        match task {
+            CanisterTask::Heartbeat => pb::execution_task::CanisterTask::Heartbeat,
+            CanisterTask::GlobalTimer => pb::execution_task::CanisterTask::Timer,
+            CanisterTask::OnLowWasmMemory => pb::execution_task::CanisterTask::OnLowWasmMemory,
+        }
+    }
+}
+
+impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
+    type Error = ProxyDecodeError;
+
+    fn try_from(task: pb::execution_task::CanisterTask) -> Result<Self, Self::Error> {
+        match task {
+            pb::execution_task::CanisterTask::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "CanisterTask",
+                    err: format!("Unknown value for canister task {:?}", task),
+                })
+            }
+            pb::execution_task::CanisterTask::Heartbeat => Ok(CanisterTask::Heartbeat),
+            pb::execution_task::CanisterTask::Timer => Ok(CanisterTask::GlobalTimer),
+            pb::execution_task::CanisterTask::OnLowWasmMemory => Ok(CanisterTask::OnLowWasmMemory),
         }
     }
 }
 
 /// A wrapper around canister messages and tasks.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterMessageOrTask {
     Message(CanisterMessage),
     Task(CanisterTask),
@@ -454,18 +517,36 @@ impl Display for CanisterMessageOrTask {
     }
 }
 
-/// A wrapper around canister messages and tasks.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// A wrapper around canister calls and tasks that are executed in
+/// replicated mode.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterCallOrTask {
-    Call(CanisterCall),
+    Update(CanisterCall),
+    Query(CanisterCall),
     Task(CanisterTask),
 }
 
 impl CanisterCallOrTask {
     pub fn cycles(&self) -> Cycles {
         match self {
-            CanisterCallOrTask::Call(msg) => msg.cycles(),
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => msg.cycles(),
             CanisterCallOrTask::Task(_) => Cycles::zero(),
+        }
+    }
+
+    pub fn caller(&self) -> Option<PrincipalId> {
+        match self {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => Some(*msg.sender()),
+            CanisterCallOrTask::Task(_) => None,
+        }
+    }
+
+    /// Returns the deadline of canister requests, `NO_DEADLINE` for ingress
+    /// messages and tasks.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => msg.deadline(),
+            CanisterCallOrTask::Task(_) => NO_DEADLINE,
         }
     }
 }
@@ -473,11 +554,14 @@ impl CanisterCallOrTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exhaustive::ExhaustiveSet;
     use crate::{time::expiry_time_from_now, Time};
     use assert_matches::assert_matches;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
+    use strum::IntoEnumIterator;
 
     fn debug_blob(v: Vec<u8>) -> String {
         format!("{:?}", Blob(v))
@@ -680,40 +764,21 @@ mod tests {
         assert_matches!(signed_ingress1, Ok(signed_ingress1) if signed_ingress == signed_ingress1);
     }
 
-    fn make_request_metadata(
-        call_tree_depth: Option<u64>,
-        call_tree_start_time: Option<u64>,
-        call_subtree_deadline: Option<u64>,
-    ) -> Option<RequestMetadata> {
-        Some(RequestMetadata {
-            call_tree_depth,
-            call_tree_start_time: call_tree_start_time.map(Time::from_nanos_since_unix_epoch),
-            call_subtree_deadline: call_subtree_deadline.map(Time::from_nanos_since_unix_epoch),
-        })
-    }
-
     #[test]
     fn serialize_request_via_bincode() {
-        for metadata in [
-            None,
-            make_request_metadata(None, None, None),
-            make_request_metadata(Some(13), None, None),
-            make_request_metadata(None, Some(17), None),
-            make_request_metadata(None, None, Some(19)),
-        ] {
-            let request = Request {
-                receiver: CanisterId::from(13),
-                sender: CanisterId::from(17),
-                sender_reply_callback: CallbackId::from(100),
-                payment: Cycles::from(100_000_000_u128),
-                method_name: "method".into(),
-                method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
-                metadata,
-            };
-            let bytes = bincode::serialize(&request).unwrap();
-            let request1 = bincode::deserialize::<Request>(&bytes);
-            assert_matches!(request1, Ok(request1) if request == request1);
-        }
+        let request = Request {
+            receiver: CanisterId::from(13),
+            sender: CanisterId::from(17),
+            sender_reply_callback: CallbackId::from(100),
+            payment: Cycles::from(100_000_000_u128),
+            method_name: "method".into(),
+            method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
+            metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(17)),
+            deadline: CoarseTime::from_secs_since_unix_epoch(169),
+        };
+        let bytes = bincode::serialize(&request).unwrap();
+        let request1 = bincode::deserialize::<Request>(&bytes);
+        assert_matches!(request1, Ok(request1) if request == request1);
     }
 
     #[test]
@@ -724,6 +789,7 @@ mod tests {
             originator_reply_callback: CallbackId::from(100),
             refund: Cycles::from(100_000_000_u128),
             response_payload: Payload::Data(vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8]),
+            deadline: CoarseTime::from_secs_since_unix_epoch(169),
         };
         let bytes = bincode::serialize(&response).unwrap();
         let response1 = bincode::deserialize::<Response>(&bytes);
@@ -757,5 +823,35 @@ mod tests {
         let mut buffer = Cursor::new(&bytes);
         let signed_ingress1: SignedIngress = bincode::deserialize_from(&mut buffer).unwrap();
         assert_eq!(signed_ingress, signed_ingress1);
+    }
+
+    #[test]
+    fn canister_task_proto_round_trip() {
+        for initial in CanisterTask::iter() {
+            let encoded = pb::execution_task::CanisterTask::from(&initial);
+            let round_trip = CanisterTask::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_canister_task() {
+        // If this fails, you are making a potentially incompatible change to `CanisterTask`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            CanisterTask::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2, 3]
+        );
+    }
+
+    #[test]
+    fn stop_canister_context_proto_round_trip() {
+        for initial in StopCanisterContext::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb::StopCanisterContext::from(&initial);
+            let round_trip = StopCanisterContext::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
     }
 }

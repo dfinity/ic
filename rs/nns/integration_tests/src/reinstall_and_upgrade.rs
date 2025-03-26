@@ -2,27 +2,25 @@ use candid::Encode;
 use canister_test::{Canister, Project, Wasm};
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance::pb::v1::{Governance as GovernanceProto, NnsFunction};
+use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, NnsFunction};
 use ic_nns_gtc::{
-    der_encode,
     pb::v1::{AccountState, Gtc as GtcProto},
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
 };
 use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     governance::{
-        append_inert, get_pending_proposals, reinstall_nns_canister_by_proposal,
+        bump_gzip_timestamp, get_pending_proposals, reinstall_nns_canister_by_proposal,
         submit_external_update_proposal, upgrade_nns_canister_by_proposal,
-        upgrade_nns_canister_with_arg_by_proposal, upgrade_root_canister_by_proposal,
+        upgrade_nns_canister_with_arg_by_proposal,
     },
-    ids::TEST_NEURON_2_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 use icp_ledger::{LedgerCanisterInitPayload, LedgerCanisterPayload, Tokens};
 use lifeline::LIFELINE_CANISTER_WASM;
@@ -45,60 +43,50 @@ const TEST_ECT_ACCOUNTS: &[(&str, u32); 2] = &[
 
 #[test]
 fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let init_state = construct_init_state();
         let nns_canisters = NnsCanisters::set_up(&runtime, init_state.clone()).await;
 
         for CanisterInstallInfo {
             wasm,
-            use_root,
+            use_root: _,
             canister,
             init_payload,
             mode,
         } in get_nns_canister_wasm(&nns_canisters, init_state).into_iter()
         {
-            if use_root {
-                if mode == CanisterInstallMode::Upgrade {
-                    println!("[Update] Canister: {:?}", canister.canister_id());
-                    if canister.canister_id() == LIFELINE_CANISTER_ID {
-                        let arg: Vec<String> = vec![];
-                        upgrade_nns_canister_with_arg_by_proposal(
-                            canister,
-                            &nns_canisters.governance,
-                            &nns_canisters.root,
-                            append_inert(Some(&wasm)),
-                            Encode!(&arg).unwrap(),
-                        )
-                        .await;
-                    } else {
-                        upgrade_nns_canister_by_proposal(
-                            canister,
-                            &nns_canisters.governance,
-                            &nns_canisters.root,
-                            true,
-                            // Method fails if wasm stays the same
-                            append_inert(Some(&wasm)),
-                            None,
-                        )
-                        .await;
-                    }
-                } else if mode == CanisterInstallMode::Reinstall {
-                    println!("[Reinstall] Canister: {:?}", canister.canister_id());
-                    reinstall_nns_canister_by_proposal(
+            if mode == CanisterInstallMode::Upgrade {
+                println!("[Update] Canister: {:?}", canister.canister_id());
+                if canister.canister_id() == LIFELINE_CANISTER_ID {
+                    let arg: Vec<String> = vec![];
+                    upgrade_nns_canister_with_arg_by_proposal(
                         canister,
                         &nns_canisters.governance,
                         &nns_canisters.root,
-                        wasm,
-                        init_payload,
+                        bump_gzip_timestamp(&wasm),
+                        Encode!(&arg).unwrap(),
+                    )
+                    .await;
+                } else {
+                    upgrade_nns_canister_by_proposal(
+                        canister,
+                        &nns_canisters.governance,
+                        &nns_canisters.root,
+                        true,
+                        // Method fails if wasm stays the same
+                        bump_gzip_timestamp(&wasm),
+                        Some(Encode!(&()).unwrap()),
                     )
                     .await;
                 }
-            } else {
-                // Root Upgrade via Lifeline
-                upgrade_root_canister_by_proposal(
+            } else if mode == CanisterInstallMode::Reinstall {
+                println!("[Reinstall] Canister: {:?}", canister.canister_id());
+                reinstall_nns_canister_by_proposal(
+                    canister,
                     &nns_canisters.governance,
-                    &nns_canisters.lifeline,
+                    &nns_canisters.root,
                     wasm,
+                    init_payload,
                 )
                 .await;
             }
@@ -110,7 +98,7 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
 
 #[test]
 fn test_reinstall_and_upgrade_canisters_with_state_changes() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let init_state = construct_init_state();
         let nns_canisters = NnsCanisters::set_up(&runtime, init_state.clone()).await;
 
@@ -198,32 +186,22 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
         // Upgrade
         for CanisterInstallInfo {
             wasm,
-            use_root,
+            use_root: _,
             canister,
             init_payload,
             mode,
         } in canister_install_info
         {
             if mode == CanisterInstallMode::Upgrade {
-                if use_root {
-                    upgrade_nns_canister_by_proposal(
-                        canister,
-                        &nns_canisters.governance,
-                        &nns_canisters.root,
-                        false,
-                        wasm,
-                        Some(init_payload),
-                    )
-                    .await;
-                } else {
-                    // Root Upgrade via Lifeline
-                    upgrade_root_canister_by_proposal(
-                        &nns_canisters.governance,
-                        &nns_canisters.lifeline,
-                        wasm,
-                    )
-                    .await;
-                }
+                upgrade_nns_canister_by_proposal(
+                    canister,
+                    &nns_canisters.governance,
+                    &nns_canisters.root,
+                    false,
+                    wasm,
+                    Some(init_payload),
+                )
+                .await;
             }
         }
 
@@ -279,10 +257,7 @@ fn get_nns_canister_wasm<'a>(
     let encoded_init_state = encode_init_state(init_state);
     vec![
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
-                "ledger-canister",
-                &[],
-            ))),
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("ledger-canister", &[])),
             use_root: true,
             canister: &nns_canisters.ledger,
             init_payload: encoded_init_state[0].clone(),
@@ -296,10 +271,10 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env(
                 "genesis-token-canister",
                 &[],
-            ))),
+            )),
             use_root: true,
             canister: &nns_canisters.genesis_token,
             init_payload: encoded_init_state[1].clone(),
@@ -313,10 +288,10 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env(
                 "cycles-minting-canister",
                 &[],
-            ))),
+            )),
             use_root: true,
             canister: &nns_canisters.cycles_minting,
             init_payload: encoded_init_state[2].clone(),
@@ -330,7 +305,7 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Wasm::from_bytes(LIFELINE_CANISTER_WASM))),
+            wasm: bump_gzip_timestamp(&Wasm::from_bytes(LIFELINE_CANISTER_WASM)),
             use_root: true,
             canister: &nns_canisters.lifeline,
             init_payload: encoded_init_state[3].clone(),
@@ -344,10 +319,10 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env(
                 "governance-canister",
                 &[],
-            ))),
+            )),
             use_root: true,
             canister: &nns_canisters.governance,
             init_payload: encoded_init_state[4].clone(),
@@ -361,27 +336,14 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
-                "root-canister",
-                &[],
-            ))),
-            use_root: false,
-            canister: &nns_canisters.root,
-            init_payload: encoded_init_state[5].clone(),
-            mode: CanisterInstallMode::Reinstall,
-        },
-        CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_from_env("root-canister", &[]),
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("root-canister", &[])),
             use_root: false,
             canister: &nns_canisters.root,
             init_payload: encoded_init_state[5].clone(),
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
-                "registry-canister",
-                &[],
-            ))),
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("registry-canister", &[])),
             use_root: true,
             canister: &nns_canisters.registry,
             init_payload: encoded_init_state[6].clone(),
@@ -401,7 +363,7 @@ async fn make_changes_to_state(nns_canisters: &NnsCanisters<'_>) {
     // GTC change: have TEST_IDENTITY_1 donate their neurons
     let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
+        pub_key: TEST_IDENTITY_1.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
     let donate_account_response: Result<Result<(), String>, String> = nns_canisters
@@ -420,7 +382,7 @@ async fn check_changes_to_state(nns_canisters: &NnsCanisters<'_>) -> bool {
     // GTC change: Assert that TEST_IDENTITY_1 has donated their neurons
     let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
+        pub_key: TEST_IDENTITY_1.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
     let get_account_response: Result<Result<AccountState, String>, String> = nns_canisters

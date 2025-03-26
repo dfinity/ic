@@ -1,5 +1,6 @@
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::compile;
@@ -7,20 +8,18 @@ use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
+use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
-    state::SystemStateBuilder,
-    types::ids::{call_context_test_id, user_test_id},
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::MemoryAllocation;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
+    time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
@@ -58,7 +57,16 @@ fn test_api_for_update(
             .with_subnet_type(subnet_type)
             .build(),
     );
-    let static_system_state = SandboxSafeSystemState::new(
+
+    let api_type = ApiType::update(
+        UNIX_EPOCH,
+        payload,
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+    );
+
+    let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),
@@ -69,19 +77,17 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
+        Default::default(),
+        Some(caller),
+        api_type.call_context_id(),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
-    let canister_current_message_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
 
     SystemApiImpl::new(
-        ApiType::update(
-            mock_time(),
-            payload,
-            Cycles::zero(),
-            caller,
-            call_context_test_id(13),
-        ),
+        api_type,
         static_system_state,
         canister_current_memory_usage,
         canister_current_message_memory_usage,
@@ -92,19 +98,21 @@ fn test_api_for_update(
                 instruction_limit,
             ),
             canister_memory_limit,
+            wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
+                as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
             subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        NumWasmPages::from(0),
+        Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
         log,
     )
 }
@@ -237,7 +245,7 @@ fn make_module_wat_for_api_calls(heap_size: usize) -> String {
         (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
         (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
         (call $ic0_canister_cycle_balance128 (i32.const 36864))
- 
+
         (; Write some data to page 10 using stable_read, by first copying 4
         bytes from the second page to stable memory, then copying back ;)
         (drop (call $ic0_stable_grow (i32.const 1)))
@@ -246,6 +254,57 @@ fn make_module_wat_for_api_calls(heap_size: usize) -> String {
       )
 
       (memory $memory {HEAP_SIZE})
+      (export "memory" (memory $memory))
+      (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
+    )"#,
+        HEAP_SIZE = heap_size
+    )
+}
+
+fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
+    format!(
+        r#"
+    (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+        (func $msg_reply_data_append (param i64) (param i64)))
+      (import "ic0" "msg_arg_data_copy"
+        (func $ic0_msg_arg_data_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "msg_arg_data_size"
+        (func $ic0_msg_arg_data_size (result i64)))
+      (import "ic0" "msg_caller_copy"
+        (func $ic0_msg_caller_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "msg_caller_size"
+        (func $ic0_msg_caller_size (result i64)))
+      (import "ic0" "canister_self_copy"
+        (func $ic0_canister_self_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "canister_self_size"
+        (func $ic0_canister_self_size (result i64)))
+
+      (import "ic0" "canister_cycle_balance128"
+        (func $ic0_canister_cycle_balance128 (param i64)))
+
+      (import "ic0" "stable64_grow"
+        (func $ic0_stable64_grow (param $pages i64) (result i64)))
+      (import "ic0" "stable64_read"
+        (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+      (import "ic0" "stable64_write"
+        (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+      (func $touch_heap_with_api_calls
+        (call $ic0_msg_caller_copy (i64.const 4096) (i64.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i64.const 12288) (i64.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i64.const 20480) (i64.const 0) (call $ic0_canister_self_size))
+        (call $ic0_canister_cycle_balance128 (i64.const 36864))
+
+        (; Write some data to page 10 using stable_read, by first copying 4
+        bytes from the second page to stable memory, then copying back ;)
+        (drop (call $ic0_stable64_grow (i64.const 1)))
+        (call $ic0_stable64_write (i64.const 0) (i64.const 4096) (i64.const 4))
+        (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
+      )
+
+      (memory $memory i64 {HEAP_SIZE})
       (export "memory" (memory $memory))
       (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
     )"#,
@@ -349,7 +408,7 @@ fn make_i32_store_forward_module_wat(heap_size: usize) -> String {
     make_module_wat_with_write_fun(heap_size, write_fun)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Write {
     dst: u32,
     bytes: Vec<u8>,
@@ -422,15 +481,15 @@ mod tests {
     use super::*;
 
     use ic_embedders::{
-        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost_new,
-        wasmtime_embedder::CanisterMemoryType,
+        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
+        wasm_utils::instrumentation::WasmMemoryType, wasmtime_embedder::CanisterMemoryType,
     };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{PageIndex, PageMap};
     use ic_system_api::ModificationTracking;
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use proptest::strategy::ValueTree;
 
     fn apply_writes_and_check_heap(
@@ -506,10 +565,10 @@ mod tests {
                 assert_eq!(wasm_heap[start..end], test_heap[start..end]);
 
                 if modification_tracking == ModificationTracking::Track {
-                    dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+                    dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
                     // Verify that wasm heap and test buffer are the same.
-                    let i = result.dirty_pages.last().unwrap().get();
+                    let i = result.wasm_dirty_pages.last().unwrap().get();
                     let offset = i as usize * PAGE_SIZE;
                     let page1 = unsafe { test_heap.as_ptr().add(offset) };
                     let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
@@ -527,7 +586,7 @@ mod tests {
                     );
                     page_map.update(&compute_page_delta(
                         &mut instance,
-                        &result.dirty_pages,
+                        &result.wasm_dirty_pages,
                         CanisterMemoryType::Heap,
                     ));
                 }
@@ -671,9 +730,9 @@ mod tests {
 
             // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
             let expected_instructions = 1 // Function is 1 instruction.
-                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
-                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP.get()
-                + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
+                + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32);
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
@@ -714,7 +773,9 @@ mod tests {
                     max_num_instructions,
                     subnet_type,
                 ),
-                Err(HypervisorError::InstructionLimitExceeded)
+                Err(HypervisorError::InstructionLimitExceeded(
+                    max_num_instructions
+                ))
             )
         })
     }
@@ -728,18 +789,19 @@ mod tests {
             get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
         };
         use ic_config::subnet_config::SchedulerConfig;
-        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+        use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
         use ic_logger::replica_logger::no_op_logger;
 
         // (drop (call $ic0_stable_grow (i32.const 1)))
         // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
         fn setup_instruction_overhead() -> u64 {
-            instruction_to_cost_new(&wasmparser::Operator::Drop)
-                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
-                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::new::STABLE_GROW.get()
-                + instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
-                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
-                + 3 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
+            instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::STABLE_GROW.get()
+                + instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + 3 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
                 + 1 // Function is 1 instruction.
         }
 
@@ -754,10 +816,12 @@ mod tests {
             )
             .unwrap();
             // Additional charge for an empty read should just be the overhead.
-            assert_eq!(instructions_consumed.get(),                 setup_instruction_overhead()
-            + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
-                .get()
-);
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
+            );
         }
 
         #[test]
@@ -775,7 +839,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
             );
@@ -796,7 +860,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::STABLE64_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
                         .get()
                     + STABLE_OP_BYTES
             );
@@ -816,8 +880,9 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
+                    + STABLE_OP_BYTES
             );
         }
 
@@ -836,7 +901,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
                     + SchedulerConfig::application_subnet()
@@ -859,8 +924,9 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -880,7 +946,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
                     + SchedulerConfig::application_subnet()
@@ -903,8 +969,9 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
+                    + STABLE_OP_BYTES
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
@@ -912,126 +979,90 @@ mod tests {
 
     #[test]
     fn test_proportional_instructions_consumption_to_data_size() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::Application;
-            let dst: u32 = 0;
+        for subnet_type in [
+            SubnetType::Application,
+            SubnetType::VerifiedApplication,
+            SubnetType::System,
+        ] {
+            with_test_replica_logger(|log| {
+                let dst: u32 = 0;
 
-            let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
-                ic_config::embedders::MeteringType::New => SchedulerConfig::application_subnet()
-                    .dirty_page_overhead
-                    .get(),
-                _ => 0,
-            };
+                let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
+                    ic_config::embedders::MeteringType::New => match subnet_type {
+                        SubnetType::System => {
+                            SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                        }
+                        SubnetType::Application => SchedulerConfig::application_subnet()
+                            .dirty_page_overhead
+                            .get(),
+                        SubnetType::VerifiedApplication => {
+                            SchedulerConfig::verified_application_subnet()
+                                .dirty_page_overhead
+                                .get()
+                        }
+                    },
+                    _ => 0,
+                };
 
-            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
-            payload.extend(random_payload());
-            let payload_size = payload.len() - 4;
+                let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
+                payload.extend(random_payload());
+                let payload_size = payload.len() - 4;
 
-            let mut double_size_payload: Vec<u8> = payload.clone();
-            double_size_payload.extend(random_payload());
+                let mut double_size_payload: Vec<u8> = payload.clone();
+                double_size_payload.extend(random_payload());
 
-            let (instructions_consumed_without_data, dry_run_stats) = run_and_get_stats(
-                log.clone(),
-                "write_bytes",
-                dst.to_le_bytes().to_vec(),
-                MAX_NUM_INSTRUCTIONS,
-                subnet_type,
-            )
-            .unwrap();
-            let dry_run_dirty_heap = dry_run_stats.dirty_pages.len() as u64;
-
-            {
-                // Number of instructions consumed only for copying the payload.
-                let (consumed_instructions, run_stats) = run_and_get_stats(
+                let (instructions_consumed_without_data, dry_run_stats) = run_and_get_stats(
                     log.clone(),
                     "write_bytes",
-                    payload,
+                    dst.to_le_bytes().to_vec(),
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
                 )
                 .unwrap();
-                let dirty_heap = run_stats.dirty_pages.len() as u64;
-                let consumed_instructions =
-                    consumed_instructions - instructions_consumed_without_data;
-                assert_eq!(
-                    (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
-                    (payload_size / BYTES_PER_INSTRUCTION)
-                        - (dry_run_dirty_heap * dirty_heap_cost) as usize,
-                );
-            }
+                let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
 
-            {
-                // Number of instructions consumed increased with the size of the data.
-                let (consumed_instructions, run_stats) = run_and_get_stats(
-                    log,
-                    "write_bytes",
-                    double_size_payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap();
-                let dirty_heap = run_stats.dirty_pages.len() as u64;
-                let consumed_instructions =
-                    consumed_instructions - instructions_consumed_without_data;
+                {
+                    // Number of instructions consumed only for copying the payload.
+                    let (consumed_instructions, run_stats) = run_and_get_stats(
+                        log.clone(),
+                        "write_bytes",
+                        payload,
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let consumed_instructions =
+                        consumed_instructions - instructions_consumed_without_data;
+                    assert_eq!(
+                        (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
+                        (payload_size / BYTES_PER_INSTRUCTION)
+                            - (dry_run_dirty_heap * dirty_heap_cost) as usize,
+                    );
+                }
 
-                assert_eq!(
-                    (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
-                    (2 * payload_size / BYTES_PER_INSTRUCTION)
-                        - (dry_run_dirty_heap * dirty_heap_cost) as usize
-                );
-            }
-        })
-    }
+                {
+                    // Number of instructions consumed increased with the size of the data.
+                    let (consumed_instructions, run_stats) = run_and_get_stats(
+                        log,
+                        "write_bytes",
+                        double_size_payload,
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let consumed_instructions =
+                        consumed_instructions - instructions_consumed_without_data;
 
-    #[test]
-    fn test_no_instructions_consumption_based_on_data_size_on_system_subnet() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::System;
-            let dst: u32 = 0;
-
-            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
-            payload.extend(random_payload());
-
-            let mut double_size_payload: Vec<u8> = payload.clone();
-            double_size_payload.extend(random_payload());
-
-            let instructions_consumed_without_data = get_num_instructions_consumed(
-                log.clone(),
-                "write_bytes",
-                dst.to_le_bytes().to_vec(),
-                MAX_NUM_INSTRUCTIONS,
-                subnet_type,
-            )
-            .unwrap();
-
-            {
-                // Number of instructions consumed for copying the payload is zero.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log.clone(),
-                    "write_bytes",
-                    payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
-                assert_eq!(consumed_instructions.get(), 0);
-            }
-
-            {
-                // Number of instructions consumed for copying the payload is zero.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log,
-                    "write_bytes",
-                    double_size_payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
-                assert_eq!(consumed_instructions.get(), 0);
-            }
-        })
+                    assert_eq!(
+                        (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
+                        (2 * payload_size / BYTES_PER_INSTRUCTION)
+                            - (dry_run_dirty_heap * dirty_heap_cost) as usize
+                    );
+                }
+            })
+        }
     }
 
     fn run_and_get_stats(
@@ -1045,7 +1076,6 @@ mod tests {
         let wasm = wat2wasm(&wat).unwrap();
 
         let config = EmbeddersConfig {
-            subnet_type,
             dirty_page_overhead: match subnet_type {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),
@@ -1363,7 +1393,63 @@ mod tests {
                     "touch_heap_with_api_calls".to_string(),
                 )))
                 .expect("call to touch_heap_with_api_calls failed");
-            dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
+
+            let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
+            expected_dirty_pages.insert(1); // caller_copy
+            expected_dirty_pages.insert(3); // data_copy
+            expected_dirty_pages.insert(5); // canister_self_copy
+            expected_dirty_pages.insert(9); // canister_cycle_balance128
+            expected_dirty_pages.insert(9); // msg_cycles_available128
+            expected_dirty_pages.insert(10); // stable_read
+
+            assert_eq!(expected_dirty_pages, dirty_pages);
+        });
+    }
+
+    #[test]
+    fn touch_heap64_with_api_calls() {
+        with_test_replica_logger(|log| {
+            let wat = make_module64_wat_for_api_calls(TEST_NUM_PAGES);
+            let wasm = wat2wasm(&wat).unwrap();
+            let mut config = EmbeddersConfig::default();
+            config.feature_flags.wasm64 = FlagStatus::Enabled;
+            let embedder = WasmtimeEmbedder::new(config, log);
+            let (embedder_cache, result) = compile(&embedder, &wasm);
+            result.unwrap();
+
+            let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
+
+            let payload = vec![0, 1, 2, 3, 4, 5, 6, 7];
+
+            let api = test_api_for_update(
+                no_op_logger(),
+                None,
+                payload,
+                SubnetType::Application,
+                MAX_NUM_INSTRUCTIONS,
+            );
+            let instruction_limit = api.slice_instruction_limit();
+            let mut instance = embedder
+                .new_instance(
+                    canister_test_id(1),
+                    &embedder_cache,
+                    None,
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    ModificationTracking::Track,
+                    Some(api),
+                )
+                .map_err(|r| r.0)
+                .expect("Failed to create instance");
+            instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
+
+            let result = instance
+                .run(FuncRef::Method(WasmMethod::Update(
+                    "touch_heap_with_api_calls".to_string(),
+                )))
+                .expect("call to touch_heap_with_api_calls failed");
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
             let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
             expected_dirty_pages.insert(1); // caller_copy

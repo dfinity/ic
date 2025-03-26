@@ -6,17 +6,12 @@ per canister.
 
 ## Code organization
 
-- The top-level `canister_sandbox` crate is the binary that will be run as
-  the sandbox process. It is just a simple wrapper that launches all logic
-  implemented in other crates from its `main` function
+- The top-level `canister_sandbox` crate contains the `backend_lib` library for
+running the sandbox process as well as the sandbox process binary. 
 
 - `common` implements the IPC mechanisms and protocols used between replica
   and sandbox process. The actual protocol definitions are found in
   the `common/src/protocol` module
-
-- `backend_lib` implements the logic to be run in the sandbox process. It is
-  organized as a library crate, with the main crate just calling its
-  entry point.
 
 - `replica_controller` implements the replica side control of the sandbox
   mechanism. It provides on the one hand the API "glue" towards the execution

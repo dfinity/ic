@@ -6,8 +6,9 @@ package types.v1;
 import "bitcoin/v1/bitcoin.proto";
 import "messaging/xnet/v1/certification.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
+import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
-import "types/v1/ecdsa.proto";
+import "types/v1/idkg.proto";
 import "types/v1/types.proto";
 
 message CertificationMessage {
@@ -36,6 +37,7 @@ message CatchUpPackageShare {
   bytes random_beacon_hash = 5;
   bytes signature = 6;
   NodeId signer = 7;
+  optional uint64 oldest_registry_version_in_use_by_replicated_state = 8;
 }
 
 message CatchUpContent {
@@ -44,6 +46,7 @@ message CatchUpContent {
   bytes state_hash = 3;
   bytes block_hash = 4;
   bytes random_beacon_hash = 5;
+  optional uint64 oldest_registry_version_in_use_by_replicated_state = 6;
 }
 
 message Block {
@@ -60,10 +63,11 @@ message Block {
   IngressPayload ingress_payload = 9;
   XNetPayload xnet_payload = 10;
   SelfValidatingPayload self_validating_payload = 12;
-  EcdsaPayload ecdsa_payload = 13;
+  IDkgPayload idkg_payload = 13;
   reserved 14;
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
+  bytes vetkd_payload_bytes = 17;
   bytes payload_hash = 11;
 }
 
@@ -80,6 +84,7 @@ message ConsensusMessage {
     RandomTapeShare random_tape_share = 9;
     CatchUpPackage cup = 10;
     CatchUpPackageShare cup_share = 11;
+    EquivocationProof equivocation_proof = 12;
   }
 }
 
@@ -153,6 +158,20 @@ message NotarizationShare {
   NodeId signer = 5;
 }
 
+message EquivocationProof {
+  NodeId signer = 1;
+  string version = 2;
+  uint64 height = 3;
+  SubnetId subnet_id = 4;
+
+  // First equivocating block
+  bytes hash1 = 5;
+  bytes signature1 = 6;
+  // Second equivocating block
+  bytes hash2 = 7;
+  bytes signature2 = 8;
+}
+
 message SubnetStreamSlice {
   SubnetId subnet_id = 1;
   messaging.xnet.v1.CertifiedStreamSlice stream_slice = 2;
@@ -180,13 +199,66 @@ message CanisterQueryStats {
   uint64 egress_payload_size = 5;
 }
 
+enum VetKdErrorCode {
+  VET_KD_ERROR_CODE_UNSPECIFIED = 0;
+  VET_KD_ERROR_CODE_TIMED_OUT = 1;
+  VET_KD_ERROR_CODE_INVALID_KEY = 2;
+}
+
+message VetKdAgreement {
+  uint64 callback_id = 1;
+  oneof agreement {
+    bytes data = 2;
+    VetKdErrorCode reject = 3;
+  }
+}
+
 message IngressIdOffset {
   uint64 expiry = 1;
   bytes message_id = 2;
   uint64 offset = 3;
 }
 
+message IngressMessage {
+  bytes message_id = 1;
+  uint64 expiry = 2;
+  bytes signed_request_bytes = 3;
+}
+
 message IngressPayload {
-  repeated IngressIdOffset id_and_pos = 1;
-  bytes buffer = 2;
+  reserved 1, 2;
+  repeated IngressMessage ingress_messages = 3;
+}
+
+// Stripped consensus artifacts messages below
+message GetIngressMessageInBlockRequest {
+  IngressMessageId ingress_message_id = 1;
+  ConsensusMessageId block_proposal_id = 2;
+  bytes ingress_bytes_hash = 3;
+}
+
+message GetIngressMessageInBlockResponse {
+  bytes ingress_message = 1;
+}
+
+message StrippedBlockProposal {
+  BlockProposal block_proposal_without_ingress_payload = 1;
+  repeated StrippedIngressMessage ingress_messages = 2;
+  ConsensusMessageId unstripped_consensus_message_id = 3;
+}
+
+message StrippedIngressMessage {
+  IngressMessageId stripped = 1;
+  bytes ingress_bytes_hash = 2;
+}
+
+message StrippedConsensusMessage {
+  oneof msg {
+    StrippedBlockProposal stripped_block_proposal = 1;
+    ConsensusMessage unstripped = 2;
+  }
+}
+
+message StrippedConsensusMessageId {
+  ConsensusMessageId unstripped_id = 1;
 }

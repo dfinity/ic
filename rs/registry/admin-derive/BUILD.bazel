@@ -3,14 +3,15 @@ load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:quote",
     "@crate_index//:syn",
 ]
 
 rust_proc_macro(
     name = "admin-derive",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_admin_derive",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

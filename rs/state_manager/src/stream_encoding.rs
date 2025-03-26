@@ -79,7 +79,7 @@ pub fn encode_stream_slice(
     use Matcher as M;
     use Pattern as P;
 
-    let byte_limit = byte_limit.unwrap_or(std::usize::MAX);
+    let byte_limit = byte_limit.unwrap_or(usize::MAX);
     let size_limit_pattern = vec![
         M::Label(LABEL_STREAMS.to_vec()),
         M::Any,
@@ -281,10 +281,10 @@ pub fn decode_slice_from_tree(
             queue.push(msg);
         }
 
-        if queue.begin() < header.begin || header.end < queue.end() {
+        if queue.begin() < header.begin() || header.end() < queue.end() {
             return Err(DecodeStreamError::SerializationError(
                 format!("the range of message indices [{}, {}) does not agree with the range in header [{}, {})",
-                        queue.begin(), queue.end(), header.begin, header.end)
+                        queue.begin(), queue.end(), header.begin(), header.end())
             ));
         }
     }

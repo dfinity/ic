@@ -4,11 +4,11 @@ use ic_nns_test_utils::{
         local_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
         try_call_via_universal_canister,
     },
-    registry::{prepare_registry, routing_table_mutation},
+    registry::{prepare_registry_with_two_node_sets, routing_table_mutation},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_test_utilities::types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::CanisterId;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -25,10 +25,11 @@ use common::test_helpers::{check_error_message, get_routing_table};
 fn test_reroute_canister_ranges() {
     local_test_on_nns_subnet(|runtime| {
         async move {
-            let (subnet_1_mutation, subnet_id_1, _, _) = prepare_registry(
-                /* num_nodes_in_subnet = */ 4, /* num_unassigned_nodes = */ 0,
-            );
-            let nns_subnet = subnet_test_id(999);
+            let (subnet_1_mutation, subnet_id_1, subnet_id_2_option, _, _) =
+                prepare_registry_with_two_node_sets(
+                    /* num_nodes_in_subnet = */ 4, /* num_unassigned_nodes = */ 4, true,
+                );
+            let subnet_id_2 = subnet_id_2_option.unwrap();
             let rt_mutation = {
                 fn range(start: u64, end: u64) -> CanisterIdRange {
                     CanisterIdRange {
@@ -38,7 +39,7 @@ fn test_reroute_canister_ranges() {
                 }
 
                 let mut rt = RoutingTable::new();
-                rt.insert(range(0, 255), nns_subnet)
+                rt.insert(range(0, 255), subnet_id_2)
                     .expect("failed to update the routing table");
                 rt.insert(range(256, 511), subnet_id_1)
                     .expect("failed to update the routing table");
@@ -70,7 +71,7 @@ fn test_reroute_canister_ranges() {
                     start: CanisterId::from(10),
                     end: CanisterId::from(11),
                 }],
-                source_subnet: nns_subnet,
+                source_subnet: subnet_id_2,
                 destination_subnet: subnet_id_1,
             };
 
@@ -88,7 +89,7 @@ fn test_reroute_canister_ranges() {
                     start: CanisterId::from(10),
                     end: CanisterId::from(11),
                 }],
-                source_subnet: nns_subnet,
+                source_subnet: subnet_id_2,
                 destination_subnet: subnet_id_1,
             };
 
@@ -105,7 +106,7 @@ fn test_reroute_canister_ranges() {
 
             assert_eq!(
                 routing_table.route(CanisterId::from(9).into()),
-                Some(nns_subnet)
+                Some(subnet_id_2)
             );
             assert_eq!(
                 routing_table.route(CanisterId::from(10).into()),
@@ -117,7 +118,7 @@ fn test_reroute_canister_ranges() {
             );
             assert_eq!(
                 routing_table.route(CanisterId::from(12).into()),
-                Some(nns_subnet)
+                Some(subnet_id_2)
             );
 
             check_error_message(
@@ -130,7 +131,7 @@ fn test_reroute_canister_ranges() {
                                 start: CanisterId::from(12),
                                 end: CanisterId::from(15),
                             }],
-                            source_subnet: nns_subnet,
+                            source_subnet: subnet_id_2,
                             destination_subnet: subnet_id_1,
                         },
                     )
@@ -149,7 +150,7 @@ fn test_reroute_canister_ranges() {
                             start: CanisterId::from(15),
                             end: CanisterId::from(10),
                         },],
-                        source_subnet: nns_subnet,
+                        source_subnet: subnet_id_2,
                         destination_subnet: subnet_id_1,
                     })
                     .unwrap(),
@@ -169,7 +170,7 @@ fn test_reroute_canister_ranges() {
                             start: CanisterId::from(12),
                             end: CanisterId::from(15),
                         },],
-                        source_subnet: nns_subnet,
+                        source_subnet: subnet_id_2,
                         destination_subnet: subnet_test_id(9999),
                     })
                     .unwrap(),

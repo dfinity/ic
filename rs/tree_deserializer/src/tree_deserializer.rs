@@ -23,7 +23,7 @@ macro_rules! unsupported_type {
 
 /// `Error` describes error conditions that can happen when deserializing a tree
 /// into a data structure.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Error {
     /// The type with the given name is not supported by this deserializer.
     UnsupportedType(&'static str),

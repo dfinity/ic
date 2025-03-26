@@ -9,16 +9,16 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 clap = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }
-ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
-ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-certification = { path = "../consensus/certification" }
+ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
-ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
@@ -30,31 +30,33 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-nns-governance = { path = "../nns/governance" }
-ic-nns-init = { path = "../nns/init" }
+ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
-icp-ledger = { path = "../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../ledger_suite/icp" }
 prost = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slog = "2.5.2"
-slog-async = { version = "2.5", features = ["nested-values"] }
-tempfile = "3.1.0"
+slog = { workspace = true }
+slog-async = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+tower = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 
 [[bin]]
 name = "ic-replay"

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
@@ -344,7 +342,7 @@ fn should_deserialize_existing_public_key_store() {
     );
 }
 
-fn equal_ignoring_timestamp(left: &Vec<PublicKey>, right: &Vec<PublicKey>) -> bool {
+fn equal_ignoring_timestamp(left: &[PublicKey], right: &[PublicKey]) -> bool {
     left.len() == right.len()
         && left
             .iter()

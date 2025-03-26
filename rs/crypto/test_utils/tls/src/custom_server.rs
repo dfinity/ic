@@ -1,15 +1,18 @@
 //! A custom, configurable TLS server that does not rely on the crypto
 //! implementation. It is purely for testing the client.
-#![allow(clippy::unwrap_used)]
 use crate::x509_certificates::CertWithPrivateKey;
 use crate::CipherSuite;
 use crate::CipherSuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use crate::TlsVersion;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
+use rand::{CryptoRng, Rng};
+use rustls::{
+    pki_types::{CertificateDer, PrivateKeyDer},
+    SupportedCipherSuite, SupportedProtocolVersion,
+};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio_rustls::rustls;
 use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
 
 static DEFAULT_PROTOCOL_VERSIONS: &[TlsVersion] = &[TlsVersion::TLS1_3];
@@ -40,10 +43,14 @@ impl CustomServerBuilder {
         self
     }
 
-    pub fn build_with_default_server_cert(self, server_node: NodeId) -> CustomServer {
+    pub fn build_with_default_server_cert<R: Rng + CryptoRng>(
+        self,
+        server_node: NodeId,
+        rng: &mut R,
+    ) -> CustomServer {
         let cert = CertWithPrivateKey::builder()
             .cn(server_node.to_string())
-            .build_ed25519();
+            .build_ed25519(rng);
         self.build(cert)
     }
 
@@ -99,21 +106,23 @@ impl CustomServer {
         let cipher_suites: Vec<_> = self
             .allowed_cipher_suites
             .iter()
-            .map(rustls::SupportedCipherSuite::from)
+            .map(SupportedCipherSuite::from)
             .collect();
         let protocol_versions: Vec<_> = self
             .protocol_versions
             .iter()
-            .map(<&rustls::SupportedProtocolVersion>::from)
+            .map(<&SupportedProtocolVersion>::from)
             .collect();
-        let cert_chain = vec![rustls::Certificate(self.server_cert.cert_der())];
-        let key_der = rustls::PrivateKey(self.server_cert.key_pair().serialize_for_rustls());
+        let cert_chain = vec![CertificateDer::from(self.server_cert.cert_der())];
+        let key_der =
+            PrivateKeyDer::try_from(self.server_cert.key_pair().serialize_for_rustls()).unwrap();
 
-        let config = ServerConfig::builder()
-            .with_cipher_suites(&cipher_suites)
-            .with_safe_default_kx_groups()
+        let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
+        ring_crypto_provider.cipher_suites = cipher_suites;
+
+        let config = ServerConfig::builder_with_provider(Arc::new(ring_crypto_provider))
             .with_protocol_versions(&protocol_versions)
-            .expect("invalid rustls server config")
+            .expect("Valid rustls server config.")
             .with_no_client_auth()
             .with_single_cert(cert_chain, key_der)
             .expect("failed to build rustls server config");

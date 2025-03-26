@@ -2,7 +2,6 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::PrincipalId;
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::invariant_compliant_mutation_as_atomic_req;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -16,6 +15,7 @@ use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 use std::str::FromStr;
@@ -36,10 +36,11 @@ fn anonymous_user_cannot_clear_the_provisional_whitelist() {
                     mutations: vec![RegistryMutation {
                         mutation_type: Type::Insert as i32,
                         key: make_provisional_whitelist_record_key().as_bytes().to_vec(),
-                        value: encode_or_panic(&ProvisionalWhitelist {
+                        value: ProvisionalWhitelist {
                             list_type: 2,
                             set: vec![principal_id.into()],
-                        }),
+                        }
+                        .encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })
@@ -93,10 +94,11 @@ fn a_canister_other_than_the_governance_canister_cannot_change_the_provisional_w
                     mutations: vec![RegistryMutation {
                         mutation_type: Type::Insert as i32,
                         key: make_provisional_whitelist_record_key().as_bytes().to_vec(),
-                        value: encode_or_panic(&ProvisionalWhitelist {
+                        value: ProvisionalWhitelist {
                             list_type: 2,
                             set: vec![principal_id.into()],
-                        }),
+                        }
+                        .encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })
@@ -144,10 +146,11 @@ fn clear_provisional_whitelist_succeeds() {
                     mutations: vec![RegistryMutation {
                         mutation_type: Type::Insert as i32,
                         key: make_provisional_whitelist_record_key().as_bytes().to_vec(),
-                        value: encode_or_panic(&ProvisionalWhitelist {
+                        value: ProvisionalWhitelist {
                             list_type: 2,
                             set: vec![principal_id.into()],
-                        }),
+                        }
+                        .encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })

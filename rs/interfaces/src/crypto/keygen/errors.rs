@@ -3,7 +3,7 @@ use ic_types::crypto::CryptoError;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CurrentNodePublicKeysError {
     TransientInternalError(String),
 }

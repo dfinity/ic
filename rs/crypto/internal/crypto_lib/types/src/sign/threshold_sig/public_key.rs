@@ -5,9 +5,10 @@ use crate::sign::threshold_sig::public_key::bls12_381::{
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
+use thiserror::Error;
 
 /// A threshold signature public key.
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialOrd, Ord, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum CspThresholdSigPublicKey {
     ThresBls12_381(bls12_381::PublicKeyBytes),
 }
@@ -20,20 +21,31 @@ impl From<CspThresholdSigPublicKey> for bls12_381::PublicKeyBytes {
     }
 }
 
-impl From<&CspNiDkgTranscript> for CspThresholdSigPublicKey {
-    // The conversion is deliberately implemented directly, i.e., without
-    // using From-conversions involving intermediate types, because the
-    // panic on empty coefficients is currently specific to converting
-    // the transcript to the contained threshold signature public key.
-    fn from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Self {
-        match PublicKeyBytes::try_from(csp_ni_dkg_transcript) {
-            Ok(public_key_bytes) => Self::ThresBls12_381(public_key_bytes),
-            Err(err) => match err {
-                CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty => {
-                    panic!("coefficients empty")
-                }
-            },
+/// Converting an NI-DKG transcript to a BLS 12 381 CspThresholdSigPublicKey struct failed.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
+pub enum CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError {
+    #[error("the public coefficients of the threshold public key are empty")]
+    CoefficientsEmpty,
+}
+
+impl From<CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError>
+    for CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError
+{
+    fn from(err: CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError) -> Self {
+        match err {
+            CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty => {
+                CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError::CoefficientsEmpty
+            }
         }
+    }
+}
+
+impl TryFrom<&CspNiDkgTranscript> for CspThresholdSigPublicKey {
+    type Error = CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError;
+
+    fn try_from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Result<Self, Self::Error> {
+        let public_key_bytes = PublicKeyBytes::try_from(csp_ni_dkg_transcript)?;
+        Ok(Self::ThresBls12_381(public_key_bytes))
     }
 }
 
@@ -73,7 +85,7 @@ pub mod bls12_381 {
     }
 
     /// Converting a threshold signature public key to bytes failed.
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
     pub enum ThresholdSigPublicKeyBytesConversionError {
         #[error("malformed threshold signature public key: {internal_error}")]
         Malformed {
@@ -115,7 +127,7 @@ pub mod bls12_381 {
     }
 
     /// Converting an NI-DKG transcript to a BLS 12 381 public key bytes struct failed.
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
     pub enum CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError {
         #[error("coefficients empty")]
         CoefficientsEmpty,
@@ -129,8 +141,7 @@ pub mod bls12_381 {
                 CspNiDkgTranscript::Groth20_Bls12_381(transcript) => Ok(
                     transcript
                         .public_coefficients
-                        .coefficients
-                        .get(0)
+                        .coefficients.first()
                         .copied()
                         .ok_or(
                             CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty,

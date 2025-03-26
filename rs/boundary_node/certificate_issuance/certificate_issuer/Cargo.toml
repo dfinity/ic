@@ -10,35 +10,36 @@ documentation.workspace = true
 path = "../certificate_orchestrator_interface"
 
 [dependencies]
-anyhow = "1.0.66"
-async-trait = "0.1.58"
-axum = { version = "0.6.1", features = ["json"] }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
-clap = { version = "4.0.18", features = ["derive"] }
+clap = { workspace = true }
 cloudflare = { workspace = true }
-flate2 = "1.0.22"
+flate2 = { workspace = true }
 futures = { workspace = true }
+http = { workspace = true }
 ic-agent = { workspace = true }
+ic-http-certification = { workspace = true }
+ic-response-verification = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
-ic-response-verification = "1.2.0"
-idna = "0.3.0"
-instant-acme = "0.3.2"
+idna = { workspace = true }
+instant-acme = "0.7.2"
 leb128 = "0.2.5"
-mockall = "0.11.3"
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+mockall = { workspace = true }
 pem = "1.1.0"
 prometheus = { workspace = true }
-rcgen = "0.10.0"
+rcgen = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10.6"
-thiserror = "1.0.37"
+sha2 = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 trust-dns-resolver = "0.22.0"
+zeroize = { workspace = true }

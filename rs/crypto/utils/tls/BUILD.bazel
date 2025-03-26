@@ -3,9 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
-    "//rs/crypto/tls_interfaces",
-    "@crate_index//:tokio-rustls",
+    "@crate_index//:thiserror",
     "@crate_index//:x509-parser",
 ]
 
@@ -19,6 +19,6 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_utils_tls",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

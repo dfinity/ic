@@ -2,11 +2,6 @@ use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Default capacity, in number of messages, for validated and unvalidated pools
-const MAX_INGRESS_POOL_VALIDATED_CAPACITY: usize = 1024;
-const MAX_INGRESS_POOL_UNVALIDATED_CAPACITY_PER_PEER: usize = 100_000_000;
-const MAX_CONSENSUS_POOL_VALIDATED_CAPACITY: usize = 2048;
-const MAX_CONSENSUS_POOL_UNVALIDATED_CAPACITY_PER_PEER: usize = 2048;
 const PERSISTENT_POOL_VALIDATED_PURGE_INTERVAL: u64 = 5000;
 
 /// The number of height folders we store grouped inside a single "shard" folder
@@ -16,7 +11,7 @@ pub const BACKUP_GROUP_SIZE: u64 = 10000;
 
 /// External configuration for artifact pools meant to be used by replica's
 /// config file.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ArtifactPoolTomlConfig {
     /// The path in which to store the validated section of the consensus pool.
     pub consensus_pool_path: PathBuf,
@@ -49,7 +44,7 @@ impl ArtifactPoolTomlConfig {
 }
 
 /// Configuration of the consensus artifact backup.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BackupConfig {
     /// Path to a folder with write permissions, for consensus artifact backup.
     /// If no path was provided, no backup will be saved.
@@ -64,12 +59,6 @@ pub struct BackupConfig {
 /// validated and unvalidated portions.
 #[derive(Clone, Debug)]
 pub struct ArtifactPoolConfig {
-    /// The maximum size, in number of messages, of the validated section
-    /// of the ingress pool.
-    pub ingress_pool_validated_capacity: usize,
-    /// The maximum size, in number of messages, of the unvalidated section
-    /// of the ingress pool, per peer.
-    pub ingress_pool_unvalidated_capacity_per_peer: usize,
     /// Maximum number of artifacts in ingress pool. If exceeded, we start
     /// throttling ingress. We also throttle if [`ingress_pool_size_max_bytes`]
     /// is exceeded.
@@ -77,12 +66,6 @@ pub struct ArtifactPoolConfig {
     /// Maximum byte size of ingress pool. If exceeded, we start throttling ingress.
     /// We also throttle if [`ingress_pool_size_max_count`] is exceeded.
     pub ingress_pool_max_bytes: usize,
-    /// The maximum size, in number of messages, of the unvalidated section
-    /// of the artifact pool, per peer.
-    pub consensus_pool_unvalidated_capacity_per_peer: usize,
-    /// The maximum size, in number of messages, of the validated section
-    /// of the artifact pool.
-    pub consensus_pool_validated_capacity: usize,
     /// Choice of persistent pool backend
     pub persistent_pool_backend: PersistentPoolBackend,
     /// Whether the persistent pool should be opened as read-only
@@ -143,13 +126,8 @@ impl From<ArtifactPoolTomlConfig> for ArtifactPoolConfig {
             }
         };
         ArtifactPoolConfig {
-            ingress_pool_validated_capacity: MAX_INGRESS_POOL_VALIDATED_CAPACITY,
-            ingress_pool_unvalidated_capacity_per_peer:
-                MAX_INGRESS_POOL_UNVALIDATED_CAPACITY_PER_PEER,
             ingress_pool_max_count: toml_config.ingress_pool_max_count,
             ingress_pool_max_bytes: toml_config.ingress_pool_max_bytes,
-            consensus_pool_unvalidated_capacity_per_peer: MAX_CONSENSUS_POOL_VALIDATED_CAPACITY,
-            consensus_pool_validated_capacity: MAX_CONSENSUS_POOL_UNVALIDATED_CAPACITY_PER_PEER,
             persistent_pool_backend,
             persistent_pool_read_only: false,
             backup_config: toml_config.backup,

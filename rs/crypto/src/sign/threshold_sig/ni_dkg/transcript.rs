@@ -30,7 +30,7 @@ mod creation {
         ensure_dealing_node_ids_in_dealers(config.dealers(), &verified_dealings);
         let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, &verified_dealings)?;
         Ok(NiDkgTranscript {
-            dkg_id: config.dkg_id(),
+            dkg_id: config.dkg_id().clone(),
             threshold: config.threshold(),
             committee: config.receivers().clone(),
             registry_version: config.registry_version(),
@@ -239,7 +239,8 @@ mod loading {
         insert_transcript_data_into_store(
             lockable_threshold_sig_data_store,
             &csp_transcript,
-            transcript.dkg_id,
+            &transcript.dkg_id,
+            transcript.registry_version,
             &transcript.committee,
         );
         let epoch = epoch(transcript.registry_version);
@@ -311,7 +312,6 @@ mod loading {
     ) -> Result<(), CspDkgLoadPrivateKeyError> {
         ni_dkg_csp_client.load_threshold_signing_key(
             AlgorithmId::NiDkg_Groth20_Bls12_381,
-            transcript.dkg_id,
             epoch(transcript.registry_version),
             csp_transcript.clone(),
             self_index_in_committee,
@@ -321,7 +321,8 @@ mod loading {
     fn insert_transcript_data_into_store(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         csp_transcript: &CspNiDkgTranscript,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
+        registry_version: RegistryVersion,
         committee: &NiDkgReceivers,
     ) {
         lockable_threshold_sig_data_store
@@ -330,6 +331,7 @@ mod loading {
                 dkg_id,
                 CspPublicCoefficients::from(csp_transcript),
                 indices(committee),
+                registry_version,
             );
     }
 

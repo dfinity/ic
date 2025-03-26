@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{fs::File, io::Write, net::IpAddr, path::PathBuf};
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SubnetConfig {
     pub subnet_id: SubnetId,
     #[serde(
@@ -19,13 +19,13 @@ pub struct SubnetConfig {
     pub disable_cold_storage: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ColdStorage {
     pub cold_storage_dir: PathBuf,
     pub versions_hot: usize,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct Config {
     pub push_metrics: bool,
     pub metrics_urls: Vec<Url>,

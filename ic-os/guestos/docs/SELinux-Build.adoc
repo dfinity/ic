@@ -11,7 +11,7 @@ the kernel is booted using correct boot arguments
 (+security=selinux+ +selinux=1+).
 
 Additional policy modules are built using the Makefile supplied
-by the SELinux distribution (see +ic/ic-os/guestos/rootfs/prep/prep.sh+).
+by the SELinux distribution (see +prep/prep.sh+).
 The linked policy is produced by inserting the modules into
 the policy state that exists after installation of the
 baseline packages. Crucially, this step as implemented currently
@@ -21,7 +21,7 @@ container whose contents will become the target system.
 
 There are some filesystem / directory entry ordering issues
 affecting build determinism using the standard module build
-setup. See +ic/ic-os/guestos/rootfs/prep/prep.sh+ how this
+setup. See +prep/prep.sh+ how this
 issue is being addressed.
 
 The result of this process is two-fold:

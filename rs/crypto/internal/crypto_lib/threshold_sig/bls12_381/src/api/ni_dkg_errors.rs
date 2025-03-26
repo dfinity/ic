@@ -14,7 +14,7 @@ pub use super::dkg_errors::{
 };
 
 /// The receiver set isn't properly indexed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MisnumberedReceiverError {
     pub receiver_index: NodeIndex,
     pub number_of_receivers: NumberOfNodes,
@@ -45,7 +45,7 @@ impl From<MisnumberedReceiverError> for CspDkgVerifyDealingError {
 }
 
 /// Creation of a forward-secure keypair during DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgCreateFsKeyError {
     InternalError(InternalError),
     DuplicateKeyId(String),
@@ -53,7 +53,7 @@ pub enum CspDkgCreateFsKeyError {
 }
 
 /// Verification of a DKG forward-secure key failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgVerifyFsKeyError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -64,7 +64,7 @@ pub enum CspDkgVerifyFsKeyError {
 }
 
 /// Updating the forward-secure epoch for DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgUpdateFsEpochError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -78,7 +78,7 @@ pub enum CspDkgUpdateFsEpochError {
 }
 
 /// Encrypting or zero-knowledge proving during DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum EncryptAndZKProveError {
     /// One of the receiver public keys is invalid.
     MalformedFsPublicKeyError {
@@ -90,7 +90,7 @@ pub enum EncryptAndZKProveError {
 }
 
 /// Forward-secure decryption during DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum DecryptError {
     /// The ciphertext was malformed
     MalformedCiphertext(&'static str),
@@ -113,7 +113,7 @@ pub enum DecryptError {
 }
 
 /// Creation of a DKG dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgCreateDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -156,7 +156,7 @@ impl From<EncryptAndZKProveError> for CspDkgCreateDealingError {
 }
 
 /// Creation of a DKG resharing dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgCreateReshareDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -174,6 +174,8 @@ pub enum CspDkgCreateReshareDealingError {
         receiver_index: NodeIndex,
         error: MalformedPublicKeyError,
     },
+    /// Error computing the KeyId of the secret key to be reshared.
+    ReshareKeyIdComputationError(InternalError),
     /// Precondition error: The key encryption key was not in the secret key
     /// store.
     ReshareKeyNotInSecretKeyStoreError(KeyNotFoundError),
@@ -272,12 +274,15 @@ impl From<CspDkgCreateReshareDealingError> for CspDkgCreateDealingError {
             CspDkgCreateReshareDealingError::TransientInternalError(error) => {
                 CspDkgCreateDealingError::TransientInternalError(error)
             }
+            CspDkgCreateReshareDealingError::ReshareKeyIdComputationError(_) => {
+                panic!("This error cannot be converted")
+            }
         }
     }
 }
 
 /// Verification of a DKG dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgVerifyDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -309,7 +314,7 @@ pub enum CspDkgVerifyDealingError {
 }
 
 /// Verification of a DKG resharing dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgVerifyReshareDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -379,7 +384,7 @@ impl From<CspDkgVerifyDealingError> for CspDkgVerifyReshareDealingError {
 }
 
 /// Creation of a DKG transcript failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgCreateTranscriptError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -401,7 +406,7 @@ pub enum CspDkgCreateTranscriptError {
 }
 
 /// Creation of a DKG transcript after resharing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgCreateReshareTranscriptError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -428,9 +433,11 @@ pub enum CspDkgCreateReshareTranscriptError {
 }
 
 /// A call to retain existing threshold keys failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgRetainThresholdKeysError {
-    // An internal error, e.g. an RPC error.
+    /// A key ID could not be computed from the public coefficients.
+    KeyIdInstantiationError(String),
+    /// An internal error, e.g. an RPC error.
     TransientInternalError(InternalError),
 }
 
@@ -461,7 +468,7 @@ impl From<CspDkgCreateTranscriptError> for CspDkgCreateReshareTranscriptError {
 }
 
 /// Loading a private key from a DKG transcript failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgLoadPrivateKeyError {
     /// The AlgorithmId does not correspond to a NiDkg variant
     UnsupportedAlgorithmId(AlgorithmId),
@@ -480,6 +487,8 @@ pub enum CspDkgLoadPrivateKeyError {
         ciphertext_epoch: Epoch,
         secret_key_epoch: Epoch,
     },
+    /// The ID of the threshold key could not be computed from the public coefficients.
+    KeyIdInstantiationError(String),
     /// An internal error occurred.
     InternalError(InternalError),
     /// A transient internal error, e.g. an RPC error.

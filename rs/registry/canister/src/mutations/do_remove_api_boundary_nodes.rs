@@ -10,7 +10,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use super::common::check_api_boundary_nodes_exist;
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RemoveApiBoundaryNodesPayload {
     pub node_ids: Vec<NodeId>,
 }
@@ -45,10 +45,12 @@ mod tests {
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_registry_keys::make_api_boundary_node_record_key;
     use ic_registry_transport::insert;
+    use ic_types::ReplicaVersion;
+    use prost::Message;
 
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
-        mutations::common::{encode_or_panic, test::TEST_NODE_ID},
+        mutations::common::test::TEST_NODE_ID,
     };
 
     use super::RemoveApiBoundaryNodesPayload;
@@ -75,23 +77,27 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add boundary node to registry
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         registry.maybe_apply_mutation_internal(vec![
             // Mutation to insert ApiBoundaryNodeRecord
             insert(
                 make_api_boundary_node_record_key(node_id), // key
-                encode_or_panic(&ApiBoundaryNodeRecord {
-                    version: "version".into(),
-                    domain: "domain".into(),
-                }),
+                ApiBoundaryNodeRecord {
+                    version: ReplicaVersion::default().to_string(),
+                }
+                .encode_to_vec(),
             ),
         ]);
 

@@ -1,0 +1,26 @@
+[package]
+name = "ic-sns-governance-token-valuation"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+cycles-minting-canister = { path = "../../../nns/cmc" }
+futures = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-cdk = { workspace = true }
+ic-nervous-system-common = { path = "../../../nervous_system/common" }
+ic-nervous-system-initial-supply = { path = "../../../nervous_system/initial_supply" }
+ic-nervous-system-runtime = { path = "../../../nervous_system/runtime" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-sns-swap-proto-library = { path = "../../../sns/swap/proto_library" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+mockall = { workspace = true }
+num-traits = { workspace = true }
+rust_decimal = "1.36.0"
+
+[dev-dependencies]
+lazy_static = { workspace = true }
+maplit = "1.0.2"
+tokio = { workspace = true }

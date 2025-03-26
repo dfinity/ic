@@ -2,12 +2,15 @@
 //! Calls the corresponding recovery process CLI.
 use clap::Parser;
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_canister_sandbox_launcher::sandbox_launcher_main;
-use ic_recovery::cmd::{RecoveryToolArgs, SubCommand};
-use ic_recovery::RecoveryArgs;
-use ic_recovery::{cli, util};
+use ic_recovery::{
+    cli,
+    cmd::{RecoveryToolArgs, SubCommand},
+    util, RecoveryArgs,
+};
 
 fn main() {
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
@@ -15,6 +18,9 @@ fn main() {
         return;
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
+        return;
+    } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
+        compiler_sandbox_main();
         return;
     }
 
@@ -28,6 +34,7 @@ fn main() {
         key_file: args.key_file,
         test_mode: args.test,
         skip_prompts: args.skip_prompts,
+        use_local_binaries: args.use_local_binaries,
     };
 
     let recovery_state = cli::read_and_maybe_update_state(&logger, recovery_args, args.subcmd);

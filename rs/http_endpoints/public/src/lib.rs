@@ -4,57 +4,70 @@
 //!
 //! As much as possible the naming of structs in this module should match the
 //! naming used in the [Interface
-//! Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
-mod body;
-mod call;
+//! Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec)
 mod catch_up_package;
 mod common;
 mod dashboard;
 mod health_status_refresher;
-mod metrics;
+pub mod metrics;
 mod pprof;
 mod query;
 mod read_state;
-mod state_reader_executor;
 mod status;
-mod threads;
-mod types;
-mod validator_executor;
+mod tracing_flamegraph;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "fuzzing_code")] {
+        pub mod call;
+    } else {
+        mod call;
+    }
+}
+
+pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
+pub use common::cors_layer;
+pub use query::QueryServiceBuilder;
+pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+pub use read_state::subnet::SubnetReadStateServiceBuilder;
 
 use crate::{
-    body::BodyReceiverLayer,
-    call::CallService,
     catch_up_package::CatchUpPackageService,
     common::{
-        get_cors_headers, get_root_threshold_public_key, make_plaintext_response,
-        map_box_error_to_response,
+        get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
+        MAX_REQUEST_RECEIVE_TIMEOUT,
     },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
-        LABEL_REQUEST_TYPE, LABEL_STATUS, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS, STATUS_ERROR,
+        HttpHandlerMetrics, LABEL_HTTP_STATUS_CODE, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE,
+        LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
         STATUS_SUCCESS,
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
-    query::QueryService,
-    read_state::{canister::CanisterReadStateService, subnet::SubnetReadStateService},
-    state_reader_executor::StateReaderExecutor,
     status::StatusService,
-    types::*,
-    validator_executor::ValidatorExecutor,
+    tracing_flamegraph::TracingFlamegraphService,
 };
-use byte_unit::Byte;
-use bytes::Bytes;
-use crossbeam::{atomic::AtomicCell, channel::Sender};
-use http::method::Method;
-use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
-use ic_async_utils::{receive_body, start_tcp_listener};
+
+use axum::{
+    body::Body,
+    error_handling::HandleErrorLayer,
+    extract::{DefaultBodyLimit, MatchedPath, State},
+    middleware::Next,
+    response::Redirect,
+    routing::get,
+    Router,
+};
+use crossbeam::atomic::AtomicCell;
+use http_body_util::{BodyExt, Full, LengthLimitError};
+use hyper::{body::Incoming, Request, StatusCode};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::BasicSigner,
@@ -72,63 +85,77 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
+        HttpReadStateResponse, HttpRequestEnvelope, MessageId, QueryResponseHash,
+        ReplicaHealthStatus, SignedIngress,
     },
     time::expiry_time_from_now,
-    NodeId, PrincipalId, SubnetId,
+    Height, NodeId, SubnetId,
 };
-use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
 use rand::Rng;
 use std::{
-    convert::{Infallible, TryFrom},
+    convert::TryFrom,
     io::Write,
     net::SocketAddr,
     path::PathBuf,
-    str::FromStr,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
-use strum::{Display, IntoStaticStr};
 use tempfile::NamedTempFile;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
-use tokio::time::{sleep, timeout, Instant};
-use tokio_io_timeout::TimeoutStream;
-use tower::{
-    limit::GlobalConcurrencyLimitLayer, service_fn, util::BoxCloneService, BoxError, Service,
-    ServiceBuilder, ServiceExt,
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+    sync::{
+        mpsc::{Receiver, UnboundedSender},
+        watch, OnceCell,
+    },
+    time::{sleep, timeout, Instant},
 };
+use tokio_rustls::TlsConnector;
+use tokio_util::sync::CancellationToken;
+use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
+use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
-const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct HttpError {
+/// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
+/// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+const ALPN_HTTP2: &[u8; 2] = b"h2";
+
+/// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/1.1` ID][spec]
+/// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
+
+/// To indicate a TLS handshake the first byte of the TLS record (also known as Content Type) is set to 22.
+/// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
+const TLS_HANDHAKE_BYTES: u8 = 22;
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
 }
 
-pub(crate) type EndpointService = BoxCloneService<Request<Bytes>, Response<Body>, Infallible>;
-
 /// Struct that holds all endpoint services.
 #[derive(Clone)]
 struct HttpHandler {
-    call_service: EndpointService,
-    query_service: EndpointService,
-    catchup_service: EndpointService,
-    dashboard_service: EndpointService,
-    status_service: EndpointService,
-    canister_read_state_service: EndpointService,
-    subnet_read_state_service: EndpointService,
-    pprof_home_service: EndpointService,
-    pprof_profile_service: EndpointService,
-    pprof_flamegraph_service: EndpointService,
+    call_router: Router,
+    call_v3_router: Router,
+    query_router: Router,
+    catchup_router: Router,
+    dashboard_router: Router,
+    status_router: Router,
+    canister_read_state_router: Router,
+    subnet_read_state_router: Router,
+    pprof_home_router: Router,
+    pprof_profile_router: Router,
+    pprof_flamegraph_router: Router,
+    tracing_flamegraph_router: Router,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -140,11 +167,11 @@ fn start_server_initialization(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    state_reader_executor: StateReaderExecutor,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
 ) {
     let rt_handle_clone = rt_handle.clone();
     rt_handle.spawn(async move {
@@ -154,13 +181,13 @@ fn start_server_initialization(
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().to_string(),
-                &ReplicaHealthStatus::WaitingForCertifiedState.to_string(),
+                (health_status.load().as_ref()),
+                (ReplicaHealthStatus::WaitingForCertifiedState.as_ref()),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::WaitingForCertifiedState);
 
-        while common::get_latest_certified_state(&state_reader_executor)
+        while common::get_latest_certified_state(state_reader.clone())
             .await
             .is_none()
         {
@@ -168,9 +195,12 @@ fn start_server_initialization(
             sleep(Duration::from_secs(1)).await;
         }
         info!(log, "Certified state is now available.");
+
         // Fetch the delegation from the NNS for this subnet to be
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
+
+        let delegation_timer = metrics.nns_delegation_metrics.update_duration.start_timer();
         let loaded_delegation = load_root_delegation(
             &config,
             &log,
@@ -178,21 +208,28 @@ fn start_server_initialization(
             subnet_id,
             nns_subnet_id,
             registry_client.as_ref(),
-            tls_handshake.as_ref(),
+            tls_config.as_ref(),
         )
         .await;
+        delegation_timer.observe_duration();
+
         if let Some(delegation) = loaded_delegation {
-            *delegation_from_nns.write().unwrap() = Some(delegation);
+            metrics
+                .nns_delegation_metrics
+                .delegation_size
+                .observe(delegation.certificate.len() as f64);
+
+            let _ = delegation_from_nns.set(delegation);
         }
+
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().to_string(),
-                &ReplicaHealthStatus::Healthy.to_string(),
+                (health_status.load().as_ref()),
+                (ReplicaHealthStatus::Healthy.as_ref()),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::Healthy);
-        // TODO: NNS1-2024
         info!(log, "Ready for interaction.");
     });
 }
@@ -243,6 +280,11 @@ fn create_port_file(path: PathBuf, port: u16) {
 /// to provide a way to "fake" delegations received from the NNS subnet
 /// without having to either mock all the related calls to the registry
 /// or actually make the calls.
+///
+/// The unbounded channel, `terminal_state_ingress_messages`, is used to register the height
+/// of the replicated state when each ingress message reaches a terminal state.
+/// It is fine to use an unbounded channel as the the consumer, [`IngressWatcher`],
+/// will be able to consume the messages at the same rate as they are produced.
 #[allow(clippy::too_many_arguments)]
 pub fn start_server(
     rt_handle: tokio::runtime::Handle,
@@ -251,11 +293,11 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     node_id: NodeId,
     subnet_id: SubnetId,
@@ -264,116 +306,109 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
+    tracing_handle: ReloadHandles,
+    certified_height_watcher: watch::Receiver<Height>,
+    completed_execution_messages_rx: Receiver<(MessageId, Height)>,
 ) {
-    let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
-
+    let tcp_listener = start_tcp_listener(config.listen_addr, &rt_handle);
     let _enter = rt_handle.enter();
-    // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
-    // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
-    // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
-    let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
-    addr.set_port(listen_addr.port());
-    let tcp_listener = start_tcp_listener(addr);
-
     if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
         error!(log, "Replica health status uses locks instead of atomics.");
     }
     let metrics = HttpHandlerMetrics::new(metrics_registry);
 
-    let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
-    let state_reader_executor = StateReaderExecutor::new(state_reader);
-    let call_service = CallService::new_service(
-        config.clone(),
+
+    let ingress_filter = Arc::new(Mutex::new(ingress_filter));
+
+    let call_handler = IngressValidatorBuilder::builder(
         log.clone(),
-        metrics.clone(),
         node_id,
         subnet_id,
-        Arc::clone(&registry_client),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        ingress_filter,
-        ingress_throttler,
-        ingress_tx,
-    );
-    let query_service = QueryService::new_service(
-        config.clone(),
+        registry_client.clone(),
+        ingress_verifier.clone(),
+        ingress_filter.clone(),
+        ingress_throttler.clone(),
+        ingress_tx.clone(),
+    )
+    .with_malicious_flags(malicious_flags.clone())
+    .build();
+
+    let (ingress_watcher_handle, _) = IngressWatcher::start(
+        rt_handle.clone(),
         log.clone(),
         metrics.clone(),
-        query_signer,
+        certified_height_watcher,
+        completed_execution_messages_rx,
+        CancellationToken::new(),
+    );
+
+    let call_router =
+        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+
+    let call_v3_router = call_v3::new_router(
+        call_handler,
+        ingress_watcher_handle,
+        metrics.clone(),
+        config.ingress_message_certificate_timeout_seconds,
+        delegation_from_nns.clone(),
+        state_reader.clone(),
+    );
+
+    let query_router = QueryServiceBuilder::builder(
+        log.clone(),
         node_id,
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        Arc::clone(&registry_client),
+        query_signer,
+        registry_client.clone(),
+        ingress_verifier.clone(),
+        delegation_from_nns.clone(),
         query_execution_service,
-    );
-    let canister_read_state_service = CanisterReadStateService::new_service(
-        config.clone(),
+    )
+    .with_health_status(health_status.clone())
+    .with_malicious_flags(malicious_flags.clone())
+    .build_router();
+
+    let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
         log.clone(),
-        metrics.clone(),
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        state_reader_executor.clone(),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        Arc::clone(&registry_client),
-    );
-    let subnet_read_state_service = SubnetReadStateService::new_service(
-        config.clone(),
-        log.clone(),
-        metrics.clone(),
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        state_reader_executor.clone(),
-    );
-    let status_service = StatusService::new_service(
-        config.clone(),
+        state_reader.clone(),
+        registry_client.clone(),
+        ingress_verifier,
+        delegation_from_nns.clone(),
+    )
+    .with_health_status(health_status.clone())
+    .with_malicious_flags(malicious_flags)
+    .build_router();
+
+    let subnet_read_state_router =
+        SubnetReadStateServiceBuilder::builder(delegation_from_nns.clone(), state_reader.clone())
+            .with_health_status(health_status.clone())
+            .build_router();
+    let status_router = StatusService::build_router(
         log.clone(),
         nns_subnet_id,
         Arc::clone(&registry_client),
         Arc::clone(&health_status),
-        state_reader_executor.clone(),
+        state_reader.clone(),
     );
-    let dashboard_service =
-        DashboardService::new_service(config.clone(), subnet_type, state_reader_executor.clone());
-    let catchup_service = CatchUpPackageService::new_service(
-        config.clone(),
-        metrics.clone(),
-        consensus_pool_cache.clone(),
-    );
+    let dashboard_router =
+        DashboardService::new_router(config.clone(), subnet_type, state_reader.clone());
+    let catchup_router = CatchUpPackageService::new_router(consensus_pool_cache.clone());
 
-    let pprof_concurrency_buffer =
-        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
+    let pprof_home_router = PprofHomeService::new_router();
+    let pprof_profile_router = PprofProfileService::new_router(pprof_collector.clone());
+    let pprof_flamegraph_router = PprofFlamegraphService::new_router(pprof_collector);
 
-    let pprof_home_service = PprofHomeService::new_service(pprof_concurrency_buffer.clone());
-    let pprof_profile_service =
-        PprofProfileService::new_service(pprof_collector.clone(), pprof_concurrency_buffer.clone());
-    let pprof_flamegraph_service =
-        PprofFlamegraphService::new_service(pprof_collector, pprof_concurrency_buffer);
+    let tracing_flamegraph_router = TracingFlamegraphService::build_router(tracing_handle);
 
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
         metrics.clone(),
         Arc::clone(&health_status),
         consensus_pool_cache,
-        state_reader_executor.clone(),
+        state_reader.clone(),
     );
 
     start_server_initialization(
@@ -383,29 +418,31 @@ pub fn start_server(
         subnet_id,
         nns_subnet_id,
         registry_client.clone(),
-        state_reader_executor,
+        state_reader,
         Arc::clone(&delegation_from_nns),
         Arc::clone(&health_status),
         rt_handle.clone(),
-        tls_handshake.clone(),
+        tls_config.clone(),
     );
 
     let http_handler = HttpHandler {
-        call_service,
-        query_service,
-        status_service,
-        catchup_service,
-        dashboard_service,
-        canister_read_state_service,
-        subnet_read_state_service,
-        pprof_home_service,
-        pprof_profile_service,
-        pprof_flamegraph_service,
+        call_router,
+        call_v3_router,
+        query_router,
+        status_router,
+        catchup_router,
+        dashboard_router,
+        canister_read_state_router,
+        subnet_read_state_router,
+        pprof_home_router,
+        pprof_profile_router,
+        pprof_flamegraph_router,
+        tracing_flamegraph_router,
     };
-    let main_service = create_main_service(
-        metrics.clone(),
-        config.clone(),
+    let router = make_router(
         http_handler,
+        config.clone(),
+        metrics.clone(),
         health_status_refresher,
     );
 
@@ -417,443 +454,342 @@ pub fn start_server(
         create_port_file(path, local_addr.port());
     }
 
-    let metrics_cl = metrics.clone();
-    let log_cl = log.clone();
-    let conn_svc = ServiceBuilder::new().service_fn(move |tcp_stream: TcpStream| {
-        handshake_and_serve_connection(
-            log_cl.clone(),
-            config.clone(),
-            main_service.clone(),
-            tcp_stream,
-            tls_handshake.clone(),
-            registry_client.clone(),
-            metrics_cl.clone(),
-        )
-    });
-    let conn_svc = BoxCloneService::new(conn_svc);
-    rt_handle.clone().spawn(async move {
+    let read_timeout = Duration::from_secs(config.connection_read_timeout_seconds);
+    rt_handle.spawn(async move {
         loop {
-            match tcp_listener.accept().await {
-                Ok((tcp_stream, _)) => {
-                    metrics.connections_total.inc();
-                    // Start recording connection setup duration.
-                    let mut conn_svc = conn_svc.clone();
-                    tokio::spawn(async move {
-                        let _ = conn_svc
-                            .ready()
-                            .await
-                            .expect("The load shedder must always be ready.")
-                            .call(tcp_stream)
-                            .await;
-                    });
+            let (stream, _remote_addr) = tcp_listener.accept().await.unwrap();
+
+            let router = router.clone();
+            let tls_config = tls_config.clone();
+            let log = log.clone();
+            let registry_client = registry_client.clone();
+            let metrics = metrics.clone();
+
+            tokio::spawn(async move {
+                metrics.connections_total.inc();
+
+                let timer = Instant::now();
+                // Set `NODELAY`
+                if stream.set_nodelay(true).is_err() {
+                    warn!(log, "Failed to set NODELAY option on tcp stream");
                 }
-                Err(err) => {
-                    // Don't exit the loop on a connection error. We will want to
-                    // continue serving.
+
+                // Peek to know if it is TLS connection.
+                let mut b = [0_u8; 1];
+                match timeout(read_timeout, stream.peek(&mut b)).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(_)) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
+                        return;
+                    }
+                    Err(_) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
+                        return;
+                    }
+                }
+                let mut stream = tokio_io_timeout::TimeoutStream::new(stream);
+                stream.set_read_timeout(Some(read_timeout));
+                let stream = Box::pin(stream);
+
+                if b[0] == TLS_HANDHAKE_BYTES {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_SECURE])
+                        .start_timer();
+                    let mut server_config = match tls_config
+                        .server_config_without_client_auth(registry_client.get_latest_version())
+                    {
+                        Ok(c) => c,
+                        Err(err) => {
+                            warn!(log, "Failed to get server config from crypto {err}");
+                            metrics.closed_connections_total.inc();
+                            return;
+                        }
+                    };
+                    server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+
+                    match tls_acceptor.accept(stream).await {
+                        Ok(stream) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
+                                .observe(timer.elapsed().as_secs_f64());
+                            if let Err(err) =
+                                serve_http(stream, router, config.http_max_concurrent_streams).await
+                            {
+                                warn!(log, "failed to serve connection: {err}");
+                            }
+                        }
+                        Err(_) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_ERROR, LABEL_TLS_ERROR])
+                                .observe(timer.elapsed().as_secs_f64());
+                        }
+                    }
+                } else {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_INSECURE])
+                        .start_timer();
                     metrics
                         .connection_setup_duration
-                        .with_label_values(&[STATUS_ERROR, ConnError::Io.into()])
-                        .observe(0.0);
-
-                    error!(log, "Can't accept TCP connection, error = {}", err);
-                }
-            }
-        }
-    });
-}
-
-fn create_main_service(
-    metrics: HttpHandlerMetrics,
-    config: Config,
-    http_handler: HttpHandler,
-    health_status_refresher: HealthStatusRefreshLayer,
-) -> BoxCloneService<Request<Body>, Response<Body>, Infallible> {
-    let route_service = service_fn(move |req: RequestWithTimer| {
-        let http_handler = http_handler.clone();
-        let config = config.clone();
-        async move { Ok::<_, Infallible>(make_router(http_handler, config, req).await) }
-    });
-
-    BoxCloneService::new(
-        ServiceBuilder::new()
-            // Attach a timer as soon as we see a request.
-            .map_request(move |request| {
-                let _ = &metrics;
-                // Start recording request duration.
-                let request_timer = HistogramVecTimer::start_timer(
-                    metrics.requests.clone(),
-                    &REQUESTS_LABEL_NAMES,
-                    [LABEL_UNKNOWN, LABEL_UNKNOWN],
-                );
-                (request, request_timer)
-            })
-            .layer(health_status_refresher)
-            .service(route_service)
-            .map_result(move |result| {
-                let (response, request_timer) = result.expect("Can't panic on infallible");
-                let status = response.status();
-                // This is a workaround for `StatusCode::as_str()` not returning a `&'static
-                // str`. It ensures `request_timer` is dropped before `status`.
-                let mut timer = request_timer;
-                timer.set_label(LABEL_STATUS, status.as_str());
-                Ok::<_, Infallible>(response)
-            }),
-    )
-}
-
-async fn handshake_and_serve_connection(
-    log: ReplicaLogger,
-    config: Config,
-    service: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
-    tcp_stream: TcpStream,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    registry_client: Arc<dyn RegistryClient>,
-    metrics: HttpHandlerMetrics,
-) -> Result<(), Infallible> {
-    let connection_start_time = Instant::now();
-    let peer_addr = tcp_stream.peer_addr();
-    let conn_after_handshake = stream_after_handshake(
-        &log,
-        config.connection_read_timeout_seconds,
-        tcp_stream,
-        tls_handshake,
-        registry_client,
-    )
-    .await;
-
-    let (connection_result, conn_type_label) = match conn_after_handshake {
-        Err(err) => {
-            warn!(
-                log,
-                "Handshake failed, error = {:?}, peer_addr = {:?}", err, peer_addr,
-            );
-            metrics
-                .connection_setup_duration
-                .with_label_values(&[STATUS_ERROR, err.into()])
-                .observe(connection_start_time.elapsed().as_secs_f64());
-            return Ok(());
-        }
-        Ok(conn_type) => {
-            let conn_type_label = conn_type.to_string();
-            metrics
-                .connection_setup_duration
-                .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
-                .observe(connection_start_time.elapsed().as_secs_f64());
-            let conn_result = match conn_type {
-                ConnType::Secure(tls_stream) => {
-                    serve_connection_with_read_timeout(
-                        tls_stream,
-                        service,
-                        config.connection_read_timeout_seconds,
-                    )
-                    .await
-                }
-                ConnType::Insecure(tcp_stream) => {
-                    serve_connection_with_read_timeout(
-                        tcp_stream,
-                        service,
-                        config.connection_read_timeout_seconds,
-                    )
-                    .await
-                }
-            };
-            (conn_result, conn_type_label)
-        }
-    };
-    match connection_result {
-        Err(err) => {
-            info!(
-                log,
-                "The connection was closed abruptly after {:?}, error = {}",
-                connection_start_time.elapsed(),
-                err
-            );
-            metrics
-                .connection_duration
-                .with_label_values(&[STATUS_ERROR, &conn_type_label])
-                .observe(connection_start_time.elapsed().as_secs_f64())
-        }
-        Ok(()) => metrics
-            .connection_duration
-            .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
-            .observe(connection_start_time.elapsed().as_secs_f64()),
-    }
-    Ok(())
-}
-
-#[derive(Display)]
-#[strum(serialize_all = "snake_case")]
-enum ConnType {
-    #[strum(serialize = "secure")]
-    Secure(Box<dyn TlsStream>),
-    #[strum(serialize = "insecure")]
-    Insecure(TcpStream),
-}
-
-#[derive(IntoStaticStr, Debug)]
-#[strum(serialize_all = "snake_case")]
-pub(crate) enum ConnError {
-    #[strum(serialize = "tls_handshake")]
-    TlsHandshake,
-    Io,
-    Timeout,
-}
-
-async fn stream_after_handshake(
-    log: &ReplicaLogger,
-    connection_read_timeout_seconds: u64,
-    tcp_stream: TcpStream,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    registry_client: Arc<dyn RegistryClient>,
-) -> Result<ConnType, ConnError> {
-    let mut b = [0_u8; 1];
-    match timeout(
-        Duration::from_secs(connection_read_timeout_seconds),
-        tcp_stream.peek(&mut b),
-    )
-    .await
-    {
-        // The peek operation was successful within the timeout.
-        Ok(Ok(_)) => {
-            if b[0] == 22 {
-                match tls_handshake
-                    .perform_tls_server_handshake_without_client_auth(
-                        tcp_stream,
-                        registry_client.get_latest_version(),
-                    )
-                    .await
-                {
-                    Err(err) => {
-                        warn!(log, "TLS handshaked failed with: {:?}", err);
-                        Err(ConnError::TlsHandshake)
-                    }
-                    Ok(tls_stream) => Ok(ConnType::Secure(tls_stream)),
-                }
-            } else {
-                Ok(ConnType::Insecure(tcp_stream))
-            }
-        }
-        Ok(Err(err)) => {
-            warn!(log, "Peeking TCP stream failed with: {:?}", err);
-            Err(ConnError::Io)
-        }
-        Err(_) => Err(ConnError::Timeout),
-    }
-}
-
-async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + 'static>(
-    stream: T,
-    metrics_svc: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
-    connection_read_timeout_seconds: u64,
-) -> Result<(), hyper::Error> {
-    let http = Http::new();
-    let mut stream = TimeoutStream::new(stream);
-    stream.set_read_timeout(Some(Duration::from_secs(connection_read_timeout_seconds)));
-    let stream = Box::pin(stream);
-    http.serve_connection(stream, metrics_svc).await
-}
-
-type RequestWithTimer = (
-    Request<Body>,
-    HistogramVecTimer<'static, REQUESTS_NUM_LABELS>,
-);
-type ResponseWithTimer = (
-    Response<Body>,
-    HistogramVecTimer<'static, REQUESTS_NUM_LABELS>,
-);
-
-async fn make_router(
-    http_handler: HttpHandler,
-    config: Config,
-    (mut req, mut timer): RequestWithTimer,
-) -> ResponseWithTimer {
-    let call_service = http_handler.call_service.clone();
-    let query_service = http_handler.query_service.clone();
-    let status_service = http_handler.status_service.clone();
-    let catch_up_package_service = http_handler.catchup_service.clone();
-    let dashboard_service = http_handler.dashboard_service.clone();
-    let canister_read_state_service = http_handler.canister_read_state_service.clone();
-    let subnet_read_state_service = http_handler.subnet_read_state_service.clone();
-    let pprof_home_service = http_handler.pprof_home_service.clone();
-    let pprof_profile_service = http_handler.pprof_profile_service.clone();
-    let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
-
-    let svc = match req.method().clone() {
-        Method::POST => {
-            // Check the content-type header
-            if !req
-                .headers()
-                .get_all(http::header::CONTENT_TYPE)
-                .iter()
-                .any(|value| {
-                    if let Ok(v) = value.to_str() {
-                        return v.to_lowercase() == CONTENT_TYPE_CBOR;
-                    }
-                    false
-                })
-            {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
-                return (
-                    make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
-                    ),
-                    timer,
-                );
-            }
-
-            // Check the path
-            let path = req.uri().path();
-            let (svc, effective_principal_id) =
-                match *path.split('/').collect::<Vec<&str>>().as_slice() {
-                    ["", "api", "v2", "canister", effective_canister_id, "call"] => {
-                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Call.into());
-                        (
-                            call_service,
-                            Some(
-                                PrincipalId::from_str(effective_canister_id)
-                                    .map_err(|err| (effective_canister_id, err.to_string())),
-                            ),
-                        )
-                    }
-                    ["", "api", "v2", "canister", effective_canister_id, "query"] => {
-                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Query.into());
-                        (
-                            query_service,
-                            Some(
-                                PrincipalId::from_str(effective_canister_id)
-                                    .map_err(|err| (effective_canister_id, err.to_string())),
-                            ),
-                        )
-                    }
-                    ["", "api", "v2", "canister", effective_canister_id, "read_state"] => {
-                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::ReadState.into());
-                        (
-                            canister_read_state_service,
-                            Some(
-                                PrincipalId::from_str(effective_canister_id)
-                                    .map_err(|err| (effective_canister_id, err.to_string())),
-                            ),
-                        )
-                    }
-                    ["", "api", "v2", "subnet", subnet_id, "read_state"] => {
-                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::ReadState.into());
-                        (
-                            subnet_read_state_service,
-                            Some(
-                                PrincipalId::from_str(subnet_id)
-                                    .map_err(|err| (subnet_id, err.to_string())),
-                            ),
-                        )
-                    }
-                    ["", "_", "catch_up_package"] => {
-                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::CatchUpPackage.into());
-                        (catch_up_package_service, None)
-                    }
-                    _ => {
-                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
-                        return (
-                            make_plaintext_response(
-                                StatusCode::NOT_FOUND,
-                                "Unexpected POST request path.".to_string(),
-                            ),
-                            timer,
-                        );
+                        .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
+                        .observe(timer.elapsed().as_secs_f64());
+                    if let Err(err) =
+                        serve_http(stream, router, config.http_max_concurrent_streams).await
+                    {
+                        warn!(log, "failed to serve connection: {err}");
                     }
                 };
 
-            // If url contains effective principal id we attach it to the request.
-            if let Some(effective_principal_id) = effective_principal_id {
-                match effective_principal_id {
-                    Ok(id) => {
-                        req.extensions_mut().insert(id);
-                    }
-                    Err((id, e)) => {
-                        return (
-                            make_plaintext_response(
-                                StatusCode::BAD_REQUEST,
-                                format!(
-                                    "Malformed request: Invalid efffective principal id {}: {}",
-                                    id, e
-                                ),
-                            ),
-                            timer,
-                        );
-                    }
-                }
-            }
-            svc
+                metrics.closed_connections_total.inc();
+            });
         }
-        Method::GET => match req.uri().path() {
-            "/api/v2/status" => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Status.into());
-                status_service
-            }
-            "/" | "/_/" => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::RedirectToDashboard.into());
-                return (redirect_to_dashboard_response(), timer);
-            }
-            HTTP_DASHBOARD_URL_PATH => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Dashboard.into());
-                dashboard_service
-            }
-            "/_/pprof" => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofHome.into());
-                pprof_home_service
-            }
-            "/_/pprof/profile" => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofProfile.into());
-                pprof_profile_service
-            }
-            "/_/pprof/flamegraph" => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofFlamegraph.into());
-                pprof_flamegraph_service
-            }
-            "/_/threads" => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Threads.into());
-                return (threads::collect().await, timer);
-            }
-            _ => {
-                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
-                return (
-                    make_plaintext_response(
-                        StatusCode::NOT_FOUND,
-                        "Unexpected GET request path.".to_string(),
-                    ),
-                    timer,
-                );
-            }
-        },
-        Method::OPTIONS => {
-            timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Options.into());
-            return (no_content_response(), timer);
-        }
-        _ => {
-            timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
-            return (
-                make_plaintext_response(
-                    StatusCode::METHOD_NOT_ALLOWED,
-                    format!(
-                        "Unsupported method: {}. supported methods: POST, GET, OPTIONS.",
-                        req.method()
-                    ),
-                ),
-                timer,
-            );
-        }
-    };
-    let svc_per_conn = ServiceBuilder::new()
-        .load_shed()
-        .timeout(Duration::from_secs(config.request_timeout_seconds))
-        .layer(BodyReceiverLayer::new(&config))
-        .service(svc);
-    (
-        svc_per_conn
-            .oneshot(req)
-            .await
-            .unwrap_or_else(|err| map_box_error_to_response(err)),
-        timer,
+    });
+}
+
+async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
+    stream: S,
+    router: Router,
+    max_concurrent_streams: u32,
+) -> Result<(), BoxError> {
+    let stream = TokioIo::new(stream);
+    let hyper_service =
+        hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
+    hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+        .http2()
+        .max_concurrent_streams(max_concurrent_streams)
+        .serve_connection_with_upgrades(stream, hyper_service)
+        .await
+}
+
+fn make_router(
+    http_handler: HttpHandler,
+    config: Config,
+    metrics: HttpHandlerMetrics,
+    health_status_refresher: HealthStatusRefreshLayer,
+) -> Router {
+    let pprof_concurrency_limiter =
+        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
+
+    let base_router = Router::new()
+        .route(
+            "/",
+            get(|| async { Redirect::temporary(DashboardService::route()) }),
+        )
+        .route(
+            "/_/",
+            get(|| async { Redirect::temporary(DashboardService::route()) }),
+        )
+        .fallback(|| async {
+            make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
+        });
+
+    let final_router = base_router
+        .merge(
+            http_handler.status_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_status_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.call_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_call_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(http_handler.call_v3_router)
+        .merge(
+            http_handler.query_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_query_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.subnet_read_state_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.canister_read_state_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.catchup_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_catch_up_package_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.dashboard_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_dashboard_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.pprof_home_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.pprof_flamegraph_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.pprof_profile_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.tracing_flamegraph_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_tracing_flamegraph_concurrent_requests,
+                    )),
+            ),
+        );
+
+    final_router.layer(
+        ServiceBuilder::new()
+            .layer(TraceLayer::new_for_http())
+            .layer(HandleErrorLayer::new(map_box_error_to_response))
+            .layer(health_status_refresher.clone())
+            .load_shed()
+            .timeout(Duration::from_secs(config.request_timeout_seconds))
+            .layer(axum::middleware::from_fn_with_state(
+                Arc::new(metrics),
+                collect_timer_metric,
+            ))
+            // Disable default limit since apply a request limit to all routes.
+            .layer(DefaultBodyLimit::disable())
+            .layer(RequestBodyLimitLayer::new(
+                config.max_request_size_bytes as usize,
+            ))
+            .layer(cors_layer()),
     )
+}
+
+async fn verify_cbor_content_header(
+    request: axum::extract::Request,
+    next: Next,
+) -> axum::response::Response {
+    if !request
+        .headers()
+        .get_all(http::header::CONTENT_TYPE)
+        .iter()
+        .any(|value| {
+            if let Ok(v) = value.to_str() {
+                return v.to_lowercase() == CONTENT_TYPE_CBOR;
+            }
+            false
+        })
+    {
+        return make_plaintext_response(
+            StatusCode::BAD_REQUEST,
+            format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+        );
+    }
+
+    next.run(request).await
+}
+
+async fn collect_timer_metric(
+    State(metrics): State<Arc<HttpHandlerMetrics>>,
+    request: axum::extract::Request,
+    next: Next,
+) -> axum::response::Response {
+    use http_body::Body;
+
+    let path = if let Some(matched_path) = request.extensions().get::<MatchedPath>() {
+        matched_path.as_str().to_owned()
+    } else {
+        request.uri().path().to_owned()
+    };
+
+    let http_version = format!("{:?}", request.version());
+
+    metrics
+        .request_http_version_counts
+        .with_label_values(&[&http_version])
+        .inc();
+
+    metrics
+        .request_body_size_bytes
+        .with_label_values(&[&path, LABEL_UNKNOWN])
+        .observe(request.body().size_hint().lower() as f64);
+
+    let request_timer = HistogramVecTimer::start_timer(
+        metrics.requests.clone(),
+        &REQUESTS_LABEL_NAMES,
+        [&path, LABEL_UNKNOWN],
+    );
+
+    let resp = next.run(request).await;
+
+    let status = resp.status();
+    // This is a workaround for `StatusCode::as_str()` not returning a `&'static
+    // str`. It ensures `request_timer` is dropped before `status`.
+    let mut timer = request_timer;
+    timer.set_label(LABEL_HTTP_STATUS_CODE, status.as_str());
+
+    metrics
+        .response_body_size_bytes
+        .with_label_values(&[&path])
+        .observe(resp.body().size_hint().lower() as f64);
+    resp
 }
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
@@ -865,7 +801,7 @@ async fn load_root_delegation(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Option<CertificateDelegation> {
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
@@ -892,7 +828,7 @@ async fn load_root_delegation(
             &subnet_id,
             &nns_subnet_id,
             registry_client,
-            tls_handshake,
+            tls_config,
         )
         .await
         {
@@ -922,7 +858,7 @@ async fn try_fetch_delegation_from_nns(
     subnet_id: &SubnetId,
     nns_subnet_id: &SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<CertificateDelegation, BoxError> {
     let (peer_id, node) =
         match get_random_node_from_nns_subnet(registry_client, *nns_subnet_id).await {
@@ -969,16 +905,34 @@ async fn try_fetch_delegation_from_nns(
 
     let addr = SocketAddr::new(ip_addr, node.port as u16);
 
+    let tls_client_config = tls_config
+        .client_config(peer_id, registry_version)
+        .map_err(|err| format!("Retrieving TLS client config failed: {:?}.", err))?;
+
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
         .map_err(|err| format!("Could not connect to node {}. {:?}.", addr, err))?;
 
-    let tls_handshake = tls_handshake
-        .perform_tls_client_handshake(tcp_stream, peer_id, registry_version)
+    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
+    let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
+    let tls_stream = tls_connector
+        .connect(
+            irrelevant_domain
+                .try_into()
+                // TODO: ideally the expect should run at compile time
+                .expect("failed to create domain"),
+            tcp_stream,
+        )
         .await
-        .map_err(|err| format!("TLS handshake failed: {:?}.", err))?;
+        .map_err(|err| {
+            format!(
+                "Could not establish TLS stream to node {}. {:?}.",
+                addr, err
+            )
+        })?;
 
-    let (mut request_sender, connection) = hyper::client::conn::handshake(tls_handshake).await?;
+    let (mut request_sender, connection) =
+        hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 
     let log_clone = log.clone();
 
@@ -1003,16 +957,38 @@ async fn try_fetch_delegation_from_nns(
         .method(hyper::Method::POST)
         .uri(uri)
         .header(hyper::header::CONTENT_TYPE, CONTENT_TYPE_CBOR)
-        .body(Body::from(body))?;
+        .body(Body::new(Full::from(body).map_err(BoxError::from)))?;
 
     let raw_response_res = request_sender.send_request(nns_request).await?;
 
-    let raw_response = receive_body(
-        raw_response_res.into_body(),
-        Duration::from_secs(config.max_request_receive_seconds),
-        Byte::from_bytes(config.max_delegation_certificate_size_bytes.into()),
+    let raw_response = match timeout(
+        MAX_REQUEST_RECEIVE_TIMEOUT,
+        http_body_util::Limited::new(
+            raw_response_res.into_body(),
+            config.max_delegation_certificate_size_bytes as usize,
+        )
+        .collect(),
     )
-    .await?;
+    .await
+    {
+        Ok(Ok(c)) => c.to_bytes(),
+        Ok(Err(e)) if e.is::<LengthLimitError>() => {
+            return Err(format!(
+                "Http body exceeds size limit of {} bytes.",
+                config.max_delegation_certificate_size_bytes
+            )
+            .into())
+        }
+        Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
+        Err(e) => {
+            return Err(format!(
+                "Timeout of {}s reached while receiving http body: {}",
+                MAX_REQUEST_RECEIVE_TIMEOUT.as_secs(),
+                e
+            )
+            .into())
+        }
+    };
 
     debug!(log, "Response from nns subnet: {:?}", raw_response);
 
@@ -1113,32 +1089,575 @@ async fn get_random_node_from_nns_subnet(
     }
 }
 
-fn no_content_response() -> Response<Body> {
-    let mut response = Response::new(Body::from(""));
-    *response.status_mut() = StatusCode::NO_CONTENT;
-    *response.headers_mut() = get_cors_headers();
-    response
-}
-
-fn redirect_to_dashboard_response() -> Response<Body> {
-    // The empty string is simply to uniformize the return type with the cases where
-    // the response is not empty.
-    let mut response = Response::new(Body::from(""));
-    *response.status_mut() = StatusCode::FOUND;
-    response.headers_mut().insert(
-        hyper::header::LOCATION,
-        hyper::header::HeaderValue::from_static(HTTP_DASHBOARD_URL_PATH),
-    );
-    response
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::read_state::subnet::SubnetReadStateService;
+    use crate::{common::Cbor, query::QueryService};
+
+    use axum::response::IntoResponse;
+    use axum_server::tls_rustls::RustlsConfig;
+    use bytes::Bytes;
+    use futures_util::{future::select_all, stream::pending, FutureExt};
+    use http::{
+        header::{
+            ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
+            ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
+        },
+        HeaderName, HeaderValue, Method,
+    };
+    use http_body_util::Empty;
+    use ic_certification_test_utils::serialize_to_cbor;
+    use ic_certification_test_utils::{
+        encoded_time, generate_root_of_trust, CertificateBuilder, CertificateData,
+    };
+    use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
+    use ic_crypto_tree_hash::{flatmap, lookup_path, Label, LabeledTree};
+    use ic_crypto_utils_threshold_sig_der::public_key_to_der;
+    use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
+    use ic_interfaces_state_manager_mocks::MockStateManager;
+    use ic_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
+    use ic_registry_keys::make_node_record_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities_registry::{
+        add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
+        SubnetRecordBuilder,
+    };
+    use ic_test_utilities_types::ids::canister_test_id;
+    use ic_types::messages::Certificate;
+    use ic_types::{
+        messages::{Blob, HttpReadStateResponse},
+        NodeId,
+    };
+    use ic_types::{CanisterId, Height};
+    use rand::thread_rng;
+    use rcgen::{generate_simple_self_signed, CertifiedKey};
+    use rustls::{
+        client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+        pki_types::{CertificateDer, ServerName, UnixTime},
+        ClientConfig, DigitallySignedStruct, SignatureScheme,
+    };
+    use std::convert::Infallible;
+    use std::{net::SocketAddr, sync::Arc};
+    use tower::ServiceExt;
+
+    fn empty_cbor() -> Bytes {
+        Bytes::from(serde_cbor::to_vec(&()).unwrap())
+    }
+
+    fn dummy_router(config: Config) -> Router {
+        async fn dummy(_body: Bytes) -> String {
+            "success".to_string()
+        }
+        async fn dummy_cbor(_body: Cbor<()>) -> String {
+            "success".to_string()
+        }
+        let http_handler = HttpHandler {
+            call_router: Router::new().route(call_v2::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new().route(call_v3::route(), axum::routing::post(dummy)),
+            query_router: Router::new()
+                .route(QueryService::route(), axum::routing::post(dummy_cbor)),
+            catchup_router: Router::new().route(
+                CatchUpPackageService::route(),
+                axum::routing::post(dummy_cbor),
+            ),
+            dashboard_router: Router::new()
+                .route(DashboardService::route(), axum::routing::get(dummy)),
+            status_router: Router::new().route(StatusService::route(), axum::routing::get(dummy)),
+            canister_read_state_router: Router::new().route(
+                CanisterReadStateService::route(),
+                axum::routing::post(dummy),
+            ),
+            subnet_read_state_router: Router::new()
+                .route(SubnetReadStateService::route(), axum::routing::post(dummy)),
+            pprof_home_router: Router::new()
+                .route(PprofHomeService::route(), axum::routing::get(dummy)),
+            pprof_profile_router: Router::new()
+                .route(PprofProfileService::route(), axum::routing::get(dummy)),
+            pprof_flamegraph_router: Router::new()
+                .route(PprofFlamegraphService::route(), axum::routing::get(dummy)),
+            tracing_flamegraph_router: Router::new()
+                .route(TracingFlamegraphService::route(), axum::routing::get(dummy)),
+        };
+
+        let metrics = HttpHandlerMetrics::new(&MetricsRegistry::default());
+
+        let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_latest_certified_height()
+            .return_const(Height::from(1));
+
+        let mut consensus_pool_cache = MockConsensusPoolCache::new();
+        consensus_pool_cache
+            .expect_is_replica_behind()
+            .return_const(false);
+
+        make_router(
+            http_handler,
+            config,
+            metrics.clone(),
+            HealthStatusRefreshLayer::new(
+                no_op_logger(),
+                metrics,
+                Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy)),
+                Arc::new(consensus_pool_cache),
+                Arc::new(state_manager),
+            ),
+        )
+    }
+
+    /// Request that takes forever to read.
+    fn infinite_request(
+        uri: String,
+        method: Method,
+        header: Option<(HeaderName, &str)>,
+    ) -> Request<Body> {
+        let mut r = Request::builder()
+            .uri(uri)
+            .method(method)
+            .body(Body::from_stream(pending::<Result<Bytes, Infallible>>()))
+            .unwrap();
+        if let Some((k, v)) = header {
+            r.headers_mut().append(k, HeaderValue::from_str(v).unwrap());
+        }
+        r
+    }
 
     // Verify that ReplicatedStateHealth is represented as an atomic by crossbeam.
     #[test]
     fn test_replica_state_atomic() {
         assert!(AtomicCell::<ReplicaHealthStatus>::is_lock_free());
+    }
+
+    #[tokio::test]
+    async fn payload_too_large_without_content_length() {
+        let router = dummy_router(Config {
+            max_request_size_bytes: 100,
+            ..Default::default()
+        });
+        let req = Request::builder()
+            .uri("/_/catch_up_package")
+            .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+            .method(hyper::Method::POST)
+            .body(Body::new(Full::from(vec![0; 1000])))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn payload_too_large_with_content_length() {
+        let router = dummy_router(Config {
+            max_request_size_bytes: 100,
+            ..Default::default()
+        });
+        let req = Request::builder()
+            .uri("/_/catch_up_package")
+            .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+            .method(hyper::Method::POST)
+            .header("content-length", "1000")
+            .body(Body::new(Full::from(vec![0; 1000])))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn invalid_method_for_existing_endpoint() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri("/_/catch_up_package")
+            .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+            .method(hyper::Method::GET)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn pre_flight_cors() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri("/_/catch_up_package")
+            .method(hyper::Method::OPTIONS)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_HEADERS));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_METHODS));
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn pre_flight_cors_fallback_path() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri("/_/sdfsfdsfd")
+            .method(hyper::Method::OPTIONS)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_HEADERS));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_METHODS));
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn origin_cors() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri(format!("/api/v2/canister/{}/query", CanisterId::ic_00()))
+            .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+            .method(hyper::Method::POST)
+            .body(Body::new(Full::new(empty_cbor())))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn non_existing_endpoint() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri("/_/idontexist")
+            .method(hyper::Method::GET)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn enforce_cbor_header() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri("/_/catch_up_package")
+            .method(hyper::Method::POST)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn request_timeout() {
+        let router = dummy_router(Config {
+            request_timeout_seconds: 1,
+            ..Default::default()
+        });
+        let req = infinite_request(
+            "/_/catch_up_package".to_string(),
+            Method::POST,
+            Some((CONTENT_TYPE, CONTENT_TYPE_CBOR)),
+        );
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::GATEWAY_TIMEOUT);
+    }
+
+    #[tokio::test]
+    async fn concurrent_request_limiter_cup() {
+        let router = dummy_router(Config {
+            max_catch_up_package_concurrent_requests: 10,
+            ..Default::default()
+        });
+        let futs = (0..11)
+            .map(|_| {
+                let req = infinite_request(
+                    "/_/catch_up_package".to_string(),
+                    Method::POST,
+                    Some((CONTENT_TYPE, CONTENT_TYPE_CBOR)),
+                );
+                let router = router.clone();
+                async { router.oneshot(req).await.unwrap() }.boxed()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            select_all(futs).await.0.status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[tokio::test]
+    async fn concurrent_request_limiter_query() {
+        let router = dummy_router(Config {
+            max_query_concurrent_requests: 10,
+            ..Default::default()
+        });
+        let futs = (0..11)
+            .map(|_| {
+                let req = infinite_request(
+                    format!("/api/v2/canister/{}/query", CanisterId::ic_00()),
+                    Method::POST,
+                    Some((CONTENT_TYPE, CONTENT_TYPE_CBOR)),
+                );
+                let router = router.clone();
+                async { router.oneshot(req).await.unwrap() }.boxed()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            select_all(futs).await.0.status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[tokio::test]
+    async fn concurrent_request_limiter_not_all_blocked() {
+        let router = dummy_router(Config {
+            max_query_concurrent_requests: 10,
+            ..Default::default()
+        });
+        let futs = (0..11)
+            .map(|_| {
+                let req = infinite_request(
+                    format!("/api/v2/canister/{}/query", CanisterId::ic_00()),
+                    Method::POST,
+                    Some((CONTENT_TYPE, CONTENT_TYPE_CBOR)),
+                );
+                let router = router.clone();
+                async { router.oneshot(req).await.unwrap() }.boxed()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            select_all(futs).await.0.status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        let req = Request::builder()
+            .uri("/_/catch_up_package")
+            .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+            .method(hyper::Method::POST)
+            .body(Body::new(Full::new(empty_cbor())))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    const NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_1;
+    const NON_NNS_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_2;
+    const NNS_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_1;
+    const NON_NNS_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_2;
+
+    // Get a free port on this host to which we can connect transport to.
+    fn get_free_localhost_socket_addr() -> SocketAddr {
+        let socket = tokio::net::TcpSocket::new_v4().unwrap();
+        socket.set_reuseport(false).unwrap();
+        socket.set_reuseaddr(false).unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        socket.local_addr().unwrap()
+    }
+
+    async fn generate_self_signed_cert() -> RustlsConfig {
+        let CertifiedKey { cert, key_pair } =
+            generate_simple_self_signed(vec!["127.0.0.1".to_string()]).unwrap();
+
+        let cert_der = CertificateDer::from(cert);
+
+        RustlsConfig::from_der(vec![cert_der.as_ref().to_vec()], key_pair.serialize_der())
+            .await
+            .unwrap()
+    }
+
+    /// Sets up all the dependencies.
+    fn set_up_nns_delegation_dependencies(
+        rt_handle: tokio::runtime::Handle,
+    ) -> (Arc<FakeRegistryClient>, MockTlsConfig) {
+        let registry_version = 1;
+
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        add_single_subnet_record(
+            &data_provider,
+            registry_version,
+            NNS_SUBNET_ID,
+            SubnetRecordBuilder::new()
+                .with_committee(&[NNS_NODE_ID])
+                .build(),
+        );
+
+        add_single_subnet_record(
+            &data_provider,
+            registry_version,
+            NON_NNS_SUBNET_ID,
+            SubnetRecordBuilder::new()
+                .with_committee(&[NON_NNS_NODE_ID])
+                .build(),
+        );
+
+        let (non_nns_public_key, _non_nns_secret_key) = generate_root_of_trust(&mut thread_rng());
+        let (nns_public_key, nns_secret_key) = generate_root_of_trust(&mut thread_rng());
+
+        add_subnet_key_record(
+            &data_provider,
+            registry_version,
+            NON_NNS_SUBNET_ID,
+            non_nns_public_key,
+        );
+
+        add_subnet_key_record(
+            &data_provider,
+            registry_version,
+            NNS_SUBNET_ID,
+            nns_public_key,
+        );
+
+        add_subnet_list_record(
+            &data_provider,
+            registry_version,
+            vec![NNS_SUBNET_ID, NON_NNS_SUBNET_ID],
+        );
+
+        let addr = get_free_localhost_socket_addr();
+
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: addr.ip().to_string(),
+                port: addr.port() as u32,
+            }),
+            ..Default::default()
+        };
+
+        data_provider
+            .add(
+                &make_node_record_key(NNS_NODE_ID),
+                registry_version.into(),
+                Some(node_record),
+            )
+            .unwrap();
+
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
+
+        registry_client.update_to_latest_version();
+
+        let (_certificate, _root_pk, cbor) =
+                CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
+                    Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                        Label::from(NON_NNS_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(0), canister_test_id(10))])),
+                            Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&non_nns_public_key.into_bytes()).unwrap()),
+                        ])
+                    ]),
+                    Label::from("time") => LabeledTree::Leaf(encoded_time(42))
+                ])))
+                .with_root_of_trust(nns_public_key, nns_secret_key)
+                .build();
+
+        rt_handle.spawn(async move {
+            let http_response = HttpReadStateResponse {
+                certificate: Blob(cbor),
+            };
+
+            let router = axum::routing::any(move || async { Cbor(http_response).into_response() });
+
+            axum_server::bind_rustls(addr, generate_self_signed_cert().await)
+                .serve(router.into_make_service())
+                .await
+                .unwrap()
+        });
+
+        #[derive(Debug)]
+        struct NoVerify;
+        impl ServerCertVerifier for NoVerify {
+            fn verify_server_cert(
+                &self,
+                _end_entity: &CertificateDer,
+                _intermediates: &[CertificateDer],
+                _server_name: &ServerName,
+                _ocsp_response: &[u8],
+                _now: UnixTime,
+            ) -> Result<ServerCertVerified, rustls::Error> {
+                Ok(ServerCertVerified::assertion())
+            }
+            fn verify_tls12_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn verify_tls13_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+                rustls::crypto::ring::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            }
+        }
+
+        let accept_any_config = ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoVerify))
+            .with_no_client_auth();
+
+        let mut tls_config = MockTlsConfig::new();
+        tls_config
+            .expect_client_config()
+            .returning(move |_, _| Ok(accept_any_config.clone()));
+
+        (registry_client, tls_config)
+    }
+
+    #[tokio::test]
+    async fn load_root_delegation_on_nns_should_return_none_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+
+        let delegation = load_root_delegation(
+            &Config::default(),
+            &no_op_logger(),
+            rt_handle,
+            NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client.as_ref(),
+            &tls_config,
+        )
+        .await;
+
+        assert!(delegation.is_none());
+    }
+
+    #[tokio::test]
+    async fn load_root_delegation_on_non_nns_should_return_some_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(rt_handle.clone());
+
+        let delegation = load_root_delegation(
+            &Config::default(),
+            &no_op_logger(),
+            rt_handle,
+            NON_NNS_SUBNET_ID,
+            NNS_SUBNET_ID,
+            registry_client.as_ref(),
+            &tls_config,
+        )
+        .await;
+
+        let delegation = delegation.expect("Should return Some delegation on non NNS subnet");
+        let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
+            .expect("Should return a certificate which can be deserialized");
+        let tree = LabeledTree::try_from(parsed_delegation.tree)
+            .expect("The deserialized delegation should contain a correct tree");
+        // Verify that the state tree has the a subtree corresponding to the requested subnet
+        match lookup_path(&tree, &[b"subnet", NON_NNS_SUBNET_ID.get_ref().as_ref()]) {
+            Some(LabeledTree::SubTree(..)) => (),
+            _ => panic!("Didn't find the subnet path in the state tree"),
+        }
     }
 }

@@ -1,28 +1,33 @@
-use crate::types::ids::subnet_test_id;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
-    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
-    StateManagerResult, StateReader, TransientStateHashError::*, CERT_ANY, CERT_CERTIFIED,
-    CERT_UNCERTIFIED,
+    CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
+    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
+    TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    batch::BatchSummary,
     consensus::certification::Certification,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        CryptoHash, CryptoHashOf,
+    },
     messages::{Request, RequestOrResponse, Response},
-    xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{
+        CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
+        StreamIndexedQueue, StreamSlice,
+    },
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -37,13 +42,6 @@ struct Snapshot {
 impl Snapshot {
     fn make_labeled_state(&self) -> Labeled<Arc<ReplicatedState>> {
         Labeled::new(self.height, self.state.clone())
-    }
-
-    fn certification_mask(&self) -> CertificationMask {
-        match self.certification {
-            Some(_) => CERT_CERTIFIED,
-            None => CERT_UNCERTIFIED,
-        }
     }
 }
 
@@ -92,9 +90,10 @@ impl FakeStateManager {
     }
 }
 
+const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
-        Height::new(0),
+        INITIAL_STATE_HEIGHT,
         Arc::new(ReplicatedState::new(
             subnet_test_id(1),
             SubnetType::Application,
@@ -192,21 +191,6 @@ impl StateManager for FakeStateManager {
         }
     }
 
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
-        self.states
-            .read()
-            .unwrap()
-            .iter()
-            .filter_map(|snapshot| {
-                if cert_mask.is_set(snapshot.certification_mask()) {
-                    Some(snapshot.height)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
     fn remove_states_below(&self, height: Height) {
         self.states
             .write()
@@ -214,7 +198,11 @@ impl StateManager for FakeStateManager {
             .retain(|snap| snap.height == Height::new(0) || snap.height >= height)
     }
 
-    fn remove_inmemory_states_below(&self, _height: Height) {
+    fn remove_inmemory_states_below(
+        &self,
+        _height: Height,
+        _extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         // All heights are checkpoints
     }
 
@@ -223,6 +211,7 @@ impl StateManager for FakeStateManager {
         state: ReplicatedState,
         height: Height,
         _scope: CertificationScope,
+        _batch_summary: Option<BatchSummary>,
     ) {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         self.states.write().unwrap().push(Snapshot {
@@ -254,9 +243,11 @@ impl StateReader for FakeStateManager {
     type State = ReplicatedState;
 
     fn latest_state_height(&self) -> Height {
-        *StateManager::list_state_heights(self, CERT_ANY)
-            .last()
+        self.states
+            .read()
             .unwrap()
+            .last()
+            .map_or(INITIAL_STATE_HEIGHT, |snap| snap.height)
     }
 
     // No certification support in FakeStateManager
@@ -276,8 +267,7 @@ impl StateReader for FakeStateManager {
             .read()
             .unwrap()
             .last()
-            .map(|snap| snap.make_labeled_state())
-            .unwrap_or_else(initial_state)
+            .map_or_else(initial_state, |snap| snap.make_labeled_state())
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
@@ -319,7 +309,7 @@ impl StateReader for FakeStateManager {
 
 /// Local helper to enable serialization and deserialization of
 /// [`RequestOrResponse`] for testing.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 enum SerializableRequestOrResponse {
     Request(Request),
     Response(Response),
@@ -352,8 +342,133 @@ impl From<SerializableRequestOrResponse> for RequestOrResponse {
 }
 
 /// Local helper to enable serialization and deserialization of
+/// ['StreamHeader'] for testing.
+#[derive(Deserialize, Serialize)]
+struct SerializableStreamHeader {
+    begin: StreamIndex,
+    end: StreamIndex,
+    signals_end: StreamIndex,
+    reject_signals: VecDeque<SerializableRejectSignal>,
+    flags: SerializableStreamFlags,
+}
+
+impl From<&StreamHeader> for SerializableStreamHeader {
+    fn from(header: &StreamHeader) -> Self {
+        Self {
+            begin: header.begin(),
+            end: header.end(),
+            signals_end: header.signals_end(),
+            reject_signals: header.reject_signals().iter().map(From::from).collect(),
+            flags: header.flags().into(),
+        }
+    }
+}
+
+impl From<SerializableStreamHeader> for StreamHeader {
+    fn from(header: SerializableStreamHeader) -> StreamHeader {
+        StreamHeader::new(
+            header.begin,
+            header.end,
+            header.signals_end,
+            header.reject_signals.into_iter().map(From::from).collect(),
+            header.flags.into(),
+        )
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
+/// ['RejectReason'] for testing.
+#[derive(Deserialize, Serialize)]
+pub enum SerializableRejectReason {
+    CanisterMigrating = 1,
+    CanisterNotFound = 2,
+    CanisterStopped = 3,
+    CanisterStopping = 4,
+    QueueFull = 5,
+    OutOfMemory = 6,
+    Unknown = 7,
+}
+
+impl From<&RejectReason> for SerializableRejectReason {
+    fn from(reason: &RejectReason) -> Self {
+        match reason {
+            RejectReason::CanisterMigrating => Self::CanisterMigrating,
+            RejectReason::CanisterNotFound => Self::CanisterNotFound,
+            RejectReason::CanisterStopped => Self::CanisterStopped,
+            RejectReason::CanisterStopping => Self::CanisterStopping,
+            RejectReason::QueueFull => Self::QueueFull,
+            RejectReason::OutOfMemory => Self::OutOfMemory,
+            RejectReason::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<SerializableRejectReason> for RejectReason {
+    fn from(reason: SerializableRejectReason) -> RejectReason {
+        match reason {
+            SerializableRejectReason::CanisterMigrating => RejectReason::CanisterMigrating,
+            SerializableRejectReason::CanisterNotFound => RejectReason::CanisterNotFound,
+            SerializableRejectReason::CanisterStopped => RejectReason::CanisterStopped,
+            SerializableRejectReason::CanisterStopping => RejectReason::CanisterStopping,
+            SerializableRejectReason::QueueFull => RejectReason::QueueFull,
+            SerializableRejectReason::OutOfMemory => RejectReason::OutOfMemory,
+            SerializableRejectReason::Unknown => RejectReason::Unknown,
+        }
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
+/// ['RejectSignal'] for testing.
+#[derive(Deserialize, Serialize)]
+pub struct SerializableRejectSignal {
+    pub reason: SerializableRejectReason,
+    pub index: StreamIndex,
+}
+
+impl From<&RejectSignal> for SerializableRejectSignal {
+    fn from(signal: &RejectSignal) -> Self {
+        Self {
+            reason: (&signal.reason).into(),
+            index: signal.index,
+        }
+    }
+}
+
+impl From<SerializableRejectSignal> for RejectSignal {
+    fn from(signal: SerializableRejectSignal) -> RejectSignal {
+        RejectSignal {
+            reason: signal.reason.into(),
+            index: signal.index,
+        }
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
+/// ['StreamFlags'] for testing.
+#[derive(Deserialize, Serialize)]
+pub struct SerializableStreamFlags {
+    pub deprecated_responses_only: bool,
+}
+
+impl From<&StreamFlags> for SerializableStreamFlags {
+    fn from(flags: &StreamFlags) -> Self {
+        Self {
+            deprecated_responses_only: flags.deprecated_responses_only,
+        }
+    }
+}
+
+impl From<SerializableStreamFlags> for StreamFlags {
+    fn from(flags: SerializableStreamFlags) -> StreamFlags {
+        StreamFlags {
+            deprecated_responses_only: flags.deprecated_responses_only,
+        }
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
 /// [`StreamIndexedQueue`] for testing.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct SerializableStreamIndexedQueue {
     begin: StreamIndex,
     queue: VecDeque<SerializableRequestOrResponse>,
@@ -380,16 +495,16 @@ impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<RequestOrRespon
 
 /// Local helper to enable serialization and deserialization of
 /// [`StreamSlice`] for testing.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct SerializableStreamSlice {
-    header: StreamHeader,
+    header: SerializableStreamHeader,
     messages: Option<SerializableStreamIndexedQueue>,
 }
 
 impl From<StreamSlice> for SerializableStreamSlice {
     fn from(slice: StreamSlice) -> Self {
         SerializableStreamSlice {
-            header: slice.header().clone(),
+            header: slice.header().into(),
             messages: slice.messages().map(|messages| messages.into()),
         }
     }
@@ -398,7 +513,7 @@ impl From<StreamSlice> for SerializableStreamSlice {
 impl From<SerializableStreamSlice> for StreamSlice {
     fn from(slice: SerializableStreamSlice) -> StreamSlice {
         StreamSlice::new(
-            slice.header,
+            slice.header.into(),
             slice
                 .messages
                 .map(|messages| messages.into())
@@ -427,11 +542,6 @@ impl CertifiedStreamStore for FakeStateManager {
             .read()
             .unwrap()
             .wait();
-        use ic_types::{
-            consensus::certification::CertificationContent,
-            crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
-            signature::ThresholdSignature,
-        };
 
         let state = self.get_latest_state();
         let stream = state
@@ -452,29 +562,11 @@ impl CertifiedStreamStore for FakeStateManager {
             // If `byte_limit == 0 && msg_limit > 0`, return exactly 1 message.
             msg_limit = Some(1);
         }
-        let slice: SerializableStreamSlice = stream.slice(begin_index, msg_limit).into();
 
-        Ok(CertifiedStreamSlice {
-            payload: serde_cbor::to_vec(&slice).expect("failed to serialize stream slice"),
-            merkle_proof: vec![],
-            certification: Certification {
-                height: state.height(),
-                signed: Signed {
-                    signature: ThresholdSignature {
-                        signer: NiDkgId {
-                            start_block_height: Height::from(0),
-                            dealer_subnet: subnet_test_id(0),
-                            dkg_tag: NiDkgTag::HighThreshold,
-                            target_subnet: NiDkgTargetSubnet::Local,
-                        },
-                        signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-                    },
-                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                        vec![],
-                    ))),
-                },
-            },
-        })
+        Ok(encode_certified_stream_slice(
+            stream.slice(begin_index, msg_limit),
+            state.height(),
+        ))
     }
 
     fn decode_certified_stream_slice(
@@ -499,6 +591,46 @@ impl CertifiedStreamStore for FakeStateManager {
         self.get_latest_state()
             .get_ref()
             .subnets_with_available_streams()
+    }
+}
+
+/// Encode a `StreamSlice` directly as CBOR, with no witness or certification;
+/// compatible with `FakeStateManager`.
+///
+/// This is useful for generating a `CertifiedStreamSlice` where
+/// `slice.header().begin() != `slice.messages().begin()` for use in tests.
+pub fn encode_certified_stream_slice(
+    slice: StreamSlice,
+    state_height: Height,
+) -> CertifiedStreamSlice {
+    use ic_types::{
+        consensus::certification::CertificationContent,
+        crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
+        signature::ThresholdSignature,
+    };
+
+    let slice: SerializableStreamSlice = slice.into();
+
+    CertifiedStreamSlice {
+        payload: serde_cbor::to_vec(&slice).expect("failed to serialize stream slice"),
+        merkle_proof: vec![],
+        certification: Certification {
+            height: state_height,
+            signed: Signed {
+                signature: ThresholdSignature {
+                    signer: NiDkgId {
+                        start_block_height: Height::from(0),
+                        dealer_subnet: subnet_test_id(0),
+                        dkg_tag: NiDkgTag::HighThreshold,
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    },
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                },
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+            },
+        },
     }
 }
 
@@ -553,19 +685,19 @@ impl StateManager for RefMockStateManager {
             .deliver_state_certification(certification)
     }
 
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
-        self.mock.read().unwrap().list_state_heights(cert_mask)
-    }
-
     fn remove_states_below(&self, height: Height) {
         self.mock.read().unwrap().remove_states_below(height)
     }
 
-    fn remove_inmemory_states_below(&self, height: Height) {
+    fn remove_inmemory_states_below(
+        &self,
+        height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         self.mock
             .read()
             .unwrap()
-            .remove_inmemory_states_below(height)
+            .remove_inmemory_states_below(height, extra_heights_to_keep)
     }
 
     fn commit_and_certify(
@@ -573,11 +705,12 @@ impl StateManager for RefMockStateManager {
         state: ReplicatedState,
         height: Height,
         scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
     ) {
         self.mock
             .read()
             .unwrap()
-            .commit_and_certify(state, height, scope)
+            .commit_and_certify(state, height, scope, batch_summary)
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {

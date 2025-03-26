@@ -2,8 +2,8 @@ use super::*;
 use crate::sign::canister_threshold_sig::idkg::utils::{
     index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
 };
-use ic_crypto_internal_csp::api::CspIDkgProtocol;
-use ic_crypto_internal_threshold_sig_ecdsa::IDkgComplaintInternal;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::verify_complaint as idkg_verify_complaint;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgComplaintInternal;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::NodeIndex;
 use std::convert::TryFrom;
@@ -11,8 +11,7 @@ use std::convert::TryFrom;
 #[cfg(test)]
 mod tests;
 
-pub fn verify_complaint<C: CspIDkgProtocol>(
-    csp_idkg_client: &C,
+pub fn verify_complaint(
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
     complaint: &IDkgComplaint,
@@ -35,21 +34,22 @@ pub fn verify_complaint<C: CspIDkgProtocol>(
     let (dealer_index, internal_dealing) =
         index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
 
-    csp_idkg_client.idkg_verify_complaint(
+    Ok(idkg_verify_complaint(
+        transcript.algorithm_id,
         &internal_complaint,
         complainer_index,
         &complainer_mega_pubkey,
         &internal_dealing,
         dealer_index,
         &transcript.context_data(),
-    )
+    )?)
 }
 
 fn index_of_complainer(
     complainer_id: NodeId,
     transcript: &IDkgTranscript,
 ) -> Result<NodeIndex, IDkgVerifyComplaintError> {
-    transcript.receivers.position(complainer_id).ok_or(
+    transcript.index_for_signer_id(complainer_id).ok_or(
         IDkgVerifyComplaintError::InvalidArgumentMissingComplainerInTranscript { complainer_id },
     )
 }

@@ -1,4 +1,3 @@
-#![cfg_attr(nightly_compiler, feature(proc_macro_diagnostic))]
 /*
 This is very gradually getting depreciated.
 You'll get much better error messages if you use 'dfn_core::{over, over_async}' instead
@@ -24,9 +23,6 @@ async fn compute_query(canister_id: Vec<u8>, words: Vec<String>) -> Vec<String> 
     compute(canister_id, words).await
 }
 ```
-If you run this on a nightly compiler you can get multiple compiler errors at
-once and the errors will be of a higher quality.
-
 When developing this you can run
 ```bash
 cargo watch -x 'expand --bin inter_canister' -w ..
@@ -50,7 +46,6 @@ struct Errors {
 }
 
 /// A list of errors which will be sent to the user
-/// On a nightly compiler this will use Diagnostic, otherwise it will panic
 /// If you call emit on an empty set of errors nothing will happen
 impl Errors {
     fn new() -> Self {
@@ -62,21 +57,6 @@ impl Errors {
         self.queue.push_back((msg.into(), s.span()));
     }
 
-    #[cfg(nightly_compiler)]
-    fn emit(mut self) {
-        match self.queue.pop_front() {
-            Some((msg, span)) => {
-                let mut diag = span.unwrap().error(msg);
-                for (msg, span) in self.queue.iter() {
-                    diag = diag.span_error(span.unwrap(), msg);
-                }
-                diag.emit()
-            }
-            None => (),
-        }
-    }
-
-    #[cfg(not(nightly_compiler))]
     fn emit(self) {
         if !self.queue.is_empty() {
             let errors = self

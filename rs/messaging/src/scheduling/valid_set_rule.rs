@@ -1,26 +1,21 @@
-// Including this clippy allow to circumvent clippy errors spawned by MockAll
-// internal expansion.  Should be removed when DFN-860 is resolved.
-// Specifically relevant to the Vec<> parameter.
-#![allow(clippy::ptr_arg)]
-
 use ic_base_types::NumBytes;
-use ic_constants::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::IngressHistoryWriter;
-use ic_logger::{debug, error, trace, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    replicated_state::{
+use ic_interfaces::{
+    execution_environment::IngressHistoryWriter,
+    messaging::{
+        IngressInductionError, LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
         LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
         LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
-        LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
-        LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
+        LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
     },
-    ReplicatedState, StateError,
 };
+use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_management_canister_types_private::CanisterStatusType;
+use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -92,8 +87,8 @@ impl VsrMetrics {
             LABEL_VALUE_CANISTER_STOPPED,
             LABEL_VALUE_CANISTER_STOPPING,
             LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
-            LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
-            LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
+            LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
+            LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
         ] {
             inducted_ingress_messages.with_label_values(&[status]);
         }
@@ -172,7 +167,7 @@ impl ValidSetRuleImpl {
                 LABEL_VALUE_SUCCESS
             }
             Err(err) => {
-                if let StateError::CanisterNotFound(canister_id) = &err {
+                if let IngressInductionError::CanisterNotFound(canister_id) = &err {
                     error!(
                         self.log,
                         "Failed to induct message: canister does not exist";
@@ -200,7 +195,7 @@ impl ValidSetRuleImpl {
 
     /// Checks whether the given message has already been inducted.
     fn is_duplicate(&self, state: &ReplicatedState, msg: &SignedIngressContent) -> bool {
-        state.get_ingress_status(&msg.id()) != IngressStatus::Unknown
+        state.get_ingress_status(&msg.id()) != &IngressStatus::Unknown
     }
 
     /// Records the result of inducting an ingress message.
@@ -225,7 +220,7 @@ impl ValidSetRuleImpl {
         status: &str,
         ingress_expiry: Time,
     ) {
-        let delta_in_nanos = expiry_time_from_now().saturating_sub(ingress_expiry);
+        let delta_in_nanos = expiry_time_from_now().saturating_duration_since(ingress_expiry);
         self.metrics
             .unreliable_induct_ingress_message_duration
             .with_label_values(&[status])
@@ -243,11 +238,11 @@ impl ValidSetRuleImpl {
         state: &mut ReplicatedState,
         msg: SignedIngressContent,
         subnet_size: usize,
-    ) -> Result<(), StateError> {
+    ) -> Result<(), IngressInductionError> {
         if state.metadata.own_subnet_type != SubnetType::System
             && state.metadata.ingress_history.len() >= self.ingress_history_max_messages
         {
-            return Err(StateError::IngressHistoryFull {
+            return Err(IngressInductionError::IngressHistoryFull {
                 capacity: self.ingress_history_max_messages,
             });
         }
@@ -255,16 +250,18 @@ impl ValidSetRuleImpl {
         let effective_canister_id =
             match extract_effective_canister_id(&msg, state.metadata.own_subnet_id) {
                 Ok(effective_canister_id) => effective_canister_id,
-                Err(
-                    ParseIngressError::UnknownSubnetMethod
-                    | ParseIngressError::SubnetMethodNotAllowed,
-                ) => {
-                    return Err(StateError::UnknownSubnetMethod(
+                Err(ParseIngressError::UnknownSubnetMethod) => {
+                    return Err(IngressInductionError::CanisterMethodNotFound(
+                        msg.method_name().to_string(),
+                    ))
+                }
+                Err(ParseIngressError::SubnetMethodNotAllowed) => {
+                    return Err(IngressInductionError::SubnetMethodNotAllowed(
                         msg.method_name().to_string(),
                     ))
                 }
                 Err(ParseIngressError::InvalidSubnetPayload(_)) => {
-                    return Err(StateError::InvalidSubnetPayload)
+                    return Err(IngressInductionError::InvalidManagementPayload)
                 }
             };
 
@@ -287,13 +284,14 @@ impl ValidSetRuleImpl {
                 // Get the paying canister from the state.
                 let canister = match state.canister_states.get_mut(&payer) {
                     Some(canister) => canister,
-                    None => return Err(StateError::CanisterNotFound(payer)),
+                    None => return Err(IngressInductionError::CanisterNotFound(payer)),
                 };
 
                 // Withdraw cost of inducting the message.
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
                 let compute_allocation = canister.scheduler_state.compute_allocation;
+                let reveal_top_up = canister.controllers().contains(&ingress.source.get());
                 if let Err(err) = self.cycles_account_manager.charge_ingress_induction_cost(
                     canister,
                     memory_usage,
@@ -301,8 +299,9 @@ impl ValidSetRuleImpl {
                     compute_allocation,
                     cost,
                     subnet_size,
+                    reveal_top_up,
                 ) {
-                    return Err(StateError::CanisterOutOfCycles(err));
+                    return Err(IngressInductionError::CanisterOutOfCycles(err));
                 }
 
                 // Ensure the canister is running if the message isn't to a subnet.
@@ -310,10 +309,14 @@ impl ValidSetRuleImpl {
                     match canister.status() {
                         CanisterStatusType::Running => {}
                         CanisterStatusType::Stopping => {
-                            return Err(StateError::CanisterStopping(canister.canister_id()))
+                            return Err(IngressInductionError::CanisterStopping(
+                                canister.canister_id(),
+                            ))
                         }
                         CanisterStatusType::Stopped => {
-                            return Err(StateError::CanisterStopped(canister.canister_id()))
+                            return Err(IngressInductionError::CanisterStopped(
+                                canister.canister_id(),
+                            ))
                         }
                     }
                 }

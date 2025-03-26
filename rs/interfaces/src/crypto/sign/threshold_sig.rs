@@ -28,7 +28,8 @@ pub trait ThresholdSigner<T: Signable> {
     ///   internal error, e.g., an RPC error when calling the CSP vault.
     // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
     // ThresholdSigDataNotFoundError>
-    fn sign_threshold(&self, message: &T, dkg_id: NiDkgId) -> CryptoResult<ThresholdSigShareOf<T>>;
+    fn sign_threshold(&self, message: &T, dkg_id: &NiDkgId)
+        -> CryptoResult<ThresholdSigShareOf<T>>;
 }
 
 /// A Crypto Component interface to verify threshold signatures.
@@ -67,7 +68,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
         &self,
         signature: &ThresholdSigShareOf<T>,
         message: &T,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         signer: NodeId,
     ) -> CryptoResult<()>;
 
@@ -89,7 +90,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
     fn combine_threshold_sig_shares(
         &self,
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>>;
 
     /// Verifies a combined threshold signature.
@@ -111,7 +112,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
         &self,
         signature: &CombinedThresholdSigOf<T>,
         message: &T,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<()>;
 }
 

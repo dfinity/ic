@@ -2,18 +2,16 @@
 #
 # Packs contents of a tar file into a vfat image (possibly taking only a
 # subdirectory of the full tar file). The (sparse) vfat image itself is then
-# wrapped into a tar file itself.
+# wrapped into a tzst file.
 #
 # Call example:
-#   build_vfat_image -s 10M -o partition.img.tar -p boot/efi -i dockerimg.tar
+#   build_vfat_image -s 10M -o partition.img.tzst -p boot/efi -i dockerimg.tar
 #
 import argparse
 import os
 import subprocess
 import sys
 import tarfile
-
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 
 def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
@@ -38,12 +36,22 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
             if path == "":
                 continue
             os.mkdir(os.path.join(fs_basedir, path))
-            subprocess.run(["faketime", "1970-1-1 0", "mmd", "-i", out_file, "::/" + path], check=True)
+            subprocess.run(["faketime", "-f", "1970-1-1 0:0:0", "mmd", "-i", out_file, "::/" + path], check=True)
         elif member.type == tarfile.REGTYPE or member.type == tarfile.AREGTYPE:
             with open(os.path.join(fs_basedir, path), "wb") as f:
                 f.write(tf.extractfile(member).read())
             subprocess.run(
-                ["faketime", "1970-1-1 0", "mcopy", "-o", "-i", out_file, os.path.join(fs_basedir, path), "::/" + path],
+                [
+                    "faketime",
+                    "-f",
+                    "1970-1-1 0:0:0",
+                    "mcopy",
+                    "-o",
+                    "-i",
+                    out_file,
+                    os.path.join(fs_basedir, path),
+                    "::/" + path,
+                ],
                 check=True,
             )
         else:
@@ -58,7 +66,8 @@ def install_extra_files(out_file, extra_files, path_transform):
         subprocess.run(
             [
                 "faketime",
-                "1970-1-1 0",
+                "-f",
+                "1970-1-1 0:0:0",
                 "mcopy",
                 "-o",
                 "-i",
@@ -84,7 +93,7 @@ def parse_size(s):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
-    parser.add_argument("-o", "--output", help="Target (tar) file to write partition image to", type=str)
+    parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
@@ -103,6 +112,7 @@ def main():
         nargs="*",
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -112,7 +122,9 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)
@@ -135,25 +147,32 @@ def main():
 
     install_extra_files(image_file, extra_files, path_transform)
 
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    temp_tar = os.path.join(tmpdir, "partition.tar")
     subprocess.run(
         [
-            "tar",
-            "cf",
-            out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "partition.img",
+            args.dflate,
+            "--input",
+            image_file,
+            "--output",
+            temp_tar,
         ],
         check=True,
     )
 
-    print_artifact_info(out_file)
+    subprocess.run(
+        [
+            "zstd",
+            "-q",
+            "--threads=0",
+            temp_tar,
+            "-o",
+            out_file,
+        ],
+        check=True,
+    )
 
 
 if __name__ == "__main__":

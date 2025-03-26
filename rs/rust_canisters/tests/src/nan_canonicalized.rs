@@ -1,4 +1,3 @@
-#![allow(clippy::ptr_arg)]
 // Canonical 32-bit and 64-bit NaN values from cranelift-codegen can be found at
 // https://github.com/bytecodealliance/cranelift/blob/60ab06981ff9ab234d1a5fa4ffe30baeb9879319/cranelift-codegen/src/nan_canonicalization.rs#L14
 static CANON_32BIT_NAN: u32 = 0b0111_1111_1100_0000_0000_0000_0000_0000;

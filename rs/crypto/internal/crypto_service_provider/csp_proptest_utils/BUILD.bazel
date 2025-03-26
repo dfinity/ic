@@ -1,8 +1,12 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    "//rs/crypto:__subpackages__",
+    "//rs/interfaces:__subpackages__",
+])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
@@ -21,6 +25,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = []
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:paste",
 ]
 
@@ -30,10 +35,10 @@ ALIASES = {}
 
 rust_library(
     name = "csp_proptest_utils",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_csp_proptest_utils",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

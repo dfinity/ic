@@ -9,20 +9,22 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 prometheus = { workspace = true }
 serde = { workspace = true }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 
 [dev-dependencies]
 candid = { workspace = true }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-wasm-types = { path = "../types/wasm_types" }

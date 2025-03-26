@@ -1,30 +1,36 @@
 use axum::{http::Request, Router};
 use bytes::Bytes;
+use consensus::{TestConsensus, U64Artifact};
 use futures::{
     future::{join_all, BoxFuture},
     FutureExt,
 };
+use ic_artifact_downloader::FetchArtifact;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
+use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_peer_manager::{start_peer_manager, SubnetTopology};
+use ic_peer_manager::start_peer_manager;
 use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{create_udp_socket, ConnId, QuicTransport, SubnetTopology, Transport};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::types::ids::subnet_test_id;
-use ic_test_utilities_registry::add_subnet_record;
+use ic_test_utilities_registry::{add_subnet_record, get_mainnet_delta_00_6d_c1};
+use ic_test_utilities_types::ids::subnet_test_id;
+use rcgen::{generate_simple_self_signed, CertifiedKey};
+use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
 use std::{
     collections::{HashMap, HashSet},
+    net::SocketAddr,
     str::FromStr,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -33,7 +39,12 @@ use std::{
     time::Duration,
 };
 use tempfile::TempDir;
-use tokio::{runtime::Handle, sync::watch::Receiver, task::JoinHandle};
+use tokio::{
+    runtime::Handle,
+    sync::watch::{self, Receiver},
+    task::JoinHandle,
+};
+use turmoil::start_test_processor;
 
 pub mod consensus;
 pub mod mocks;
@@ -71,7 +82,7 @@ impl RegistryConsensusHandle {
 
         let mut membership = self.membership.lock().unwrap();
         membership.push(node_id.get().to_vec());
-        subnet_record.membership = membership.clone();
+        subnet_record.membership.clone_from(&membership);
 
         add_subnet_record(
             &self.data_provider,
@@ -102,7 +113,7 @@ impl RegistryConsensusHandle {
             .unwrap();
         membership.remove(index);
 
-        subnet_record.membership = membership.clone();
+        subnet_record.membership.clone_from(&membership);
         add_subnet_record(
             &self.data_provider,
             version.get(),
@@ -168,20 +179,50 @@ pub fn create_peer_manager_and_registry_handle(
     (jh, rcv, registry_handle)
 }
 
-/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
-fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
-    let tempdir = TempDir::new().unwrap();
-    let store = LocalStoreImpl::new(tempdir.path());
-    let changelog =
-        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-            .expect("")
-            .1;
+/// Id is used to get a unique localhost address space. So it should be different for each test.
+#[allow(clippy::type_complexity)]
+pub fn fully_connected_localhost_subnet(
+    rt: &Handle,
+    log: ReplicaLogger,
+    id: u8,
+    router: Vec<(NodeId, Router)>,
+) -> (
+    Vec<(NodeId, Arc<dyn Transport>)>,
+    watch::Receiver<SubnetTopology>,
+) {
+    assert!(
+        id > 0,
+        "ID is used to reserve a localhost address that is unique and shoud not be zero."
+    );
+    let mut node_ids = Vec::new();
+    let (_jh, topology_watcher, mut registry_handler) =
+        create_peer_manager_and_registry_handle(rt, log.clone());
+    for (i, (node, router)) in router.into_iter().enumerate() {
+        let node_crypto = temp_crypto_component_with_tls_keys(&registry_handler, node);
+        registry_handler.registry_client.update_to_latest_version();
+        registry_handler.registry_client.reload();
 
-    for (v, changelog_entry) in changelog.into_iter().enumerate() {
-        let v = RegistryVersion::from((v + 1) as u64);
-        store.store(v, changelog_entry).unwrap();
+        let socket: SocketAddr = format!("127.1.{id}.{}:4100", i + 1).parse().unwrap();
+
+        let transport = Arc::new(QuicTransport::start(
+            &log,
+            &MetricsRegistry::default(),
+            rt,
+            node_crypto,
+            registry_handler.registry_client.clone(),
+            node,
+            topology_watcher.clone(),
+            create_udp_socket(rt, socket),
+            router,
+        )) as Arc<_>;
+        registry_handler.add_node(
+            RegistryVersion::from(i as u64 + 1),
+            node,
+            Some(&socket.ip().to_string()),
+        );
+        node_ids.push((node, transport));
     }
-    (tempdir, store)
+    (node_ids, topology_watcher)
 }
 
 pub fn create_peer_manager_with_local_store(
@@ -383,5 +424,114 @@ impl ConnectivityChecker {
         let connected_peer_1 = peers.get(peer_1).unwrap();
 
         !connected_peer_1.contains_key(peer_2)
+    }
+}
+
+pub fn start_consensus_manager(
+    log: ReplicaLogger,
+    rt_handle: Handle,
+    processor: TestConsensus<U64Artifact>,
+) -> (
+    Box<dyn JoinGuard>,
+    ic_consensus_manager::AbortableBroadcastChannelBuilder,
+) {
+    let _enter = rt_handle.enter();
+    let pool = Arc::new(RwLock::new(processor));
+    let bouncer_factory = Arc::new(pool.clone().read().unwrap().clone());
+    let downloader = FetchArtifact::new(
+        log.clone(),
+        rt_handle.clone(),
+        pool.clone(),
+        bouncer_factory,
+        MetricsRegistry::default(),
+    );
+
+    let mut cm1 = ic_consensus_manager::AbortableBroadcastChannelBuilder::new(
+        log.clone(),
+        rt_handle.clone(),
+        MetricsRegistry::default(),
+    );
+    let AbortableBroadcastChannel {
+        outbound_tx,
+        inbound_rx,
+    } = cm1.abortable_broadcast_channel(downloader, usize::MAX);
+
+    let artifact_processor_jh = start_test_processor(
+        outbound_tx,
+        inbound_rx,
+        pool.clone(),
+        pool.clone().read().unwrap().clone(),
+    );
+    (artifact_processor_jh, cm1)
+}
+
+pub fn generate_self_signed_cert() -> quinn::ServerConfig {
+    let CertifiedKey { cert, key_pair } =
+        generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+
+    let cert_der = CertificateDer::from(cert);
+    let priv_key = PrivatePkcs8KeyDer::from(key_pair.serialize_der());
+
+    let mut server_config =
+        quinn::ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())
+            .expect("is valid config");
+
+    let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
+    transport_config.max_concurrent_uni_streams(0_u8.into());
+
+    server_config
+}
+
+#[derive(Debug)]
+pub struct SkipServerVerification(Arc<rustls::crypto::CryptoProvider>);
+
+impl SkipServerVerification {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self(Arc::new(rustls::crypto::ring::default_provider())))
+    }
+}
+
+impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp: &[u8],
+        _now: UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
     }
 }

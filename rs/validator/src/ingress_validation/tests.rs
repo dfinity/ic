@@ -3,7 +3,7 @@ use assert_matches::assert_matches;
 use ic_crypto_standalone_sig_verifier::ed25519_public_key_to_der;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
 use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-use ic_test_utilities::types::ids::{canister_test_id, message_test_id, node_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, node_test_id};
 use ic_types::{
     messages::{Delegation, SignedDelegation, UserSignature},
     time::UNIX_EPOCH,
@@ -491,7 +491,7 @@ mod validate_ingress_expiry {
 
         let result = validate_ingress_expiry(&request, current_time);
 
-        assert_matches!(result, Err(InvalidIngressExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
+        assert_matches!(result, Err(InvalidRequestExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
     }
 
     #[test]
@@ -504,7 +504,7 @@ mod validate_ingress_expiry {
 
         let result = validate_ingress_expiry(&request, current_time);
 
-        assert_matches!(result, Err(InvalidIngressExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
+        assert_matches!(result, Err(InvalidRequestExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod validate_ingress_expiry {
 
         let result = validate_ingress_expiry(&request, current_time);
 
-        assert_matches!(result, Err(InvalidIngressExpiry(msg)) if msg.ends_with("overflows"))
+        assert_matches!(result, Err(InvalidRequestExpiry(msg)) if msg.ends_with("overflows"))
     }
 
     #[test]

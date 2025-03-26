@@ -5,8 +5,8 @@ use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable}
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::manifest::split::split_manifest;
 use ic_state_manager::manifest::{manifest_hash, validate_manifest};
+use ic_state_manager::state_sync::types::Manifest;
 use ic_types::crypto::CryptoHash;
-use ic_types::state_sync::Manifest;
 use ic_types::{CanisterId, CryptoHashOfState, SubnetId, Time};
 use std::fs::File;
 use std::path::PathBuf;

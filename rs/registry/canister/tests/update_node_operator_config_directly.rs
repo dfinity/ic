@@ -4,7 +4,6 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
     TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
@@ -14,6 +13,7 @@ use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
+use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
@@ -37,7 +37,7 @@ fn node_provider_is_updated_on_receiving_the_request() {
                     mutations: vec![RegistryMutation {
                         mutation_type: registry_mutation::Type::Insert as i32,
                         key: node_operator_key.as_bytes().to_vec(),
-                        value: encode_or_panic(&node_operator_record),
+                        value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })

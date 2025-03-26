@@ -1,6 +1,7 @@
 use super::{principal_bytes_to_u256, Persist, PersistStatus, Persister, RouteSubnet, Routes};
 
 use std::{
+    collections::HashMap,
     net::{IpAddr, Ipv4Addr},
     sync::Arc,
 };
@@ -9,11 +10,12 @@ use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use candid::Principal;
 use ethnum::u256;
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities::types::ids::node_test_id;
 
-use crate::snapshot::{CanisterRange, Node, Subnet};
+use crate::{
+    snapshot::{node_test_id, CanisterRange, Node, Subnet},
+    test_utils::valid_tls_certificate_and_validation_time,
+};
 
 // Converts string principal to a u256
 fn principal_to_u256(p: &str) -> Result<u256, Error> {
@@ -58,8 +60,8 @@ fn test_principal_to_u256() -> Result<(), Error> {
     Ok(())
 }
 
-pub fn node(i: u64, subnet_id: Principal) -> Node {
-    Node {
+pub fn node(i: u64, subnet_id: Principal) -> Arc<Node> {
+    Arc::new(Node {
         id: node_test_id(1001 + i).get().0,
         subnet_id,
         subnet_type: SubnetType::Application,
@@ -68,8 +70,8 @@ pub fn node(i: u64, subnet_id: Principal) -> Node {
         tls_certificate: valid_tls_certificate_and_validation_time()
             .0
             .certificate_der,
-        replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
-    }
+        avg_latency_secs: f64::MAX,
+    })
 }
 
 pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {
@@ -135,7 +137,7 @@ pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {
     vec![subnet1, subnet2, subnet3]
 }
 
-fn generate_test_routes(offset: u64) -> Routes {
+pub fn generate_test_routes(offset: u64) -> Routes {
     let subnet_id_1 =
         Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap();
@@ -147,54 +149,62 @@ fn generate_test_routes(offset: u64) -> Routes {
             .unwrap();
 
     let subnet1 = RouteSubnet {
-        id: subnet_id_1.to_string(),
+        id: subnet_id_1,
         range_start: principal_to_u256("f7crg-kabae").unwrap(),
         range_end: principal_to_u256("sxiki-5ygae-aq").unwrap(),
         nodes: vec![node(1 + offset, subnet_id_1)],
     };
 
     let subnet2 = RouteSubnet {
-        id: subnet_id_2.to_string(),
+        id: subnet_id_2,
         range_start: principal_to_u256("sqjm4-qahae-aq").unwrap(),
         range_end: principal_to_u256("sqjm4-qahae-aq").unwrap(),
         nodes: vec![node(2 + offset, subnet_id_2)],
     };
 
     let subnet3 = RouteSubnet {
-        id: subnet_id_1.to_string(),
+        id: subnet_id_1,
         range_start: principal_to_u256("t5his-7iiae-aq").unwrap(),
         range_end: principal_to_u256("jlzvg-byp77-7qcai").unwrap(),
         nodes: vec![node(1 + offset, subnet_id_1)],
     };
 
     let subnet4 = RouteSubnet {
-        id: subnet_id_3.to_string(),
+        id: subnet_id_3,
         range_start: principal_to_u256("zdpgc-saqaa-aacai").unwrap(),
         range_end: principal_to_u256("fij4j-bi777-7qcai").unwrap(),
         nodes: vec![node(3 + offset, subnet_id_3)],
     };
 
     let subnet5 = RouteSubnet {
-        id: subnet_id_2.to_string(),
+        id: subnet_id_2,
         range_start: principal_to_u256("6l3jn-7icca-aaaai-b").unwrap(),
         range_end: principal_to_u256("ca5tg-macd7-776ai-b").unwrap(),
         nodes: vec![node(2 + offset, subnet_id_2)],
     };
 
+    let subnets = vec![
+        Arc::new(subnet1),
+        Arc::new(subnet2),
+        Arc::new(subnet3),
+        Arc::new(subnet4),
+        Arc::new(subnet5),
+    ];
+
+    let subnet_map = subnets
+        .iter()
+        .map(|subnet| (subnet.id, subnet.clone()))
+        .collect::<HashMap<_, _>>();
+
     Routes {
         node_count: 3,
-        subnets: vec![
-            Arc::new(subnet1),
-            Arc::new(subnet2),
-            Arc::new(subnet3),
-            Arc::new(subnet4),
-            Arc::new(subnet5),
-        ],
+        subnets,
+        subnet_map,
     }
 }
 
-#[tokio::test]
-async fn test_persist() -> Result<(), Error> {
+#[test]
+fn test_persist() -> Result<(), Error> {
     let routes = generate_test_routes(0);
     let subnets = generate_test_subnets(0);
 
@@ -202,21 +212,21 @@ async fn test_persist() -> Result<(), Error> {
     let persister = Persister::new(Arc::clone(&rt_init));
 
     // Persist the routing table
-    let result = persister.persist(subnets.clone()).await;
+    let result = persister.persist(subnets.clone());
     // Check the result
     assert!(matches!(result, PersistStatus::Completed(_)));
     // Compare the persisted table state with expected
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Check empty table
-    let result = persister.persist(vec![]).await;
+    let result = persister.persist(vec![]);
     assert!(matches!(result, PersistStatus::SkippedEmpty));
     // Check if the table hasn't changed
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Generate different table
     let subnets = generate_test_subnets(1);
-    let result = persister.persist(subnets).await;
+    let result = persister.persist(subnets);
     // Check if it was updated
     assert!(matches!(result, PersistStatus::Completed(_)));
     // Check if the routing table matches expected one
@@ -231,60 +241,67 @@ fn test_lookup() -> Result<(), Error> {
     let r = generate_test_routes(0);
 
     assert_eq!(
-        r.lookup(Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("sqjm4-qahae-aq").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("sqjm4-qahae-aq").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     // Test failure
     assert!(r
-        .lookup(Principal::from_text("32fn4-qqaaa-aaaak-ad65a-cai").unwrap())
+        .lookup_by_canister_id(Principal::from_text("32fn4-qqaaa-aaaak-ad65a-cai").unwrap())
         .is_none());
     assert!(r
-        .lookup(Principal::from_text("3we4s-lyaaa-aaaak-aegrq-cai").unwrap())
+        .lookup_by_canister_id(Principal::from_text("3we4s-lyaaa-aaaak-aegrq-cai").unwrap())
         .is_none());
 
     Ok(())

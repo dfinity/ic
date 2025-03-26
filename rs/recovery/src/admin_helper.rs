@@ -1,7 +1,8 @@
 use crate::NeuronArgs;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_ic00_types::EcdsaKeyId;
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_types::{Height, ReplicaVersion, SubnetId};
+use serde::Serialize;
 use url::Url;
 
 use std::{
@@ -22,8 +23,16 @@ pub struct RegistryParams {
     pub registry_version: RegistryVersion,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct KeyConfigRequest {
+    subnet_id: SubnetId,
+    key_id: String,
+    pre_signatures_to_create_in_advance: String,
+    max_queue_size: String,
+}
+
 /// Struct simplyfiying the creation of `ic-admin` commands for a given NNS [Url].
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct AdminHelper {
     pub binary: PathBuf,
     pub nns_url: Url,
@@ -41,7 +50,7 @@ impl AdminHelper {
         }
     }
 
-    pub fn get_ic_admin_cmd_base(&self, neuron_args: &Option<NeuronArgs>) -> IcAdmin {
+    pub fn get_ic_admin_cmd_base(&self) -> IcAdmin {
         let mut ica = self.binary.clone();
         ica.push("ic-admin");
         let mut ic_admin = vec![ica.display().to_string()];
@@ -50,7 +59,7 @@ impl AdminHelper {
 
         // Existence of [NeuronArgs] implies no testing mode. Add hsm parameters to
         // base.
-        if let Some(args) = neuron_args {
+        if let Some(args) = &self.neuron_args {
             ic_admin
                 .add_positional_argument("--use-hsm")
                 .add_argument("slot", &args.slot)
@@ -61,22 +70,18 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn add_propose_to_update_subnet_base(
-        ic_admin: &mut IcAdmin,
-        neuron_args: &Option<NeuronArgs>,
-        subnet_id: SubnetId,
-    ) {
+    pub fn add_propose_to_update_subnet_base(&self, ic_admin: &mut IcAdmin, subnet_id: SubnetId) {
         ic_admin
             .add_positional_argument("propose-to-update-subnet")
             .add_argument("subnet", subnet_id);
 
-        AdminHelper::add_proposer_args(ic_admin, neuron_args);
+        self.add_proposer_args(ic_admin);
     }
 
     // Existence of [NeuronArgs] implies no testing mode. Add proposer neuron id,
     // else add test neuron proposer.
-    pub fn add_proposer_args(ic_admin: &mut IcAdmin, neuron_args: &Option<NeuronArgs>) {
-        if let Some(args) = neuron_args {
+    pub fn add_proposer_args(&self, ic_admin: &mut IcAdmin) {
+        if let Some(args) = &self.neuron_args {
             ic_admin.add_argument("proposer", &args.neuron_id);
         } else {
             ic_admin.add_positional_argument("--test-neuron-proposer");
@@ -89,8 +94,8 @@ impl AdminHelper {
         is_halted: bool,
         keys: &[String],
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        AdminHelper::add_propose_to_update_subnet_base(&mut ic_admin, &self.neuron_args, subnet_id);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
+        self.add_propose_to_update_subnet_base(&mut ic_admin, subnet_id);
 
         ic_admin.add_argument("is-halted", is_halted);
         if !keys.is_empty() {
@@ -114,10 +119,10 @@ impl AdminHelper {
         upgrade_url: &Url,
         sha256: String,
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            .add_positional_argument("propose-to-update-elected-replica-versions")
+            .add_positional_argument("propose-to-revise-elected-guestos-versions")
             .add_argument("replica-version-to-elect", quote(upgrade_version))
             .add_argument("release-package-urls", quote(upgrade_url))
             .add_argument("release-package-sha256-hex", quote(sha256))
@@ -129,19 +134,20 @@ impl AdminHelper {
                 )),
             );
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 
-    pub fn get_propose_to_update_subnet_replica_version_command(
+    pub fn get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
         &self,
         subnet_id: SubnetId,
         upgrade_version: &ReplicaVersion,
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
-            .add_positional_argument("propose-to-update-subnet-replica-version")
+            .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
             .add_positional_argument(subnet_id)
             .add_positional_argument(upgrade_version)
             .add_argument(
@@ -149,7 +155,8 @@ impl AdminHelper {
                 quote(format!("Upgrade replica version of subnet {}.", subnet_id)),
             );
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 
@@ -158,13 +165,12 @@ impl AdminHelper {
         subnet_id: SubnetId,
         checkpoint_height: Height,
         state_hash: String,
-        ecdsa_key_ids: Vec<EcdsaKeyId>,
+        chain_key_config: Option<(ChainKeyConfig, SubnetId)>,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
         time: SystemTime,
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
             .add_positional_argument("propose-to-update-recovery-cup")
@@ -172,18 +178,35 @@ impl AdminHelper {
             .add_argument("height", checkpoint_height)
             .add_argument("state-hash", state_hash);
 
-        if !ecdsa_key_ids.is_empty() {
-            let ecdsa_subnet = ecdsa_subnet_id
-                .map(|id| format!(r#", "subnet_id": "{}""#, id))
+        if let Some((config, subnet_id)) = chain_key_config {
+            let key_requests = config
+                .key_configs
+                .iter()
+                .map(|key_config| KeyConfigRequest {
+                    subnet_id,
+                    key_id: key_config.key_id.to_string(),
+                    pre_signatures_to_create_in_advance: key_config
+                        .pre_signatures_to_create_in_advance
+                        .to_string(),
+                    max_queue_size: key_config.max_queue_size.to_string(),
+                })
+                .collect::<Vec<_>>();
+            let key_requests_string = serde_json::to_string(&key_requests)
+                .map_err(|err| eprintln!("Generating key_requests_string failed with {}", err))
                 .unwrap_or_default();
 
-            let keys = ecdsa_key_ids
-                .iter()
-                .map(|k| format!(r#"{{ "key_id": "{}"{} }}"#, k, ecdsa_subnet))
-                .collect::<Vec<String>>()
-                .join(" , ");
-
-            ic_admin.add_argument("ecdsa-keys-to-request", format!("'[ {} ]'", keys));
+            if !key_requests.is_empty() {
+                ic_admin.add_argument(
+                    "initial-chain-key-configs-to-request",
+                    format!("'{}'", key_requests_string),
+                );
+            }
+            if let Some(idkg_key_rotation_period_ms) = config.idkg_key_rotation_period_ms {
+                ic_admin.add_argument("idkg-key-rotation-period-ms", idkg_key_rotation_period_ms);
+            }
+            if let Some(signature_request_timeout_ns) = config.signature_request_timeout_ns {
+                ic_admin.add_argument("signature-request-timeout-ns", signature_request_timeout_ns);
+            }
         }
 
         if !replacement_nodes.is_empty() {
@@ -204,7 +227,8 @@ impl AdminHelper {
             .expect("Time went backwards");
         ic_admin.add_argument("time-ns", since_the_epoch.as_nanos());
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 
@@ -215,7 +239,7 @@ impl AdminHelper {
         replica_version: ReplicaVersion,
         node_ids: &[NodeId],
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
             .add_positional_argument("propose-to-create-subnet")
@@ -235,7 +259,8 @@ impl AdminHelper {
             ic_admin.add_positional_argument(node_id);
         }
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 
@@ -311,6 +336,10 @@ mod tests {
     use super::*;
 
     use ic_base_types::PrincipalId;
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
+    use ic_registry_subnet_features::KeyConfig;
     use std::{str::FromStr, time::Duration};
 
     const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
@@ -383,7 +412,7 @@ mod tests {
             result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-elected-replica-versions \
+            propose-to-revise-elected-guestos-versions \
             --replica-version-to-elect \"fake_replica_version\" \
             --release-package-urls \"https://fake_upgrade_url.com/\" \
             --release-package-sha256-hex \"fake_sha_256\" \
@@ -399,9 +428,8 @@ mod tests {
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 Height::from(666),
                 "fake_state_hash".to_string(),
-                vec![],
-                &[],
                 None,
+                &[],
                 None,
                 UNIX_EPOCH + Duration::from_nanos(123456),
             )
@@ -421,15 +449,34 @@ mod tests {
 
     #[test]
     fn get_propose_to_update_recovery_cup_command_maximum_options_test() {
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![
+                KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: "test_key_1".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: 77,
+                    max_queue_size: 30,
+                },
+                KeyConfig {
+                    key_id: MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+                        name: "test_key_2".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: 12,
+                    max_queue_size: 32,
+                },
+            ],
+            signature_request_timeout_ns: Some(123_456),
+            idkg_key_rotation_period_ms: Some(321_654),
+        };
         let result = fake_admin_helper_with_neuron_args()
             .get_propose_to_update_recovery_cup_command(
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 Height::from(666),
                 "fake_state_hash".to_string(),
-                vec![
-                    EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap(),
-                    EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap(),
-                ],
+                Some((chain_key_config, subnet_id_from_str(FAKE_SUBNET_ID_2))),
                 &[node_id_from_str(FAKE_NODE_ID)],
                 Some(RegistryParams {
                     registry_store_uri: Url::try_from("https://fake_registry_store_uri.com")
@@ -437,7 +484,6 @@ mod tests {
                     registry_store_hash: "fake_registry_store_hash".to_string(),
                     registry_version: RegistryVersion::from(666),
                 }),
-                Some(subnet_id_from_str(FAKE_SUBNET_ID_2)),
                 UNIX_EPOCH + Duration::from_nanos(123456),
             )
             .join(" ");
@@ -453,7 +499,11 @@ mod tests {
             --subnet-index gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --height 666 \
             --state-hash fake_state_hash \
-            --ecdsa-keys-to-request '[ { \"key_id\": \"Secp256k1:some_key_1\", \"subnet_id\": \"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" } , { \"key_id\": \"Secp256k1:some_key_2\", \"subnet_id\": \"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" } ]' \
+            --initial-chain-key-configs-to-request '[\
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"}]' \
+            --idkg-key-rotation-period-ms 321654 \
+            --signature-request-timeout-ns 123456 \
             --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
             --registry-store-uri https://fake_registry_store_uri.com/ \
             --registry-store-hash fake_registry_store_hash \
@@ -464,9 +514,9 @@ mod tests {
     }
 
     #[test]
-    fn get_propose_to_update_subnet_replica_version_command_test() {
+    fn get_propose_to_deploy_guestos_to_all_subnet_nodes_command_test() {
         let result = fake_admin_helper()
-            .get_propose_to_update_subnet_replica_version_command(
+            .get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 &ReplicaVersion::try_from(FAKE_REPLICA_VERSION).unwrap(),
             )
@@ -475,7 +525,7 @@ mod tests {
         assert_eq!(result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-subnet-replica-version \
+            propose-to-deploy-guestos-to-all-subnet-nodes \
             gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             fake_replica_version \
             --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \

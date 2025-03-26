@@ -3,18 +3,19 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/internal/logmon",
     "//rs/crypto/node_key_generation",
-    "//rs/crypto/tls_interfaces",
     "//rs/crypto/temp_crypto/temp_vault",
+    "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
-    "//rs/crypto/utils/time",
     "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/fake",
@@ -23,19 +24,21 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:rand",
+    "@crate_index//:rustls",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:rand_chacha",
@@ -50,7 +53,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_temp_crypto",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -59,7 +61,6 @@ rust_test(
     name = "temp_crypto_test",
     aliases = ALIASES,
     crate = ":temp_crypto",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -67,7 +68,6 @@ rust_test(
 rust_test_suite(
     name = "test_suite",
     srcs = glob(["tests/**"]),
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":temp_crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

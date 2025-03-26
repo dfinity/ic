@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use ic_base_types::CanisterId;
-use ic_constants::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
 use ic_embedders::wasm_executor::{
@@ -19,19 +19,24 @@ use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, Response,
+    CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
+    Response,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
+use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use crate::execution::common::{
-    self, action_to_response, apply_canister_state_changes, update_round_limits,
+    self, action_to_response, apply_canister_state_changes, log_dirty_pages, update_round_limits,
 };
 use crate::execution_environment::{
     ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
+use crate::metrics::CallTreeMetrics;
+use ic_config::flag_status::FlagStatus;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -96,7 +101,6 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 ///   ▼
 /// [end]
 ///```
-
 /// Contains fields of `ResponseHelper` that are necessary for resuming the
 /// response execution.
 #[derive(Debug)]
@@ -116,6 +120,7 @@ struct ResponseHelper {
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
     applied_subnet_memory_reservation: NumBytes,
+    deallocation_sender: DeallocationSender,
 }
 
 impl ResponseHelper {
@@ -127,6 +132,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        deallocation_sender: &DeallocationSender,
     ) -> Self {
         // Canister A sends a request to canister B with some cycles.
         // Canister B can accept some of the cycles in the request.
@@ -157,20 +163,13 @@ impl ResponseHelper {
         // possible response when the request is being sent. Now that we
         // have received the response, we can refund the cycles based on
         // the actual size of the response.
-        let prepayment_for_response_transmission =
-            match original.callback.prepayment_for_response_transmission {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_transmission(original.subnet_size),
-            };
         let refund_for_response_transmission = round
             .cycles_account_manager
             .refund_for_response_transmission(
                 round.log,
                 round.counters.response_cycles_refund_error,
                 response,
-                prepayment_for_response_transmission,
+                original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
             );
 
@@ -184,6 +183,7 @@ impl ResponseHelper {
             initial_cycles_balance,
             response_sender,
             applied_subnet_memory_reservation: NumBytes::new(0),
+            deallocation_sender: deallocation_sender.clone(),
         };
         helper.apply_subnet_memory_reservation(original, round_limits);
         helper
@@ -245,6 +245,7 @@ impl ResponseHelper {
                     heap_delta: NumBytes::from(0),
                     instructions_used: NumInstructions::from(0),
                     response: ExecutionResponse::Empty,
+                    call_duration: Some(round.time.saturating_duration_since(call_context.time())),
                 });
             }
             // Since the call context has responded, passing `Ok(None)` will produce
@@ -271,11 +272,12 @@ impl ResponseHelper {
     /// Returns a struct with all the necessary information to replay the
     /// initial steps in subsequent rounds.
     fn pause(
-        &self,
+        self,
         original: &OriginalContext,
         round_limits: &mut RoundLimits,
     ) -> PausedResponseHelper {
         self.revert_subnet_memory_reservation(original, round_limits);
+        self.deallocation_sender.send(Box::new(self.canister));
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
             refund_for_response_transmission: self.refund_for_response_transmission,
@@ -299,6 +301,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        deallocation_sender: &DeallocationSender,
     ) -> Result<ResponseHelper, (ResponseHelper, HypervisorError)> {
         // We expect the function call to succeed because the call context and
         // the callback have been checked in `execute_response()`.
@@ -319,6 +322,7 @@ impl ResponseHelper {
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
             applied_subnet_memory_reservation: NumBytes::new(0),
+            deallocation_sender: deallocation_sender.clone(),
         };
 
         helper.apply_subnet_memory_reservation(original, round_limits);
@@ -348,11 +352,12 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
         reserved_cleanup_instructions: NumInstructions,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
@@ -364,31 +369,35 @@ impl ResponseHelper {
 
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let old_balance = self.canister.system_state.balance();
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // Note that we ignore the freezing threshold as required by the spec.
-            if old_balance < requested {
-                let err = CanisterOutOfCyclesError {
-                    canister_id: self.canister.canister_id(),
-                    available: old_balance,
-                    requested,
-                    threshold: original.freezing_threshold,
-                };
-                info!(
+        let old_balance = self.canister.system_state.balance();
+        let requested = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        // Note that we ignore the freezing threshold as required by the spec.
+        if old_balance < requested {
+            let reveal_top_up = self
+                .canister
+                .controllers()
+                .contains(&original.call_origin.get_principal());
+            let err = CanisterOutOfCyclesError {
+                canister_id: self.canister.canister_id(),
+                available: old_balance,
+                requested,
+                threshold: original.freezing_threshold,
+                reveal_top_up,
+            };
+            info!(
                     round.log,
                     "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
                     self.canister.canister_id(),
                     err,
                 );
-                let err = HypervisorError::InsufficientCyclesBalance(err);
-                // Return total instructions: wasm executor leftovers + cleanup reservation.
-                return Err((
-                    self,
-                    err,
-                    output.num_instructions_left + reserved_cleanup_instructions,
-                ));
-            }
+            // Return total instructions: wasm executor leftovers + cleanup reservation.
+            return Err((
+                self,
+                HypervisorError::InsufficientCyclesBalance(err),
+                output.num_instructions_left + reserved_cleanup_instructions,
+            ));
         }
 
         apply_canister_state_changes(
@@ -402,14 +411,18 @@ impl ResponseHelper {
             round.hypervisor.subnet_id(),
             round.log,
             round.counters.state_changes_error,
+            call_tree_metrics,
+            original.call_context_creation_time,
+            &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
+
         // Return total instructions: wasm executor leftovers + cleanup reservation.
         let instructions_available = output.num_instructions_left + reserved_cleanup_instructions;
         match output.wasm_result {
             Ok(_) => Ok(self.finish(
                 output.wasm_result,
                 instructions_available,
-                NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                 original,
                 round,
                 round_limits,
@@ -423,12 +436,35 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_cleanup_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: Option<CanisterStateChanges>,
+        canister_state_changes: CanisterStateChanges,
         callback_err: HypervisorError,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // The ingress induction debit can interfere with cycles changes that happened concurrently
+        // during the cleanup callback execution. If the balance of the canister is not enough to
+        // cover the debit + the amount of removed cycles during execution, the canister might end
+        // up with an incorrect balance. To avoid this, we check if the balance is enough to cover
+        // the debit + the removed cycles to ensure that the cycles change can be performed.
+        //
+        // This allows the cleanup callback to always succeed at the expense of some ingress
+        // messages being inducted for free in this edge case. This is acceptable because the cleanup
+        // callback is expected to always run and allow the canister to perform important cleanup tasks,
+        // like releasing locks or undoing other state changes.
+        let ingress_induction_cycles_debit =
+            self.canister.system_state.ingress_induction_cycles_debit();
+        let removed_cycles = canister_state_changes
+            .system_state_modifications
+            .removed_cycles();
+        if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
+            self.canister
+                .system_state
+                .remove_charge_from_ingress_induction_cycles_debit(
+                    ingress_induction_cycles_debit - removed_cycles,
+                );
+        }
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -436,12 +472,6 @@ impl ResponseHelper {
                 round.log,
                 round.counters.charging_from_balance_error,
             );
-
-        if let Some(state_changes) = &canister_state_changes {
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // A cleanup callback cannot accept and send cycles.
-            assert_eq!(requested.get(), 0);
-        }
 
         apply_canister_state_changes(
             canister_state_changes,
@@ -454,6 +484,9 @@ impl ResponseHelper {
             round.hypervisor.subnet_id(),
             round.log,
             round.counters.state_changes_error,
+            call_tree_metrics,
+            original.call_context_creation_time,
+            &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
         match output.wasm_result {
@@ -463,7 +496,7 @@ impl ResponseHelper {
                 self.finish(
                     Err(callback_err),
                     output.num_instructions_left,
-                    NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                    NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                     original,
                     round,
                     round_limits,
@@ -507,17 +540,16 @@ impl ResponseHelper {
                 .get()
                 .saturating_sub(instructions_left.get()),
         );
-        let action = self
+        let (action, call_context) = self
             .canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .on_canister_result(
                 original.call_context_id,
                 Some(original.callback_id),
                 result,
                 instructions_used,
-            );
+            )
+            .unwrap();
         let response = action_to_response(
             &self.canister,
             action,
@@ -527,21 +559,20 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let prepayment_for_response_execution =
-            match original.callback.prepayment_for_response_execution {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_execution(original.subnet_size),
-            };
+        let wasm_execution_mode = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            prepayment_for_response_execution,
+            original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
+            wasm_execution_mode,
             round.log,
         );
 
@@ -555,11 +586,23 @@ impl ResponseHelper {
             );
         }
 
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                format!("reponse_to_{}", original.message.originator).as_str(),
+                heap_delta.get() as usize / PAGE_SIZE,
+                instructions_used,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
             instructions_used,
             heap_delta,
+            call_duration: call_context
+                .map(|call_context| round.time.saturating_duration_since(call_context.time())),
         }
     }
 
@@ -631,6 +674,8 @@ struct OriginalContext {
     callback_id: CallbackId,
     call_origin: CallOrigin,
     time: Time,
+    call_context_creation_time: Time,
+    request_metadata: RequestMetadata,
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
     subnet_size: usize,
@@ -638,6 +683,7 @@ struct OriginalContext {
     canister_id: CanisterId,
     subnet_memory_reservation: NumBytes,
     instructions_executed: NumInstructions,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Struct used to hold necessary information for the
@@ -667,6 +713,8 @@ impl PausedExecution for PausedResponseExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -683,6 +731,7 @@ impl PausedExecution for PausedResponseExecution {
             &self.original,
             &round,
             round_limits,
+            deallocation_sender,
         ) {
             Ok(helper) => {
                 let execution_state = helper.canister().execution_state.as_ref().unwrap();
@@ -714,6 +763,7 @@ impl PausedExecution for PausedResponseExecution {
             self.original,
             round,
             round_limits,
+            call_tree_metrics,
         )
     }
 
@@ -728,6 +778,10 @@ impl PausedExecution for PausedResponseExecution {
         let message = CanisterMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
+    }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
     }
 }
 
@@ -756,6 +810,8 @@ impl PausedExecution for PausedCleanupExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
+        deallocation_sender: &DeallocationSender,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -775,6 +831,7 @@ impl PausedExecution for PausedCleanupExecution {
             &self.original,
             &round,
             round_limits,
+            deallocation_sender,
         ) {
             Ok(helper) => {
                 let execution_state = helper.canister().execution_state.as_ref().unwrap();
@@ -806,6 +863,7 @@ impl PausedExecution for PausedCleanupExecution {
             self.original,
             round,
             round_limits,
+            call_tree_metrics,
         )
     }
 
@@ -820,6 +878,10 @@ impl PausedExecution for PausedCleanupExecution {
         let message = CanisterMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
+    }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
     }
 }
 
@@ -838,6 +900,9 @@ pub fn execute_response(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
     subnet_memory_reservation: NumBytes,
+    call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
+    deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(
@@ -855,6 +920,7 @@ pub fn execute_response(
                     instructions_used: NumInstructions::from(0),
                     heap_delta: NumBytes::from(0),
                     response: ExecutionResponse::Empty,
+                    call_duration: None,
                 };
             }
         };
@@ -875,6 +941,8 @@ pub fn execute_response(
         callback_id,
         call_origin: call_context.call_origin().clone(),
         time,
+        call_context_creation_time: call_context.time(),
+        request_metadata: call_context.metadata().clone(),
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
         subnet_size,
@@ -882,10 +950,17 @@ pub fn execute_response(
         canister_id: clean_canister.canister_id(),
         subnet_memory_reservation,
         instructions_executed: call_context.instructions_executed(),
+        log_dirty_pages,
     };
 
-    let mut helper =
-        ResponseHelper::new(&clean_canister, &response, &original, &round, round_limits);
+    let mut helper = ResponseHelper::new(
+        &clean_canister,
+        &response,
+        &original,
+        &round,
+        round_limits,
+        deallocation_sender,
+    );
     helper.apply_initial_refunds();
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
@@ -900,9 +975,9 @@ pub fn execute_response(
     };
 
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => FuncRef::QueryClosure(closure),
     };
 
@@ -940,6 +1015,7 @@ pub fn execute_response(
         helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -953,6 +1029,7 @@ pub fn execute_response(
         original,
         round,
         round_limits,
+        call_tree_metrics,
     )
 }
 
@@ -982,14 +1059,15 @@ fn execute_response_cleanup(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     execution_parameters
         .instruction_limits
         .update(instructions_left);
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(cleanup_closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(cleanup_closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
             FuncRef::QueryClosure(cleanup_closure)
         }
@@ -998,6 +1076,7 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            execution_mode: execution_parameters.execution_mode.clone(),
             call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
@@ -1006,6 +1085,7 @@ fn execute_response_cleanup(
         helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -1018,6 +1098,7 @@ fn execute_response_cleanup(
         original,
         round,
         round_limits,
+        call_tree_metrics,
     )
 }
 
@@ -1033,6 +1114,7 @@ fn process_response_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -1068,11 +1150,12 @@ fn process_response_result(
                     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
+            let deallocation_sender = helper.deallocation_sender.clone();
             match helper.handle_wasm_execution_of_response_callback(
                 output,
                 canister_state_changes,
@@ -1080,8 +1163,12 @@ fn process_response_result(
                 &round,
                 round_limits,
                 reserved_cleanup_instructions,
+                call_tree_metrics,
             ) {
-                Ok(result) => result,
+                Ok(result) => {
+                    deallocation_sender.send(Box::new(clean_canister));
+                    result
+                }
                 Err((helper, err, instructions_left)) => {
                     // A trap has occurred when executing the reply/reject closure.
                     // Execute the cleanup if it exists.
@@ -1096,9 +1183,11 @@ fn process_response_result(
                             original,
                             round,
                             round_limits,
+                            call_tree_metrics,
                         ),
                         None => {
                             // No cleanup closure present. Return the callback error as-is.
+                            helper.deallocation_sender.send(Box::new(clean_canister));
                             helper.finish(
                                 Err(err),
                                 instructions_left,
@@ -1125,6 +1214,7 @@ fn process_cleanup_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -1160,11 +1250,12 @@ fn process_cleanup_result(
                     "[DTS] Finished cleanup callback {:?} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
+            helper.deallocation_sender.send(Box::new(clean_canister));
             helper.handle_wasm_execution_of_cleanup_callback(
                 output,
                 canister_state_changes,
@@ -1172,6 +1263,7 @@ fn process_cleanup_result(
                 &original,
                 &round,
                 round_limits,
+                call_tree_metrics,
             )
         }
     }

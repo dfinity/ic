@@ -1,4 +1,4 @@
-use clap::{ArgEnum, Parser};
+use clap::{Parser, ValueEnum};
 use ic_types::PrincipalId;
 use std::{
     env,
@@ -11,32 +11,26 @@ use std::{
 use x509_cert::der; // re-export of der crate
 use x509_cert::spki; // re-export of spki crate
 
-#[derive(Debug, Clone, ArgEnum)]
+#[derive(Clone, Debug, ValueEnum)]
 enum PemOrDer {
     Pem,
     Der,
 }
 
-#[derive(Debug)]
-struct PemOrDerParseError(());
-
-impl ToString for PemOrDerParseError {
-    fn to_string(&self) -> String {
-        "Can't parse string. Not 'pem' nor 'der'".to_string()
+impl std::fmt::Display for PemOrDer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                PemOrDer::Pem => "pem",
+                PemOrDer::Der => "der",
+            }
+        )
     }
 }
 
-impl ToString for PemOrDer {
-    fn to_string(&self) -> String {
-        match self {
-            PemOrDer::Pem => "pem",
-            PemOrDer::Der => "der",
-        }
-        .to_string()
-    }
-}
-
-#[derive(Parser, Debug)]
+#[derive(Debug, Parser)]
 #[clap(
     name = "ic-principal-id",
     about = r#"
@@ -57,14 +51,14 @@ EXAMPLES:
 )]
 enum CliArgs {
     SelfSigned {
-        #[clap(short = 'i', long = "input", parse(from_os_str))]
+        #[clap(short = 'i', long = "input")]
         file: Option<PathBuf>,
 
-        #[clap(arg_enum, short = 't', long = "type")]
+        #[clap(value_enum, short = 't', long = "type")]
         pem_or_der: Option<PemOrDer>,
     },
     Raw {
-        #[clap(short = 'i', long = "input", parse(from_os_str))]
+        #[clap(short = 'i', long = "input")]
         file: Option<PathBuf>,
     },
 }

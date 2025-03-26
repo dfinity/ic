@@ -1,0 +1,11 @@
+[Unit]
+Description=Save machine-id
+RequiresMountsFor=/boot/config
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/save-machine-id.sh

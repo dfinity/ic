@@ -1,19 +1,12 @@
-#![allow(clippy::unwrap_used)]
 mod csp_tests {
-    use crate::api::CspKeyGenerator;
     use crate::api::CspSigner;
-    use crate::api::CspTlsHandshakeSignerProvider;
-    use crate::vault::test_utils::ed25519_csp_pubkey_from_tls_pubkey_cert;
     use crate::Csp;
     use crate::CspPublicKey;
     use crate::KeyId;
-    use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_types::crypto::AlgorithmId;
-    use ic_types_test_utils::ids::node_test_id;
 
     mod csp_public_key_store {
         use super::*;
-        use crate::CspPublicKeyStore;
         use ic_types::crypto::CurrentNodePublicKeys;
 
         #[test]
@@ -21,6 +14,7 @@ mod csp_tests {
             let csp = Csp::builder_for_test().build();
 
             let current_node_public_keys = csp
+                .csp_vault
                 .current_node_public_keys()
                 .expect("Failed to retrieve node public keys");
 
@@ -41,6 +35,7 @@ mod csp_tests {
             let csp = Csp::builder_for_test().build();
 
             let key_count = csp
+                .csp_vault
                 .idkg_dealing_encryption_pubkeys_count()
                 .expect("Failed to retrieve iDKG dealing encryption public keys count");
 
@@ -51,7 +46,7 @@ mod csp_tests {
     #[test]
     fn should_sign_and_verify_with_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_node_signing_key_pair();
-        let key_id = KeyId::try_from(&public_key).unwrap();
+        let key_id = KeyId::from(&public_key);
         let message = "Hello world!".as_bytes();
 
         let signature = csp
@@ -63,37 +58,12 @@ mod csp_tests {
         assert!(verification.is_ok());
     }
 
-    #[test]
-    fn should_sign_and_verify_with_newly_generated_tls_secret_key_from_store() {
-        let (csp, cert) = csp_with_tls_key_pair();
-        let key_id = KeyId::try_from(&cert).unwrap();
-        let message = "Hello world!".as_bytes();
-
-        let signature = csp
-            .handshake_signer()
-            .tls_sign(message.to_vec(), key_id)
-            .expect("error signing message with TLS private key");
-
-        let public_key = ed25519_csp_pubkey_from_tls_pubkey_cert(&cert);
-        let verification = csp.verify(&signature, message, AlgorithmId::Ed25519, public_key);
-
-        assert!(verification.is_ok());
-    }
-
     fn csp_with_node_signing_key_pair() -> (Csp, CspPublicKey) {
         let csp = Csp::builder_for_test().build();
         let public_key = csp
+            .csp_vault
             .gen_node_signing_key_pair()
             .expect("error generating public/private key pair");
         (csp, public_key)
-    }
-
-    fn csp_with_tls_key_pair() -> (Csp, TlsPublicKeyCert) {
-        const NODE_1: u64 = 4241;
-        let csp = Csp::builder_for_test().build();
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1))
-            .expect("error generating TLS key pair");
-        (csp, cert)
     }
 }

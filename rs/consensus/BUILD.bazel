@@ -1,16 +1,18 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/artifact_pool",
+    "//packages/ic-error-types",
     "//rs/config",
+    "//rs/consensus/certification",
+    "//rs/consensus/dkg",
     "//rs/consensus/utils",
+    "//rs/consensus/vetkd",
     "//rs/crypto",
     "//rs/crypto/prng",
-    "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/https_outcalls/consensus",
     "//rs/interfaces",
@@ -25,75 +27,94 @@ DEPENDENCIES = [
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:num-traits",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
-    "@crate_index//:rayon",
     "@crate_index//:slog",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/bitcoin/types/internal",
+    "//rs/artifact_pool",
+    "//rs/bitcoin/replica_types",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tree_hash",
     "//rs/execution_environment",
     "//rs/ingress_manager",
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager/mocks",
+    "//rs/limits",
     "//rs/messaging",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
     "//rs/state_manager",
+    "//rs/sys",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
-    "//rs/utils",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
+    "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
     "@crate_index//:prost",
+    "@crate_index//:rstest",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog-async",
     "@crate_index//:slog-envlogger",
     "@crate_index//:slog-term",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+MALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/test_utils/canister_threshold_sigs",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
 DATA = [
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
 ]
 
 ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
 }
 
 rust_library(
     name = "consensus",
     srcs = glob(["src/**/*.rs"]),
-    crate_features = select({
-        "//bazel:malicious_code_enabled": ["malicious_code"],
-        "//conditions:default": [],
-    }),
     crate_name = "ic_consensus",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "malicious_consensus",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["malicious_code"],
+    crate_name = "ic_consensus",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES,
 )
 
 rust_doc(
@@ -103,23 +124,26 @@ rust_doc(
 
 rust_test(
     name = "consensus_test",
-    crate = ":consensus",
-    crate_features = ["proptest"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    crate = ":malicious_consensus",
+    crate_features = [
+        "malicious_code",
+        "proptest",
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES,
 )
 
 rust_test(
     name = "integration_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/integration.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES + [":malicious_consensus"],
 )
 
 rust_test(
     name = "payload_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/payload.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":malicious_consensus"],
 )
 
 rust_test(
@@ -129,18 +153,18 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
 )
 
-rust_bench(
+rust_ic_bench(
     name = "validate_payload_bench",
     testonly = True,
     srcs = ["benches/validate_payload.rs"],
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":consensus",
         "//rs/artifact_pool",
         "//rs/config",
         "//rs/consensus/utils",
-        "//rs/constants",
         "//rs/execution_environment",
         "//rs/https_outcalls/consensus",
         "//rs/ingress_manager",
@@ -148,14 +172,19 @@ rust_bench(
         "//rs/interfaces/mocks",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/state_manager",
         "//rs/test_utilities",
+        "//rs/test_utilities/consensus",
         "//rs/test_utilities/registry",
-        "//rs/types/ic00_types",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:tempfile",

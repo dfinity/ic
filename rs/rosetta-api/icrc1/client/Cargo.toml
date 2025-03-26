@@ -1,0 +1,35 @@
+[package]
+name = "ic-icrc-rosetta-client"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Build Once. Integrate Your Blockchain Everywhere. "
+edition = "2021"
+
+[[bin]]
+name = "ic-icrc-rosetta-client-bin"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+ic-agent = { workspace = true }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
+ic-icrc-rosetta = { path = ".." }
+ic-rosetta-api = { path = "../../icp" }
+ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+num-bigint = { workspace = true }
+reqwest = { workspace = true }
+rosetta-core = { path = "../../common/rosetta_core" }
+serde = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+ic-icrc-rosetta-runner = { path = "../runner" }
+pocket-ic = { path = "../../../../packages/pocket-ic" }

@@ -1,0 +1,20 @@
+package(default_visibility = ["//ic-os/setupos:__subpackages__"])
+
+exports_files(glob(["**"]))
+
+exports_files([
+    "Dockerfile.base",
+    "extra_boot_args",
+])
+
+filegroup(
+    name = "context-files",
+    srcs = [
+        "Dockerfile",
+        "docker-base.dev",
+        "docker-base.prod",
+        "packages.common",
+        "packages.dev",
+    ],
+    tags = ["manual"],
+)

@@ -3,9 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_service_provider",
-    "//rs/crypto/internal/logmon",
-    "//rs/monitoring/logger",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]
@@ -19,7 +18,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_temp_crypto_vault",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

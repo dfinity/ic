@@ -2,8 +2,8 @@ use std::{net::SocketAddr, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use futures_util::future::ready;
-use hyper::client::connect::dns::Name;
-use reqwest::dns::{Addrs, Resolve, Resolving};
+use ic_bn_lib::http::client::CloneableDnsResolver;
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use crate::snapshot::RegistrySnapshot;
 
@@ -13,23 +13,25 @@ const UNUSED_PORT: u16 = 0;
 #[error("{0}")]
 pub struct DnsError(String);
 
+#[derive(Clone, Debug)]
 pub struct DnsResolver {
-    rt: Arc<ArcSwapOption<RegistrySnapshot>>,
+    snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl DnsResolver {
-    pub fn new(rt: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
-        Self { rt }
+    pub fn new(snapshot: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
+        Self { snapshot }
     }
 }
+impl CloneableDnsResolver for DnsResolver {}
 
 // Implement resolver based on the routing table
 // It's used by reqwest to resolve node IDs to an IP address
 impl Resolve for DnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         // Load a routing table if we have one
-        let rt = match self.rt.load_full() {
-            Some(rt) => rt,
+        let snapshot = match self.snapshot.load_full() {
+            Some(v) => v,
             None => {
                 return Box::pin(ready(Err(Box::from(DnsError(
                     "No routing table available".into(),
@@ -37,10 +39,10 @@ impl Resolve for DnsResolver {
             }
         };
 
-        match rt.nodes.get(name.as_str()) {
+        match snapshot.nodes.get(name.as_str()) {
             // If there's no node with given id - return future with error
             None => Box::pin(ready(Err(Box::from(DnsError(format!(
-                "Node '{name}' not found in the routing table",
+                "Node '{name:#?}' not found in the routing table",
             )))))),
 
             // Return future that resolves to an iterator with a node IP address

@@ -1,0 +1,17 @@
+{
+  "ckusdc_ledger": {
+    "ic": "3sgad-taaaa-aaaar-qaedq-cai"
+  },
+  "index": {
+    "ic": "3oc2s-eaaaa-aaaar-qaebq-cai"
+  },
+  "ledger": {
+    "ic": "33fl7-fiaaa-aaaar-qaeca-cai"
+  },
+  "minter": {
+    "ic": "34enl-iqaaa-aaaar-qaecq-cai"
+  },
+  "orchestrator": {
+    "ic": "3vhgx-6yaaa-aaaar-qaeda-cai"
+  }
+}

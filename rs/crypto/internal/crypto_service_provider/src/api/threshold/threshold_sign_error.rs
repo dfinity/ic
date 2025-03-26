@@ -3,7 +3,7 @@ use crate::KeyId;
 use ic_crypto_internal_threshold_sig_bls12381::api::threshold_sign_error::ClibThresholdSignError;
 
 /// Errors occurring while performing threshold signature generation
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspThresholdSignError {
     SecretKeyNotFound {
         algorithm: AlgorithmId,
@@ -16,6 +16,7 @@ pub enum CspThresholdSignError {
     MalformedSecretKey {
         algorithm: AlgorithmId,
     },
+    KeyIdInstantiationError(String),
     TransientInternalError {
         internal_error: String,
     },
@@ -66,6 +67,9 @@ impl fmt::Display for CspThresholdSignError {
             ),
             CspThresholdSignError::TransientInternalError { internal_error } => {
                 write!(f, "Transient internal error: {}", internal_error)
+            }
+            CspThresholdSignError::KeyIdInstantiationError(message) => {
+                write!(f, "KeyID instantiation error: {}", message)
             }
         }
     }

@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.41"
+async-trait = { workspace = true }
 ic-http-utils = { path = "../../http_utils" }
 ic-logger = { path = "../../monitoring/logger" }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 tokio = { workspace = true }
 
 [lib]

@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-wasm-encoder = "0.35.0"
-wasmparser = "0.115.0"
+wasm-encoder = { workspace = true }
+wasmparser = { workspace = true }
 
 
 [dev-dependencies]
-wasmprinter = "0.2.45"
-wat = "1.0.57"
+wasmprinter = { workspace = true }
+wat = { workspace = true }

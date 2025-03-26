@@ -60,6 +60,8 @@ module IC.Test.Agent
     code202_or_4xx,
     code2xx,
     code4xx,
+    code400,
+    code403,
     decodeCert',
     defaultSK,
     defaultUser,
@@ -80,7 +82,6 @@ module IC.Test.Agent
     ic00as,
     ic00',
     ic00WithSubnetas',
-    ingressDelay,
     is2xx,
     isErr4xx,
     isErrOrReject,
@@ -220,12 +221,15 @@ data AgentConfig = AgentConfig
     tc_manager :: Manager,
     tc_endPoint :: String,
     tc_subnets :: [AgentSubnetConfig],
+    tc_httpbin_proto :: String,
     tc_httpbin :: String,
-    tc_timeout :: Int
+    tc_timeout :: Int,
+    tc_ucan_chunk_hash :: Maybe Blob,
+    tc_store_canister_id :: Maybe Blob
   }
 
-makeAgentConfig :: Bool -> String -> [AgentSubnetConfig] -> String -> Int -> IO AgentConfig
-makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
+makeAgentConfig :: Bool -> String -> [AgentSubnetConfig] -> String -> String -> Int -> IO AgentConfig
+makeAgentConfig allow_self_signed_certs ep' subnets httpbin_proto httpbin' to = do
   let validate = \ca_store -> if allow_self_signed_certs then \_ _ _ -> return [] else C.validateDefault (C.makeCertificateStore $ (C.listCertificates ca_store))
   let client_params =
         (defaultParamsClient "" B.empty)
@@ -245,7 +249,6 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
       `catch` (\(HUnitFailure _ r) -> putStrLn r >> exitFailure)
 
   putStrLn $ "Spec version tested:  " ++ T.unpack specVersion
-  putStrLn $ "Spec version claimed: " ++ T.unpack (status_api_version s)
 
   return
     AgentConfig
@@ -253,8 +256,11 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
         tc_manager = manager,
         tc_endPoint = ep,
         tc_subnets = subnets,
+        tc_httpbin_proto = httpbin_proto,
         tc_httpbin = httpbin,
-        tc_timeout = to
+        tc_timeout = to,
+        tc_ucan_chunk_hash = Nothing,
+        tc_store_canister_id = Nothing
       }
   where
     -- strip trailing slash
@@ -270,6 +276,7 @@ fixUrl msg x
 preFlight :: OptionSet -> IO AgentConfig
 preFlight os = do
   let Endpoint ep = lookupOption os
+  let HttpbinProto httpbin_proto = lookupOption os
   let Httpbin httpbin = lookupOption os
   let PollTimeout to = lookupOption os
   let AllowSelfSignedCerts allow_self_signed_certs = lookupOption os
@@ -277,14 +284,14 @@ preFlight os = do
   let test_agent_subnet_config = AgentSubnetConfig (rawEntityId test_id) (map (fixUrl "node") test_nodes) test_ranges
   let PeerSubnet (peer_id, _, _, peer_ranges, peer_nodes) = lookupOption os
   let peer_agent_subnet_config = AgentSubnetConfig (rawEntityId peer_id) (map (fixUrl "node") peer_nodes) peer_ranges
-  makeAgentConfig allow_self_signed_certs ep [test_agent_subnet_config, peer_agent_subnet_config] httpbin to
+  makeAgentConfig allow_self_signed_certs ep [test_agent_subnet_config, peer_agent_subnet_config] httpbin_proto httpbin to
 
 -- Yes, implicit arguments are frowned upon. But they are also very useful.
 
 type HasAgentConfig = (?agentConfig :: AgentConfig)
 
-withAgentConfig :: (forall. (HasAgentConfig) => a) -> AgentConfig -> a
-withAgentConfig act tc = let ?agentConfig = tc in act
+withAgentConfig :: AgentConfig -> (forall. (HasAgentConfig) => a) -> a
+withAgentConfig tc act = let ?agentConfig = tc in act
 
 agentConfig :: (HasAgentConfig) => AgentConfig
 agentConfig = ?agentConfig
@@ -362,11 +369,11 @@ addNonce =
 getRand8Bytes :: IO BS.ByteString
 getRand8Bytes = BS.pack <$> replicateM 8 randomIO
 
--- Adds expiry 5 minutes
+-- Adds expiry 3 minutes
 addExpiry :: GenR -> IO GenR
 addExpiry = addIfNotThere "ingress_expiry" $ do
   t <- getPOSIXTime
-  return $ GNat $ round ((t + 60 * 5) * 1000_000_000)
+  return $ GNat $ round ((t + 60 * 3) * 1000_000_000)
 
 envelope :: SecretKey -> GenR -> IO GenR
 envelope sk = delegationEnv sk []
@@ -376,7 +383,7 @@ delegationEnv sk1 dels content = do
   let sks = sk1 : map fst dels
 
   t <- getPOSIXTime
-  let expiry = round ((t + 5 * 60) * 1000_000_000)
+  let expiry = round ((t + 3 * 60) * 1000_000_000)
   delegations <- for (zip sks dels) $ \(sk1, (sk2, targets)) -> do
     let delegation =
           rec $
@@ -452,7 +459,7 @@ postCBOR' ep path gr = do
         }
   waitFor $ do
     res <- httpLbs request agentManager
-    if responseStatus res == tooManyRequests429
+    if responseStatus res == tooManyRequests429 || responseStatus res == badGateway502
       then return Nothing
       else return $ Just res
 
@@ -486,11 +493,11 @@ sync_height cid = forM subnets $ \sub -> do
   let ranges = map (\(a, b) -> (wordToId' a, wordToId' b)) (tc_canister_ranges sub)
   when (any (\(a, b) -> a <= cid && cid <= b) ranges) $ do
     hs <- get_heights (tc_node_addresses sub)
-    let h = maximum hs
     unless (length (nub hs) <= 1) $
-      waitFor $ do
-        hs <- get_heights (tc_node_addresses sub)
-        if h <= minimum hs then return (Just ()) else return Nothing
+      let h = maximum hs
+       in waitFor $ do
+            hs <- get_heights (tc_node_addresses sub)
+            if h <= minimum hs then return (Just ()) else return Nothing
   where
     get_heights ns =
       mapM
@@ -754,12 +761,7 @@ isPendingOrProcessing Processing = return ()
 isPendingOrProcessing r = assertFailure $ "Expected pending or processing, got " <> show r
 
 pollDelay :: IO ()
-pollDelay = threadDelay $ 10 * 1000 -- 10 milliseconds
-
--- How long to wait before checking if a request that should _not_ show up on
--- the system indeed did not show up
-ingressDelay :: IO ()
-ingressDelay = threadDelay $ 2 * 1000 * 1000 -- 2 seconds
+pollDelay = threadDelay $ 500 * 1000 -- 500 milliseconds
 
 -- * HTTP Response predicates
 
@@ -776,6 +778,11 @@ code2xx, code202, code4xx, code202_or_4xx :: (HasCallStack) => Response BS.ByteS
 code2xx = codePred "2xx" $ \c -> 200 <= c && c < 300
 code202 = codePred "202" $ \c -> c == 202
 code4xx = codePred "4xx" $ \c -> 400 <= c && c < 500
+
+code400 = codePred "400" $ \c -> c == 400
+
+code403 = codePred "403" $ \c -> c == 403
+
 code202_or_4xx = codePred "202 or 4xx" $ \c -> c == 202 || 400 <= c && c < 500
 
 -- * CBOR decoding
@@ -983,20 +990,17 @@ runGet a b = case Get.runGetOrFail (a <* done) b of
 -- * Status endpoint parsing
 
 data StatusResponse = StatusResponse
-  { status_api_version :: T.Text,
-    status_root_key :: Blob
-  }
+  {status_root_key :: Blob}
 
 statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
 statusResponse =
   asExceptT . record do
-    v <- field text "ic_api_version"
     _ <- optionalField text "impl_source"
     _ <- optionalField text "impl_version"
     _ <- optionalField text "impl_revision"
     pk <- field blob "root_key"
     swallowAllFields -- More fields are explicitly allowed
-    return StatusResponse {status_api_version = v, status_root_key = pk}
+    return StatusResponse {status_root_key = pk}
 
 -- * Interacting with aaaaa-aa (via HTTP)
 
@@ -1059,7 +1063,6 @@ callIC ::
   forall s a b.
   (HasCallStack, HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a, Candid.CandidArg b) =>
   IC00 ->
   Blob ->
@@ -1077,7 +1080,6 @@ callIC' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   IC00 ->
   Blob ->
@@ -1094,7 +1096,6 @@ callICWithSubnet'' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   Blob ->
   Blob ->
@@ -1108,7 +1109,6 @@ callIC'' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   Blob ->
   Blob ->
@@ -1122,7 +1122,6 @@ callIC''' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   IC00' ->
   Blob ->

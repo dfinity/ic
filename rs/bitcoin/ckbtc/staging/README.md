@@ -36,6 +36,7 @@ dfx canister --network ic install ledger --argument '(variant { Init = record{
     transfer_fee = 10_000;
     metadata = vec {};
     initial_balances = vec {};
+    max_memo_length = opt 80;
     archive_options = record {
         num_blocks_to_archive = 2000;
         trigger_threshold = 1000;

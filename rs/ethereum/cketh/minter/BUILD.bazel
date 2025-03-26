@@ -2,19 +2,32 @@ load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 sol_binary(
-    name = "minter_contract",
-    srcs = ["minter.sol"],
+    name = "contracts",
+    srcs = [
+        "EthDepositHelper.sol",
+    ],
 )
 
 # Export the compiled bytecode and ABI files as artifacts
 filegroup(
     name = "contract_artifacts",
     srcs = [
-        ":minter_contract",
+        ":contracts",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "helper_contracts",
+    srcs = [
+        "DepositHelperWithSubaccount.sol",
+        "ERC20DepositHelper.sol",
+        "EthDepositHelper.sol",
     ],
     visibility = ["//visibility:public"],
 )
@@ -31,17 +44,21 @@ rust_library(
     ),
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:ic-cdk-macros",
         "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
     deps = [
+        # Keep sorted.
+        "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
+        "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
-        "//rs/crypto/sha3",
+        "//rs/ethereum/evm-rpc-client",
         "//rs/phantom_newtype",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/utils/ensure",
         "@crate_index//:candid",
         "@crate_index//:ethnum",
@@ -52,11 +69,13 @@ rust_library(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-sha3",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
         "@crate_index//:rlp",
+        "@crate_index//:scopeguard",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
@@ -79,27 +98,41 @@ rust_doc_test(
 rust_test(
     name = "lib_tests",
     crate = ":minter",
+    data = [
+        "test_resources/mainnet_events.gz",
+        "test_resources/sepolia_events.gz",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+    },
     deps = [
+        # Keep sorted.
         ":minter",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
+        "@crate_index//:candid_parser",
         "@crate_index//:ethers-core",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:rand",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )
 
 rust_test(
     name = "unit_tests",
-    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_cketh_minter",
     data = [":cketh_minter.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
     },
     deps = [
+        # Keep sorted.
         ":minter",
+        "@crate_index//:candid_parser",
         "@crate_index//:maplit",
         "@crate_index//:scraper",
     ],
@@ -107,29 +140,29 @@ rust_test(
 
 [rust_canister(
     name = "cketh_minter" + target_suffix,
-    srcs = [
-        "src/dashboard.rs",
-        "src/main.rs",
-    ],
+    srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
+        "templates/pagination.html",
         "templates/principal_to_bytes.js",
     ],
     crate_features = features,
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:ic-cdk-macros",
     ],
     service_file = "cketh_minter.did",
     deps = [
+        # Keep sorted.
         ":minter",
+        "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
-        "@crate_index//:ethabi",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",
@@ -138,7 +171,6 @@ rust_test(
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
-        "@crate_index//:serde_json",
         "@crate_index//:time",
     ],
 ) for (target_suffix, features) in [
@@ -153,60 +185,90 @@ rust_binary(
     name = "principal_to_hex",
     srcs = ["bin/principal_to_hex.rs"],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:hex",
     ],
 )
 
-rust_test(
-    name = "integration_tests",
-    srcs = ["tests/tests.rs"],
-    data = [
-        ":cketh_minter_debug.wasm",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
-        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-    },
-    proc_macro_deps = [
-        "@crate_index//:strum_macros",
-    ],
-    deps = [
-        ":minter",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rosetta-api/icrc1/ledger",
-        "//rs/rust_canisters/http_types",
-        "//rs/state_machine_tests",
-        "//rs/test_utilities/load_wasm",
-        "//rs/types/base_types",
-        "@crate_index//:candid",
-        "@crate_index//:ethers-core",
-        "@crate_index//:hex",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:num-traits",
-        "@crate_index//:rlp",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:serde_json",
-        "@crate_index//:strum",
-    ],
-)
+[
+    rust_ic_test_suite(
+        name = "integration_tests" + name_suffix,
+        srcs = glob(["tests/**/*.rs"]),
+        data = [
+            ":cketh_minter_debug.wasm.gz",
+            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+            "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+            "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        ] + extra_data,
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
+            "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+            "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        } | extra_env,
+        proc_macro_deps = [],
+        deps = [
+            # Keep sorted.
+            ":minter",
+            "//packages/ic-ethereum-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+            "//rs/state_machine_tests",
+            "//rs/types/base_types",
+            "//rs/types/management_canister_types",
+            "@crate_index//:assert_matches",
+            "@crate_index//:candid",
+            "@crate_index//:ethers-core",
+            "@crate_index//:hex",
+            "@crate_index//:num-bigint",
+            "@crate_index//:num-traits",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+            "@crate_index//:serde_json",
+        ] + extra_deps,
+    )
+    for (name_suffix, extra_data, extra_env, extra_deps) in [
+        (
+            "",
+            [],
+            {},
+            ["//rs/ethereum/cketh/test_utils"],
+        ),
+        (
+            "_evm_rpc",
+            ["@evm_rpc.wasm.gz//file"],
+            {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)"},
+            ["//rs/ethereum/cketh/test_utils:test_utils_evm_rpc"],
+        ),
+    ]
+]
 
 closure_js_library(
     name = "principal_to_bytes",
     srcs = ["templates/principal_to_bytes.js"],
+    # We don't automatically build this because the build is unreliable.
+    tags = ["manual"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 closure_js_test(
     name = "principal_to_bytes_test",
     srcs = ["tests/principal_to_bytes_test.js"],
+    # We don't automatically build this because the build is unreliable.
+    tags = ["manual"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
+        # Keep sorted.
         ":principal_to_bytes",
         "@com_google_javascript_closure_library//closure/goog/testing:asserts",
         "@com_google_javascript_closure_library//closure/goog/testing:jsunit",

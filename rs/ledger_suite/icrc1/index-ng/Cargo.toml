@@ -1,0 +1,57 @@
+[package]
+name = "ic-icrc1-index-ng"
+description = "Index canister for the ICRC1 Ledger"
+edition = "2018"
+version.workspace = true
+authors.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ic-icrc1-index-ng"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ciborium = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-crypto-sha2 = { path = "../../../crypto/sha2" }
+ic-icrc1 = { path = ".." }
+ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
+ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-metrics-encoder = "1.1"
+ic-stable-structures = { workspace = true }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+num-traits = { workspace = true }
+scopeguard = "1.1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-icrc1-ledger = { path = "../ledger" }
+ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
+ic-icrc1-test-utils = { path = "../test_utils" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-types = { path = "../../../types/types" }
+proptest = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = []
+u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+icrc3_disabled = []
+get_blocks_disabled = []

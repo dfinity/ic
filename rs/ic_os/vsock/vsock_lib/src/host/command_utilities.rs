@@ -29,7 +29,6 @@ fn handle_output_string(
             error_string
         })
         .and_then(|output| {
-            println!("Command {} output: {}", label, output);
             if label == "stdout" {
                 Ok(Payload::NoPayload)
             } else {

@@ -1,0 +1,305 @@
+syntax = "proto3";
+
+package types.v1;
+
+import "registry/subnet/v1/subnet.proto";
+import "state/queues/v1/queues.proto";
+import "types/v1/signature.proto";
+import "types/v1/types.proto";
+
+message IDkgPayload {
+  reserved 2, 3, 4, 9, 11, 12, 16;
+  repeated CompletedSignature signature_agreements = 1;
+  registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
+  repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
+  repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
+  repeated XnetReshareAgreement xnet_reshare_agreements = 8;
+  uint64 next_unused_pre_signature_id = 10;
+  repeated MasterKeyTranscript key_transcripts = 13;
+  repeated AvailablePreSignature available_pre_signatures = 14;
+  repeated PreSignatureInProgress pre_signatures_in_creation = 15;
+}
+
+message ConsensusResponse {
+  reserved 1, 2, 4, 7, 8;
+  uint64 callback = 3;
+  oneof payload {
+    bytes data = 5;
+    state.queues.v1.RejectContext reject = 6;
+  }
+}
+
+message MasterKeyTranscript {
+  reserved 1;
+  UnmaskedTranscriptWithAttributes current = 2;
+  KeyTranscriptCreation next_in_creation = 3;
+  types.v1.MasterPublicKeyId master_key_id = 4;
+}
+
+message AvailablePreSignature {
+  uint64 pre_signature_id = 1;
+  PreSignatureRef pre_signature = 2;
+}
+
+message PreSignatureInProgress {
+  uint64 pre_signature_id = 1;
+  PreSignatureInCreation pre_signature = 2;
+}
+
+message OngoingXnetReshare {
+  IDkgReshareRequest request = 1;
+  ReshareOfUnmaskedParams transcript = 2;
+}
+
+message XnetReshareAgreement {
+  reserved 2, 3;
+  reserved "response";
+  IDkgReshareRequest request = 1;
+  ConsensusResponse initial_dealings = 4;
+}
+
+message RequestId {
+  reserved 1, 2, 4;
+  reserved "key_id";
+  uint64 height = 3;
+  uint64 callback_id = 5;
+}
+
+message TranscriptRef {
+  uint64 height = 1;
+  registry.subnet.v1.IDkgTranscriptId transcript_id = 2;
+}
+
+message MaskedTranscript {
+  TranscriptRef transcript_ref = 1;
+}
+
+message UnmaskedTranscript {
+  TranscriptRef transcript_ref = 1;
+}
+
+message UnmaskedTranscriptWithAttributes {
+  TranscriptRef transcript_ref = 1;
+  IDkgTranscriptAttributes attributes = 2;
+}
+
+message IDkgTranscriptOperationRef {
+  int32 op_type = 1;
+  MaskedTranscript masked = 2;
+  UnmaskedTranscript unmasked = 3;
+}
+
+message IDkgTranscriptAttributes {
+  repeated types.v1.NodeId receivers = 1;
+  int32 algorithm_id = 2;
+  uint64 registry_version = 3;
+}
+
+message IDkgTranscriptParamsRef {
+  registry.subnet.v1.IDkgTranscriptId transcript_id = 1;
+  repeated types.v1.NodeId dealers = 2;
+  repeated types.v1.NodeId receivers = 3;
+  uint64 registry_version = 4;
+  int32 algorithm_id = 5;
+  IDkgTranscriptOperationRef operation_type_ref = 6;
+}
+
+message RandomTranscriptParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message RandomUnmaskedTranscriptParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message ReshareOfMaskedParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message ReshareOfUnmaskedParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message UnmaskedTimesMaskedParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
+message PreSignatureInCreation {
+  oneof msg {
+    QuadrupleInCreation ecdsa = 1;
+    TranscriptInCreation schnorr = 2;
+  }
+}
+
+message PreSignatureRef {
+  oneof msg {
+    PreSignatureQuadrupleRef ecdsa = 1;
+    PreSignatureTranscriptRef schnorr = 2;
+  }
+}
+
+message QuadrupleInCreation {
+  reserved 1, 2, 5;
+
+  RandomTranscriptParams lambda_config = 3;
+  MaskedTranscript lambda_masked = 4;
+
+  RandomUnmaskedTranscriptParams kappa_unmasked_config = 11;
+  UnmaskedTranscript kappa_unmasked = 6;
+
+  UnmaskedTimesMaskedParams key_times_lambda_config = 7;
+  MaskedTranscript key_times_lambda = 8;
+
+  UnmaskedTimesMaskedParams kappa_times_lambda_config = 9;
+  MaskedTranscript kappa_times_lambda = 10;
+
+  types.v1.EcdsaKeyId key_id = 12;
+}
+
+message PreSignatureQuadrupleRef {
+  UnmaskedTranscript kappa_unmasked_ref = 1;
+  MaskedTranscript lambda_masked_ref = 2;
+  MaskedTranscript kappa_times_lambda_ref = 3;
+  MaskedTranscript key_times_lambda_ref = 4;
+  UnmaskedTranscript key_unmasked_ref = 5;
+  types.v1.EcdsaKeyId key_id = 6;
+}
+
+message TranscriptInCreation {
+  types.v1.SchnorrKeyId key_id = 1;
+  RandomUnmaskedTranscriptParams blinder_unmasked_config = 2;
+  UnmaskedTranscript blinder_unmasked = 3;
+}
+
+message PreSignatureTranscriptRef {
+  types.v1.SchnorrKeyId key_id = 1;
+  UnmaskedTranscript blinder_unmasked_ref = 2;
+  UnmaskedTranscript key_unmasked_ref = 3;
+}
+
+message CompletedSignature {
+  reserved 1;
+  reserved 2;
+  ConsensusResponse unreported = 3;
+  bytes pseudo_random_id = 4;
+}
+
+message IDkgReshareRequest {
+  reserved 1, 4;
+  repeated types.v1.NodeId receiving_node_ids = 2;
+  uint64 registry_version = 3;
+  types.v1.MasterPublicKeyId master_key_id = 5;
+}
+
+enum KeyTranscriptCreationState {
+  KEY_TRANSCRIPT_CREATION_STATE_BEGIN_UNSPECIFIED = 0;
+  KEY_TRANSCRIPT_CREATION_STATE_RANDOM_TRANSCRIPT_PARAMS = 1;
+  KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_MASKED_PARAMS = 2;
+  KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_UNMASKED_PARAMS = 3;
+  KEY_TRANSCRIPT_CREATION_STATE_XNET_RESHARE_OF_UNMASKED_PARAMS = 4;
+  KEY_TRANSCRIPT_CREATION_STATE_CREATED = 5;
+}
+
+message KeyTranscriptCreation {
+  KeyTranscriptCreationState state = 1;
+  RandomTranscriptParams random = 2;
+  ReshareOfMaskedParams reshare_of_masked = 3;
+  ReshareOfUnmaskedParams reshare_of_unmasked = 4;
+  ReshareOfUnmaskedParams xnet_reshare_of_unmasked = 5;
+  registry.subnet.v1.InitialIDkgDealings xnet_reshare_initial_dealings = 6;
+  UnmaskedTranscript created = 9;
+}
+
+message IDkgMessage {
+  oneof msg {
+    registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
+    IDkgDealingSupport dealing_support = 2;
+    EcdsaSigShare ecdsa_sig_share = 3;
+    SignedIDkgComplaint complaint = 4;
+    SignedIDkgOpening opening = 5;
+    SchnorrSigShare schnorr_sig_share = 6;
+    VetKdKeyShare vetkd_key_share = 7;
+  }
+}
+
+message EcdsaSigShare {
+  NodeId signer_id = 1;
+  RequestId request_id = 2;
+  bytes sig_share_raw = 3;
+}
+
+message SchnorrSigShare {
+  NodeId signer_id = 1;
+  RequestId request_id = 2;
+  bytes sig_share_raw = 3;
+}
+
+message VetKdKeyShare {
+  NodeId signer_id = 1;
+  RequestId request_id = 2;
+  bytes encrypted_key_share = 3;
+  bytes node_signature = 4;
+}
+
+message SignedIDkgComplaint {
+  IDkgComplaintContent content = 1;
+  types.v1.BasicSignature signature = 2;
+}
+
+message IDkgComplaintContent {
+  registry.subnet.v1.IDkgComplaint idkg_complaint = 1;
+}
+
+message SignedIDkgOpening {
+  IDkgOpeningContent content = 1;
+  types.v1.BasicSignature signature = 2;
+}
+
+message IDkgOpeningContent {
+  registry.subnet.v1.IDkgOpening idkg_opening = 1;
+}
+
+message IDkgDealingSupport {
+  registry.subnet.v1.IDkgTranscriptId transcript_id = 1;
+  types.v1.NodeId dealer = 2;
+  bytes dealing_hash = 3;
+  types.v1.BasicSignature sig_share = 4;
+}
+
+message IDkgPrefix {
+  uint64 group_tag = 1;
+  uint64 meta_hash = 2;
+}
+
+message IDkgArtifactIdData {
+  uint64 height = 1;
+  bytes hash = 2;
+  types.v1.SubnetId subnet_id = 3;
+}
+
+message SigShareIdData {
+  uint64 height = 1;
+  bytes hash = 2;
+}
+
+message PrefixPairIDkg {
+  IDkgPrefix prefix = 1;
+  IDkgArtifactIdData id_data = 2;
+}
+
+message PrefixPairSigShare {
+  IDkgPrefix prefix = 1;
+  SigShareIdData id_data = 2;
+}
+
+message IDkgArtifactId {
+  oneof kind {
+    PrefixPairIDkg dealing = 1;
+    PrefixPairIDkg dealing_support = 2;
+    PrefixPairSigShare ecdsa_sig_share = 3;
+    PrefixPairIDkg complaint = 4;
+    PrefixPairIDkg opening = 5;
+    PrefixPairSigShare schnorr_sig_share = 6;
+    PrefixPairSigShare vetkd_key_share = 7;
+  }
+}

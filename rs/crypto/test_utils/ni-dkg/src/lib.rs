@@ -33,7 +33,9 @@ use std::sync::Arc;
 mod initial_config;
 
 pub use initial_config::{
-    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message, InitialNiDkgConfig,
+    dummy_initial_dkg_transcript, dummy_initial_dkg_transcript_with_master_key,
+    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message,
+    InitialNiDkgConfig, SecretKeyBytes,
 };
 
 pub fn create_transcript<R: CryptoComponentRng>(
@@ -172,7 +174,7 @@ pub fn retain_only_active_keys<R: CryptoComponentRng>(
 pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
     signers: &[NodeId],
     msg: &H,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
 ) -> BTreeMap<NodeId, ThresholdSigShareOf<H>> {
     signers
@@ -218,7 +220,8 @@ pub fn dummy_transcript_for_tests_with_params(
         internal_csp_transcript: CspNiDkgTranscript::Groth20_Bls12_381(
             ni_dkg_groth20_bls12_381::Transcript {
                 public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-                    coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
+                    // the following public key matches the one used in StateMachine tests
+                    coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
                 },
                 receiver_data: BTreeMap::new(),
             },
@@ -384,7 +387,7 @@ impl RandomNiDkgConfigBuilder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct RandomNiDkgConfig(NiDkgConfig);
 
 impl RandomNiDkgConfig {
@@ -458,9 +461,10 @@ impl RandomNiDkgConfig {
     /// is possible to perform tests where a single subnet has both
     /// high and low threshold transcripts
     pub fn new_with_inverted_threshold<R: Rng + CryptoRng>(&self, rng: &mut R) -> Self {
-        let dkg_tag = match self.0.dkg_id().dkg_tag {
+        let dkg_tag = match &self.0.dkg_id().dkg_tag {
             NiDkgTag::LowThreshold => NiDkgTag::HighThreshold,
             NiDkgTag::HighThreshold => NiDkgTag::LowThreshold,
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!("not supported/needed currently"),
         };
 
         let subnet_size = self.0.receivers().get().len();
@@ -563,8 +567,11 @@ impl RandomNiDkgConfig {
                 receivers
             }
         };
-        let dkg_tag = transcript.dkg_id.dkg_tag;
+        let dkg_tag = transcript.dkg_id.dkg_tag.clone();
         let config_data = NiDkgConfigData {
+            threshold: Self::number_of_nodes_from_usize(
+                dkg_tag.threshold_for_subnet_of_size(new_subnet_size),
+            ),
             dkg_id: NiDkgId {
                 start_block_height: Height::new(transcript.dkg_id.start_block_height.get() + 1),
                 // Theoretically the subnet ID should change on the _first_ DKG in the new
@@ -581,9 +588,6 @@ impl RandomNiDkgConfig {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(new_subnet_size))
             },
             receivers,
-            threshold: Self::number_of_nodes_from_usize(
-                dkg_tag.threshold_for_subnet_of_size(new_subnet_size),
-            ),
             registry_version,
             resharing_transcript: Some(transcript),
         };
@@ -604,6 +608,9 @@ impl RandomNiDkgConfig {
         let receivers = transcript.committee.get().clone();
         let dkg_tag = transcript.dkg_id.dkg_tag;
         let config_data = NiDkgConfigData {
+            threshold: Self::number_of_nodes_from_usize(
+                dkg_tag.threshold_for_subnet_of_size(subnet_size),
+            ),
             dkg_id: NiDkgId {
                 start_block_height: Height::new(transcript.dkg_id.start_block_height.get() + 1),
                 // Theoretically the subnet ID should change on the _first_ DKG in the new
@@ -620,9 +627,6 @@ impl RandomNiDkgConfig {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
             },
             receivers,
-            threshold: Self::number_of_nodes_from_usize(
-                dkg_tag.threshold_for_subnet_of_size(subnet_size),
-            ),
             registry_version,
             resharing_transcript: None,
         };
@@ -874,7 +878,11 @@ impl NiDkgTestEnvironment {
         let temp_crypto_builder = TempCryptoComponent::builder()
             .with_registry(Arc::clone(&self.registry) as Arc<_>)
             .with_node_id(node_id)
-            .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
+            .with_keys(NodeKeysToGenerate {
+                generate_node_signing_keys: true,
+                generate_dkg_dealing_encryption_keys: true,
+                ..NodeKeysToGenerate::none()
+            })
             .with_rng(ChaCha20Rng::from_seed(rng.gen()));
         let temp_crypto_builder = if use_remote_vault {
             temp_crypto_builder.with_remote_vault()
@@ -887,6 +895,11 @@ impl NiDkgTestEnvironment {
             .expect("Failed to retrieve node public keys")
             .dkg_dealing_encryption_public_key
             .expect("missing dkg_dealing_encryption_pk");
+        let node_signing_pubkey = temp_crypto
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
+            .node_signing_public_key
+            .expect("missing dkg_dealing_encryption_pk");
         self.crypto_components.insert(node_id, temp_crypto);
 
         // Insert DKG dealing encryption public key into registry
@@ -897,6 +910,14 @@ impl NiDkgTestEnvironment {
                 Some(dkg_dealing_encryption_pubkey),
             )
             .expect("failed to add DKG dealing encryption key to registry");
+        // Insert node signing public key into registry
+        self.registry_data
+            .add(
+                &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
+                ni_dkg_config.registry_version(),
+                Some(node_signing_pubkey),
+            )
+            .expect("failed to add node signing public key to registry");
     }
 
     /// Cleans up nodes whose IDs are no longer in use

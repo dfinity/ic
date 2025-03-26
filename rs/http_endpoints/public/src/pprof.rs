@@ -1,23 +1,16 @@
-use crate::{
-    common::{get_cors_headers, make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
-    EndpointService,
-};
-use bytes::Bytes;
-use futures_util::Future;
-use http::{header, request::Parts, Request};
-use hyper::{self, Body, Response, StatusCode};
-use ic_pprof::{Error, PprofCollector};
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-    time::Duration,
-};
-use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
+use crate::common::{CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_SVG};
 
-pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
+use axum::{
+    extract::{Query, State},
+    response::{Html, IntoResponse},
+    Router,
+};
+use http::header;
+use hyper::{self, StatusCode};
+use ic_pprof::PprofCollector;
+use serde::Deserialize;
+use std::{sync::Arc, time::Duration};
+
 /// Default CPU profile duration.
 pub const DEFAULT_DURATION_SECONDS: u64 = 30;
 /// Default sampling frequency. 250Hz is the default Linux software clock
@@ -47,91 +40,19 @@ Types of profiles available:
 </body>
 </html>"#;
 
-fn query(parts: Parts) -> Result<(Duration, i32), String> {
-    let query_pairs: HashMap<_, _> = match parts.uri.query() {
-        Some(query) => url::form_urlencoded::parse(query.as_bytes()).collect(),
-        None => Default::default(),
-    };
-
-    let seconds: u64 = match query_pairs.get("seconds") {
-        Some(val) => match val.parse() {
-            Ok(val) => val,
-            Err(err) => {
-                return Err(err.to_string());
-            }
-        },
-        None => DEFAULT_DURATION_SECONDS,
-    };
-    let duration = Duration::from_secs(seconds);
-
-    let frequency: i32 = match query_pairs.get("frequency") {
-        Some(val) => match val.parse() {
-            Ok(val) => val,
-            Err(err) => {
-                return Err(err.to_string());
-            }
-        },
-        None => DEFAULT_FREQUENCY,
-    };
-    Ok((duration, frequency))
-}
-
-/// Converts an `ic_pprof::profile()` output into an HTTP response.
-fn into_response(result: Result<Vec<u8>, Error>, content_type: &'static str) -> Response<Body> {
-    match result {
-        Ok(body) => ok_response(body, content_type),
-        Err(err) => make_plaintext_response(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-    }
-}
-
-/// Converts a successful `ic_pprof::profile()` output into an HTTP response.
-fn ok_response(body: Vec<u8>, content_type: &'static str) -> Response<Body> {
-    let mut response = Response::builder()
-        .status(StatusCode::OK)
-        .body(body.into())
-        .unwrap();
-    *response.headers_mut() = get_cors_headers();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static(content_type),
-    );
-    response
-}
-
 /// Returns the `/_/pprof` root page, listing the available profiles.
 #[derive(Clone)]
 pub(crate) struct PprofHomeService;
 
 impl PprofHomeService {
-    pub fn new_service(concurrency_limiter: GlobalConcurrencyLimitLayer) -> EndpointService {
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(concurrency_limiter)
-                .service(Self),
+    pub fn route() -> &'static str {
+        "/_/pprof"
+    }
+    pub fn new_router() -> Router {
+        Router::new().route(
+            Self::route(),
+            axum::routing::get(|| async { Html(PPROF_HOME_HTML) }),
         )
-    }
-}
-
-impl Service<Request<Bytes>> for PprofHomeService {
-    type Response = Response<Body>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, _unused: Request<Bytes>) -> Self::Future {
-        let mut response = Response::new(Body::from(PPROF_HOME_HTML));
-        *response.status_mut() = StatusCode::OK;
-        *response.headers_mut() = get_cors_headers();
-        response.headers_mut().insert(
-            header::CONTENT_TYPE,
-            header::HeaderValue::from_static(CONTENT_TYPE_HTML),
-        );
-
-        Box::pin(async move { Ok(response) })
     }
 }
 
@@ -141,50 +62,51 @@ pub(crate) struct PprofProfileService {
 }
 
 impl PprofProfileService {
-    pub fn new_service(
-        collector: Arc<dyn PprofCollector>,
-        concurrency_limiter: GlobalConcurrencyLimitLayer,
-    ) -> EndpointService {
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(concurrency_limiter)
-                .service(Self { collector }),
+    pub fn route() -> &'static str {
+        "/_/pprof/profile"
+    }
+    pub fn new_router(collector: Arc<dyn PprofCollector>) -> Router {
+        let state = PprofProfileService { collector };
+        Router::new().route(
+            Self::route(),
+            axum::routing::get(pprof_profile).with_state(state),
         )
     }
 }
 
-impl Service<Request<Bytes>> for PprofProfileService {
-    type Response = Response<Body>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+#[derive(Deserialize)]
+pub(crate) struct PprofParams {
+    frequency: Option<i32>,
+    seconds: Option<u64>,
+}
 
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    /// Collects a CPU profile in `pprof` or flamegraph format.
-    ///
-    /// Supported query arguments are `seconds`, for the duration of the CPU
-    /// profile; and `frequency`, for the frequency at whicn stack trace samples
-    /// should be collected.
-    ///
-    /// `frequency` and its accuracy are limited (on Linux) by the resolution of
-    /// the software clock, which is 250Hz by default. See
-    /// [`man 7 time`](https://linux.die.net/man/7/time) for details.
-    fn call(&mut self, body: Request<Bytes>) -> Self::Future {
-        let parts = body.into_parts().0;
-        let collector = self.collector.clone();
-
-        Box::pin(async move {
-            Ok(match query(parts) {
-                Ok((duration, frequency)) => into_response(
-                    collector.profile(duration, frequency).await,
-                    CONTENT_TYPE_PROTOBUF,
-                ),
-                Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
-            })
-        })
+/// Collects a CPU profile in `pprof` or flamegraph format.
+///
+/// Supported query arguments are `seconds`, for the duration of the CPU
+/// profile; and `frequency`, for the frequency at whicn stack trace samples
+/// should be collected.
+///
+/// `frequency` and its accuracy are limited (on Linux) by the resolution of
+/// the software clock, which is 250Hz by default. See
+/// [`man 7 time`](https://linux.die.net/man/7/time) for details.
+async fn pprof_profile(
+    Query(params): Query<PprofParams>,
+    State(PprofProfileService { collector }): State<PprofProfileService>,
+) -> impl IntoResponse {
+    match collector
+        .profile(
+            Duration::from_secs(params.seconds.unwrap_or(DEFAULT_DURATION_SECONDS)),
+            params.frequency.unwrap_or(DEFAULT_FREQUENCY),
+        )
+        .await
+    {
+        Ok(v) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, CONTENT_TYPE_PROTOBUF)],
+            v,
+        )
+            .into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
     }
 }
 
@@ -194,40 +116,35 @@ pub(crate) struct PprofFlamegraphService {
 }
 
 impl PprofFlamegraphService {
-    pub fn new_service(
-        collector: Arc<dyn PprofCollector>,
-        concurrency_limiter: GlobalConcurrencyLimitLayer,
-    ) -> EndpointService {
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(concurrency_limiter)
-                .service(Self { collector }),
+    pub fn route() -> &'static str {
+        "/_/pprof/flamegraph"
+    }
+    pub fn new_router(collector: Arc<dyn PprofCollector>) -> Router {
+        let state = PprofFlamegraphService { collector };
+        Router::new().route(
+            Self::route(),
+            axum::routing::get(pprof_flamegraph).with_state(state),
         )
     }
 }
 
-impl Service<Request<Bytes>> for PprofFlamegraphService {
-    type Response = Response<Body>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, body: Request<Bytes>) -> Self::Future {
-        let parts = body.into_parts().0;
-        let collector = self.collector.clone();
-
-        Box::pin(async move {
-            Ok(match query(parts) {
-                Ok((duration, frequency)) => into_response(
-                    collector.flamegraph(duration, frequency).await,
-                    CONTENT_TYPE_SVG,
-                ),
-                Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
-            })
-        })
+pub(crate) async fn pprof_flamegraph(
+    Query(params): Query<PprofParams>,
+    State(PprofFlamegraphService { collector }): State<PprofFlamegraphService>,
+) -> impl IntoResponse {
+    match collector
+        .flamegraph(
+            Duration::from_secs(params.seconds.unwrap_or(DEFAULT_DURATION_SECONDS)),
+            params.frequency.unwrap_or(DEFAULT_FREQUENCY),
+        )
+        .await
+    {
+        Ok(v) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, CONTENT_TYPE_SVG)],
+            v,
+        )
+            .into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
     }
 }

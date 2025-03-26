@@ -13,7 +13,7 @@ pub use ic_types::{
     time::current_time,
     RegistryVersion, Time,
 };
-use ic_utils::thread::JoinOnDrop;
+use ic_utils_thread::JoinOnDrop;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::{collections::BTreeMap, thread::JoinHandle};
 
@@ -129,7 +129,17 @@ impl RegistryClientImpl {
     pub fn try_polling_latest_version(&self, retries: usize) -> Result<(), RegistryClientError> {
         let mut last_version = self.get_latest_version();
         for _ in 0..retries {
-            self.poll_once()?;
+            match self.poll_once() {
+                Ok(()) => {}
+                Err(RegistryClientError::DataProviderQueryFailed {
+                    source: RegistryDataProviderError::Transfer { source },
+                    ..
+                }) if source.contains("Request timed out") => {
+                    eprintln!("Request timed out, retrying.");
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
             let new_version = self.get_latest_version();
             if new_version == last_version {
                 return Ok(());
@@ -290,27 +300,25 @@ impl RegistryClient for RegistryClientImpl {
         // 1. Skip all entries up to the first_match_index
         // 2. Filter out all versions newer than the one we are interested in
         // 3. Only consider the subsequence that starts with the given prefix
-        let res = cache_state
+        let records = cache_state
             .records
             .iter()
             .skip(first_match_index) // (1)
             .filter(|r| r.version <= version) // (2)
-            .take_while(|r| r.key.starts_with(key_prefix)) // (3)
-            .fold(vec![], |mut acc, r| {
-                // is_set iff the key is set in this transport record.
-                let is_set = r.value.is_some();
-                // if this record indicates a removal for the last key in the list, we need to
-                // remove that key.
-                if acc.last().map(|k| k == &r.key).unwrap_or(false) {
-                    if !is_set {
-                        acc.pop();
-                    }
-                } else if is_set {
-                    acc.push(r.key.clone());
-                }
-                acc
-            });
-        Ok(res)
+            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
+
+        // For each key, keep only the record values for the latest record versions. We rely upon
+        // the fact that for a fixed key, the records are sorted by version.
+        let mut effective_records = BTreeMap::new();
+        for record in records {
+            effective_records.insert(record.key.clone(), &record.value);
+        }
+        // Finally, remove empty records, i.e., those for which `value` is `None`.
+        let result = effective_records
+            .into_iter()
+            .filter_map(|(key, value)| value.is_some().then_some(key))
+            .collect();
+        Ok(result)
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
@@ -335,18 +343,6 @@ impl RegistryClient for RegistryClientImpl {
             .timestamps
             .get(&registry_version)
             .cloned()
-    }
-}
-
-/// An empty registry data provider that emulates a static, empty registry.
-pub struct EmptyRegistryDataProvider();
-
-impl RegistryDataProvider for EmptyRegistryDataProvider {
-    fn get_updates_since(
-        &self,
-        _version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        Ok(vec![])
     }
 }
 
@@ -402,6 +398,7 @@ mod tests {
         set("A", 3);
         set("A", 6);
         set("B", 6);
+        set("B2", 4);
         set("B2", 5);
         rem("B2", 6);
         set("B3", 5);
@@ -447,9 +444,10 @@ mod tests {
         assert_eq!(get("B", 6).unwrap(), Some(value(6)));
         assert!(get("B", latest_version + 1).is_err());
 
-        for t in 0..5 {
+        for t in 0..4 {
             assert!(get("B2", t).unwrap().is_none());
         }
+        assert_eq!(get("B2", 4).unwrap(), Some(value(4)));
         assert_eq!(get("B2", 5).unwrap(), Some(value(5)));
         assert!(get("B2", 6).unwrap().is_none());
         assert!(get("B2", latest_version + 1).is_err());
@@ -613,37 +611,6 @@ mod tests {
 
         assert_eq!(get("C", 7).unwrap(), Some(value(7)));
     }
-    #[cfg(test)]
-    mod metrics {
-        use ic_test_utilities_metrics::fetch_int_gauge;
-
-        use super::*;
-
-        #[test]
-        fn ic_registry_client_registry_version_updates() {
-            let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-            let metrics_registry = MetricsRegistry::new();
-            let registry = RegistryClientImpl::new(data_provider.clone(), Some(&metrics_registry));
-
-            data_provider.add("A", v(1), Some(value(1))).unwrap();
-
-            registry.poll_once().unwrap();
-            assert_eq!(registry.get_latest_version(), v(1));
-            assert_eq!(
-                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
-                Some(1)
-            );
-
-            data_provider.add("A", v(3), Some(value(3))).unwrap();
-
-            registry.poll_once().unwrap();
-            assert_eq!(registry.get_latest_version(), v(3));
-            assert_eq!(
-                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
-                Some(3)
-            );
-        }
-    }
 
     fn v(v: u64) -> RegistryVersion {
         RegistryVersion::new(v)
@@ -692,6 +659,37 @@ mod tests {
             let mut res = self.data_provider.get_updates_since(version)?;
             res.retain(|r| r.version <= version + self.changelog_size);
             Ok(res)
+        }
+    }
+    #[cfg(test)]
+    mod metrics {
+        use ic_test_utilities_metrics::fetch_int_gauge;
+
+        use super::*;
+
+        #[test]
+        fn ic_registry_client_registry_version_updates() {
+            let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+            let metrics_registry = MetricsRegistry::new();
+            let registry = RegistryClientImpl::new(data_provider.clone(), Some(&metrics_registry));
+
+            data_provider.add("A", v(1), Some(value(1))).unwrap();
+
+            registry.poll_once().unwrap();
+            assert_eq!(registry.get_latest_version(), v(1));
+            assert_eq!(
+                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
+                Some(1)
+            );
+
+            data_provider.add("A", v(3), Some(value(3))).unwrap();
+
+            registry.poll_once().unwrap();
+            assert_eq!(registry.get_latest_version(), v(3));
+            assert_eq!(
+                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
+                Some(3)
+            );
         }
     }
 }

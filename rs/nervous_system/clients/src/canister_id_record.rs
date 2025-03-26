@@ -3,7 +3,7 @@ use ic_base_types::CanisterId;
 use serde::{Deserialize, Serialize};
 
 /// Copied from ic-types::ic_00::CanisterIdRecord.
-#[derive(CandidType, Deserialize, Serialize, Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct CanisterIdRecord {
     pub canister_id: CanisterId,
 }

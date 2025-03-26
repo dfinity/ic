@@ -1,0 +1,14 @@
+[package]
+name = "ic-validate-eq"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_validate_eq"
+path = "src/lib.rs"
+
+[dependencies]
+ic-validate-eq-derive = { path = "../validate_eq_derive" }

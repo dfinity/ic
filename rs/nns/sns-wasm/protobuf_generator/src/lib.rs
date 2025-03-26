@@ -37,6 +37,34 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");
     ic_sns_type_attr(&mut config, "SnsCanisterIds", "#[derive(Copy)]");
 
+    // Add serde_bytes for efficiently parsing blobs.
+    let blob_fields = vec![
+        "SnsWasmStableIndex.hash",
+        "SnsWasm.wasm",
+        "AddWasmRequest.hash",
+        "GetWasmRequest.hash",
+        "SnsVersion.root_wasm_hash",
+        "SnsVersion.governance_wasm_hash",
+        "SnsVersion.ledger_wasm_hash",
+        "SnsVersion.swap_wasm_hash",
+        "SnsVersion.archive_wasm_hash",
+        "SnsVersion.index_wasm_hash",
+        "AddWasmResponse.result.hash",
+    ];
+    for field in blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_wasm.pb.v1.{}", field),
+            "#[serde(with = \"serde_bytes\")]",
+        );
+    }
+    let option_blob_fields = vec!["GetWasmMetadataRequest.hash", "MetadataSection.contents"];
+    for field in option_blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_wasm.pb.v1.{}", field),
+            "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
+        );
+    }
+
     config.btree_map([".ic_sns_wasm.pb.v1.StableCanisterState.nns_proposal_to_deployed_sns"]);
 
     config

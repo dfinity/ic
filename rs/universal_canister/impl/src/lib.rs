@@ -25,7 +25,7 @@ macro_rules! try_from_u8 {
 }
 
 try_from_u8!(
-    #[derive(Debug, Eq, PartialEq)]
+    #[derive(Eq, PartialEq, Debug)]
     pub enum Ops {
         Noop = 0,
         Drop = 1,
@@ -108,5 +108,18 @@ try_from_u8!(
         CyclesBurn128 = 78,
         BlobLength = 79,
         PushEqualBytes = 80,
+        InReplicatedExecution = 81,
+        CallWithBestEffortResponse = 82,
+        MsgDeadline = 83,
+        MemorySizeIsAtLeast = 84,
+        MintCycles128 = 85,
+        CostCall = 86,
+        CostCreateCanister = 87,
+        CostHttpRequest = 88,
+        CostSignWithEcdsa = 89,
+        CostSignWithSchnorr = 90,
+        CostVetkdDeriveKey = 91,
+        LiquidCyclesBalance128 = 92,
+        CallDataAppendCyclesAddMax = 93,
     }
 );

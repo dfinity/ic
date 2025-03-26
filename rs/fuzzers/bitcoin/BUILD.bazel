@@ -3,7 +3,8 @@ load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
-    "@crate_index//:bitcoin",
+    # Keep sorted.
+    "@crate_index//:bitcoin_0_28",
     "@crate_index//:libfuzzer-sys",
 ]
 

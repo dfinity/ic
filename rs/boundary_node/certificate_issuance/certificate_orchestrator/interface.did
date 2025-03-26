@@ -88,6 +88,16 @@ type RemoveRegistrationResponse = variant {
     Err: RemoveRegistrationError;
 };
 
+type ListRegistrationsError = variant {
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type ListRegistrationsResponse = variant {
+    Ok: vec record { text; Registration };
+    Err: ListRegistrationsError;
+};
+
 type GetCertificateError = variant {
     NotFound;
     Unauthorized;
@@ -155,6 +165,16 @@ type PeekTaskResponse = variant {
     Err: PeekTaskError;
 };
 
+type ListTasksError = variant {
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type ListTasksResponse = variant {
+    Ok: vec record { text; nat64; Registration };
+    Err: ListTasksError;
+};
+
 type DispenseTaskError = variant {
     NoTasksAvailable;
     Unauthorized;
@@ -164,6 +184,17 @@ type DispenseTaskError = variant {
 type DispenseTaskResponse = variant {
     Ok: Id;
     Err: DispenseTaskError;
+};
+
+type RemoveTaskError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type RemoveTaskResponse = variant {
+    Ok;
+    Err: RemoveTaskError;
 };
 
 type ModifyAllowedPrincipalError = variant {
@@ -207,6 +238,7 @@ service: (InitArg) -> {
     getRegistration: (Id) -> (GetRegistrationResponse) query;
     updateRegistration: (Id, UpdateType) -> (UpdateRegistrationResponse);
     removeRegistration: (Id) -> (RemoveRegistrationResponse);
+    listRegistrations: () -> (ListRegistrationsResponse) query;
 
     // Certificates
     getCertificate: (Id) -> (GetCertificateResponse) query;
@@ -218,7 +250,9 @@ service: (InitArg) -> {
     // Tasks
     queueTask: (Id, Timestamp) -> (QueueTaskResponse);
     dispenseTask: () -> (DispenseTaskResponse);
+    removeTask: (Id) -> (RemoveTaskResponse);
     peekTask: () -> (PeekTaskResponse) query;
+    listTasks: () -> (ListTasksResponse) query;
 
     // Metrics (Http Interface)
     http_request: (HttpRequest) -> (HttpResponse) query;

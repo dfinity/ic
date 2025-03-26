@@ -32,6 +32,11 @@ dfx deploy minter --argument '(variant {InitArg = record { ethereum_network = va
 dfx deploy --network ic minter --argument '(variant {InitArg = record { ethereum_network = variant {Sepolia} ; ecdsa_key_name = "key_1"; ethereum_contract_address = opt "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34" ; ledger_id = principal "'"$(dfx canister --network ic id ledger)"'"; ethereum_block_height = variant {Finalized} ; minimum_withdrawal_amount = 10_000_000_000_000_000; next_transaction_nonce = NEXT_NONCE; last_scraped_block_number = 4_775_280 }})' --mode reinstall --wallet mf7xa-laaaa-aaaar-qaaaa-cai
 ```
 
+### Upgrading for ckERC20
+```shell
+dfx deploy minter --network ic --argument "(variant {UpgradeArg = record {ledger_suite_orchestrator_id = opt principal \"$(dfx canister --network ic id orchestrator)\"; erc20_helper_contract_address = opt \"0x674Cdbe64Df412DA9bAb1596e00c1520979B5A23\"; last_erc20_scraped_block_number = opt 5680659;}})" --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
+
 Note: you can query the next nonce using:
 
 ```
@@ -55,4 +60,39 @@ curl -X POST 'https://ethereum-sepolia.publicnode.com' \
 
 ```
 dfx deploy --network ic index --argument '(opt variant {Init = record { ledger_id = principal "apia6-jaaaa-aaaar-qabma-cai" }})' --mode reinstall --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
+
+## Deploying the Orchestrator
+
+### Locally
+
+```shell
+dfx canister create orchestrator
+dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 2_000_000_000_000 ; cycles_for_archive_creation = 1_000_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
+```
+
+### Mainnet
+
+```shell
+dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 2_000_000_000_000 ; cycles_for_archive_creation = 1_000_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
+```
+
+# ckERC20
+
+## Add ckSepoliaUSDC
+
+```shell
+dfx deploy orchestrator --network ic --argument "(variant { AddErc20Arg = record { contract = record { chain_id = 11155111; address = \"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238\" }; ledger_init_arg = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 6; max_memo_length = opt 80; transfer_fee = 4_000; token_symbol = \"ckSepoliaUSDC\"; token_name = \"Chain key Sepolia USDC\"; token_logo = \"\"; initial_balances = vec {}; }; git_commit_hash = \"3924e543af04d30a0b601d749721af239a10dff6\";  ledger_compressed_wasm_hash = \"57e2a728f9ffcb1a7d9e101dbd1260f8b9f3246bf5aa2ad3e2c750e125446838\"; index_compressed_wasm_hash = \"6fb62c7e9358ca5c937a5d25f55700459ed09a293d0826c09c631b64ba756594\"; }})" --upgrade-unchanged --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
+
+## Add ckSepoliaLINK
+
+```shell
+dfx deploy orchestrator --network ic --argument "(variant { AddErc20Arg = record { contract = record { chain_id = 11155111; address = \"0x779877A7B0D9E8603169DdbD7836e478b4624789\" }; ledger_init_arg = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 18; max_memo_length = opt 80; transfer_fee = 200_000_000_000_000; token_symbol = \"ckSepoliaLINK\"; token_name = \"Chain key Sepolia LINK\"; token_logo = \"\"; initial_balances = vec {}; }; git_commit_hash = \"3924e543af04d30a0b601d749721af239a10dff6\";  ledger_compressed_wasm_hash = \"57e2a728f9ffcb1a7d9e101dbd1260f8b9f3246bf5aa2ad3e2c750e125446838\"; index_compressed_wasm_hash = \"6fb62c7e9358ca5c937a5d25f55700459ed09a293d0826c09c631b64ba756594\"; }})" --upgrade-unchanged --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
+
+## Add ckSepoliaPEPE
+
+```shell
+dfx deploy orchestrator --network ic --argument "(variant { AddErc20Arg = record { contract = record { chain_id = 11155111; address = \"0x560eF9F39E4B08f9693987cad307f6FBfd97B2F6\" }; ledger_init_arg = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 18; max_memo_length = opt 80; transfer_fee = 100_000_000_000_000_000_000; token_symbol = \"ckSepoliaPEPE\"; token_name = \"Chain key Sepolia PEPE\"; token_logo = \"\"; initial_balances = vec {}; }; git_commit_hash = \"3924e543af04d30a0b601d749721af239a10dff6\";  ledger_compressed_wasm_hash = \"57e2a728f9ffcb1a7d9e101dbd1260f8b9f3246bf5aa2ad3e2c750e125446838\"; index_compressed_wasm_hash = \"6fb62c7e9358ca5c937a5d25f55700459ed09a293d0826c09c631b64ba756594\"; }})" --upgrade-unchanged --wallet mf7xa-laaaa-aaaar-qaaaa-cai
 ```

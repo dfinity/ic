@@ -1,20 +1,24 @@
 #[cfg(test)]
 mod tests;
 
-use crate::address::Address;
-use crate::eth_rpc::{FeeHistory, Hash};
+use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Hash, Quantity};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
+use crate::guard::TimerGuard;
+use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
-use crate::state::{lazy_call_ecdsa_public_key, read_state};
+use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskType};
 use ethnum::u256;
-use ic_crypto_ecdsa_secp256k1::RecoveryId;
-use ic_ic00_types::DerivationPath;
+use ic_canister_log::log;
+use ic_ethereum_types::Address;
+use ic_management_canister_types_private::DerivationPath;
+use ic_secp256k1::RecoveryId;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 
 const EIP1559_TX_ID: u8 = 2;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
 #[cbor(transparent)]
 pub struct AccessList(#[n(0)] pub Vec<AccessListItem>);
 
@@ -36,11 +40,11 @@ impl rlp::Encodable for AccessList {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
 #[cbor(transparent)]
 pub struct StorageKey(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
 pub struct AccessListItem {
     /// Accessed address
     #[n(0)]
@@ -64,7 +68,7 @@ impl rlp::Encodable for AccessListItem {
 }
 
 /// <https://eips.ethereum.org/EIPS/eip-1559>
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct Eip1559TransactionRequest {
     #[n(0)]
     pub chain_id: u64,
@@ -86,6 +90,98 @@ pub struct Eip1559TransactionRequest {
     pub access_list: AccessList,
 }
 
+impl AsRef<Eip1559TransactionRequest> for Eip1559TransactionRequest {
+    fn as_ref(&self) -> &Eip1559TransactionRequest {
+        self
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Resubmittable<T> {
+    pub transaction: T,
+    pub resubmission: ResubmissionStrategy,
+}
+
+pub type TransactionRequest = Resubmittable<Eip1559TransactionRequest>;
+pub type SignedTransactionRequest = Resubmittable<SignedEip1559TransactionRequest>;
+
+impl<T> Resubmittable<T> {
+    pub fn clone_resubmission_strategy<V>(&self, other: V) -> Resubmittable<V> {
+        Resubmittable {
+            transaction: other,
+            resubmission: self.resubmission.clone(),
+        }
+    }
+}
+
+impl<T> AsRef<T> for Resubmittable<T> {
+    fn as_ref(&self) -> &T {
+        &self.transaction
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ResubmissionStrategy {
+    ReduceEthAmount { withdrawal_amount: Wei },
+    GuaranteeEthAmount { allowed_max_transaction_fee: Wei },
+}
+
+impl ResubmissionStrategy {
+    pub fn allowed_max_transaction_fee(&self) -> Wei {
+        match self {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => *withdrawal_amount,
+            ResubmissionStrategy::GuaranteeEthAmount {
+                allowed_max_transaction_fee,
+            } => *allowed_max_transaction_fee,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ResubmitTransactionError {
+    InsufficientTransactionFee {
+        allowed_max_transaction_fee: Wei,
+        actual_max_transaction_fee: Wei,
+    },
+}
+
+impl SignedTransactionRequest {
+    pub fn resubmit(
+        &self,
+        new_gas_fee: GasFeeEstimate,
+    ) -> Result<Option<Eip1559TransactionRequest>, ResubmitTransactionError> {
+        let transaction_request = self.transaction.transaction();
+        let last_tx_price = transaction_request.transaction_price();
+        let new_tx_price = last_tx_price
+            .clone()
+            .resubmit_transaction_price(new_gas_fee);
+        if new_tx_price == last_tx_price {
+            return Ok(None);
+        }
+
+        if new_tx_price.max_transaction_fee() > self.resubmission.allowed_max_transaction_fee() {
+            return Err(ResubmitTransactionError::InsufficientTransactionFee {
+                allowed_max_transaction_fee: self.resubmission.allowed_max_transaction_fee(),
+                actual_max_transaction_fee: new_tx_price.max_transaction_fee(),
+            });
+        }
+        let new_amount = match self.resubmission {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => {
+                withdrawal_amount.checked_sub(new_tx_price.max_transaction_fee())
+                    .expect("BUG: withdrawal_amount covers new transaction fee because it was checked before")
+            }
+            ResubmissionStrategy::GuaranteeEthAmount { .. } => transaction_request.amount,
+        };
+        Ok(Some(Eip1559TransactionRequest {
+            max_priority_fee_per_gas: new_tx_price.max_priority_fee_per_gas,
+            max_fee_per_gas: new_tx_price.max_fee_per_gas,
+            gas_limit: new_tx_price.gas_limit,
+            amount: new_amount,
+            ..transaction_request.clone()
+        }))
+    }
+}
+
 impl rlp::Encodable for Eip1559TransactionRequest {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_unbounded_list();
@@ -94,13 +190,13 @@ impl rlp::Encodable for Eip1559TransactionRequest {
     }
 }
 
-#[derive(Default, Clone, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Decode, Encode)]
 pub struct Eip1559Signature {
     #[n(0)]
     pub signature_y_parity: bool,
-    #[cbor(n(1), with = "crate::cbor::u256")]
+    #[cbor(n(1), with = "icrc_cbor::u256")]
     pub r: u256,
-    #[cbor(n(2), with = "crate::cbor::u256")]
+    #[cbor(n(2), with = "icrc_cbor::u256")]
     pub s: u256,
 }
 
@@ -115,7 +211,7 @@ impl rlp::Encodable for Eip1559Signature {
 /// Immutable signed EIP-1559 transaction.
 /// Use `Eip1559TransactionRequest::sign()` to create a newly signed transaction or
 /// `SignedEip1559TransactionRequest::from()` if the signature is already known
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignedEip1559TransactionRequest {
     inner: InnerSignedTransactionRequest,
     /// Hash of the signed transaction. Since computation of the hash is an expensive operation,
@@ -126,7 +222,13 @@ pub struct SignedEip1559TransactionRequest {
     memoized_hash: Hash,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+impl AsRef<Eip1559TransactionRequest> for SignedEip1559TransactionRequest {
+    fn as_ref(&self) -> &Eip1559TransactionRequest {
+        &self.inner.transaction
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 struct InnerSignedTransactionRequest {
     #[n(0)]
     transaction: Eip1559TransactionRequest,
@@ -178,12 +280,18 @@ impl<'b, C> minicbor::Decode<'b, C> for SignedEip1559TransactionRequest {
 
 /// Immutable finalized transaction.
 /// Use `SignedEip1559TransactionRequest::try_finalize()` to create a finalized transaction.
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct FinalizedEip1559Transaction {
     #[n(0)]
     transaction: SignedEip1559TransactionRequest,
     #[n(1)]
     receipt: TransactionReceipt,
+}
+
+impl AsRef<Eip1559TransactionRequest> for FinalizedEip1559Transaction {
+    fn as_ref(&self) -> &Eip1559TransactionRequest {
+        self.transaction.as_ref()
+    }
 }
 
 impl FinalizedEip1559Transaction {
@@ -201,6 +309,10 @@ impl FinalizedEip1559Transaction {
 
     pub fn transaction_hash(&self) -> &Hash {
         &self.receipt.transaction_hash
+    }
+
+    pub fn transaction_data(&self) -> &[u8] {
+        &self.transaction.transaction().data
     }
 
     pub fn transaction(&self) -> &Eip1559TransactionRequest {
@@ -238,7 +350,7 @@ impl SignedEip1559TransactionRequest {
             transaction,
             signature,
         };
-        let hash = Hash(ic_crypto_sha3::Keccak256::hash(inner.raw_bytes()));
+        let hash = Hash(ic_sha3::Keccak256::hash(inner.raw_bytes()));
         Self {
             inner,
             memoized_hash: hash,
@@ -324,7 +436,7 @@ impl Eip1559TransactionRequest {
         use rlp::Encodable;
         let mut bytes = self.rlp_bytes().to_vec();
         bytes.insert(0, self.transaction_type());
-        Hash(ic_crypto_sha3::Keccak256::hash(bytes))
+        Hash(ic_sha3::Keccak256::hash(bytes))
     }
 
     pub fn transaction_price(&self) -> TransactionPrice {
@@ -384,7 +496,42 @@ async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
         })
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct GasFeeEstimate {
+    pub base_fee_per_gas: WeiPerGas,
+    pub max_priority_fee_per_gas: WeiPerGas,
+}
+
+impl GasFeeEstimate {
+    pub fn checked_estimate_max_fee_per_gas(&self) -> Option<WeiPerGas> {
+        self.base_fee_per_gas
+            .checked_mul(2_u8)
+            .and_then(|base_fee_estimate| {
+                base_fee_estimate.checked_add(self.max_priority_fee_per_gas)
+            })
+    }
+
+    pub fn estimate_max_fee_per_gas(&self) -> WeiPerGas {
+        self.checked_estimate_max_fee_per_gas()
+            .unwrap_or(WeiPerGas::MAX)
+    }
+
+    pub fn to_price(self, gas_limit: GasAmount) -> TransactionPrice {
+        TransactionPrice {
+            gas_limit,
+            max_fee_per_gas: self.estimate_max_fee_per_gas(),
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+        }
+    }
+
+    pub fn min_max_fee_per_gas(&self) -> WeiPerGas {
+        self.base_fee_per_gas
+            .checked_add(self.max_priority_fee_per_gas)
+            .unwrap_or(WeiPerGas::MAX)
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TransactionPrice {
     pub gas_limit: GasAmount,
     pub max_fee_per_gas: WeiPerGas,
@@ -395,11 +542,16 @@ impl TransactionPrice {
     pub fn max_transaction_fee(&self) -> Wei {
         self.max_fee_per_gas
             .transaction_cost(self.gas_limit)
-            .expect("ERROR: max_transaction_fee overflow")
+            .unwrap_or(Wei::MAX)
     }
 
-    /// Increase current transaction price by at least 10%
-    pub fn increase_by_10_percent(self) -> Self {
+    /// Estimate the transaction price to resubmit a transaction with the new gas fee.
+    ///
+    /// If the current transaction price is still actual, then the return price will be the same.
+    /// Otherwise, the new `max_priority_fee_per_gas` will be at least 10% higher than the current one to ensure that
+    /// the transaction can be resubmitted (See [Retrying an EIP 1559 transaction](https://docs.alchemy.com/docs/retrying-an-eip-1559-transaction)).
+    /// The current `max_fee_per_gas` will be kept as long as it is enough to cover the new `max_priority_fee_per_gas + base_fee_per_gas_next_block`.
+    pub fn resubmit_transaction_price(self, new_gas_fee: GasFeeEstimate) -> Self {
         let plus_10_percent = |amount: WeiPerGas| {
             amount
                 .checked_add(
@@ -409,44 +561,131 @@ impl TransactionPrice {
                 )
                 .unwrap_or(WeiPerGas::MAX)
         };
-        Self {
-            gas_limit: self.gas_limit,
-            max_fee_per_gas: plus_10_percent(self.max_fee_per_gas),
-            max_priority_fee_per_gas: plus_10_percent(self.max_priority_fee_per_gas),
-        }
-    }
 
-    /// Returns true if the new transaction fee is higher than the current one
-    pub fn is_fee_increased(&self, new: &Self) -> bool {
-        self.max_fee_per_gas < new.max_fee_per_gas
-            || self.max_priority_fee_per_gas < new.max_priority_fee_per_gas
-    }
-
-    pub fn max(self, other: Self) -> Self {
-        Self {
-            gas_limit: self.gas_limit.max(other.gas_limit),
-            max_fee_per_gas: self.max_fee_per_gas.max(other.max_fee_per_gas),
-            max_priority_fee_per_gas: self
-                .max_priority_fee_per_gas
-                .max(other.max_priority_fee_per_gas),
+        if self.max_fee_per_gas >= new_gas_fee.min_max_fee_per_gas()
+            && self.max_priority_fee_per_gas >= new_gas_fee.max_priority_fee_per_gas
+        {
+            self
+        } else {
+            // At this point the transaction price needs to be updated
+            // which involves a minimum increase of 10% in the max_priority_fee_per_gas.
+            // We also need to ensure that the new max_fee_per_gas covers the new max_priority_fee_per_gas,
+            // but it would be counter-productive to increase it further than the minimum required.
+            // The reason is that any increase in the max_fee_per_gas may render the corresponding transaction
+            // not resubmittable due to the user not having enough funds to cover the new transaction price,
+            // which could potentially block the minter further. In other words, having a stuck transaction with a higher
+            // max_priority_fee_per_gas, is better than having a stuck transaction with a lower max_priority_fee_per_gas,
+            // since the first one will go through sooner than the second one when the transaction prices decrease.
+            // In case of steep increasing transaction fees, several resubmissions each involving costly operations
+            // (various HTTPs outcalls, tECDSA signatures, etc.) might be required, which potentially could be avoided,
+            // if one were to increase the max_fee_per_gas more than the minimum required. However,
+            // this seems less important than getting the minter unstuck as soon as possible.
+            let updated_max_priority_fee_per_gas = plus_10_percent(self.max_priority_fee_per_gas)
+                .max(new_gas_fee.max_priority_fee_per_gas);
+            let new_gas_fee = GasFeeEstimate {
+                max_priority_fee_per_gas: updated_max_priority_fee_per_gas,
+                ..new_gas_fee
+            };
+            let new_max_fee_per_gas = new_gas_fee.min_max_fee_per_gas().max(self.max_fee_per_gas);
+            TransactionPrice {
+                gas_limit: self.gas_limit,
+                max_fee_per_gas: new_max_fee_per_gas,
+                max_priority_fee_per_gas: updated_max_priority_fee_per_gas,
+            }
         }
     }
 }
-#[derive(Debug, PartialEq, Eq)]
-pub enum TransactionPriceEstimationError {
+
+pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
+    const MAX_AGE_NS: u64 = 60_000_000_000_u64; //60 seconds
+
+    async fn do_refresh() -> Option<GasFeeEstimate> {
+        let _guard = match TimerGuard::new(TaskType::RefreshGasFeeEstimate) {
+            Ok(guard) => guard,
+            Err(e) => {
+                log!(
+                    DEBUG,
+                    "[refresh_gas_fee_estimate]: Failed retrieving guard: {e:?}",
+                );
+                return None;
+            }
+        };
+
+        let fee_history = match eth_fee_history().await {
+            Ok(fee_history) => fee_history,
+            Err(e) => {
+                log!(
+                    INFO,
+                    "[refresh_gas_fee_estimate]: Failed retrieving fee history: {e:?}",
+                );
+                return None;
+            }
+        };
+
+        let gas_fee_estimate = match estimate_transaction_fee(&fee_history) {
+            Ok(estimate) => {
+                mutate_state(|s| {
+                    s.last_transaction_price_estimate =
+                        Some((ic_cdk::api::time(), estimate.clone()));
+                });
+                estimate
+            }
+            Err(e) => {
+                log!(
+                    INFO,
+                    "[refresh_gas_fee_estimate]: Failed estimating gas fee: {e:?}",
+                );
+                return None;
+            }
+        };
+        log!(
+            INFO,
+            "[refresh_gas_fee_estimate]: Estimated transaction fee: {:?}",
+            gas_fee_estimate,
+        );
+        Some(gas_fee_estimate)
+    }
+
+    async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
+        read_state(EthRpcClient::from_state)
+            .eth_fee_history(FeeHistoryParams {
+                block_count: Quantity::from(5_u8),
+                highest_block: BlockSpec::Tag(BlockTag::Latest),
+                reward_percentiles: vec![20],
+            })
+            .await
+    }
+
+    let now_ns = ic_cdk::api::time();
+    match read_state(|s| s.last_transaction_price_estimate.clone()) {
+        Some((last_estimate_timestamp_ns, estimate))
+            if now_ns < last_estimate_timestamp_ns.saturating_add(MAX_AGE_NS) =>
+        {
+            Some(estimate)
+        }
+        _ => do_refresh().await,
+    }
+}
+#[derive(Eq, PartialEq, Debug)]
+pub enum TransactionFeeEstimationError {
     InvalidFeeHistory(String),
     Overflow(String),
 }
-pub fn estimate_transaction_price(
+
+/// Estimate the transaction fee based on the fee history.
+///
+/// From the fee history, the current base fee per gas and the max priority fee per gas are determined.
+/// Then, the max fee per gas is computed as `2 * base_fee_per_gas + max_priority_fee_per_gas` to ensure that
+/// the estimate remains valid for the next few blocks, see `<https://www.blocknative.com/blog/eip-1559-fees>`.
+pub fn estimate_transaction_fee(
     fee_history: &FeeHistory,
-) -> Result<TransactionPrice, TransactionPriceEstimationError> {
+) -> Result<GasFeeEstimate, TransactionFeeEstimationError> {
     // average value between the `minSuggestedMaxPriorityFeePerGas`
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
     const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
-    const TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
-    let base_fee_of_next_finalized_block = *fee_history.base_fee_per_gas.last().ok_or(
-        TransactionPriceEstimationError::InvalidFeeHistory(
+    let base_fee_per_gas_next_block = *fee_history.base_fee_per_gas.last().ok_or(
+        TransactionFeeEstimationError::InvalidFeeHistory(
             "base_fee_per_gas should not be empty to be able to evaluate transaction price"
                 .to_string(),
         ),
@@ -454,22 +693,24 @@ pub fn estimate_transaction_price(
     let max_priority_fee_per_gas = {
         let mut rewards: Vec<&WeiPerGas> = fee_history.reward.iter().flatten().collect();
         let historic_max_priority_fee_per_gas =
-            **median(&mut rewards).ok_or(TransactionPriceEstimationError::InvalidFeeHistory(
+            **median(&mut rewards).ok_or(TransactionFeeEstimationError::InvalidFeeHistory(
                 "should be non-empty with rewards of the last 5 blocks".to_string(),
             ))?;
         historic_max_priority_fee_per_gas.max(MIN_MAX_PRIORITY_FEE_PER_GAS)
     };
-    let max_fee_per_gas = base_fee_of_next_finalized_block
-        .checked_mul(2_u8)
-        .and_then(|base_fee_estimate| base_fee_estimate.checked_add(max_priority_fee_per_gas))
-        .ok_or(TransactionPriceEstimationError::Overflow(
-            "ERROR: overflow during transaction price estimation".to_string(),
-        ))?;
-    Ok(TransactionPrice {
-        gas_limit: TRANSACTION_GAS_LIMIT,
-        max_fee_per_gas,
+    let gas_fee_estimate = GasFeeEstimate {
+        base_fee_per_gas: base_fee_per_gas_next_block,
         max_priority_fee_per_gas,
-    })
+    };
+    if gas_fee_estimate
+        .checked_estimate_max_fee_per_gas()
+        .is_none()
+    {
+        return Err(TransactionFeeEstimationError::Overflow(
+            "max_fee_per_gas overflowed".to_string(),
+        ));
+    }
+    Ok(gas_fee_estimate)
 }
 
 fn median<T: Ord>(values: &mut [T]) -> Option<&T> {

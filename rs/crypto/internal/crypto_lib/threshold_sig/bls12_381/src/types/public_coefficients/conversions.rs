@@ -84,7 +84,7 @@ impl From<&PublicCoefficients> for PublicKey {
         // so in this case we return a zero-public key.
         public_coefficients
             .coefficients
-            .get(0)
+            .first()
             .cloned()
             .unwrap_or_else(|| PublicKey(G2Projective::identity()))
     }
@@ -97,7 +97,7 @@ impl TryFrom<&PublicCoefficientsBytes> for PublicKey {
         // so in this case we return a zero-public key.
         Ok(public_coefficients
             .coefficients
-            .get(0)
+            .first()
             .map(PublicKey::try_from)
             .unwrap_or_else(|| Ok(PublicKey(G2Projective::identity())))?)
     }
@@ -112,7 +112,7 @@ pub fn pub_key_bytes_from_pub_coeff_bytes(
 ) -> PublicKeyBytes {
     public_coefficients
         .coefficients
-        .get(0)
+        .first()
         .cloned()
         .unwrap_or_else(|| PublicKeyBytes::from(PublicKey(G2Projective::identity())))
 }

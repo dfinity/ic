@@ -1,11 +1,15 @@
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command};
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_canister_sandbox_launcher::sandbox_launcher_main;
-use ic_config::{embedders::MeteringType, flag_status::FlagStatus, Config, ConfigSource};
+use ic_config::{
+    embedders::BestEffortResponsesFeature, flag_status::FlagStatus, Config, ConfigSource,
+};
 use ic_drun::{run_drun, DrunOptions};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::NumBytes;
 use std::path::PathBuf;
 
 const DEFAULT_CONFIG_FILE: &str = "ic.json5";
@@ -16,7 +20,9 @@ const ARG_MESSAGES: &str = "messages";
 const ARG_EXTRA_BATCHES: &str = "extra-batches";
 const ARG_INSTRUCTION_LIMIT: &str = "instruction-limit";
 const ARG_SUBNET_TYPE: &str = "subnet-type";
-const USE_OLD_METERING: &str = "use-old-metering";
+
+const GB: u64 = 1024 * 1024 * 1024;
+const MAIN_MEMORY_CAPACITY: NumBytes = NumBytes::new(16 * GB);
 
 fn main() -> Result<(), String> {
     // Check if `drun` is running in the canister sandbox mode where it waits
@@ -29,6 +35,9 @@ fn main() -> Result<(), String> {
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
         Ok(())
+    } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
+        compiler_sandbox_main();
+        Ok(())
     } else {
         drun_main()
     }
@@ -37,30 +46,43 @@ fn main() -> Result<(), String> {
 #[tokio::main]
 async fn drun_main() -> Result<(), String> {
     let matches = get_arg_matches();
-    Config::run_with_temp_config(|mut default_config| {
+    Config::run_with_temp_config(|mut default_config| async {
         let source = matches
-            .value_of(ARG_CONF)
+            .get_one::<String>(ARG_CONF)
             .map(|arg| ConfigSource::File(PathBuf::from(arg)))
             .unwrap_or(ConfigSource::Default);
+        let hypervisor_config = &mut default_config.hypervisor;
+
         // Enable composite queries in drun by default to allow local
         // development and testing.
-        default_config.hypervisor.composite_queries = FlagStatus::Enabled;
-        default_config
-            .hypervisor
+        hypervisor_config.composite_queries = FlagStatus::Enabled;
+        hypervisor_config
             .embedders_config
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
-        default_config.hypervisor.rate_limiting_of_heap_delta = FlagStatus::Disabled;
-        default_config.hypervisor.rate_limiting_of_instructions = FlagStatus::Disabled;
-        let mut cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
+        hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+        hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+        // For testing enhanced orthogonal persistence in Motoko,
+        // enable Wasm Memory64 and re-configure the main memory capacity.
+        hypervisor_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
+        hypervisor_config
+            .embedders_config
+            .feature_flags
+            .best_effort_responses = BestEffortResponsesFeature::Enabled;
+        hypervisor_config.embedders_config.max_wasm64_memory_size = MAIN_MEMORY_CAPACITY;
+        hypervisor_config.max_canister_memory_size_wasm64 =
+            hypervisor_config.embedders_config.max_wasm64_memory_size
+                + hypervisor_config.embedders_config.max_stable_memory_size;
+
+        let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             eprintln!("Failed to load config:\n  {}", err);
             std::process::exit(1);
         });
 
-        let log_file = matches.value_of(ARG_LOG_FILE).map(PathBuf::from);
+        let log_file = matches.get_one::<String>(ARG_LOG_FILE).map(PathBuf::from);
 
         let extra_batches = matches
-            .value_of(ARG_EXTRA_BATCHES)
+            .get_one::<String>(ARG_EXTRA_BATCHES)
             .map(|arg| {
                 arg.parse().unwrap_or_else(|err| {
                     eprintln!("Failed to parse {}\n  {}", ARG_EXTRA_BATCHES, err);
@@ -69,7 +91,7 @@ async fn drun_main() -> Result<(), String> {
             })
             .unwrap_or(DEFAULT_EXTRA_BATCHES);
 
-        let instruction_limit = matches.value_of(ARG_INSTRUCTION_LIMIT).map(|arg| {
+        let instruction_limit = matches.get_one::<String>(ARG_INSTRUCTION_LIMIT).map(|arg| {
             arg.parse().unwrap_or_else(|err| {
                 eprintln!("Failed to parse {}\n  {}", ARG_INSTRUCTION_LIMIT, err);
                 std::process::exit(1);
@@ -77,7 +99,7 @@ async fn drun_main() -> Result<(), String> {
         });
 
         let subnet_type = matches
-            .value_of(ARG_SUBNET_TYPE)
+            .get_one::<String>(ARG_SUBNET_TYPE)
             .map(|arg| {
                 arg.parse().unwrap_or_else(|err| {
                     eprintln!("Failed to parse {}\n  {}", ARG_SUBNET_TYPE, err);
@@ -86,23 +108,17 @@ async fn drun_main() -> Result<(), String> {
             })
             .unwrap_or(SubnetType::System);
 
-        let use_old_metering = matches.get_flag(USE_OLD_METERING);
-        cfg.hypervisor.embedders_config.metering_type = if use_old_metering {
-            MeteringType::Old
-        } else {
-            MeteringType::New
-        };
-
         let uo = DrunOptions {
-            msg_filename: matches.value_of(ARG_MESSAGES).unwrap().to_string(),
+            msg_filename: matches.get_one::<String>(ARG_MESSAGES).unwrap().clone(),
             cfg,
             extra_batches,
             log_file,
             instruction_limit,
             subnet_type,
         };
-        run_drun(uo)
+        run_drun(uo).await
     })
+    .await
 }
 
 fn get_arg_matches() -> ArgMatches {
@@ -112,28 +128,22 @@ fn get_arg_matches() -> ArgMatches {
             Arg::new(ARG_EXTRA_BATCHES)
                 .long("extra-batches")
                 .value_name("INT")
-                .help(
-                    format!(
+                .help(format!(
                     "Extra batches to execute after each response has been received (default: {}).",
                     DEFAULT_EXTRA_BATCHES
-                )
-                    .as_str(),
-                )
-                .takes_value(true),
+                ))
+                .num_args(1),
         )
         .arg(
             Arg::new(ARG_CONF)
                 .short('c')
                 .long("config")
                 .value_name("config")
-                .help(
-                    format!(
-                        "Main configuration of the node (default: {}).",
-                        DEFAULT_CONFIG_FILE
-                    )
-                    .as_str(),
-                )
-                .takes_value(true),
+                .help(format!(
+                    "Main configuration of the node (default: {}).",
+                    DEFAULT_CONFIG_FILE
+                ))
+                .num_args(1),
         )
         .arg(
             Arg::new(ARG_MESSAGES)
@@ -146,27 +156,21 @@ fn get_arg_matches() -> ArgMatches {
                 .long(ARG_LOG_FILE)
                 .value_name("log_file")
                 .help("Log file for the run (default: None).")
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
             Arg::new(ARG_INSTRUCTION_LIMIT)
                 .long(ARG_INSTRUCTION_LIMIT)
                 .value_name("Instruction Limit")
                 .help("Limit on the number of instructions a message is allowed to execute.")
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
             Arg::new(ARG_SUBNET_TYPE)
                 .long(ARG_SUBNET_TYPE)
                 .help("Use specified subnet type.")
                 .value_name("Subnet Type")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::new(USE_OLD_METERING)
-                .long(USE_OLD_METERING)
-                .help("Enable the old metering in the local canister execution environment.")
-                .action(ArgAction::SetTrue),
+                .num_args(1),
         )
         .get_matches()
 }

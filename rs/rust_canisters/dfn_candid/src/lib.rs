@@ -1,14 +1,37 @@
 use candid::de::IDLDeserialize;
-use candid::CandidType;
 pub use candid::{
-    decode_args, encode_args, encode_one,
+    decode_args_with_config, encode_args, encode_one,
     utils::{ArgumentDecoder, ArgumentEncoder},
 };
+use candid::{CandidType, DecoderConfig};
 use on_wire::witness;
 use on_wire::{FromWire, IntoWire, NewType};
 use serde::de::DeserializeOwned;
 
 pub struct Candid<T>(pub T);
+
+pub trait HasCandidDecoderConfig {
+    fn decoding_quota() -> usize;
+}
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+fn default_decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
+
+fn decoder_config<T: HasCandidDecoderConfig>() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_decoding_quota(T::decoding_quota());
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 impl<T> NewType for Candid<T> {
     type Inner = T;
@@ -28,7 +51,8 @@ impl<Tuple: ArgumentEncoder> IntoWire for Candid<Tuple> {
 
 impl<Tuple: for<'a> ArgumentDecoder<'a>> FromWire for Candid<Tuple> {
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
-        let res = decode_args(&bytes).map_err(|e| e.to_string())?;
+        let res = decode_args_with_config(&bytes, &default_decoder_config())
+            .map_err(|e| e.to_string())?;
         Ok(Candid(res))
     }
 }
@@ -53,16 +77,46 @@ impl<T: CandidType> IntoWire for CandidOne<T> {
 
 impl<A1: DeserializeOwned + CandidType> FromWire for CandidOne<A1> {
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
-        let mut de = IDLDeserialize::new(&bytes[..]).map_err(|e| e.to_string())?;
+        let mut de = IDLDeserialize::new_with_config(&bytes[..], &default_decoder_config())
+            .map_err(|e| e.to_string())?;
         let res = de.get_value().map_err(|e| e.to_string())?;
         Ok(CandidOne(res))
+    }
+}
+
+pub struct CandidOneWithDecodingConfig<T>(pub T);
+
+impl<T> NewType for CandidOneWithDecodingConfig<T> {
+    type Inner = T;
+    fn from_inner(t: Self::Inner) -> Self {
+        CandidOneWithDecodingConfig(t)
+    }
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
+impl<T: CandidType> IntoWire for CandidOneWithDecodingConfig<T> {
+    fn into_bytes(self) -> Result<Vec<u8>, String> {
+        encode_one(self.0).map_err(|e| e.to_string())
+    }
+}
+
+impl<A1: DeserializeOwned + CandidType + HasCandidDecoderConfig> FromWire
+    for CandidOneWithDecodingConfig<A1>
+{
+    fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
+        let mut de = IDLDeserialize::new_with_config(&bytes[..], &decoder_config::<A1>())
+            .map_err(|e| e.to_string())?;
+        let res = de.get_value().map_err(|e| e.to_string())?;
+        Ok(CandidOneWithDecodingConfig(res))
     }
 }
 
 /// this is a private mirror of the type in dfn_core::api which generates the
 /// serialization/deserialization for it without putting a dependency on candid
 /// in dfn_core
-
+///
 /// This is a bit of a weird type witness. Candid is multi arity in both inputs
 /// and outputs the outputs don't fit in well with rust. To make writing candid
 /// nicer we assume that every function is going to try and return one value, if
@@ -78,5 +132,10 @@ pub fn candid_multi_arity<A, B>(a: Candid<A>, b: B) -> (A, Candid<B>) {
 
 /// This is a candid function that takes one argument and returns another
 pub fn candid_one<A, B>(a: CandidOne<A>, b: B) -> (A, CandidOne<B>) {
+    witness(a, b)
+}
+
+/// This is a candid function that takes one argument and returns another
+pub fn candid_one_with_config<A, B>(a: CandidOne<A>, b: B) -> (A, CandidOneWithDecodingConfig<B>) {
     witness(a, b)
 }

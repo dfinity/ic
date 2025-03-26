@@ -19,6 +19,7 @@ use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::MockNetwork;
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgUpdateFsEpochError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError,
 };
@@ -28,6 +29,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_test_utils::set_of;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_types::crypto::error::KeyNotFoundError;
 use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::NODE_42;
 
@@ -250,6 +252,56 @@ fn should_return_transient_internal_error_from_load_threshold_signing_key_if_nid
         result,
         Err(CspDkgLoadPrivateKeyError::TransientInternalError(InternalError{internal_error}))
         if internal_error.contains(INTERNAL_ERROR)
+    );
+}
+
+#[test]
+fn should_return_error_if_update_forward_secure_key_with_wrong_algorithm_id() {
+    let mut sks = MockSecretKeyStore::new();
+    let key_id = KeyId::from([0u8; 32]);
+    sks.expect_get().never();
+    sks.expect_insert_or_replace().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+    let epoch_to_update_to = Epoch::from(2);
+
+    let wrong_algorithm = AlgorithmId::from(0);
+
+    let result = csp.update_forward_secure_epoch(wrong_algorithm, key_id, epoch_to_update_to);
+    assert_matches!(
+        result,
+        Err(CspDkgUpdateFsEpochError::UnsupportedAlgorithmId(
+            AlgorithmId::Placeholder
+        ))
+    );
+}
+
+#[test]
+fn should_not_update_forward_secure_key_if_key_is_missing() {
+    const INTERNAL_ERROR: &str = "Cannot update forward secure key if it is missing";
+    let mut sks = MockSecretKeyStore::new();
+    let sks_key_id = KeyId::from([0u8; 32]);
+    sks.expect_get()
+        .withf(move |key_id_| key_id_ == &sks_key_id)
+        .times(1)
+        .return_const(None);
+    sks.expect_insert_or_replace().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+    let epoch_to_update_to = Epoch::from(2);
+
+    let result = csp.update_forward_secure_epoch(
+        AlgorithmId::NiDkg_Groth20_Bls12_381,
+        sks_key_id,
+        epoch_to_update_to,
+    );
+
+    assert_matches!(
+        result,
+        Err(CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(KeyNotFoundError{internal_error, key_id}))
+        if internal_error.contains(INTERNAL_ERROR) && key_id.contains(&sks_key_id.to_string())
     );
 }
 

@@ -1,0 +1,7 @@
+[package]
+name = "ic-sns-governance-proposal-criticality"
+edition = "2021"
+version = "0.0.1"
+
+[dependencies]
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }

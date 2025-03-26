@@ -118,6 +118,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// restart.
     async fn confirm_boot(&self) {
         if let Err(err) = Command::new(self.binary_dir().join("manageboot.sh").into_os_string())
+            .arg("guestos")
             .arg("confirm")
             .output()
             .await
@@ -158,11 +159,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
                 "Request to download image {:?} from {}",
                 version, release_package_url
             );
-            let file_downloader = FileDownloader::new_with_timeout(
-                Some(self.log().clone()),
-                Duration::from_secs(60),
-                /* allow_redirects = */ true,
-            );
+            let file_downloader =
+                FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
             let download_result = file_downloader
                 .download_file(release_package_url, self.image_path(), hash.clone())
@@ -170,7 +168,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             let duration = start_time.elapsed();
 
             if let Err(e) = download_result {
-                warn!(self.log(), "{} failed in {:?}: {:?}", req, duration, e);
+                warn!(self.log(), "{} failed in {:?}: {}", req, duration, e);
                 error = UpgradeError::from(e);
             } else {
                 info!(self.log(), "{} processed in {:?}", req, duration);
@@ -203,6 +201,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         script.push("manageboot.sh");
         let mut c = Command::new(script.clone().into_os_string());
         let out = c
+            .arg("guestos")
             .arg("upgrade-install")
             .arg(self.image_path())
             .output()
@@ -249,6 +248,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         let script = self.binary_dir().join("manageboot.sh");
         let mut cmd = Command::new(script.into_os_string());
         let out = cmd
+            .arg("guestos")
             .arg("upgrade-commit")
             .output()
             .await

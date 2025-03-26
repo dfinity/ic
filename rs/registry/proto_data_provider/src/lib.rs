@@ -4,8 +4,8 @@ use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegis
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
+use ic_sys::fs::write_atomically;
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
-use ic_utils::fs::write_atomically;
 use std::collections::HashMap;
 use std::{
     io::Write,
@@ -21,7 +21,7 @@ pub struct ProtoRegistryDataProvider {
     records: Arc<RwLock<Vec<ProtoRegistryRecord>>>,
 }
 
-#[derive(Error, Clone, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum ProtoRegistryDataProviderError {
     #[error("key {key} already exists at version {version}")]
     KeyAlreadyExists {

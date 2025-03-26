@@ -60,10 +60,13 @@ canister_bazel_label() {
         "xrc-mock-canister")
             echo "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister"
             ;;
+        "genesis-token")
+            echo "//rs/nns/gtc:genesis-token-canister"
+            ;;
         "cycles-minting")
             echo "//rs/nns/cmc:cycles-minting-canister"
             ;;
-        # TODO cycles-minting, genesis-token, identity, ledger, lifeline, nns-ui, registry
+        # TODO identity, ledger, lifeline, nns-ui, registry
         *)
             echo "Sorry. I do not know how to build ${CANISTER_NAME}."
             exit 1
@@ -107,6 +110,11 @@ propose_upgrade_canister_wasm_file_pem() {
     echo "Testnet $CANISTER_ID upgrade" >$PROPOSAL
 
     local WASM_SHA=$(sha_256 "$WASM_FILE")
+    local ENCODED_ARGS_SHA=""
+
+    if [ -f "$ENCODED_ARGS_FILE" ]; then
+        local ENCODED_ARGS_SHA=$(sha_256 "$ENCODED_ARGS_FILE")
+    fi
 
     $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
         propose-to-change-nns-canister --mode=upgrade \
@@ -116,7 +124,8 @@ propose_upgrade_canister_wasm_file_pem() {
         --summary-file $PROPOSAL \
         --proposer "$NEURON_ID" \
         $([ "${SKIP_STOPPING:-no}" == "yes" ] && echo "--skip-stopping-before-installing") \
-        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE")
+        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE") \
+        $([ -z "$ENCODED_ARGS_SHA" ] || echo "--arg-sha256 $ENCODED_ARGS_SHA")
 
     rm -rf $PROPOSAL
 }
@@ -126,22 +135,23 @@ get_nns_canister_code_location() {
 
     IC_REPO=$(repo_root)
     RUST_DIR="$IC_REPO/rs"
-    LEDGER_COMMON="$RUST_DIR/rosetta-api/icp_ledger/src "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_core "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_canister_core "
+    LEDGER_COMMON="$RUST_DIR/ledger_suite/icp/src "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_core "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_canister_core "
     LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
+    SNS_INIT="$RUST_DIR/sns/init"
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"
-    code_location__governance="$RUST_DIR/nns/governance"
+    code_location__governance="$RUST_DIR/nns/governance $SNS_INIT"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
-    code_location__icp_ledger_archive="$RUST_DIR/rosetta-api/icp_ledger/archive $LEDGER_COMMON"
-    code_location__root="$RUST_DIR/nns/handlers/root/impl"
+    code_location__icp_ledger_archive="$RUST_DIR/ledger_suite/icp/archive $LEDGER_COMMON"
+    code_location__root="$RUST_DIR/nns/handlers/root"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
     code_location__genesis_token="$RUST_DIR/nns/gtc"
     code_location__identity="$RUST_DIR/nns/identity"
     code_location__nns_ui="$RUST_DIR/nns/nns-ui"
-    code_location__sns_wasm="$RUST_DIR/nns/sns-wasm"
+    code_location__sns_wasm="$RUST_DIR/nns/sns-wasm $SNS_INIT"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}
@@ -156,10 +166,10 @@ get_sns_canister_code_location() {
     # Map of locations
     code_location__root="$RUST_DIR/sns/root"
     code_location__governance="$RUST_DIR/sns/governance"
-    code_location__ledger="$RUST_DIR/rosetta-api/icrc1 $RUST_DIR/rosetta-api/ledger_core $RUST_DIR/rosetta-api/ledger_canister_core"
+    code_location__ledger="$RUST_DIR/ledger_suite/icrc1 $RUST_DIR/ledger_suite/common/ledger_core $RUST_DIR/ledger_suite/common/ledger_canister_core"
     code_location__swap="$RUST_DIR/sns/swap"
-    code_location__archive="$RUST_DIR/rosetta-api/icrc1"
-    code_location__index="$RUST_DIR/rosetta-api/icrc1"
+    code_location__archive="$RUST_DIR/ledger_suite/icrc1"
+    code_location__index="$RUST_DIR/ledger_suite/icrc1"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}
@@ -179,7 +189,7 @@ set_sns_wasms_allowed_subnets() {
     #  Remove all from current list
     #  and add new one
 
-    CURRENT_SUBNETS=$(__dfx canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
+    CURRENT_SUBNETS=$(__dfx canister --network "$NNS_URL" call ${SNS_W} get_sns_subnet_ids '(record {})' \
         | grep principal \
         | sed 's/.*"\(.*\)";/\1/')
 
@@ -255,18 +265,18 @@ nns_neuron_info() {
         $(nns_canister_id governance) get_neuron_info "( $NEURON_ID : nat64 )"
 }
 
-##: top_up_wallet
+##: top_up_canister
 ## Tops up the wallet from the current dfx user's ICP balance
-top_up_wallet() {
-    local SUBNET_URL=$1
-    local WALLET_CANISTER=$2
+top_up_canister() {
+    local NNS_URL=$1
+    local CANISTER=$2
     local AMOUNT=$3
 
-    __dfx -q ledger top-up --network "$SUBNET_URL" \
-        --amount "$AMOUNT" "$WALLET_CANISTER"
+    __dfx -q ledger top-up --network "$NNS_URL" \
+        --amount "$AMOUNT" "$CANISTER"
 }
 
-# Note, this will be deprecated soon when get_state is deprecated from sale canister.
+# Note, this will be deprecated soon when get_state is deprecated from swap canister.
 call_swap() {
     local NNS_URL=$1
     local SWAP_CANISTER_ID=$2
@@ -280,7 +290,7 @@ call_swap() {
         $SWAP_CANISTER_ID $METHOD '(record {})'
 }
 
-sns_quill_participate_in_sale() {
+sns_quill_participate_in_swap() {
     ensure_variable_set SNS_QUILL
 
     # Please forgive me we need separate urls for these subnets until we get the boundary node in the script :(
@@ -337,7 +347,7 @@ sns_get_sns_canisters_summary() {
         "$SNS_ROOT_CANISTER_ID" get_sns_canisters_summary '(record {})'
 }
 
-sns_finalize_sale() {
+sns_finalize_swap() {
     local SNS_URL=$1
     local SWAP_CANISTER_ID=$2
 
@@ -365,7 +375,7 @@ sns_w_list_upgrade_steps() {
 
     __dfx -q canister --network "$NNS_URL" \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
+        ${SNS_W} list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
 }
 
 ##: list_deployed_snses
@@ -379,7 +389,7 @@ list_deployed_snses() {
 
     __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai list_deployed_snses '(record {})'
+        ${SNS_W} list_deployed_snses '(record {})'
 }
 
 sns_w_latest_version() {
@@ -390,21 +400,21 @@ sns_w_latest_version() {
 
     __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai get_latest_sns_version_pretty '(null)'
+        ${SNS_W} get_latest_sns_version_pretty '(null)'
 }
 
 ##: sns_list_my_neurons
-## Usage: $1 <SUBNET_URL> <SNS_GOVERNANCE_CANISTER_ID>
+## Usage: $1 <NNS_URL> <SNS_GOVERNANCE_CANISTER_ID>
 ## List the neurons owned by the current dfx identity
 sns_list_my_neurons() {
 
-    local SNS_URL=$1 # usually SUBNET_URL
+    local NNS_URL=$1 # usually NNS_URL
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    __dfx -q canister --network $SNS_URL call \
+    __dfx -q canister --network $NNS_URL call \
         --candid $GOV_DID \
         $SNS_GOVERNANCE_CANISTER_ID list_neurons \
         "( record { of_principal = opt principal \"$(__dfx -q identity get-principal)\"; limit = 100: nat32})"
@@ -412,17 +422,17 @@ sns_list_my_neurons() {
 }
 
 ##: sns_list_all_neurons
-## Usage: $1 <SUBNET_URL> <SNS_GOVERNANCE_CANISTER_ID>
+## Usage: $1 <NNS_URL> <SNS_GOVERNANCE_CANISTER_ID>
 ## List all neurons in an SNS
 sns_list_all_neurons() {
 
-    local SNS_URL=$1 # usually SUBNET_URL
+    local NNS_URL=$1 # usually NNS_URL
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    __dfx -q canister --network "${SNS_URL}" call \
+    __dfx -q canister --network "${NNS_URL}" call \
         --candid "${GOV_DID}" \
         "${SNS_GOVERNANCE_CANISTER_ID}" list_neurons \
         "( record { of_principal = null; limit = 100: nat32})"
@@ -443,7 +453,7 @@ sns_w_get_next_sns_version() {
 
     __dfx -q canister --network $NNS_URL call \
         --candid $SNS_W_DID \
-        qaa6y-5yaaa-aaaaa-aaafa-cai get_next_sns_version \
+        ${SNS_W} get_next_sns_version \
         "(record {
                     governance_canister_id =  $SNS_GOVERNANCE_CANISTER_ID;
                     current_version = opt $CURRENT_VERSION_CANDID
@@ -534,13 +544,13 @@ sns_get_proposal() {
 }
 
 sns_get_archive() {
-    local SUBNET_URL=$1
+    local NNS_URL=$1
     local SNS_LEDGER_CANISTER_ID=$2
 
     set -e
     # Unfortunately the ledger .did file does not support this method even though the canister does.
     # This forces us to use grep & awk instead of jq
-    ARCHIVE_ID=$(__dfx canister --network "$SUBNET_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
+    ARCHIVE_ID=$(__dfx canister --network "$NNS_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
         | grep -o 'principal "[^"]*"' | awk -F '"' '{print $2}')
     set +e
 
@@ -574,9 +584,11 @@ wait_for_proposal_to_execute() {
             return 0
         fi
         # Early exit if we know it failed, what are we waiting around for again?
-        FAILED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].failed_timestamp_seconds')
+        INFO=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON)
+        FAILED=$(echo ${INFO} | jq -r '.[0].failed_timestamp_seconds')
         if [[ "${FAILED}" != 0 ]]; then
             print_red "NNS proposal ${PROPOSAL_ID} failed to execute"
+            print_red "Failure reason: $(echo $INFO | jq -r '.[].failure_reason[].error_message')"
             return 1
         fi
         sleep 10
@@ -589,7 +601,7 @@ wait_for_proposal_to_execute() {
 wait_for_sns_governance_to_be_in_normal_mode() {
     ensure_variable_set IDL2JSON
 
-    local SUBNET_URL=$1
+    local NNS_URL=$1
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
@@ -597,7 +609,7 @@ wait_for_sns_governance_to_be_in_normal_mode() {
 
     for i in {1..40}; do
         echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/40)"
-        EXECUTED=$(__dfx canister --network "$SUBNET_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
+        EXECUTED=$(__dfx canister --network "$NNS_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
         if [[ "${EXECUTED}" -eq 1 ]]; then
             print_green "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode"
             return 0
@@ -607,4 +619,45 @@ wait_for_sns_governance_to_be_in_normal_mode() {
 
     print_red "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} never reached normal mode"
     return 1
+}
+
+set_testnet_env_variables() {
+    # Check for NNS_URL and NEURON_ID environment variables
+    if [ ! -z "${NNS_URL:-}" ] || [ ! -z "${NEURON_ID:-}" ]; then
+        if [ -z "${NNS_URL:-}" ] || [ -z "${NEURON_ID:-}" ]; then
+            echo >&2 "It seems like you set one of NNS_URL and NEURON_ID, but not both. Both variables should be set to use custom values, or neither should be set to default to the values in the test directory. Setting only one creates ambiguity, so the script will exit to avoid misconfiguration."
+            exit 1
+        fi
+    fi
+
+    if [ -n "${NNS_URL:-}" ] && [ -n "${NEURON_ID:-}" ]; then
+        echo "Skipping sourcing set_testnet_env_variables.sh file because both NNS_URL and NEURON_ID are set."
+        return
+    fi
+
+    TEST_TMPDIR=${TEST_TMPDIR:-$"/tmp/$(whoami)/test_tmpdir"}
+    TEST_TMPDIR="${TEST_TMPDIR}/_tmp"
+
+    # Check if the target directory exists
+    if [ ! -d "${TEST_TMPDIR}" ]; then
+        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './ci/container/container-run.sh', and that you created it by following the instructions in README.md."
+        exit 1
+    fi
+
+    # Count the number of directories in the target directory
+    DIR_COUNT=$(find "${TEST_TMPDIR}" -mindepth 1 -maxdepth 1 -type d | wc -l)
+
+    # Proceed based on the count of directories found
+    if [ "${DIR_COUNT}" -eq 1 ]; then
+        # If both are unset, proceed with sourcing
+        # Get the directory name
+        DIR_NAME=$(find "${TEST_TMPDIR}" -mindepth 1 -maxdepth 1 -type d -print | head -n 1 | sed 's|.*/||')
+        # Source the script without changing the user's directory
+        source "${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
+        echo "Sourced ${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
+    else
+        # Print an error and exit if not exactly one directory
+        echo >&2 "Error: There must be exactly one folder in ${TEST_TMPDIR}."
+        exit 1
+    fi
 }

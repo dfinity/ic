@@ -4,12 +4,6 @@ package ic_nns_common.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
 
-// A PB container for a CanisterId, which uniquely identifies
-// a principal.
-message CanisterId {
-  bytes serialized_id = 1;
-}
-
 // A container for a NeuronId blob, which uniquely identifies
 // a Neuron.
 message NeuronId {

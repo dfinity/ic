@@ -1,0 +1,26 @@
+[package]
+name = "ic-management-canister-types-private"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+arbitrary = { workspace = true, optional = true }
+candid = { workspace = true }
+ic-base-types = { path = "../base_types" }
+ic-btc-interface = { workspace = true }
+ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-protobuf = { path = "../../protobuf" }
+ic-utils = { path = "../../utils" }
+num-traits = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+
+[features]
+fuzzing_code = ["dep:arbitrary"]

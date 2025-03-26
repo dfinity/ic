@@ -12,8 +12,9 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
+comparable = { version = "0.5", features = ["derive"] }
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../constants" }
@@ -22,16 +23,14 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
-lazy_static = "1.4.0"
-num-traits = "0.2.12"
-on_wire = { path = "../../rust_canisters/on_wire" }
+lazy_static = { workspace = true }
+num-traits = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
-sha2 = "0.9.1"
-comparable = { version = "0.5", features = ["derive"] }
+serde_bytes = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
-serial_test = "0.8.0"
 ic-nns-common-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

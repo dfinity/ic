@@ -20,6 +20,7 @@ use strum::IntoEnumIterator;
 /// This assumes that a set of keys has been provided and verifies that:
 /// * If the threshold signatures are used correctly, signatures verify.
 /// * If incorrect values are provided at any stage, relevant methods fail.
+///
 /// Note: We assume that all signers have been dealt keys but disqualify
 /// some as part of the test.
 ///
@@ -56,7 +57,7 @@ pub fn test_threshold_signatures(
         // * Signatures cannot be generated with an incorrect AlgorithmId:
         for algorithm_id in AlgorithmId::iter() {
             if algorithm_id != AlgorithmId::ThresBls12_381 {
-                if let Some((csp_vault, key_id)) = signers.get(0) {
+                if let Some((csp_vault, key_id)) = signers.first() {
                     assert!(
                         csp_vault
                             .threshold_sign(algorithm_id, message.to_vec(), *key_id)
@@ -69,7 +70,7 @@ pub fn test_threshold_signatures(
         }
         //
         // * Signatures cannot be generated with an incorrect key_id:
-        if let Some((csp_vault, _key_id)) = signers.get(0) {
+        if let Some((csp_vault, _key_id)) = signers.first() {
             let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
             let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
 

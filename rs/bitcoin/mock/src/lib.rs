@@ -1,7 +1,7 @@
 pub use ic_btc_interface::{Address, OutPoint, Utxo};
 use serde::{Deserialize, Serialize};
 
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct PushUtxoToAddress {
     pub address: Address,
     pub utxo: Utxo,

@@ -61,8 +61,6 @@ pub struct StandaloneIterator<'a, F> {
     pub(crate) snapshot: Arc<StandaloneSnapshot<'a>>,
 }
 
-trait DeserializeFn<'a, T>: Fn(Arc<StandaloneSnapshot<'a>>, &[u8]) -> Option<T> {}
-
 /// Status of the iterator, one of NotStarted, Started, or Stopped.
 enum Status {
     NotStarted,
@@ -70,7 +68,7 @@ enum Status {
     Stopped,
 }
 
-impl<'a, F> StandaloneIterator<'a, F> {
+impl<F> StandaloneIterator<'_, F> {
     /// Create an iterator for the given column family 'name' of the given 'db'
     /// starting from 'start_key'
     pub fn new(

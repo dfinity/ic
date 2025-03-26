@@ -7,5 +7,6 @@
     "[bazel]": {
         "editor.defaultFormatter": "StackBuild.bazel-stack-vscode",
         "editor.formatOnSave": true
-    }
+    },
+    "bazel.buildifierExecutable": "@buildifier",
 }

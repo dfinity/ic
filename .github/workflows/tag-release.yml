@@ -1,0 +1,91 @@
+name: Publish Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'release-*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Collect Release Artifacts
+        run: |
+          set -euxo pipefail
+
+          DOWNLOAD_PREFIX="http://download.dfinity.systems/ic/$GITHUB_SHA"
+
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/ic-admin.gz" -o ic-admin-x86_64-darwin.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/drun.gz" -o drun-x86_64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/drun.gz" -o drun-x86_64-darwin.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/pocket-ic.gz" -o pocket-ic-x86_64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/pocket-ic.gz" -o pocket-ic-x86_64-darwin.gz
+          sha256sum *.gz > sha256sums.txt
+
+          echo "DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX}" >> "$GITHUB_ENV"
+
+      - name: Collect Canister Artifacts
+        run: |
+          set -euxo pipefail
+
+          # full list of canisters we build: $repo_root/publish/canisters/BUILD.bazel
+          # here we make a tarball from subset of the full list
+          CANISTERS=(
+            "canister-creator-canister.wasm"
+            "cycles-minting-canister.wasm"
+            "genesis-token-canister.wasm"
+            "governance-canister.wasm"
+            "governance-canister_test.wasm"
+            "ic-ckbtc-minter.wasm"
+            "ic-ckbtc-kyt.wasm"
+            "identity-canister.wasm"
+            "ledger-canister.wasm"
+            "ledger-canister_notify-method.wasm"
+            "lifeline_canister.wasm"
+            "nns-ui-canister.wasm"
+            "registry-canister.wasm"
+            "root-canister.wasm"
+            "sns-governance-canister.wasm"
+            "sns-root-canister.wasm"
+            "sns-swap-canister.wasm"
+            "sns-wasm-canister.wasm"
+            "wasm.wasm"
+          )
+
+          mkdir canisters && pushd canisters
+          for C in "${CANISTERS[@]}"; do
+            curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.gz" -O
+            curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.gz.did" -O
+          done
+          tar -cf canisters.tar *.gz *.did
+          mv canisters.tar ..
+          popd
+
+          sha256sum *.tar >> sha256sums.txt
+
+      - name: Publish Release
+        # v0.1.15
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        with:
+          body: "IC ${{github.ref_name}}"
+          files: |
+            canisters.tar
+            setup-os-img.tar.gz
+            update-os-img.tar.gz
+            ic-admin-x86_64-linux.gz
+            ic-admin-x86_64-darwin.gz
+            drun-x86_64-linux.gz
+            drun-x86_64-darwin.gz
+            pocket-ic-x86_64-linux.gz
+            pocket-ic-x86_64-darwin.gz
+            sha256sums.txt

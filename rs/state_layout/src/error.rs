@@ -24,6 +24,9 @@ pub enum LayoutError {
 
     /// Trying to remove the latest checkpoint.
     LatestCheckpoint(Height),
+
+    /// Checkpoint at the specified height is unverified.
+    CheckpointUnverified(Height),
 }
 
 impl fmt::Display for LayoutError {
@@ -57,6 +60,18 @@ impl fmt::Display for LayoutError {
                 "Trying to remove the latest checkpoint at height @{}",
                 height
             ),
+            Self::CheckpointUnverified(height) => {
+                write!(f, "Checkpoint @{} is not verified", height)
+            }
+        }
+    }
+}
+
+impl std::error::Error for LayoutError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            LayoutError::IoError { io_err, .. } => Some(io_err),
+            _ => None,
         }
     }
 }

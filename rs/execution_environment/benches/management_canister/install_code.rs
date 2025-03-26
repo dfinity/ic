@@ -4,14 +4,14 @@ use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Crit
 use ic_state_machine_tests::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct CreateCanistersArgs {
     pub canisters_number: u64,
     pub canisters_per_batch: u64,
     pub initial_cycles: u128,
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct InstallCodeArgs {
     pub canister_ids: Vec<Principal>,
     pub wasm_module_size: u64,
@@ -71,7 +71,7 @@ pub fn install_code_benchmark(c: &mut Criterion) {
         &mut group,
         "canisters:1/wasm:0B/arg:0B",
         (1, 0, 0),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,

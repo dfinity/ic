@@ -1,34 +1,42 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
-use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{
+    corrupt_dealing, ComplaintCorrupter,
+};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
+};
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{
-    BasicSigner, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin,
-    IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgDealing,
+    IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
+    EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare, ThresholdSchnorrCombinedSignature,
+    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+use ic_types::crypto::{
+    AlgorithmId, BasicSig, BasicSigOf, ExtendedDerivationPath, KeyPurpose, Signed,
 };
-use ic_types::crypto::{AlgorithmId, KeyPurpose, Signed};
-use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use strum_macros::EnumIter;
 
 pub mod dummy_values;
 
@@ -146,14 +154,54 @@ pub fn swap_two_dealings_in_transcript(
     transcript
 }
 
+/// Copies the dealing from `dealer_from` to `dealer_to` and outputs the result
+/// in a new transcript.
+pub fn copy_dealing_in_transcript(
+    params: &IDkgTranscriptParams,
+    transcript: IDkgTranscript,
+    env: &CanisterThresholdSigTestEnvironment,
+    dealer_from: &Node,
+    dealer_to: &Node,
+) -> IDkgTranscript {
+    assert_ne!(dealer_from, dealer_to);
+
+    let from_idx = transcript.index_for_dealer_id(dealer_from.id()).unwrap();
+    let to_idx = transcript.index_for_dealer_id(dealer_to.id()).unwrap();
+
+    let dealing_from = transcript
+        .verified_dealings
+        .get(&from_idx)
+        .expect("Dealing exists")
+        .clone();
+
+    let dealing_to = dealing_from
+        .content
+        .into_builder()
+        .with_dealer_id(dealer_to.id())
+        .build_with_signature(params, dealer_to, dealer_to.id());
+
+    let dealing_to_signed = env
+        .nodes
+        .support_dealing_from_all_receivers(dealing_to, params);
+
+    let mut transcript = transcript;
+
+    assert!(transcript
+        .verified_dealings
+        .insert(to_idx, dealing_to_signed)
+        .is_some());
+
+    transcript
+}
+
 pub fn generate_key_transcript<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
     receivers: &IDkgReceivers,
-    algorithm_id: AlgorithmId,
+    alg: AlgorithmId,
     rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
+    let masked_key_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
 
     let masked_key_transcript = env
         .nodes
@@ -169,33 +217,21 @@ pub fn generate_key_transcript<R: RngCore + CryptoRng>(
         .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
 }
 
-pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
+pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
     receivers: &IDkgReceivers,
-    algorithm_id: AlgorithmId,
+    alg: AlgorithmId,
     key_transcript: &IDkgTranscript,
     rng: &mut R,
-) -> PreSignatureQuadruple {
-    let lambda_params = env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
+) -> EcdsaPreSignatureQuadruple {
+    let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
     let lambda_transcript = env
         .nodes
         .run_idkg_and_create_and_verify_transcript(&lambda_params, rng);
 
     let kappa_transcript = {
-        let masked_kappa_params =
-            env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
-
-        let masked_kappa_transcript = env
-            .nodes
-            .run_idkg_and_create_and_verify_transcript(&masked_kappa_params, rng);
-
-        let unmasked_kappa_params = build_params_from_previous(
-            masked_kappa_params,
-            IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
-            rng,
-        );
-
+        let unmasked_kappa_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
         env.nodes
             .run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, rng)
     };
@@ -228,7 +264,7 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
             .run_idkg_and_create_and_verify_transcript(&key_times_lambda_params, rng)
     };
 
-    PreSignatureQuadruple::new(
+    EcdsaPreSignatureQuadruple::new(
         kappa_transcript,
         lambda_transcript,
         kappa_times_lambda_transcript,
@@ -261,7 +297,8 @@ pub mod node {
     use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CurrentNodePublicKeysError, IDkgProtocol, KeyManager,
-        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
+        ThresholdSchnorrSigner,
     };
     use ic_logger::ReplicaLogger;
     use ic_protobuf::log::log_entry::v1::LogEntry;
@@ -273,8 +310,10 @@ pub mod node {
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
         IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+        ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+        ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgOpening,
@@ -283,6 +322,7 @@ pub mod node {
     };
     use ic_types::crypto::canister_threshold_sig::{
         ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
     use ic_types::crypto::{BasicSigOf, CryptoResult, CurrentNodePublicKeys, Signable};
     use ic_types::signature::BasicSignatureBatch;
@@ -367,11 +407,16 @@ pub mod node {
                 });
         }
 
-        pub fn load_input_transcripts(&self, inputs: &ThresholdEcdsaSigInputs) {
+        pub fn load_tecdsa_sig_transcripts(&self, inputs: &ThresholdEcdsaSigInputs) {
             self.load_transcript_or_panic(inputs.presig_quadruple().kappa_unmasked());
             self.load_transcript_or_panic(inputs.presig_quadruple().lambda_masked());
             self.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
             self.load_transcript_or_panic(inputs.presig_quadruple().key_times_lambda());
+            self.load_transcript_or_panic(inputs.key_transcript());
+        }
+
+        pub fn load_tschnorr_sig_transcripts(&self, inputs: &ThresholdSchnorrSigInputs) {
+            self.load_transcript_or_panic(inputs.presig_transcript().blinder_unmasked());
             self.load_transcript_or_panic(inputs.key_transcript());
         }
 
@@ -517,11 +562,11 @@ pub mod node {
     }
 
     impl ThresholdEcdsaSigner for Node {
-        fn sign_share(
+        fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            self.crypto_component.sign_share(inputs)
+        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+            ThresholdEcdsaSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -532,8 +577,12 @@ pub mod node {
             inputs: &ThresholdEcdsaSigInputs,
             share: &ThresholdEcdsaSigShare,
         ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-            self.crypto_component
-                .verify_sig_share(signer, inputs, share)
+            ThresholdEcdsaSigVerifier::verify_sig_share(
+                self.crypto_component.as_ref(),
+                signer,
+                inputs,
+                share,
+            )
         }
 
         fn combine_sig_shares(
@@ -541,7 +590,11 @@ pub mod node {
             inputs: &ThresholdEcdsaSigInputs,
             shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
         ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-            self.crypto_component.combine_sig_shares(inputs, shares)
+            ThresholdEcdsaSigVerifier::combine_sig_shares(
+                self.crypto_component.as_ref(),
+                inputs,
+                shares,
+            )
         }
 
         fn verify_combined_sig(
@@ -549,7 +602,61 @@ pub mod node {
             inputs: &ThresholdEcdsaSigInputs,
             signature: &ThresholdEcdsaCombinedSignature,
         ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
-            self.crypto_component.verify_combined_sig(inputs, signature)
+            ThresholdEcdsaSigVerifier::verify_combined_sig(
+                self.crypto_component.as_ref(),
+                inputs,
+                signature,
+            )
+        }
+    }
+
+    impl ThresholdSchnorrSigner for Node {
+        fn create_sig_share(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+        ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+            ThresholdSchnorrSigner::create_sig_share(&*self.crypto_component, inputs)
+        }
+    }
+
+    impl ThresholdSchnorrSigVerifier for Node {
+        fn verify_sig_share(
+            &self,
+            signer: NodeId,
+            inputs: &ThresholdSchnorrSigInputs,
+            share: &ThresholdSchnorrSigShare,
+        ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+            ThresholdSchnorrSigVerifier::verify_sig_share(
+                self.crypto_component.as_ref(),
+                signer,
+                inputs,
+                share,
+            )
+        }
+
+        fn combine_sig_shares(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+            shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+        ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>
+        {
+            ThresholdSchnorrSigVerifier::combine_sig_shares(
+                self.crypto_component.as_ref(),
+                inputs,
+                shares,
+            )
+        }
+
+        fn verify_combined_sig(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+            signature: &ThresholdSchnorrCombinedSignature,
+        ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+            ThresholdSchnorrSigVerifier::verify_combined_sig(
+                self.crypto_component.as_ref(),
+                inputs,
+                signature,
+            )
         }
     }
 
@@ -656,7 +763,7 @@ pub mod node {
         }
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
     pub struct Nodes {
         nodes: BTreeSet<Node>,
     }
@@ -702,36 +809,36 @@ pub mod node {
             (nodes_true, nodes_false)
         }
 
-        pub fn into_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
+        pub fn into_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             self,
             idkg_receivers: T,
         ) -> impl Iterator<Item = Node> + 'a {
             self.nodes
                 .into_iter()
-                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
+        pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             &'a self,
             idkg_receivers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
-                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn dealers<'a, T: AsRef<IDkgDealers> + 'a>(
+        pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
             &'a self,
             idkg_dealers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
-                .filter(move |node| idkg_dealers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
 
         pub fn random_subset_with_min_size<'a, R: RngCore + CryptoRng>(
             &'a self,
             minimum_size: usize,
             rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             assert!(
                 minimum_size <= self.len(),
                 "Requested a random subset with at least {} elements but there are only {} elements",
@@ -742,33 +849,37 @@ pub mod node {
             self.iter().choose_multiple(rng, subset_size).into_iter()
         }
 
-        pub fn into_random_receiver<R: Rng>(
-            self,
-            idkg_receivers: &IDkgReceivers,
-            rng: &mut R,
-        ) -> Node {
-            self.into_receivers(idkg_receivers)
-                .choose(rng)
-                .expect("empty receivers")
+        pub fn random_subset<'a, R: RngCore + CryptoRng>(
+            &'a self,
+            size: usize,
+            rng: &'a mut R,
+        ) -> impl Iterator<Item = &'a Node> + 'a {
+            assert!(
+                size <= self.len(),
+                "Requested a random subset with {} elements but there are only {} elements",
+                size,
+                self.len()
+            );
+            self.iter().choose_multiple(rng, size).into_iter()
         }
 
-        pub fn random_receiver<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
+        pub fn random_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
-            self.receivers(idkg_receivers)
+        ) -> &'a Node {
+            self.filter_by_receivers(idkg_receivers)
                 .choose(rng)
                 .expect("empty receivers")
         }
 
-        pub fn random_receiver_excluding<'a, R: Rng>(
+        pub fn random_filtered_by_receivers_excluding<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
             exclusion: &Node,
-            idkg_receivers: &'a IDkgReceivers,
+            idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
-            self.receivers(idkg_receivers)
+        ) -> &'a Node {
+            self.filter_by_receivers(idkg_receivers)
                 .filter(|node| *node != exclusion)
                 .choose(rng)
                 .expect("empty receivers")
@@ -778,8 +889,10 @@ pub mod node {
             &'a self,
             params: &'a IDkgTranscriptParams,
             rng: &mut R,
-        ) -> &Node {
-            self.dealers(params).choose(rng).expect("empty dealers")
+        ) -> &'a Node {
+            self.filter_by_dealers(params)
+                .choose(rng)
+                .expect("empty dealers")
         }
 
         pub fn random_node<R: Rng>(&self, rng: &mut R) -> &Node {
@@ -793,7 +906,7 @@ pub mod node {
         ) -> BatchSignedIDkgDealing {
             let signature = {
                 let mut signatures_map = BTreeMap::new();
-                for signer in self.receivers(&params) {
+                for signer in self.filter_by_receivers(&params) {
                     let signature = signer
                         .sign_basic(&signed_dealing, signer.id(), params.registry_version())
                         .expect("failed to generate basic-signature");
@@ -812,7 +925,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| (dealer.id(), dealer.create_dealing_or_panic(params)))
                 .collect()
         }
@@ -842,7 +955,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| {
                     let dealing = self.create_and_verify_signed_dealing(params, dealer);
                     (dealer.id(), dealing)
@@ -863,7 +976,7 @@ pub mod node {
                 .expect("unexpectedly invalid dealing");
 
             // Verify the dealing is privately valid for all receivers
-            for receiver in self.receivers(&params) {
+            for receiver in self.filter_by_receivers(&params) {
                 receiver
                     .verify_dealing_private(params, &signed_dealing)
                     .expect("unexpectedly invalid dealing (private verification)");
@@ -879,6 +992,7 @@ pub mod node {
         ) -> SignedIDkgDealing {
             match params.operation_type() {
                 IDkgTranscriptOperation::Random => (),
+                IDkgTranscriptOperation::RandomUnmasked => (),
                 IDkgTranscriptOperation::ReshareOfMasked(transcript)
                 | IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
                     loader.load_transcript_or_panic(transcript);
@@ -896,7 +1010,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| {
                     let signed_dealing =
                         self.load_previous_transcripts_and_create_signed_dealing(params, dealer);
@@ -915,11 +1029,11 @@ pub mod node {
         ) -> IDkgTranscript {
             let dealings = self.load_previous_transcripts_and_create_signed_dealings(params);
             let multisigned_dealings = self.support_dealings_from_all_receivers(dealings, params);
-            let transcript_creator = self.receivers(params).next().unwrap();
+            let transcript_creator = self.filter_by_receivers(params).next().unwrap();
             let transcript =
                 transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
             assert!(self
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_transcript(params, &transcript)
                 .is_ok());
             transcript
@@ -1060,6 +1174,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least one node to be dealers.
     /// - Choose a random subset with at least one node to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.
@@ -1069,6 +1184,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least `min_num_dealers` nodes to be dealers.
     /// - Choose a random subset with at least `min_num_receivers` nodes to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.
@@ -1170,26 +1286,6 @@ impl CanisterThresholdSigTestEnvironment {
         env
     }
 
-    /// Returns an `IDkgTranscriptParams` appropriate for creating a random
-    /// sharing in this environment.
-    pub fn params_for_random_sharing<R: RngCore + CryptoRng>(
-        &self,
-        dealers: &IDkgDealers,
-        receivers: &IDkgReceivers,
-        algorithm_id: AlgorithmId,
-        rng: &mut R,
-    ) -> IDkgTranscriptParams {
-        IDkgTranscriptParams::new(
-            random_transcript_id(rng),
-            dealers.get().clone(),
-            receivers.get().clone(),
-            self.newest_registry_version,
-            algorithm_id,
-            IDkgTranscriptOperation::Random,
-        )
-        .expect("failed to create random IDkgTranscriptParams")
-    }
-
     pub fn choose_dealers_and_receivers<R: RngCore + CryptoRng>(
         &self,
         strategy: &IDkgParticipants,
@@ -1230,12 +1326,11 @@ impl CanisterThresholdSigTestEnvironment {
     }
 }
 
-pub fn random_receiver_for_inputs<R: RngCore + CryptoRng>(
-    inputs: &ThresholdEcdsaSigInputs,
+pub fn random_receiver_id<R: RngCore + CryptoRng>(
+    receivers: &IDkgReceivers,
     rng: &mut R,
 ) -> NodeId {
-    *inputs
-        .receivers()
+    *receivers
         .get()
         .iter()
         .choose(rng)
@@ -1271,13 +1366,17 @@ pub fn random_node_ids_excluding<R: RngCore + CryptoRng>(
 }
 
 pub fn node_id(id: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_self_authenticating(&id.to_be_bytes()))
+}
+
+pub fn ordered_node_id(id: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(id))
 }
 
 pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     let mut nodes = BTreeSet::new();
     for id in ids.iter() {
-        nodes.insert(node_id(*id));
+        nodes.insert(ordered_node_id(*id));
     }
     nodes
 }
@@ -1303,15 +1402,7 @@ pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTree
 }
 
 fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
-    NodeId::from(PrincipalId::new_node_test_id(rng.gen()))
-}
-
-pub fn random_receiver_id<R: RngCore + CryptoRng>(
-    params: &IDkgTranscriptParams,
-    rng: &mut R,
-) -> NodeId {
-    *random_receiver_id_excluding_set(params.receivers(), &BTreeSet::new(), rng)
-        .expect("receivers is empty")
+    node_id(rng.gen())
 }
 
 pub fn random_receiver_id_excluding<R: RngCore + CryptoRng>(
@@ -1384,6 +1475,7 @@ pub fn n_random_dealer_indexes<R: RngCore + CryptoRng>(
         .choose_multiple(rng, n)
 }
 
+/// Creates a crypto component with a new, randomly generated node ID that is not in `receivers`.
 pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,
@@ -1395,6 +1487,367 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
         .with_node_id(node_id)
         .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build()
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
+pub enum IDkgMode {
+    RandomUnmasked,
+    Random,
+    ReshareOfMasked,
+    ReshareOfUnmasked,
+    UnmaskedTimesMasked,
+}
+
+impl IDkgMode {
+    /// Generates a random subnet size that can be used to generate a complaint.
+    /// The reason to have this function is that `IDkgMode::ReshareOfUnmasked`
+    /// does not produce transcripts that are loaded into canister secret key
+    /// store for subnets of size <4. Thus, not all subnet sizes can be used to
+    /// benchmark loading transcripts or generating complaints.
+    pub fn subnet_size_for_complaint<R: Rng + CryptoRng>(&self, max: usize, rng: &mut R) -> usize {
+        let min = self.min_subnet_size_for_complaint();
+        assert!(
+            min < max,
+            "min ({min}) should not be larger than max ({max}) subnet size"
+        );
+        rng.gen_range(min..=max)
+    }
+
+    /// Returns the minimum subnet size for `&self` that can be used to generate
+    /// complaint. See [`Self::subnet_size_for_complaint`] for more
+    /// details.
+    pub fn min_subnet_size_for_complaint(&self) -> usize {
+        match *self {
+            // In `IDkgMode::ReshareOfUnmasked` with subnet size <4 it is not
+            // possible to create a complaint. The reason is that the complaint
+            // creation happens on transcript loading, which effectively is skipped
+            // for `IDkgMode::ReshareOfUnmasked` with subnet size <4 because the
+            // secret (commitment opening) is already in the canister secret store.
+            // The reason for the latter is that with a subnet of size <4, the
+            // commitment polynomial is of degree zero, i.e., it is not random and
+            // thus the commitment remains the same after resharing.
+            Self::ReshareOfUnmasked => 4,
+            Self::RandomUnmasked
+            | Self::Random
+            | Self::ReshareOfMasked
+            | Self::UnmaskedTimesMasked => 2,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct IDkgModeTestContext {
+    mode: IDkgMode,
+    dealers: IDkgDealers,
+    receivers: IDkgReceivers,
+}
+
+impl IDkgModeTestContext {
+    /// Generates a new test context, where all nodes are acting as both dealers and receivers.
+    pub fn new<R: RngCore + CryptoRng>(
+        mode: IDkgMode,
+        env: &CanisterThresholdSigTestEnvironment,
+        rng: &mut R,
+    ) -> Self {
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+
+        Self {
+            mode,
+            dealers,
+            receivers,
+        }
+    }
+
+    /// Generates dealers and receivers from `env` for the IDKG mode chosen in
+    /// `mode`. Since `Self::new` can return a setting with only 1 node, this
+    /// function modifies that setting to always return at least two receivers
+    /// s.t. complaints always work.
+    ///
+    /// Note that this function returns random dealers and receivers with some
+    /// constraints, so this method is not very useful for benchmarks.
+    pub fn new_for_testing_complaint<R: RngCore + CryptoRng>(
+        mode: IDkgMode,
+        env: &CanisterThresholdSigTestEnvironment,
+        rng: &mut R,
+    ) -> Self {
+        match mode {
+            IDkgMode::Random => {
+                // If we want to generate and verify a complaint, we need at least 2 receivers.
+                let (dealers, receivers) = env.choose_dealers_and_receivers(
+                    &IDkgParticipants::RandomWithAtLeast {
+                        min_num_dealers: 1,
+                        min_num_receivers: 2,
+                    },
+                    rng,
+                );
+                Self {
+                    mode: IDkgMode::Random,
+                    dealers,
+                    receivers,
+                }
+            }
+            _ => Self::new(mode, env, rng),
+        }
+    }
+
+    /// Generates IDKG input parameters for the chosen IDKG mode.
+    pub fn setup_params<R: RngCore + CryptoRng>(
+        &self,
+        env: &CanisterThresholdSigTestEnvironment,
+        alg: AlgorithmId,
+        rng: &mut R,
+    ) -> IDkgTranscriptParams {
+        let IDkgModeTestContext {
+            mode,
+            dealers,
+            receivers,
+        } = self;
+        match mode {
+            IDkgMode::RandomUnmasked => {
+                setup_unmasked_random_params(env, alg, dealers, receivers, rng)
+            }
+            IDkgMode::Random => setup_masked_random_params(env, alg, dealers, receivers, rng),
+            IDkgMode::ReshareOfMasked => {
+                setup_reshare_of_masked_params(env, alg, dealers, receivers, rng)
+            }
+            IDkgMode::ReshareOfUnmasked => {
+                setup_reshare_of_unmasked_params(env, alg, dealers, receivers, rng)
+            }
+            IDkgMode::UnmaskedTimesMasked => {
+                setup_unmasked_times_masked_params(env, alg, dealers, receivers, rng)
+            }
+        }
+    }
+
+    /// Generates IDKG output parameters for the chosen IDKG mode, corrupts the
+    /// dealing for a random receiver and generates a complaint.
+    pub fn setup_outputs_for_complaint<'a, R: RngCore + CryptoRng>(
+        &self,
+        env: &'a CanisterThresholdSigTestEnvironment,
+        alg: AlgorithmId,
+        rng: &mut R,
+    ) -> IDkgTestContextForComplaint<'a> {
+        let params = self.setup_params(env, alg, rng);
+        let mut transcript = env
+            .nodes
+            .run_idkg_and_create_and_verify_transcript(&params, rng);
+
+        let (complainer, complaint): (&'a Node, _) =
+            corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, env, rng);
+        let verifier: &Node = env
+            .nodes
+            .random_filtered_by_receivers(self.receivers().clone(), rng);
+        IDkgTestContextForComplaint {
+            transcript,
+            complaint,
+            complainer,
+            verifier,
+        }
+    }
+
+    fn receivers(&self) -> &IDkgReceivers {
+        &self.receivers
+    }
+}
+
+impl std::fmt::Display for IDkgMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::RandomUnmasked => "random_unmasked",
+                Self::Random => "random",
+                Self::ReshareOfMasked => "reshare_of_masked",
+                Self::ReshareOfUnmasked => "reshare_of_unmasked",
+                Self::UnmaskedTimesMasked => "product",
+            }
+        )
+    }
+}
+
+/// Returns an `IDkgTranscriptParams` appropriate for creating a random
+/// unmasked sharing in this environment.
+pub fn setup_unmasked_random_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    algorithm_id: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        dealers.get().clone(),
+        receivers.get().clone(),
+        env.newest_registry_version,
+        algorithm_id,
+        IDkgTranscriptOperation::RandomUnmasked,
+    )
+    .expect("failed to create random IDkgTranscriptParams")
+}
+
+/// Returns an `IDkgTranscriptParams` appropriate for creating a random
+/// masked sharing in this environment.
+pub fn setup_masked_random_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    algorithm_id: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        dealers.get().clone(),
+        receivers.get().clone(),
+        env.newest_registry_version,
+        algorithm_id,
+        IDkgTranscriptOperation::Random,
+    )
+    .expect("failed to create random IDkgTranscriptParams")
+}
+
+pub fn setup_reshare_of_masked_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    alg: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    let params = setup_masked_random_params(env, alg, dealers, receivers, rng);
+    let masked_transcript = run_idkg_without_complaint(&params, &env.nodes, rng);
+    let reshare_params = build_params_from_previous(
+        params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&reshare_params, &env.nodes);
+    reshare_params
+}
+
+pub fn setup_reshare_of_unmasked_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    alg: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    let unmasked_params = setup_reshare_of_masked_params(env, alg, dealers, receivers, rng);
+    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
+    let reshare_params = build_params_from_previous(
+        unmasked_params,
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&reshare_params, &env.nodes);
+    reshare_params
+}
+
+pub fn setup_unmasked_times_masked_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    alg: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    let masked_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
+    let masked_random_transcript = run_idkg_without_complaint(&masked_params, &env.nodes, rng);
+
+    let unmasked_params = build_params_from_previous(
+        masked_params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_random_transcript.clone()),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&unmasked_params, &env.nodes);
+    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
+
+    let product_params = build_params_from_previous(
+        unmasked_params,
+        IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_random_transcript),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&product_params, &env.nodes);
+    product_params
+}
+
+pub struct IDkgTestContextForComplaint<'a> {
+    pub transcript: IDkgTranscript,
+    pub complaint: IDkgComplaint,
+    pub complainer: &'a Node,
+    pub verifier: &'a Node,
+}
+
+pub fn load_previous_transcripts_for_all_dealers(params: &IDkgTranscriptParams, nodes: &Nodes) {
+    let mut transcripts_to_load = Vec::with_capacity(2);
+    match params.operation_type() {
+        IDkgTranscriptOperation::Random => {}
+        IDkgTranscriptOperation::RandomUnmasked => {}
+        IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
+            transcripts_to_load.push(transcript)
+        }
+        IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
+            transcripts_to_load.push(transcript)
+        }
+        IDkgTranscriptOperation::UnmaskedTimesMasked(transcript1, transcript2) => {
+            transcripts_to_load.push(transcript1);
+            transcripts_to_load.push(transcript2)
+        }
+    }
+
+    nodes.filter_by_dealers(params).for_each(|dealer| {
+        transcripts_to_load.iter().for_each(|transcript| {
+            assert_eq!(
+                load_transcript_or_panic(dealer, transcript),
+                vec![],
+                "did not expect any complaint"
+            )
+        });
+    });
+}
+
+pub fn create_transcript_or_panic(
+    receiver: &Node,
+    params: &IDkgTranscriptParams,
+    dealings: &BatchSignedIDkgDealings,
+) -> IDkgTranscript {
+    receiver
+        .create_transcript(params, dealings)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to create IDKG transcript by receiver {:?} with parameters {:?}: {:?}",
+                receiver.id(),
+                params,
+                error
+            )
+        })
+}
+
+pub fn load_transcript_or_panic(
+    receiver: &Node,
+    transcript: &IDkgTranscript,
+) -> Vec<IDkgComplaint> {
+    receiver
+        .load_transcript(transcript)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to load IDKG transcript by receiver {:?}: {:?}",
+                receiver.id(),
+                error
+            )
+        })
+}
+
+pub fn run_idkg_without_complaint<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
+    nodes: &Nodes,
+    rng: &mut R,
+) -> IDkgTranscript {
+    load_previous_transcripts_for_all_dealers(params, nodes);
+    let receiver = nodes.random_filtered_by_receivers(params.receivers(), rng);
+    let dealings = nodes.create_dealings(params);
+    let dealings_with_receivers_support =
+        nodes.support_dealings_from_all_receivers(dealings, params);
+    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support)
 }
 
 /// Corrupts the dealing for a single randomly picked receiver.
@@ -1413,7 +1866,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
     let receiver =
         random_receiver_id_excluding_set(transcript_params.receivers(), excluded_receivers, rng)
             .ok_or(CorruptSignedIDkgDealingError::NoReceivers)?;
-    let node_index = transcript_params.receivers().position(*receiver).unwrap();
+    let node_index = transcript_params.receiver_index(*receiver).unwrap();
 
     Ok(idkg_dealing
         .into_builder()
@@ -1421,7 +1874,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
         .build_with_signature(transcript_params, basic_signer, signer_id))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CorruptSignedIDkgDealingError {
     SerializationError(String),
     FailedToCorruptDealing(String),
@@ -1440,7 +1893,7 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
     let quadruple =
-        generate_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
+        generate_ecdsa_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,
@@ -1457,7 +1910,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     sig_inputs: &ThresholdEcdsaSigInputs,
     rng: &mut R,
 ) -> ThresholdEcdsaCombinedSignature {
-    let sig_shares = sig_share_from_each_receiver(env, sig_inputs);
+    let sig_shares = ecdsa_sig_share_from_each_receiver(env, sig_inputs);
     // Verify that each signature share can be verified
     let verifier_id = random_node_id_excluding(sig_inputs.receivers().get(), rng);
     let verifier_crypto_component = TempCryptoComponent::builder()
@@ -1466,9 +1919,13 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
         .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
-        assert!(verifier_crypto_component
-            .verify_sig_share(*signer_id, sig_inputs, sig_share)
-            .is_ok());
+        ThresholdEcdsaSigVerifier::verify_sig_share(
+            &verifier_crypto_component,
+            *signer_id,
+            sig_inputs,
+            sig_share,
+        )
+        .expect("failed to verify signature share");
     }
 
     let combiner_crypto_component = TempCryptoComponent::builder()
@@ -1476,22 +1933,109 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
         .with_node_id(verifier_id)
         .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
-    combiner_crypto_component
-        .combine_sig_shares(sig_inputs, &sig_shares)
-        .expect("Failed to generate signature")
+    ThresholdEcdsaSigVerifier::combine_sig_shares(
+        &combiner_crypto_component,
+        sig_inputs,
+        &sig_shares,
+    )
+    .expect("Failed to generate signature")
 }
 
-pub fn sig_share_from_each_receiver(
+pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    key_transcript: &IDkgTranscript,
+    message: &[u8],
+    nonce: Randomness,
+    taproot_tree_root: Option<&[u8]>,
+    derivation_path: &ExtendedDerivationPath,
+    alg: AlgorithmId,
+    rng: &mut R,
+) -> ThresholdSchnorrSigInputs {
+    let blinder_unmasked_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
+    let blinder_unmasked_transcript = env
+        .nodes
+        .run_idkg_and_create_and_verify_transcript(&blinder_unmasked_params, rng);
+
+    let presig = SchnorrPreSignatureTranscript::new(blinder_unmasked_transcript)
+        .expect("failed to create Schnorr pre-signature transcript");
+
+    ThresholdSchnorrSigInputs::new(
+        derivation_path,
+        message,
+        taproot_tree_root,
+        nonce,
+        presig,
+        key_transcript.clone(),
+    )
+    .expect("failed to create signature inputs")
+}
+
+pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
+    env: &CanisterThresholdSigTestEnvironment,
+    sig_inputs: &ThresholdSchnorrSigInputs,
+    rng: &mut R,
+) -> ThresholdSchnorrCombinedSignature {
+    let sig_shares = schnorr_sig_share_from_each_receiver(env, sig_inputs);
+
+    // Verify each signature share
+    let verifier_id = random_node_id_excluding(sig_inputs.receivers().get(), rng);
+    let verifier_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .build();
+    for (signer_id, sig_share) in sig_shares.iter() {
+        ThresholdSchnorrSigVerifier::verify_sig_share(
+            &verifier_crypto_component,
+            *signer_id,
+            sig_inputs,
+            sig_share,
+        )
+        .expect("failed to verify signature share");
+    }
+
+    let combiner_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .build();
+    ThresholdSchnorrSigVerifier::combine_sig_shares(
+        &combiner_crypto_component,
+        sig_inputs,
+        &sig_shares,
+    )
+    .expect("Failed to generate signature")
+}
+
+pub fn ecdsa_sig_share_from_each_receiver(
     env: &CanisterThresholdSigTestEnvironment,
     inputs: &ThresholdEcdsaSigInputs,
 ) -> BTreeMap<NodeId, ThresholdEcdsaSigShare> {
     let sig_shares: BTreeMap<_, _> = env
         .nodes
-        .receivers(&inputs)
+        .filter_by_receivers(&inputs)
         .map(|receiver| {
-            receiver.load_input_transcripts(inputs);
-            let sig_share = receiver
-                .sign_share(inputs)
+            receiver.load_tecdsa_sig_transcripts(inputs);
+            let sig_share = ThresholdEcdsaSigner::create_sig_share(receiver, inputs)
+                .expect("failed to create sig share");
+            (receiver.id(), sig_share)
+        })
+        .collect();
+    sig_shares
+}
+
+pub fn schnorr_sig_share_from_each_receiver(
+    env: &CanisterThresholdSigTestEnvironment,
+    inputs: &ThresholdSchnorrSigInputs,
+) -> BTreeMap<NodeId, ThresholdSchnorrSigShare> {
+    let sig_shares: BTreeMap<_, _> = env
+        .nodes
+        .filter_by_receivers(&inputs)
+        .map(|receiver| {
+            receiver.load_tschnorr_sig_transcripts(inputs);
+            let sig_share = ThresholdSchnorrSigner::create_sig_share(receiver, inputs)
                 .expect("failed to create sig share");
             (receiver.id(), sig_share)
         })
@@ -1595,11 +2139,31 @@ impl CorruptBytes for ThresholdEcdsaSigShare {
     }
 }
 
+impl CorruptBytes for ThresholdSchnorrSigShare {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self::Type {
+        Self {
+            sig_share_raw: self.sig_share_raw.clone_with_bit_flipped(),
+        }
+    }
+}
+
 impl CorruptBytes for ThresholdEcdsaCombinedSignature {
     type Type = Self;
 
     fn clone_with_bit_flipped(&self) -> Self::Type {
         ThresholdEcdsaCombinedSignature {
+            signature: self.signature.clone_with_bit_flipped(),
+        }
+    }
+}
+
+impl CorruptBytes for ThresholdSchnorrCombinedSignature {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self {
+        Self {
             signature: self.signature.clone_with_bit_flipped(),
         }
     }
@@ -1860,7 +2424,7 @@ pub struct ThresholdEcdsaSigInputsBuilder {
     derivation_path: ExtendedDerivationPath,
     hashed_message: Vec<u8>,
     nonce: Randomness,
-    presig_quadruple: PreSignatureQuadruple,
+    presig_quadruple: EcdsaPreSignatureQuadruple,
     key_transcript: IDkgTranscript,
 }
 
@@ -1896,6 +2460,54 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
             hashed_message: Vec::from(self.hashed_message()),
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
+            key_transcript: self.key_transcript().clone(),
+        }
+    }
+}
+
+pub struct ThresholdSchnorrSigInputsBuilder {
+    derivation_path: ExtendedDerivationPath,
+    message: Vec<u8>,
+    taproot_tree_root: Option<Vec<u8>>,
+    nonce: Randomness,
+    presig_transcript: SchnorrPreSignatureTranscript,
+    key_transcript: IDkgTranscript,
+}
+
+impl ThresholdSchnorrSigInputsBuilder {
+    pub fn build(self) -> ThresholdSchnorrSigInputs {
+        ThresholdSchnorrSigInputs::new(
+            &self.derivation_path,
+            &self.message,
+            self.taproot_tree_root.as_deref(),
+            self.nonce,
+            self.presig_transcript,
+            self.key_transcript,
+        )
+        .expect("invalid threshold Schnorr sig inputs")
+    }
+
+    pub fn corrupt_message(mut self) -> Self {
+        self.message = self.message.clone_with_bit_flipped();
+        self
+    }
+
+    pub fn corrupt_nonce(mut self) -> Self {
+        self.nonce = self.nonce.clone_with_bit_flipped();
+        self
+    }
+}
+
+impl IntoBuilder for ThresholdSchnorrSigInputs {
+    type BuilderType = ThresholdSchnorrSigInputsBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        ThresholdSchnorrSigInputsBuilder {
+            derivation_path: self.derivation_path().clone(),
+            message: Vec::from(self.message()),
+            taproot_tree_root: self.taproot_tree_root().map(Vec::from),
+            nonce: *self.nonce(),
+            presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
         }
     }
@@ -1960,7 +2572,7 @@ impl IDkgTranscriptBuilder {
 
     pub fn add_a_new_receiver(mut self) -> Self {
         let mut receivers = self.receivers.get().clone();
-        let extra_receiver = NodeId::from(PrincipalId::new_node_test_id(i64::MAX as u64));
+        let extra_receiver = node_id(i64::MAX as u64);
         receivers.insert(extra_receiver);
         self.receivers = IDkgReceivers::new(receivers).unwrap();
         self
@@ -1969,6 +2581,11 @@ impl IDkgTranscriptBuilder {
     pub fn corrupt_transcript_type(mut self) -> Self {
         self.transcript_type = match self.transcript_type {
             IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+                    self.transcript_id,
+                ))
+            }
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random) => {
                 IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
                     self.transcript_id,
                 ))
@@ -2009,5 +2626,384 @@ impl IntoBuilder for IDkgTranscript {
             algorithm_id: self.algorithm_id,
             internal_transcript_raw: self.internal_transcript_raw,
         }
+    }
+}
+
+/// Creates a clone of `complaint` and corrupts it using `complaint_corrupter`.
+pub fn to_corrupt_complaint(
+    complaint: &IDkgComplaint,
+    complaint_corrupter: &ComplaintCorrupter,
+) -> IDkgComplaint {
+    let internal_complaint =
+        IDkgComplaintInternal::deserialize(complaint.internal_complaint_raw.as_slice())
+            .expect("failed to deserialize internal complaint");
+    let corrupt_internal_complaint = complaint_corrupter
+        .clone_and_corrupt_complaint(&internal_complaint)
+        .expect("failed to corrupt internal complaint");
+    IDkgComplaint {
+        internal_complaint_raw: corrupt_internal_complaint
+            .serialize()
+            .expect("failed to serialize internal complaint"),
+        ..complaint.clone()
+    }
+}
+
+pub fn corrupt_single_dealing_and_generate_complaint<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
+    transcript: &mut IDkgTranscript,
+    complainer: &Node,
+    rng: &mut R,
+) -> IDkgComplaint {
+    let (_, complaints) =
+        corrupt_dealings_and_generate_complaints(params, transcript, 1, complainer, rng);
+    complaints
+        .into_iter()
+        .next()
+        .expect("empty complaints result")
+}
+
+pub fn corrupt_random_dealing_and_generate_complaint<'a, R: RngCore + CryptoRng>(
+    transcript: &mut IDkgTranscript,
+    params: &IDkgTranscriptParams,
+    env: &'a CanisterThresholdSigTestEnvironment,
+    rng: &mut R,
+) -> (&'a Node, IDkgComplaint) {
+    let (complainer, _, mut complaints) =
+        corrupt_dealings_and_generate_complaints_for_random_complainer(
+            transcript, 1, params, env, rng,
+        );
+    (
+        complainer,
+        complaints.pop().expect("expected one complaint"),
+    )
+}
+
+pub fn corrupt_dealings_and_generate_complaints_for_random_complainer<
+    'a,
+    R: RngCore + CryptoRng,
+>(
+    transcript: &mut IDkgTranscript,
+    number_of_complaints: usize,
+    params: &IDkgTranscriptParams,
+    env: &'a CanisterThresholdSigTestEnvironment,
+    rng: &mut R,
+) -> (&'a Node, Vec<NodeIndex>, Vec<IDkgComplaint>) {
+    let complainer = env
+        .nodes
+        .random_filtered_by_receivers(params.receivers().clone(), rng);
+    let (dealing_indices_to_corrupt, complaints) = corrupt_dealings_and_generate_complaints(
+        params,
+        transcript,
+        number_of_complaints,
+        complainer,
+        rng,
+    );
+    (complainer, dealing_indices_to_corrupt, complaints)
+}
+
+pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
+    transcript: &mut IDkgTranscript,
+    number_of_complaints: usize,
+    complainer: &Node,
+    rng: &mut R,
+) -> (Vec<NodeIndex>, Vec<IDkgComplaint>) {
+    assert!(
+        number_of_complaints > 0,
+        "should generate at least one complaint"
+    );
+    assert!(
+        number_of_complaints <= transcript.verified_dealings.len(),
+        "cannot generate {} complaints because there are only {} dealings",
+        number_of_complaints,
+        transcript.verified_dealings.len()
+    );
+
+    let dealing_indices_to_corrupt = transcript
+        .verified_dealings
+        .keys()
+        .copied()
+        .choose_multiple(rng, number_of_complaints);
+    assert_eq!(dealing_indices_to_corrupt.len(), number_of_complaints);
+
+    let complainer_index = params
+        .receiver_index(complainer.id())
+        .unwrap_or_else(|| panic!("Missing receiver {:?}", complainer));
+    dealing_indices_to_corrupt
+        .iter()
+        .for_each(|index_to_corrupt| {
+            corrupt_signed_dealing_for_one_receiver(
+                *index_to_corrupt,
+                &mut transcript.verified_dealings,
+                complainer_index,
+                rng,
+            )
+        });
+
+    let complaints = {
+        let complaints = complainer
+            .load_transcript(transcript)
+            .expect("expected complaints");
+        assert_eq!(complaints.len(), number_of_complaints);
+        complaints
+    };
+
+    (dealing_indices_to_corrupt, complaints)
+}
+
+pub fn generate_and_verify_openings_for_complaint(
+    number_of_openings: usize,
+    transcript: &IDkgTranscript,
+    env: &CanisterThresholdSigTestEnvironment,
+    complainer: &Node,
+    complaint: IDkgComplaint,
+) -> BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>> {
+    let openers = env
+        .nodes
+        .filter_by_receivers(&transcript)
+        .filter(|node| *node != complainer);
+    let openings: BTreeMap<_, _> = openers
+        .take(number_of_openings)
+        .map(|opener| {
+            let opening = generate_and_verify_opening(opener, complainer, transcript, &complaint);
+            (opener.id(), opening)
+        })
+        .collect();
+    assert_eq!(openings.values().len(), number_of_openings);
+
+    let mut complaint_with_openings = BTreeMap::new();
+    complaint_with_openings.insert(complaint, openings);
+    complaint_with_openings
+}
+
+fn generate_and_verify_opening(
+    opener: &Node,
+    complainer: &Node,
+    transcript: &IDkgTranscript,
+    complaint: &IDkgComplaint,
+) -> IDkgOpening {
+    let opening = opener
+        .open_transcript(transcript, complainer.id(), complaint)
+        .expect("failed creating opening");
+    assert_eq!(
+        complainer.verify_opening(transcript, opener.id(), &opening, complaint),
+        Ok(())
+    );
+    opening
+}
+
+fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
+    dealing_index_to_corrupt: NodeIndex,
+    dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    receiver_index: NodeIndex,
+    rng: &mut R,
+) {
+    let signed_dealing = dealings
+        .get_mut(&dealing_index_to_corrupt)
+        .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
+    let invalidated_internal_dealing_raw = {
+        let internal_dealing =
+            IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
+                .expect("failed to deserialize internal dealing");
+
+        let corrupted_internal_dealing =
+            ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing(
+                &internal_dealing,
+                &[receiver_index],
+                Seed::from_rng(rng),
+            )
+            .expect("failed to corrupt dealing");
+        corrupted_internal_dealing
+            .serialize()
+            .expect("failed to serialize internal dealing")
+    };
+    signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
+}
+
+pub fn generate_initial_dealings<R: RngCore + CryptoRng>(
+    alg: AlgorithmId,
+    registry_version: RegistryVersion,
+    source_subnet_nodes: Nodes,
+    target_subnet_nodes: Nodes,
+    corrupt_first_dealing: bool,
+    rng: &mut R,
+) -> (InitialIDkgDealings, IDkgTranscriptParams) {
+    let (source_dealers, source_receivers) = source_subnet_nodes
+        .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+    let source_key_transcript = {
+        let masked_key_params = IDkgTranscriptParams::new(
+            random_transcript_id(rng),
+            source_dealers.get().clone(),
+            source_receivers.get().clone(),
+            registry_version,
+            alg,
+            IDkgTranscriptOperation::Random,
+        )
+        .expect("failed to create random IDkgTranscriptParams");
+        let masked_key_transcript =
+            source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
+        let unmasked_params = build_params_from_previous(
+            masked_key_params,
+            IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+            rng,
+        );
+        source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+    };
+
+    let reshare_params = IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        source_receivers.get().clone(),
+        target_subnet_nodes.ids(),
+        source_key_transcript.registry_version,
+        source_key_transcript.algorithm_id,
+        IDkgTranscriptOperation::ReshareOfUnmasked(source_key_transcript),
+    )
+    .expect("invalid reshare of unmasked parameters");
+
+    let nodes_involved_in_resharing: Nodes = source_subnet_nodes
+        .into_filtered_by_receivers(&source_receivers)
+        .chain(target_subnet_nodes)
+        .collect();
+    let initial_dealings = {
+        let signed_dealings = nodes_involved_in_resharing
+            .load_previous_transcripts_and_create_signed_dealings(&reshare_params);
+        let mut signed_dealings_vec = signed_dealings.into_values().collect::<Vec<_>>();
+        if corrupt_first_dealing {
+            signed_dealings_vec
+                .first_mut()
+                .map(|sd| *sd = sd.clone().into_builder().corrupt_signature().build())
+                .expect("no dealings");
+        }
+
+        InitialIDkgDealings::new(reshare_params.clone(), signed_dealings_vec)
+            .expect("should create initial dealings")
+    };
+    (initial_dealings, reshare_params)
+}
+
+pub mod ecdsa {
+    use super::{
+        generate_key_transcript, generate_tecdsa_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    };
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
+    use ic_types::PrincipalId;
+    use ic_types::Randomness;
+    use rand::distributions::uniform::SampleRange;
+    use rand::prelude::*;
+
+    pub fn environment_with_sig_inputs<R, S>(
+        subnet_size_range: S,
+        alg: AlgorithmId,
+        rng: &mut R,
+    ) -> (
+        CanisterThresholdSigTestEnvironment,
+        ThresholdEcdsaSigInputs,
+        IDkgDealers,
+        IDkgReceivers,
+    )
+    where
+        R: RngCore + CryptoRng,
+        S: SampleRange<usize>,
+    {
+        let subnet_size = rng.gen_range(subnet_size_range);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+        let derivation_path = ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(1),
+            derivation_path: vec![],
+        };
+        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let message = rng.gen::<[u8; 32]>();
+
+        let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+        let inputs = generate_tecdsa_protocol_inputs(
+            &env,
+            &dealers,
+            &receivers,
+            &key_transcript,
+            &message,
+            seed,
+            &derivation_path,
+            alg,
+            rng,
+        );
+        (env, inputs, dealers, receivers)
+    }
+}
+
+pub mod schnorr {
+    use super::{
+        generate_key_transcript, generate_tschnorr_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    };
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
+    use ic_types::PrincipalId;
+    use ic_types::Randomness;
+    use rand::distributions::uniform::SampleRange;
+    use rand::prelude::*;
+
+    pub fn environment_with_sig_inputs<R, S>(
+        subnet_size_range: S,
+        alg: AlgorithmId,
+        rng: &mut R,
+    ) -> (
+        CanisterThresholdSigTestEnvironment,
+        ThresholdSchnorrSigInputs,
+        IDkgDealers,
+        IDkgReceivers,
+    )
+    where
+        R: RngCore + CryptoRng,
+        S: SampleRange<usize>,
+    {
+        let subnet_size = rng.gen_range(subnet_size_range);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+        let derivation_path = ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(1),
+            derivation_path: vec![],
+        };
+
+        let message_length = rng.gen_range(0..2_000_000);
+        let mut message = vec![0; message_length];
+        rng.fill_bytes(&mut message);
+        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+        let taproot_tree_root = {
+            if alg == AlgorithmId::ThresholdSchnorrBip340 {
+                let choose = rng.gen::<u8>();
+                if choose <= 128 {
+                    None
+                } else if choose <= 192 {
+                    Some(vec![])
+                } else {
+                    Some(rng.gen::<[u8; 32]>().to_vec())
+                }
+            } else {
+                None
+            }
+        };
+
+        let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+        let tsig_inputs = generate_tschnorr_protocol_inputs(
+            &env,
+            &dealers,
+            &receivers,
+            &key_transcript,
+            &message,
+            seed,
+            taproot_tree_root.as_deref(),
+            &derivation_path,
+            alg,
+            rng,
+        );
+        (env, tsig_inputs, dealers, receivers)
     }
 }

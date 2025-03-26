@@ -31,7 +31,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 ///     Ok(())
 /// }
 ///
-/// #[ic_cdk::query]
+/// #[ic_cdk_macros::query]
 /// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
 ///     let path = match request.url.find('?') {
 ///         None => &request.url[..],
@@ -41,7 +41,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 ///     match path {
 ///         "/metrics" => serve_metrics(encode_metrics),
 ///         _ => HttpResponse {
-///                 status: 404.into(),
+///                 status: 404_u32.into(),
 ///                 body: "not_found".into(),
 ///                 ..Default::default()
 ///             }
@@ -57,7 +57,7 @@ pub fn serve_metrics(
         Ok(()) => {
             let content_body: Vec<u8> = writer.into_inner();
             HttpResponse {
-                status: 200.into(),
+                status: 200_u8.into(),
                 headers: vec![
                     HttpHeader {
                         name: "Content-Type".to_string(),
@@ -72,7 +72,7 @@ pub fn serve_metrics(
             }
         }
         Err(err) => HttpResponse {
-            status: 500.into(),
+            status: 500_u16.into(),
             headers: vec![],
             body: format!("Failed to encode metrics: {}", err).into(),
         },
@@ -92,7 +92,7 @@ pub fn serve_metrics(
 /// declare_log_buffer!(name = INFO, capacity = 100);
 /// declare_log_buffer!(name = ERROR, capacity = 100);
 ///
-/// #[ic_cdk::query]
+/// #[ic_cdk_macros::query]
 /// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
 ///     log!(INFO, "This is an INFO log");
 ///     log!(ERROR, "This is an ERROR log");
@@ -105,7 +105,7 @@ pub fn serve_metrics(
 ///     match path {
 ///         "/logs" => serve_logs(request, &INFO, &ERROR),
 ///         _ => HttpResponse {
-///                 status: 404.into(),
+///                 status: 404_u32.into(),
 ///                 body: "not_found".into(),
 ///                 ..Default::default()
 ///             }
@@ -126,7 +126,7 @@ pub fn serve_logs(
                 .into_bytes();
 
             return HttpResponse {
-                status: 400.into(),
+                status: 400_u16.into(),
                 headers: vec![
                     HttpHeader {
                         name: "Content-Type".to_string(),
@@ -153,7 +153,7 @@ pub fn serve_logs(
 
     let content_body: Vec<u8> = body.into_bytes();
     HttpResponse {
-        status: 200.into(),
+        status: 200_u8.into(),
         headers: vec![
             HttpHeader {
                 name: "Content-Type".to_string(),
@@ -172,11 +172,11 @@ pub fn serve_logs(
 ///
 /// This does two main things:
 ///
-///   1. Tries to convert from a generic CanisterHttpRequestArgument
-///     (via impl From<CanisterHttpRequestArgument>).
+/// 1. Tries to convert from a generic CanisterHttpRequestArgument
+///    (via impl From<CanisterHttpRequestArgument>).
 ///
-///   2. Renders JSON (via LogsRequest::render_json). Of course, this needs to
-///      be fed logs.
+///2. Renders JSON (via LogsRequest::render_json). Of course, this needs to
+///   be fed logs.
 struct LogsRequest {
     severity: LogSeverity,
     time: u64,
@@ -188,10 +188,10 @@ impl LogsRequest {
     /// This is not entirely straightforward because this needs to do two
     /// things
     ///
-    ///   a. Merge INFO and ERROR logs (in the future, adding more severity levels
-    ///        is would be pretty straightforward).
+    /// a. Merge INFO and ERROR logs (in the future, adding more severity levels
+    ///    is would be pretty straightforward).
     ///
-    ///   b. Implement the filtering specified by the query parameters.
+    /// b. Implement the filtering specified by the query parameters.
     fn render_json(&self, info_logs: &LogBuffer, error_logs: &LogBuffer) -> String {
         let mut info_logs = LogIter::new(LogSeverity::Info, self.skip_old_log_entries(info_logs));
         let mut error_logs =
@@ -345,7 +345,7 @@ fn query_parameters_map(url: &str) -> HashMap<String, String> {
     result
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, serde::Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, serde::Serialize)]
 enum LogSeverity {
     Info,
     Error,

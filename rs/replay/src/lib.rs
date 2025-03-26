@@ -14,26 +14,25 @@
 //!
 //! Use `ic-replay --help` to find out more.
 
-use crate::cmd::{ReplayToolArgs, SubCommand};
-use crate::ingress::*;
-use crate::player::{Player, ReplayResult};
-
+use crate::{
+    cmd::{ReplayToolArgs, SubCommand},
+    ingress::*,
+    player::{Player, ReplayResult},
+};
 use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
 use ic_types::ReplicaVersion;
 use prost::Message;
-use std::cell::RefCell;
-use std::convert::TryFrom;
-use std::rc::Rc;
+use std::{cell::RefCell, convert::TryFrom, rc::Rc};
 
 mod backup;
 pub mod cmd;
 pub mod ingress;
 mod mocks;
 pub mod player;
+mod registry_helper;
 mod validator;
 
 /// Replays the past blocks and creates a checkpoint of the latest state.
@@ -230,8 +229,7 @@ fn cmd_get_recovery_cup(
     cmd: &crate::cmd::GetRecoveryCupCmd,
 ) -> Result<(), String> {
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
-    use ic_types::consensus::HasHeight;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
+    use ic_types::{consensus::HasHeight, crypto::threshold_sig::ni_dkg::NiDkgTag};
 
     let context_time = ic_types::time::current_time();
     let time = context_time + std::time::Duration::from_secs(60);
@@ -242,10 +240,12 @@ fn cmd_get_recovery_cup(
     let low_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::LowThreshold)
+        .expect("No current low threshold transcript available")
         .clone();
     let high_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("No current high threshold transcript available")
         .clone();
     let initial_ni_dkg_transcript_low_threshold =
         Some(InitialNiDkgTranscriptRecord::from(low_threshold_transcript));
@@ -265,9 +265,10 @@ fn cmd_get_recovery_cup(
             registry_version: registry_version.get(),
         }),
         ecdsa_initializations: vec![],
+        chain_key_initializations: vec![],
     };
 
-    let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(
+    let cup = ic_consensus::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,

@@ -9,7 +9,7 @@ fn test_round_trip() {
         expected_seconds_after_utc_midnight: u64,
         expected_formatted_str: &str,
     ) {
-        #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+        #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
         struct T {
             #[serde(with = "crate::serde::time_of_day")]
             lunchtime: GlobalTimeOfDay,
@@ -31,7 +31,7 @@ fn test_round_trip() {
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("---\nlunchtime: \"{}\"\n", expected_formatted_str),
+            format!("lunchtime: {}\n", expected_formatted_str),
             "original_time_of_day_str = {:?}",
             original_time_of_day_str,
         );

@@ -4,12 +4,12 @@
 == Introduction
 
 The public endpoint is responsible for processing https requests as specified in the
-https://sdk.dfinity.org/docs/interface-spec/index.html#http-interface[IC specification]. Processing semantics include:
+https://internetcomputer.org/docs/current/references/ic-interface-spec#http-interface[IC specification]. Processing semantics include:
 
 * accepting TCP connections
 * TLS handshake for connections using HTTPS
 * forwarding, potentially after a transform, each request to the corresponding upstream component
-* request validation according to the https://sdk.dfinity.org/docs/interface-spec/index.html[interface specification of the IC]
+* request validation according to the https://internetcomputer.org/docs/current/references/ic-interface-spec#http-interface[interface specification of the IC]
 * async accepting and serving of connections 
 * DoS mitigation, as described in the link:rs/http_endpoints/README.adoc[parent README.adoc]
 

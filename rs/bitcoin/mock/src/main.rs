@@ -15,7 +15,7 @@ const DEFAULT_TIP_HEIGHT: u32 = 12;
 
 fn main() {}
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub struct State {
     pub fee_percentiles: Vec<u64>,
     // The network used in the bitcoin canister.
@@ -87,7 +87,7 @@ fn set_tip_height(tip_height: u32) {
 #[update]
 fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
     read_state(|s| {
-        assert_eq!(utxos_request.network, s.network.into());
+        assert_eq!(Network::from(utxos_request.network), s.network);
 
         let mut utxos = s
             .address_to_utxos
@@ -98,10 +98,14 @@ fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
             .cloned()
             .collect::<Vec<Utxo>>();
 
-        if let Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)) =
-            utxos_request.filter
-        {
-            utxos.retain(|u| s.tip_height + 1 >= u.height + min_confirmations);
+        if let Some(filter) = utxos_request.filter {
+            match filter {
+                UtxosFilterInRequest::MinConfirmations(min_confirmations)
+                | UtxosFilterInRequest::min_confirmations(min_confirmations) => {
+                    utxos.retain(|u| s.tip_height + 1 >= u.height + min_confirmations)
+                }
+                UtxosFilterInRequest::Page(_) | UtxosFilterInRequest::page(_) => {}
+            }
         }
 
         GetUtxosResponse {
@@ -190,24 +194,24 @@ fn reset_mempool() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    fn source_to_str(source: &candid::utils::CandidSource) -> String {
+    fn source_to_str(source: &candid_parser::utils::CandidSource) -> String {
         match source {
-            candid::utils::CandidSource::File(f) => {
+            candid_parser::utils::CandidSource::File(f) => {
                 std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
             }
-            candid::utils::CandidSource::Text(t) => t.to_string(),
+            candid_parser::utils::CandidSource::Text(t) => t.to_string(),
         }
     }
 
     fn check_service_equal(
         new_name: &str,
-        new: candid::utils::CandidSource,
+        new: candid_parser::utils::CandidSource,
         old_name: &str,
-        old: candid::utils::CandidSource,
+        old: candid_parser::utils::CandidSource,
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_equal(new, old) {
+        match candid_parser::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -233,8 +237,8 @@ fn check_candid_interface_compatibility() {
 
     check_service_equal(
         "actual ledger candid interface",
-        candid::utils::CandidSource::Text(&new_interface),
+        candid_parser::utils::CandidSource::Text(&new_interface),
         "declared candid interface in bitcoin_mock.did file",
-        candid::utils::CandidSource::File(old_interface.as_path()),
+        candid_parser::utils::CandidSource::File(old_interface.as_path()),
     );
 }

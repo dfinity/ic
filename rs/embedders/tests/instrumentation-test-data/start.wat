@@ -4,7 +4,7 @@
   (memory (data "hi"))
   (type (func (param i32)))
   (start $foo)
-  (table 0 1 anyfunc)
+  (table 0 1 funcref)
   (func $foo)
   (func (drop (i32.const 42)))
   (export "e" (func 1)))

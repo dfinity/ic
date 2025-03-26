@@ -6,7 +6,9 @@ rust_library(
     name = "phantom_newtype",
     srcs = glob(["src/**"]),
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
+        "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:slog",
     ],

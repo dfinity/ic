@@ -2,16 +2,41 @@ repo_root() {
     git rev-parse --show-toplevel
 }
 
+LIGHT_GRAY_TEXT='\033[0;37m'
+RED_TEXT='\033[0;31m'
+GREEN_TEXT='\033[0;32m'
+YELLOW_TEXT='\033[0;33m'
+BLUE_TEXT='\033[0;34m'
+PURPLE_TEXT='\033[0;35m'
+CYAN_TEXT='\033[0;36m'
+NO_COLOR='\033[0m'
+
+print_light_gray() {
+    echo -e "${LIGHT_GRAY_TEXT}$*${NO_COLOR}"
+}
+
 print_red() {
-    echo -e "\033[0;31m$*\033[0m" 1>&2
+    echo -e "${RED_TEXT}$*${NO_COLOR}" 1>&2
 }
 
 print_green() {
-    echo -e "\033[0;32m$*\033[0m"
+    echo -e "${GREEN_TEXT}$*${NO_COLOR}"
+}
+
+print_yellow() {
+    echo -e "${YELLOW_TEXT}$*${NO_COLOR}" 1>&2
 }
 
 print_blue() {
-    echo -e "\033[0;34m$*\033[0m"
+    echo -e "${BLUE_TEXT}$*${NO_COLOR}"
+}
+
+print_purple() {
+    echo -e "${PURPLE_TEXT}$*${NO_COLOR}"
+}
+
+print_cyan() {
+    echo -e "${CYAN_TEXT}$*${NO_COLOR}"
 }
 
 info() {
@@ -114,7 +139,7 @@ install_binary() {
     local DEST=$DEST_FOLDER/$DOWNLOAD_NAME
 
     PLATFORM=$(uname | tr '[[:upper:]]' '[[:lower:]]')
-    curl "https://download.dfinity.systems/ic/${GIT_HASH}/openssl-static-binaries/x86_64-${PLATFORM}/${DOWNLOAD_NAME}.gz" | zcat >"$DEST"
+    curl "https://download.dfinity.systems/ic/${GIT_HASH}/binaries/x86_64-${PLATFORM}/${DOWNLOAD_NAME}.gz" | zcat >"$DEST"
 
     chmod +x "$DEST"
 }

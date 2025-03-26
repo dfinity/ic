@@ -6,209 +6,291 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-    ValidatedPoolReader,
+    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, BouncerFactory, BouncerValue,
+    MutablePool, PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
 };
-use ic_logger::{info, ReplicaLogger};
-use ic_types::{
-    artifact::{Advert, ArtifactKind, ArtifactTag, Priority},
-    crypto::CryptoHash,
-    NodeId,
-};
+use ic_logger::ReplicaLogger;
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
+use ic_types::NodeId;
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
-pub struct U64Artifact;
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct U64Artifact(Vec<u8>);
 
-impl ArtifactKind for U64Artifact {
-    // Does not matter
-    const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
-    // Id==Message
-    type PbMessage = u64;
+impl IdentifiableArtifact for U64Artifact {
+    const NAME: &'static str = "artifact";
+    type Id = u64;
+    fn id(&self) -> Self::Id {
+        u64::from_le_bytes(self.0[..8].try_into().unwrap())
+    }
+}
+
+impl From<U64Artifact> for Vec<u8> {
+    fn from(value: U64Artifact) -> Self {
+        value.0
+    }
+}
+impl From<Vec<u8>> for U64Artifact {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
+impl PbArtifact for U64Artifact {
+    type PbMessage = Vec<u8>;
     type PbIdError = Infallible;
     type PbMessageError = Infallible;
-    type PbAttributeError = Infallible;
-    type PbFilterError = Infallible;
-    type Message = u64;
     type PbId = u64;
-    type Id = u64;
-    type PbAttribute = ();
-    type Attribute = ();
-    type PbFilter = ();
-    type Filter = ();
+}
 
-    /// The function converts a U64ArtifactMessage to an advert for a
-    /// U64Artifact.
-    fn message_to_advert(msg: &Self::Message) -> Advert<U64Artifact> {
-        Advert {
-            attribute: (),
-            size: 64,
-            id: *msg,
-            integrity_hash: CryptoHash(vec![]),
+impl U64Artifact {
+    pub fn id_to_msg(id: u64, msg_size: usize) -> Self {
+        let mut msg = id.to_le_bytes().to_vec();
+        msg.resize(msg_size, 0);
+        Self(msg)
+    }
+}
+
+#[derive(Debug, Default)]
+struct PeerPool {
+    pool_events: Vec<PoolEvent>,
+    // Pool with events applied.
+    pool: HashSet<u64>,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum PoolEvent {
+    Insert(u64),
+    Remove(u64),
+}
+
+impl PeerPool {
+    pub fn new() -> Self {
+        Self {
+            pool_events: Vec::new(),
+            pool: HashSet::new(),
         }
+    }
+    pub fn insert(&mut self, id: u64) {
+        self.pool.insert(id);
+        self.pool_events.push(PoolEvent::Insert(id))
+    }
+    pub fn remove(&mut self, id: u64) {
+        self.pool.remove(&id);
+        self.pool_events.push(PoolEvent::Remove(id))
+    }
+    pub fn num_inserts(&self, id: u64) -> usize {
+        self.pool_events
+            .iter()
+            .filter(|e| e == &&PoolEvent::Insert(id))
+            .count()
+    }
+    pub fn num_removes(&self, id: u64) -> usize {
+        self.pool_events
+            .iter()
+            .filter(|e| e == &&PoolEvent::Remove(id))
+            .count()
+    }
+
+    pub fn pool(&self) -> HashSet<u64> {
+        self.pool.clone()
     }
 }
 
 #[derive(Clone)]
-pub struct TestConsensus<Artifact: ArtifactKind> {
-    log: ReplicaLogger,
+pub struct TestConsensus<Artifact: IdentifiableArtifact> {
+    _log: ReplicaLogger,
     node_id: NodeId,
-    adverts: Arc<Mutex<VecDeque<Artifact::Message>>>,
-    purge: Arc<Mutex<VecDeque<Artifact::Id>>>,
-    received_remove_count: Arc<Mutex<HashMap<Artifact::Id, u16>>>,
-    received_unvalidated_count: Arc<Mutex<HashMap<Artifact::Id, u16>>>,
-    pool: Arc<Mutex<HashSet<Artifact::Id>>>,
+    inner: Arc<Mutex<TestConsensusInner<Artifact>>>,
+    msg_size: usize,
+    latency_sensitive: bool,
+}
+
+pub struct TestConsensusInner<Artifact: IdentifiableArtifact> {
+    adverts: VecDeque<Artifact::Id>,
+    purge: VecDeque<Artifact::Id>,
+    peer_pool: HashMap<NodeId, PeerPool>,
 }
 
 impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
-    type ChangeSet = (Vec<u64>, Vec<u64>);
+    type Mutations = (Vec<u64>, Vec<u64>);
 
-    fn insert(&mut self, msg: UnvalidatedArtifact<u64>) {
-        self.received_unvalidated_count
-            .lock()
-            .unwrap()
-            .entry(msg.message)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
-
-        self.pool.lock().unwrap().insert(msg.message);
+    fn insert(&mut self, msg: UnvalidatedArtifact<U64Artifact>) {
+        let mut inner = self.inner.lock().unwrap();
+        let peer_pool = &mut inner.peer_pool;
+        assert!(self.node_id != msg.peer_id);
+        peer_pool
+            .entry(msg.peer_id)
+            .and_modify(|x| x.insert(msg.message.id()))
+            .or_insert_with(|| {
+                let mut pool = PeerPool::new();
+                pool.insert(msg.message.id());
+                pool
+            });
     }
 
     fn remove(&mut self, id: &u64) {
-        self.received_remove_count
-            .lock()
-            .unwrap()
-            .entry(*id)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
-
-        self.pool.lock().unwrap().remove(id);
+        let mut inner = self.inner.lock().unwrap();
+        let peer_pool = &mut inner.peer_pool;
+        peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
-        let mut pool = self.pool.lock().unwrap();
+    fn apply(&mut self, mut change_set: Self::Mutations) -> ArtifactTransmits<U64Artifact> {
         let mut poll_immediately = false;
-        for add in &change_set.0 {
-            pool.insert(*add);
+        if !change_set.0.is_empty() {
             poll_immediately = true;
         }
-        for remove in &change_set.1 {
-            pool.remove(remove);
+        if !change_set.1.is_empty() {
             poll_immediately = true;
         }
-        ChangeResult {
-            purged: change_set.1,
-            adverts: change_set
-                .0
-                .into_iter()
-                .map(|m| U64Artifact::message_to_advert(&m))
-                .collect(),
+        let mut transmits = vec![];
+        transmits.extend(change_set.0.drain(..).map(|m| {
+            ArtifactTransmit::Deliver(ArtifactWithOpt {
+                artifact: self.id_to_msg(m).into(),
+                is_latency_sensitive: self.latency_sensitive,
+            })
+        }));
+
+        transmits.extend(change_set.1.drain(..).map(ArtifactTransmit::Abort));
+        ArtifactTransmits {
+            transmits,
             poll_immediately,
         }
     }
 }
 
-impl ChangeSetProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
-    type ChangeSet = <TestConsensus<U64Artifact> as MutablePool<U64Artifact>>::ChangeSet;
-    fn on_state_change(&self, _pool: &TestConsensus<U64Artifact>) -> Self::ChangeSet {
-        let advert: Vec<_> = self.adverts.lock().unwrap().drain(..).collect();
-        let purged: Vec<_> = self.purge.lock().unwrap().drain(..).collect();
+impl PoolMutationsProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+    type Mutations = <TestConsensus<U64Artifact> as MutablePool<U64Artifact>>::Mutations;
+    fn on_state_change(&self, _pool: &TestConsensus<U64Artifact>) -> Self::Mutations {
+        let mut inner = self.inner.lock().unwrap();
+        let purged: Vec<_> = inner.purge.drain(..).collect();
+        let mut advert = Vec::new();
+        if purged.is_empty() {
+            advert = inner.adverts.drain(..).collect();
+        }
         (advert, purged)
     }
 }
 
-#[allow(dead_code)]
 impl TestConsensus<U64Artifact> {
-    pub fn new(log: ReplicaLogger, node_id: NodeId) -> Self {
+    pub fn new(
+        log: ReplicaLogger,
+        node_id: NodeId,
+        msg_size: usize,
+        latency_sensitive: bool,
+    ) -> Self {
         Self {
-            log,
+            _log: log,
             node_id,
-            adverts: Arc::new(Mutex::new(VecDeque::new())),
-            purge: Arc::new(Mutex::new(VecDeque::new())),
-            received_remove_count: Arc::new(Mutex::new(HashMap::new())),
-            received_unvalidated_count: Arc::new(Mutex::new(HashMap::new())),
-            pool: Arc::new(Mutex::new(HashSet::new())),
+            inner: Arc::new(Mutex::new(TestConsensusInner {
+                adverts: VecDeque::new(),
+                purge: VecDeque::new(),
+                peer_pool: HashMap::from_iter(vec![(node_id, PeerPool::default())]),
+            })),
+            msg_size,
+            latency_sensitive,
         }
     }
 
-    pub fn push_advert(&self, artifact: u64) {
-        self.pool.lock().unwrap().insert(artifact);
-        self.adverts.lock().unwrap().push_back(artifact);
+    pub fn id_to_msg(&self, id: u64) -> Vec<u8> {
+        U64Artifact::id_to_msg(id, self.msg_size).into()
+    }
+
+    pub fn push_advert(&self, id: u64) {
+        let mut inner = self.inner.lock().unwrap();
+        let my_pool = inner.peer_pool.get_mut(&self.node_id).unwrap();
+        my_pool.insert(id);
+
+        inner.adverts.push_back(id);
     }
 
     pub fn push_purge(&self, id: u64) {
-        self.pool.lock().unwrap().remove(&id);
-        self.purge.lock().unwrap().push_back(id);
+        let mut inner = self.inner.lock().unwrap();
+        let my_pool = inner.peer_pool.get_mut(&self.node_id).unwrap();
+        my_pool.remove(id);
+
+        inner.purge.push_back(id);
     }
 
     pub fn received_advert_once(&self, id: u64) -> bool {
-        self.received_unvalidated_count
-            .lock()
-            .unwrap()
-            .get(&id)
-            .is_some_and(|&count| count == 1)
+        let inner = self.inner.lock().unwrap();
+        inner
+            .peer_pool
+            .iter()
+            .filter(|(&n, _)| n != self.node_id)
+            .map(|(_, x)| x.num_inserts(id))
+            .sum::<usize>()
+            == 1
     }
 
-    pub fn received_advert_count(&self, id: u64) -> u16 {
-        self.received_unvalidated_count
-            .lock()
-            .unwrap()
-            .get(&id)
-            .copied()
-            .unwrap_or(0)
+    pub fn received_advert_count(&self, id: u64) -> usize {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .peer_pool
+            .iter()
+            .filter(|(&n, _)| n != self.node_id)
+            .map(|(_, x)| x.num_inserts(id))
+            .sum()
+    }
+
+    pub fn received_remove_count(&self, id: u64) -> usize {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .peer_pool
+            .iter()
+            .filter(|(&n, _)| n != self.node_id)
+            .map(|(_, x)| x.num_removes(id))
+            .sum()
     }
 
     pub fn received_remove_once(&self, id: u64) -> bool {
-        self.received_remove_count
-            .lock()
-            .unwrap()
-            .get(&id)
-            .is_some_and(|&count| count == 1)
+        let inner = self.inner.lock().unwrap();
+        inner
+            .peer_pool
+            .iter()
+            .filter(|(&n, _)| n != self.node_id)
+            .map(|(_, x)| x.num_removes(id))
+            .sum::<usize>()
+            == 1
     }
 
-    pub fn pool(&self) -> HashSet<u64> {
-        self.pool.lock().unwrap().clone()
+    pub fn my_pool(&self) -> HashSet<u64> {
+        self.peer_pool(&self.node_id)
+    }
+
+    pub fn peer_pool(&self, peer_id: &NodeId) -> HashSet<u64> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .peer_pool
+            .get(peer_id)
+            .map(|p| p.pool())
+            .unwrap_or_default()
+            .clone()
     }
 }
 
 impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
-    fn contains(&self, id: &<U64Artifact as ArtifactKind>::Id) -> bool {
-        self.pool().contains(id)
+    fn get(&self, id: &<U64Artifact as IdentifiableArtifact>::Id) -> Option<U64Artifact> {
+        self.my_pool().get(id).map(|id| self.id_to_msg(*id).into())
     }
-    fn get_validated_by_identifier(
-        &self,
-        id: &<U64Artifact as ArtifactKind>::Id,
-    ) -> Option<<U64Artifact as ArtifactKind>::Message> {
-        info!(
-            self.log,
-            "{}: Get validated by id {} {:?}",
-            self.node_id,
-            id,
-            self.pool().get(id).copied()
-        );
-        self.pool().get(id).copied()
-    }
-    fn get_all_validated_by_filter(
-        &self,
-        _filter: &<U64Artifact as ArtifactKind>::Filter,
-    ) -> Box<dyn Iterator<Item = <U64Artifact as ArtifactKind>::Message> + '_> {
-        Box::new(self.pool().into_iter())
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = U64Artifact> + '_> {
+        Box::new(
+            self.my_pool()
+                .into_iter()
+                .map(|id| self.id_to_msg(id).into()),
+        )
     }
 }
 
-impl PriorityFnAndFilterProducer<U64Artifact, TestConsensus<U64Artifact>>
-    for TestConsensus<U64Artifact>
-{
-    fn get_priority_function(
+impl BouncerFactory<u64, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+    fn new_bouncer(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_types::artifact::PriorityFn<
-        <U64Artifact as ArtifactKind>::Id,
-        <U64Artifact as ArtifactKind>::Attribute,
-    > {
-        Box::new(|_, _| Priority::Fetch)
+    ) -> ic_interfaces::p2p::consensus::Bouncer<u64> {
+        Box::new(|_| BouncerValue::Wants)
     }
-    fn get_filter(&self) -> <U64Artifact as ArtifactKind>::Filter {
-        todo!()
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }

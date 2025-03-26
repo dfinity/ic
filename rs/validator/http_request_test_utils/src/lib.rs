@@ -8,8 +8,8 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, ReadState,
-    SignedDelegation, SignedIngressContent, UserQuery,
+    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
+    ReadState, SignedDelegation, SignedIngressContent,
 };
 use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
@@ -278,7 +278,7 @@ impl HttpRequestEnvelopeContentWithCanisterId for HttpCanisterUpdate {
 }
 
 impl HttpRequestEnvelopeContent for HttpUserQuery {
-    type HttpRequestContentType = UserQuery;
+    type HttpRequestContentType = Query;
 
     fn set_sender(&mut self, sender: Blob) {
         self.sender = sender;
@@ -353,14 +353,14 @@ impl HttpRequestEnvelopeContent for HttpReadState {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, EnumCount)]
+#[derive(Clone, Eq, PartialEq, Debug, EnumCount)]
 pub enum AuthenticationScheme {
     Anonymous,
     Direct(DirectAuthenticationScheme),
     Delegation(DelegationChain),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CanisterSigner {
     pub seed: Vec<u8>,
     pub canister_id: CanisterId,
@@ -411,7 +411,7 @@ impl CanisterSigner {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum DirectAuthenticationScheme {
     UserKeyPair(Ed25519KeyPair),
     CanisterSignature(CanisterSigner),
@@ -519,7 +519,7 @@ impl DirectAuthenticationScheme {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct DelegationChain {
     start: DirectAuthenticationScheme,
     end: DirectAuthenticationScheme,
@@ -540,7 +540,7 @@ impl DelegationChain {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DelegationChainBuilder {
     start: DirectAuthenticationScheme,
     end: Option<DirectAuthenticationScheme>,
@@ -697,7 +697,7 @@ fn oid_canister_signature() -> OID {
     oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2)
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RootOfTrust {
     pub public_key: ThresholdSigPublicKey,
     pub secret_key: SecretKeyBytes,
@@ -728,6 +728,17 @@ pub fn all_authentication_schemes<R: Rng + CryptoRng>(rng: &mut R) -> Vec<Authen
     ];
     assert_eq!(schemes.len(), AuthenticationScheme::COUNT + 1);
     schemes
+}
+
+pub fn all_authentication_schemes_except<R: Rng + CryptoRng>(
+    exception: AuthenticationScheme,
+    rng: &mut R,
+) -> Vec<AuthenticationScheme> {
+    let all_schemes = all_authentication_schemes(rng);
+    all_schemes
+        .into_iter()
+        .filter(|scheme| scheme != &exception)
+        .collect()
 }
 
 pub fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {

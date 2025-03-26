@@ -3,7 +3,6 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    convert::TryFrom,
     fs,
     io::{self, BufRead},
     path::{Path, PathBuf},
@@ -23,7 +22,6 @@ use ic_prep_lib::{
     subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 
@@ -50,7 +48,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
 /// See the README.adoc file for more details.
 struct CliArgs {
     /// The version of the Replica being run
-    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
+    #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
     /// The URL against which a HTTP GET request will return a release
@@ -60,7 +58,7 @@ struct CliArgs {
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will default to
     /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.zst
-    #[clap(long, parse(try_from_str = url::Url::parse))]
+    #[clap(long)]
     pub release_package_download_url: Option<Url>,
 
     /// The hex-formatted SHA-256 hash of the archive served by
@@ -75,11 +73,11 @@ struct CliArgs {
     pub release_package_sha256_hex: Option<String>,
 
     /// JSON5 node definition
-    #[clap(long = "node", group = "node_spec", multiple_values(true), parse(try_from_str = Node::from_json5_without_braces))]
+    #[clap(long = "node", group = "node_spec", num_args(1..), value_parser = Node::from_json5_without_braces)]
     pub nodes: Vec<Node>,
 
     /// Path to working directory for node states.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub working_dir: PathBuf,
 
     /// Skip generating subnet records
@@ -92,7 +90,7 @@ struct CliArgs {
 
     /// Reads a directory containing datacenter's DER keys and a "meta.json"
     /// file containing metainformation for each datacenter.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub dc_pk_path: Option<PathBuf>,
 
     /// Indicate whether each node operator entry is required to specify a file
@@ -109,7 +107,7 @@ struct CliArgs {
     /// A json-file containing a list of whitelisted principal IDs. A
     /// whitelisted principal is allowed to create canisters on any subnet on
     /// the IC.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub provisional_whitelist: Option<PathBuf>,
 
     /// The Principal Id of the node operator that is used for all nodes created
@@ -127,13 +125,13 @@ struct CliArgs {
     /// The path to the file which contains the initial set of SSH public keys
     /// to populate the registry with, to give "readonly" access to all the
     /// nodes.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub ssh_readonly_access_file: Option<PathBuf>,
 
     /// The path to the file which contains the initial set of SSH public keys
     /// to populate the registry with, to give "backup" access to all the
     /// nodes.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub ssh_backup_access_file: Option<PathBuf>,
 
     /// Maximum size of ingress message in bytes.
@@ -141,15 +139,15 @@ struct CliArgs {
     #[clap(long, allow_hyphen_values = true)]
     pub max_ingress_bytes_per_message: Option<i64>,
 
+    /// Maximum size of a block payload in bytes.
+    #[clap(long)]
+    pub max_block_payload_size: Option<u64>,
+
     /// if release-package-download-url is not specified and this option is
     /// specified, the corresponding update image field in the blessed replica
     /// version record is left empty.
     #[clap(long)]
     pub allow_empty_update_image: bool,
-
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    #[clap(long)]
-    pub guest_launch_measurement_sha256_hex: Option<String>,
 
     /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
     /// Used only for local and testnet replicas.
@@ -161,9 +159,10 @@ struct CliArgs {
     #[clap(long)]
     whitelisted_prefixes: Option<String>,
 
-    /// The indices of subnets that should have the SEV feature enabled, if any.
-    #[clap(long, use_value_delimiter = true)]
-    pub sev_subnet_indices: Vec<u64>,
+    /// Whitelisted ports for the firewall prefixes, separated by
+    /// commas. Port 8080 is always included.
+    #[clap(long)]
+    whitelisted_ports: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -182,6 +181,7 @@ fn main() -> Result<()> {
         }
     }
 
+    let replica_version = valid_args.replica_version_id.unwrap_or_default();
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();
     for (i, (subnet_id, nodes)) in valid_args.subnets.iter().enumerate() {
@@ -190,35 +190,29 @@ fn main() -> Result<()> {
         } else {
             SubnetType::Application
         };
-        let features = valid_args
-            .sev_subnet_indices
-            .contains(&(i as u64))
-            .then_some(SubnetFeatures {
-                sev_enabled: true,
-                ..Default::default()
-            });
 
         let subnet_configuration = SubnetConfig::new(
             *subnet_id,
             nodes.to_owned(),
-            valid_args.replica_version_id.clone(),
+            replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
-            None,
-            None,
-            None,
-            None,
+            /*max_ingress_messages_per_block=*/ None,
+            valid_args.max_block_payload_size,
+            /*unit_delay=*/ None,
+            /*initial_notary_delay=*/ None,
             valid_args.dkg_interval_length,
-            None,
+            /*dkg_dealings_per_block=*/ None,
             subnet_type,
-            None,
-            None,
-            None,
-            features,
-            None,
-            None,
+            /*max_instructions_per_message=*/ None,
+            /*max_instructions_per_round=*/ None,
+            /*max_instructions_per_install_code=*/ None,
+            /*features=*/ None,
+            /*chain_key_config=*/ None,
+            /*max_number_of_canisters=*/ None,
             valid_args.ssh_readonly_access.clone(),
             valid_args.ssh_backup_access.clone(),
             SubnetRunningState::Active,
+            None,
         );
         topology_config.insert_subnet(*subnet_id, subnet_configuration);
     }
@@ -228,7 +222,7 @@ fn main() -> Result<()> {
     let mut ic_config0 = IcConfig::new(
         valid_args.working_dir.as_path(),
         topology_config,
-        valid_args.replica_version_id,
+        replica_version,
         valid_args.generate_subnet_records,
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
@@ -237,12 +231,12 @@ fn main() -> Result<()> {
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,
         valid_args.ssh_readonly_access,
-        valid_args.guest_launch_measurement_sha256_hex,
     );
 
     ic_config0
         .set_use_specified_ids_allocation_range(valid_args.use_specified_ids_allocation_range);
     ic_config0.set_whitelisted_prefixes(valid_args.whitelisted_prefixes);
+    ic_config0.set_whitelisted_ports(valid_args.whitelisted_ports);
 
     let ic_config = match valid_args.dc_pk_dir {
         Some(dir) => ic_config0.load_registry_node_operator_records_from_dir(
@@ -256,7 +250,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ValidatedArgs {
     pub working_dir: PathBuf,
     pub replica_version_id: Option<ReplicaVersion>,
@@ -275,11 +269,11 @@ struct ValidatedArgs {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_block_payload_size: Option<u64>,
     pub allow_empty_update_image: bool,
-    pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
     pub whitelisted_prefixes: Option<String>,
-    pub sev_subnet_indices: Vec<u64>,
+    pub whitelisted_ports: Option<String>,
 }
 
 impl CliArgs {
@@ -333,16 +327,6 @@ impl CliArgs {
                 self.nns_subnet_index.unwrap(),
                 subnets.keys().collect::<Vec<_>>()
             );
-        }
-
-        for index in &self.sev_subnet_indices {
-            if !subnets.contains_key(index) {
-                bail!(
-                    "SEV subnet index {} does not match any of subnet indices {:?}",
-                    index,
-                    subnets.keys().collect::<Vec<_>>()
-                );
-            }
         }
 
         let dc_pk_path = match self.dc_pk_path {
@@ -429,11 +413,11 @@ impl CliArgs {
                     None
                 }
             }),
+            max_block_payload_size: self.max_block_payload_size,
             allow_empty_update_image: self.allow_empty_update_image,
-            guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
             whitelisted_prefixes: self.whitelisted_prefixes,
-            sev_subnet_indices: self.sev_subnet_indices,
+            whitelisted_ports: self.whitelisted_ports,
         })
     }
 }
@@ -465,7 +449,7 @@ fn load_json<T: DeserializeOwned, P: AsRef<Path> + Copy>(path: P) -> Result<T> {
 }
 
 /// List of whitelisted principal ids.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 struct ProvisionalWhitelistFile {
     pub provisional_whitelist: Vec<String>,
 }
@@ -510,8 +494,7 @@ mod test_flag_node_parser {
     use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
 
-    const GOOD_FLAG: &str =
-        r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#;
+    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#;
 
     /// Verifies that a good flag parses correctly
     #[test]
@@ -523,10 +506,10 @@ mod test_flag_node_parser {
             config: NodeConfiguration {
                 xnet_api: "1.2.3.4:81".parse().unwrap(),
                 public_api: "3.4.5.6:82".parse().unwrap(),
-                p2p_addr: "1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: None,
+                domain: None,
+                node_reward_type: None,
             },
         };
 
@@ -538,12 +521,11 @@ mod test_flag_node_parser {
     fn missing_fields() {
         // Each flag variant omits a field, starting with `idx`.
         let flags = vec![
-            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
+            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
             // Omitting subnet index yields an unassigned node.
-            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81""#,
         ];
 
         for flag in flags {

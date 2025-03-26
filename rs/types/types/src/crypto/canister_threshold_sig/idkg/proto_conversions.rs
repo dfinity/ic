@@ -4,7 +4,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
     SignedIDkgDealing,
 };
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
@@ -241,6 +241,7 @@ impl TryFrom<&IDkgSignedDealingTupleProto> for SignedIDkgDealing {
 fn idkg_transcript_params_proto(params: &IDkgTranscriptParams) -> IDkgTranscriptParamsProto {
     let idkg_transcript_operation_args = match params.operation_type() {
         IDkgTranscriptOperation::Random => vec![],
+        IDkgTranscriptOperation::RandomUnmasked => vec![],
         IDkgTranscriptOperation::ReshareOfMasked(idkg_transcript) => {
             vec![idkg_transcript_proto(idkg_transcript)]
         }
@@ -280,6 +281,7 @@ fn idkg_transcript_operation_type_proto(
 ) -> IDkgTranscriptOperationProto {
     match op_type {
         IDkgTranscriptOperation::Random => IDkgTranscriptOperationProto::Random,
+        IDkgTranscriptOperation::RandomUnmasked => IDkgTranscriptOperationProto::RandomUnmasked,
         IDkgTranscriptOperation::ReshareOfMasked(_) => {
             IDkgTranscriptOperationProto::ReshareOfMasked
         }

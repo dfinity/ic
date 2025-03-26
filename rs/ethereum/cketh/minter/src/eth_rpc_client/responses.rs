@@ -4,7 +4,7 @@ use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Deserialize, Encode, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionReceipt {
     /// The hash of the block containing the transaction.
@@ -46,7 +46,7 @@ impl HttpResponsePayload for TransactionReceipt {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Decode, Deserialize, Encode, Serialize)]
 #[serde(try_from = "ethnum::u256", into = "ethnum::u256")]
 pub enum TransactionStatus {
     /// Transaction was mined and executed successfully.
@@ -71,13 +71,24 @@ impl From<TransactionStatus> for ethnum::u256 {
     }
 }
 
+impl TryFrom<u8> for TransactionStatus {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TransactionStatus::Failure),
+            1 => Ok(TransactionStatus::Success),
+            _ => Err(format!("invalid transaction status: {}", value)),
+        }
+    }
+}
+
 impl TryFrom<ethnum::u256> for TransactionStatus {
     type Error = String;
 
     fn try_from(value: ethnum::u256) -> Result<Self, Self::Error> {
         match value {
-            ethnum::u256::ZERO => Ok(TransactionStatus::Failure),
-            ethnum::u256::ONE => Ok(TransactionStatus::Success),
+            ethnum::u256::ZERO | ethnum::u256::ONE => TransactionStatus::try_from(value.as_u8()),
             _ => Err(format!("invalid transaction status: {}", value)),
         }
     }

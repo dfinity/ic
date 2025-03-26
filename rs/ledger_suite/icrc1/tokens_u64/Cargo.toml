@@ -1,0 +1,19 @@
+[package]
+name = "ic-icrc1-tokens-u64"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-stable-structures = { workspace = true }
+minicbor = { workspace = true }
+num-traits = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+ciborium = { workspace = true }
+proptest = { workspace = true }

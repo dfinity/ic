@@ -8,12 +8,13 @@ message Stats {
 }
 
 message QueryStats {
-  uint64 epoch = 1;
+  optional uint64 highest_aggregated_epoch = 1;
   repeated QueryStatsInner query_stats = 2;
 }
 
 message QueryStatsInner {
   types.v1.NodeId proposer = 1;
+  uint64 epoch = 7;
   types.v1.CanisterId canister = 2;
   uint32 num_calls = 3;
   uint64 num_instructions = 4;

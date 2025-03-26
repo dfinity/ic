@@ -1,37 +1,39 @@
 [package]
 name = "ic-consensus-manager"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.6.12"
-backoff = "0.3.0"
+axum = { workspace = true }
+backoff = { workspace = true }
 bytes = { workspace = true }
-crossbeam-channel = "0.5.5"
-futures ={ workspace = true }
-ic-async-utils = { path = "../../async_utils" }
-ic-artifact-pool = { path = "../../artifact_pool" }
+ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-peer-manager = { path = "../../p2p/peer_manager" }
-ic-protobuf = { path = "../../protobuf" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
 ic-quic-transport = { path = "../quic_transport" }
 ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
-rand = "0.8.5"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+prost = { workspace = true }
+rand = { workspace = true }
+slog = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-mockall = "0.11.4"
-turmoil = "0.5"
+mockall = { workspace = true }
+tower = { workspace = true }
+turmoil = { workspace = true }

@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "rejoin_test_lib",
+    testonly = True,
+    srcs = ["rejoin_test_lib.rs"],
+    crate_name = "rejoin_test_lib",
+    deps = [
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:candid",
+        "@crate_index//:chrono",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)

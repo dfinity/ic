@@ -1,11 +1,13 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_json",
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:lazy_static",
     "@crate_index//:rand",
     "@crate_index//:rand_pcg",
@@ -14,26 +16,30 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/canister_test",
+    "//rs/state_machine_tests",
     "//rs/test_utilities",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
 ]
 
 MACRO_DEPENDENCIES = [
-    "//rs/rust_canisters/dfn_macro",
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
 ]
 
 rust_binary(
     name = "statesync_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "statesync_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_canister(
-    name = "statesync_test_canister",
+    name = "statesync-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":statesync_test.did",
@@ -46,19 +52,15 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "statesync_test_integration_test",
     srcs = ["test/test.rs"],
     data = [
-        ":statesync_test_canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
+        ":statesync-test-canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/statesync_test",
-        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync_test_canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync-test-canister)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

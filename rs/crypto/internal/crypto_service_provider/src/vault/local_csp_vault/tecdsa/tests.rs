@@ -2,23 +2,22 @@ mod ecdsa_sign_share {
     use crate::key_id::KeyId;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::types::CspSecretKey;
-    use crate::vault::api::ThresholdEcdsaSignerCspVault;
+    use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
     use crate::LocalCspVault;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_threshold_sig_ecdsa::{
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
         CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalarBytes,
         IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
         ThresholdEcdsaSigShareInternal,
     };
-    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
-    use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
     use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::ExtendedDerivationPath;
     use ic_types::Randomness;
     use proptest::collection::vec;
     use proptest::prelude::any;
     use proptest::proptest;
     use proptest::strategy::Strategy;
-    use serde_bytes::ByteBuf;
     use std::collections::HashSet;
 
     #[test]
@@ -35,7 +34,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
+            Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { commitment_string })
             if commitment_string == format!("{:?}", parameters.lambda_masked.combined_commitment.commitment())
         )
     }
@@ -46,7 +45,8 @@ mod ecdsa_sign_share {
         let lambda_masked_key_id =
             KeyId::from(parameters.lambda_masked.combined_commitment.commitment());
 
-        proptest!(|(lambda_masked_sk in arb_csp_secret_key_with_wrong_type())| {
+        proptest!(|(lambda_masked_sk in arb_non_commitment_opening_csp_secret_key())| {
+            let wrong_secret_key_type = <&'static str>::from(&lambda_masked_sk).to_string();
             let mut canister_sks = MockSecretKeyStore::new();
             canister_sks
                 .expect_get()
@@ -62,8 +62,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.lambda_masked.combined_commitment.commitment())
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
+                if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
     }
@@ -83,7 +83,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
+            Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { commitment_string })
             if commitment_string == format!("{:?}", parameters.kappa_times_lambda.combined_commitment.commitment())
         )
     }
@@ -98,7 +98,8 @@ mod ecdsa_sign_share {
                 .commitment(),
         );
 
-        proptest!(|(kappa_times_lambda_sk in arb_csp_secret_key_with_wrong_type())| {
+        proptest!(|(kappa_times_lambda_sk in arb_non_commitment_opening_csp_secret_key())| {
+            let wrong_secret_key_type = <&'static str>::from(&kappa_times_lambda_sk).to_string();
             let mut canister_sks = MockSecretKeyStore::new();
             parameters.with_lambda_masked_idkg_commitment(&mut canister_sks);
             canister_sks
@@ -115,8 +116,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.kappa_times_lambda.combined_commitment.commitment())
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
+                if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
     }
@@ -137,7 +138,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
+            Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { commitment_string })
             if commitment_string == format!("{:?}", parameters.key_times_lambda.combined_commitment.commitment())
         )
     }
@@ -148,7 +149,8 @@ mod ecdsa_sign_share {
         let key_times_lambda_key_id =
             KeyId::from(parameters.key_times_lambda.combined_commitment.commitment());
 
-        proptest!(|(key_times_lambda_sk in arb_csp_secret_key_with_wrong_type())| {
+        proptest!(|(key_times_lambda_sk in arb_non_commitment_opening_csp_secret_key())| {
+            let wrong_secret_key_type = <&'static str>::from(&key_times_lambda_sk).to_string();
             let mut canister_sks = MockSecretKeyStore::new();
             parameters.with_lambda_masked_idkg_commitment(&mut canister_sks);
             parameters.with_kappa_times_lambda_idkg_commitment(&mut canister_sks);
@@ -166,8 +168,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.key_times_lambda.combined_commitment.commitment())
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
+                if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
     }
@@ -197,8 +199,8 @@ mod ecdsa_sign_share {
 
                 assert_matches!(
                     result,
-                    Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
-                    if internal_error.contains("UnsupportedAlgorithm")
+                    Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
+                    if internal_error.contains("unsupported algorithm")
                 )
             });
     }
@@ -226,47 +228,11 @@ mod ecdsa_sign_share {
             //TODO CRP-1340 add dedicated error type for hash length mismatch
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
-                if internal_error.contains("UnsupportedAlgorithm")
+                Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
+                if internal_error.contains("length of hashed_message")
+                && internal_error.contains("not matching expected length (32)")
             )
         });
-    }
-
-    #[test]
-    fn should_error_when_kappa_unmasked_commitment_type_wrong() {
-        let parameters = EcdsaSignShareParameters::default();
-        let mut canister_sks = MockSecretKeyStore::new();
-        parameters.with_lambda_masked_idkg_commitment(&mut canister_sks);
-        parameters.with_kappa_times_lambda_idkg_commitment(&mut canister_sks);
-        parameters.with_key_times_lambda_idkg_commitment(&mut canister_sks);
-        let vault = LocalCspVault::builder_for_test()
-            .with_mock_stores()
-            .with_canister_secret_key_store(canister_sks)
-            .build();
-
-        let params_with_wrong_commitment_type = {
-            let kappa_unmasked_by_summation = IDkgTranscriptInternal {
-                combined_commitment: CombinedCommitment::BySummation(
-                    parameters
-                        .kappa_unmasked
-                        .combined_commitment
-                        .commitment()
-                        .clone(),
-                ),
-            };
-            EcdsaSignShareParameters {
-                kappa_unmasked: kappa_unmasked_by_summation,
-                ..parameters
-            }
-        };
-
-        let result = params_with_wrong_commitment_type.ecdsa_sign_share(&vault);
-
-        assert_matches!(
-            result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
-            if internal_error.contains("UnexpectedCommitmentType")
-        )
     }
 
     #[test]
@@ -301,7 +267,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+            Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
             if internal_error.contains("UnexpectedCommitmentType")
         )
     }
@@ -338,7 +304,7 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+            Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
             if internal_error.contains("UnexpectedCommitmentType")
         )
     }
@@ -375,10 +341,11 @@ mod ecdsa_sign_share {
 
         assert_matches!(
             result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+            Err(ThresholdEcdsaCreateSigShareError::InternalError { internal_error })
             if internal_error.contains("UnexpectedCommitmentType")
         )
     }
+
     #[test]
     fn should_sign_share() {
         let parameters = EcdsaSignShareParameters::default();
@@ -394,6 +361,98 @@ mod ecdsa_sign_share {
         let result = parameters.ecdsa_sign_share(&vault);
 
         assert_matches!(result, Ok(_))
+    }
+
+    #[test]
+    fn should_fail_on_invalid_serialiation_of_transcript() {
+        let parameters = EcdsaSignShareParameters::default();
+        let vault = LocalCspVault::builder_for_test().build();
+
+        let invalid_serialization = vec![0xFF; 100];
+
+        for i in 0..5 {
+            let mut transcript_key = transcript_to_bytes(&parameters.key);
+            let mut transcript_kappa_unmasked = transcript_to_bytes(&parameters.kappa_unmasked);
+            let mut transcript_lambda_masked = transcript_to_bytes(&parameters.lambda_masked);
+            let mut transcript_kappa_times_lambda =
+                transcript_to_bytes(&parameters.kappa_times_lambda);
+            let mut transcript_key_times_lambda = transcript_to_bytes(&parameters.key_times_lambda);
+            // `IDkgTranscriptInternalBytes` is neither `Copy` nor `Clone`, so
+            // we can't use a `Vec` to store them.
+            let transcripts = [
+                &mut transcript_key,
+                &mut transcript_kappa_unmasked,
+                &mut transcript_lambda_masked,
+                &mut transcript_kappa_times_lambda,
+                &mut transcript_key_times_lambda,
+            ];
+
+            *transcripts[i] = IDkgTranscriptInternalBytes::from(invalid_serialization.clone());
+
+            assert_matches!(
+                vault.create_ecdsa_sig_share(
+                    parameters.derivation_path.clone(),
+                    parameters.hashed_message.clone(),
+                    parameters.nonce,
+                    transcript_key,
+                    transcript_kappa_unmasked,
+                    transcript_lambda_masked,
+                    transcript_kappa_times_lambda,
+                    transcript_key_times_lambda,
+                    parameters.algorithm_id,
+                ),
+                Err(ThresholdEcdsaCreateSigShareError::SerializationError { .. })
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_cant_deserialize_commitment_opening_bytes() {
+        let parameters = EcdsaSignShareParameters::default();
+
+        let keys_openings = parameters.keys_openings();
+
+        let invalid_scalar_encoding = EccScalarBytes::K256(Box::new([0xFFu8; 32]));
+        let invalid_commitment_opening_encoding =
+            CommitmentOpeningBytes::Simple(invalid_scalar_encoding);
+        let invalid_commitment_opening =
+            CspSecretKey::IDkgCommitmentOpening(invalid_commitment_opening_encoding);
+
+        for invalidate_key_index in 0..keys_openings.len() {
+            let mut canister_sks = MockSecretKeyStore::new();
+            for (key_index, (key_id, opening)) in keys_openings.iter().cloned().enumerate() {
+                let return_value = if key_index == invalidate_key_index {
+                    invalid_commitment_opening.clone()
+                } else {
+                    opening.clone()
+                };
+
+                canister_sks
+                    .expect_get()
+                    .times(1)
+                    .withf(move |this_key_id| *this_key_id == key_id)
+                    .return_const(Some(return_value));
+
+                if key_index == invalidate_key_index {
+                    // We return after the first deserializations failure and
+                    // thus don't try to fetch and deserialize subsequent
+                    // commitment openings, so we need to expect them to not
+                    // happen.
+                    break;
+                }
+            }
+
+            let vault = LocalCspVault::builder_for_test()
+                .with_mock_stores()
+                .with_canister_secret_key_store(canister_sks)
+                .build();
+
+            assert_matches!(
+                parameters.ecdsa_sign_share(&vault),
+                Err(ThresholdEcdsaCreateSigShareError::SerializationError { internal_error })
+                if internal_error == "CanisterThresholdSerializationError(\"failed to deserialize EccScalar: invalid encoding\")"
+            );
+        }
     }
 
     fn some_derivation_path() -> ExtendedDerivationPath {
@@ -423,7 +482,7 @@ mod ecdsa_sign_share {
             let [key, kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda] =
                 distinct_transcripts();
             let kappa_unmasked = IDkgTranscriptInternal {
-                combined_commitment: CombinedCommitment::ByInterpolation(
+                combined_commitment: CombinedCommitment::BySummation(
                     kappa_unmasked.combined_commitment.commitment().clone(),
                 ),
             };
@@ -451,32 +510,16 @@ mod ecdsa_sign_share {
         fn ecdsa_sign_share<V: ThresholdEcdsaSignerCspVault>(
             &self,
             vault: &V,
-        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-            vault.ecdsa_sign_share(
+        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
+            vault.create_ecdsa_sig_share(
                 self.derivation_path.clone(),
                 self.hashed_message.clone(),
                 self.nonce,
-                ByteBuf::from(self.key.serialize().expect("should serialize successfully")),
-                ByteBuf::from(
-                    self.kappa_unmasked
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
-                ByteBuf::from(
-                    self.lambda_masked
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
-                ByteBuf::from(
-                    self.kappa_times_lambda
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
-                ByteBuf::from(
-                    self.key_times_lambda
-                        .serialize()
-                        .expect("should serialize successfully"),
-                ),
+                transcript_to_bytes(&self.key),
+                transcript_to_bytes(&self.kappa_unmasked),
+                transcript_to_bytes(&self.lambda_masked),
+                transcript_to_bytes(&self.kappa_times_lambda),
+                transcript_to_bytes(&self.key_times_lambda),
                 self.algorithm_id,
             )
         }
@@ -542,6 +585,27 @@ mod ecdsa_sign_share {
                 .times(1)
                 .withf(move |key_id| *key_id == key_times_lambda_key_id)
                 .return_const(Some(self.key_times_lambda_commitment.clone()));
+        }
+
+        /// Returns key-opening pairs for the transcripts of `lambda_masked`,
+        /// `kappa_times_lambda`, and `key_times_lambda`.
+        fn keys_openings(&self) -> Vec<(KeyId, CspSecretKey)> {
+            [
+                (&self.lambda_masked, &self.lambda_masked_commitment),
+                (
+                    &self.kappa_times_lambda,
+                    &self.kappa_times_lambda_commitment,
+                ),
+                (&self.key_times_lambda, &self.key_times_lambda_commitment),
+            ]
+            .into_iter()
+            .map(|(transcript, opening)| {
+                (
+                    KeyId::from(transcript.combined_commitment.commitment()),
+                    opening.clone(),
+                )
+            })
+            .collect()
         }
     }
 
@@ -623,7 +687,7 @@ mod ecdsa_sign_share {
             .expect("failed to convert to fixed size array")
     }
 
-    fn arb_csp_secret_key_with_wrong_type() -> impl Strategy<Value = CspSecretKey> {
+    fn arb_non_commitment_opening_csp_secret_key() -> impl Strategy<Value = CspSecretKey> {
         any::<CspSecretKey>().prop_filter(
             "Secret key must not be of type IDkgCommitmentOpening",
             |sk| !matches!(sk, CspSecretKey::IDkgCommitmentOpening(_)),
@@ -636,5 +700,13 @@ mod ecdsa_sign_share {
             CommitmentOpeningBytes::Pedersen(bytes, _) => bytes,
         };
         CommitmentOpeningBytes::Simple(scalar_bytes.clone())
+    }
+
+    fn transcript_to_bytes(transcript: &IDkgTranscriptInternal) -> IDkgTranscriptInternalBytes {
+        IDkgTranscriptInternalBytes::from(
+            transcript
+                .serialize()
+                .expect("should serialize successfully"),
+        )
     }
 }

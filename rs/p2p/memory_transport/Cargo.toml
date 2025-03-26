@@ -1,18 +1,19 @@
 [package]
 name = "ic-memory-transport"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.36"
-axum = "0.6.12"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 bytes = { workspace = true }
-futures ={ workspace = true }
-http = "0.2.9"
-ic-types = { path = "../../types/types" }
 ic-quic-transport = { path = "../quic_transport" }
-prost = { workspace = true }
+ic-types = { path = "../../types/types" }
 tokio = { workspace = true }
 tower = { workspace = true }

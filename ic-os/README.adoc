@@ -7,7 +7,11 @@ IC-OS is an umbrella term for all the operating systems within the IC, including
 * SetupOS: Responsible for booting a new replica node and installing HostOS and GuestOS.
 * HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design to not perform any trusted capabilities.
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
-* Boundary-guestOS: The operating system that runs on boundary nodes.
+* Boundary-GuestOS: The operating system that runs on boundary nodes. It contains all the services necessary to fulfill the two main tasks of the boundary nodes: (1) route ICP API requests to a healthy replica of the right subnet (`ic-boundary`); and (2) translate HTTP requests into ICP API requests to allow direct access to dapps from the browser.
+
+== Managing IC-OS files
+
+For details on adding to and removing files from IC-OS builds, refer to the link:components/README.adoc#[components/ documentation]
 
 == Building IC-OS images
 
@@ -15,23 +19,22 @@ All the IC-OS images can be built though Bazel.
 
 === Environment setup
 
-Building IC-OS images locally requires environment configuration. The required packages are found in ic/gitlab-ci/container/Dockerfile.
+Building IC-OS images locally requires environment configuration. The required packages are found in ic/ci/container/Dockerfile.
 
 In addition to these packages, https://bazel.build/install[Bazel] must be installed.
 
 As an alternative, the following script can be used to build the images in a container with the correct environment already configured:
 
-    ./gitlab-ci/container/container-run.sh
+    ./ci/container/container-run.sh
 
 === Build targets
 
 Each image has its own build targets, which are variations of the image:
 
-* SetupOS: `prod`, `dev`, `dev-sev`
-* HostOS: `prod`, `dev`, `dev-sev`
-* GuestOS: `prod`, `dev`, `dev-malicious`, `dev-sev`
-* BoundaryGuestOS: `prod`, `prod-sev`, `dev`, `dev-sev`
-** Note that the `dev` and `dev-sev` images use the local service worker, while the `prod` and `prod-dev` images pull the service worker from `npm`.
+* SetupOS: `prod`, `dev`
+* HostOS: `prod`, `dev`
+* GuestOS: `prod`, `dev`, `dev-malicious`
+* BoundaryGuestOS: `prod`, `dev`
 
 The difference between production and development images is that the console can be accessed on `dev` images, but not on `prod` images.
 
@@ -56,7 +59,10 @@ IC-OS images are first created as docker images and then transformed into "bare-
 
 Rather than installing and relying on a full-blown upstream ISO image, the system is assembled based on a minimal Docker image with the required components added. This approach allows for a minimal, controlled, and well understood system - which is key for a secure platform.
 
-The build process is as follows:
+[NOTE]
+For a detailed overview of the build process, refer to the link:defs.bzl#[Bazel icos_build macro]
+
+The main build stages are as follows:
 
 === Docker
 
@@ -64,14 +70,14 @@ The docker build process is split into two dockerfiles. This split is necessary 
 
 *Dockerfile.base*
 
-  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/rootfs/Dockerfile.base
+  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/Dockerfile.base
 
    ** The Dockerfile.base takes care of installing all upstream Ubuntu packages.
    ** Because the versions of these packages can change at any given time (as updates are published regularly), in order to maintain build determinism, once a week, the CI pipeline builds a new base image for each OS. The result is published on the DFINITY public https://hub.docker.com/u/dfinity[Docker Hub].
 
 *Dockerfile*
 
-  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/rootfs/Dockerfile
+  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/Dockerfile
 
    ** The +Dockerfile+ builds off the published base image and takes care of configuring and assembling the main disk-image.
    ** Any instruction in this file needs to be reproducible in itself.
@@ -83,42 +89,23 @@ The docker image is then transformed into a bootable "bare-metal" or "virtual-me
 Note that all pre-configuration of the system is performed using docker utilities, and the system is actually also operational as a docker container.
 This means that some development and testing could be done on the docker image itself, but an actual VM image is still required for proper testing.
 
+=== Injection of additional binaries
+
+As a caching optimization, additional IC services, configuration, scripts and binaries are added to the image late in the build process.
+
 == IC-OS Directory Organization
 
-* *bootloader/*: This directory contains everything related to building EFI firmware and the GRUB bootloader image. It is configured to support the A/B partition split on upgradable IC-OS images (HostOS, GuestOS, and potentially Boundary-guestOS)
+* *components/*: This directory contains scripts and components that are copied to the target IC-OS.
+** For instructions on how to make changes to the OS, refer to the link:components/README.adoc#[components/ documentation]
 
-* *scripts/*: This directory contains build scripts. 
-** Note that GuestOS has its own scripts subdirectory that still need to be unified with the outer scripts directory.
+* *bootloader/*: This directory contains everything related to building EFI firmware and the GRUB bootloader image. 
 
-* *rootfs/*: Each rootfs subdirectory contains everything required to build a bootable Ubuntu system. Various template directories (e.g., /opt) are used, which are copied verbatim to the target system. You can add files to these directories to include them in the image.
-** For instructions on how to make changes to the OS, refer to the link:docs/Rootfs.adoc#[rootfs documentation]
+* *scripts/*: This directory contains build and utility scripts for the IC-OS.
 
-== SEV testing
+== Adding a new dependency to an IC-OS image
 
-=== Preparing DEV machine
+To add a new package to an IC-OS image you need to:
 
-Follow instructions link:docs/SEVSnpTest.adoc#[here] to prepare the dev machine.
-
-==== Storing the SEV Certificates on the host (e.g. for test/farm machines)
-
-Note: we are storing the PEM files instead of the DER files.
-
-```bash
-% ic/ic-os/hostos/rootfs/opt/ic/bin/get-sev-certs.sh
-% sev-host-set-cert-chain  -r ark.pem -s ask.pem -v vcek.pem
-```
-
-=== Running SEV-SNP VM with virsh
-
-### Preparing image
-
-* cd to the root of the source tree
-* build the image: bazel build //ic-os/boundary-guestos/envs/dev-sev/...
-* ic-os/scripts/bn-virsh/prepare-for-virsh.sh
-
-### Create, login, destroy
-
-* ```$ virsh create ./bn_sev_vm.xml```
-* ```$ virsh console boundary_nodes_sev_snp-$USER```
-** Note: control-] to exit
-* ```$ virsh destroy boundary_nodes_sev_snp-$USER```
+   * Update the list of packages to install in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/packages.common`
+   ** Commit the changes and wait for CI to publish the base image
+   * Update the base image hash in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/docker-base.<env>`

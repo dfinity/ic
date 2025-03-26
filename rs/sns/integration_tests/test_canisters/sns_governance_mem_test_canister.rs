@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 //! This is a special-purpose canister to create a large Governance proto and
 //! serialize it to stable memory in a format that is compatible with the real
 //! governance canister.
@@ -9,10 +12,11 @@
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
+use ic_sns_governance::pb::v1::Topic;
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
-        governance::{NeuronInFlightCommand, SnsMetadata},
+        governance::{Mode, NeuronInFlightCommand, SnsMetadata},
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron::{DissolveState, Followees},
         proposal::Action,
@@ -163,6 +167,7 @@ fn generate_generic_nervous_system_functions(
             name: "GenericNervousSystemFunction".to_string(),
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(Topic::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from_u64(id).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(id).get()),
@@ -255,12 +260,18 @@ fn allocate_proposal_data(
 ) -> ProposalData {
     // As Proposal Actions are keyed on u64, below is a map of those keys to ~estimated~ payload size
     let payload_size: usize = match action {
-        native_action_ids::UNSPECIFIED => 10_000, // Max size of motion_text payload = 10_000 bytes
+        native_action_ids::UNSPECIFIED | native_action_ids::MOTION => 10_000, // Max size of motion_text payload = 10_000 bytes
         native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS => 280, // sizeof(NervousSystemParameter) = 280 bytes
-        native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER => 1_500_000, // Governance wasm is 1.5 MB
+        native_action_ids::UPGRADE_SNS_CONTROLLED_CANISTER => 1_500_000, // Governance wasm is 1.5 MB
         native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION => 200, // sizeof(NervousSystemFunction) = ~200 bytes
         native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 8, // sizeof(u64) = 8 bytes
         native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 1_000_000, // Estimate of average payload size = 1MB
+        native_action_ids::MANAGE_SNS_METADATA => 2 * 1024 * 1024,
+        native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION => 100,
+        native_action_ids::TRANSFER_SNS_TREASURY_FUNDS => 100,
+        native_action_ids::REGISTER_DAPP_CANISTERS => 100,
+        native_action_ids::DEREGISTER_DAPP_CANISTERS => 100,
+        native_action_ids::MANAGE_LEDGER_PARAMETERS => 100,
         _ => panic!("Undefined proposal action"),
     };
 
@@ -316,6 +327,7 @@ fn populate_canister_state() {
             description: Some("A project to spin up a ServiceNervousSystem".to_string()),
             url: Some("https://internetcomputer.org".to_string()),
         }),
+        mode: Mode::Normal.into(),
         ..Default::default()
     };
 

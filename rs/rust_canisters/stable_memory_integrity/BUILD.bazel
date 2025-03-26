@@ -1,5 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,8 +10,9 @@ rust_library(
     aliases = {},
     crate_name = "ic_stable_memory_integrity",
     proc_macro_deps = [],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
@@ -23,28 +25,31 @@ rust_canister(
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":stable_memory_integrity.did",
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/stable_memory_integrity",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "tests",
     srcs = ["tests/stable_memory_integrity.rs"],
     aliases = {},
     crate_root = "tests/stable_memory_integrity.rs",
     data = [
-        ":stable_memory_integrity_canister.wasm",
+        ":stable_memory_integrity_canister.wasm.gz",
     ],
     env = {
-        "STABLE_MEMORY_INTEGRITY_CANISTER_WASM_PATH": "$(rootpath :stable_memory_integrity_canister.wasm)",
+        "STABLE_MEMORY_INTEGRITY_CANISTER_WASM_PATH": "$(rootpath :stable_memory_integrity_canister.wasm.gz)",
     },
     proc_macro_deps = [],
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/stable_memory_integrity",
         "//rs/state_machine_tests",
+        "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",

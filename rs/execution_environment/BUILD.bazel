@@ -1,26 +1,27 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
-load("//bazel:defs.bzl", "rust_bench")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
+load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/canister_sandbox/replica_controller",
+    "//packages/ic-error-types",
+    "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/constants",
     "//rs/crypto/prng",
     "//rs/crypto/sha2",
-    "//rs/crypto/tecdsa",
     "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/canister_threshold_sig",
     "//rs/cycles_account_manager",
     "//rs/embedders",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
-    "//rs/memory_tracker",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/constants",
     "//rs/phantom_newtype",
+    "//rs/query_stats",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
@@ -30,18 +31,18 @@ DEPENDENCIES = [
     "//rs/sys",
     "//rs/system_api",
     "//rs/types/base_types",
-    "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/lru_cache",
+    "//rs/utils/thread",
+    "//rs/wasm_transform",
     "@crate_index//:candid",
-    "@crate_index//:crossbeam-channel",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:lazy_static",
-    "@crate_index//:nix",
+    "@crate_index//:more-asserts",
     "@crate_index//:num-rational",
     "@crate_index//:num-traits",
     "@crate_index//:prometheus",
@@ -52,9 +53,11 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tower",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -62,40 +65,39 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/state_manager/mocks",
+    "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
-    "@crate_index//:ic-btc-test-utils",
     "@crate_index//:insta",
+    "@crate_index//:itertools",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
-    "@crate_index//:tempfile",
+    "@crate_index//:regex",
+    "@crate_index//:rstest",
     "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:test-strategy",
 ]
 
 ALIASES = {}
 
-DATA = [
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
-]
+DATA = []
 
-ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-}
+ENV = {}
 
 rust_library(
     name = "execution_environment",
@@ -104,34 +106,53 @@ rust_library(
     compile_data = glob(["tests/test-data/**"]),
     crate_name = "ic_execution_environment",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "execution_environment_test",
     timeout = "long",
     aliases = ALIASES,
     crate = ":execution_environment",
-    data = DATA,
-    env = ENV,
+    data = DATA + [
+        "//rs/universal_canister/impl:universal_canister.module",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = ENV | {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    # TODO(IDX-3164): enable on PR when flakiness issue is resolved
+    #                 or we have new darwin runners in use
     tags = [
-        "test_macos",
+        "test_macos_slow",
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "execution_environment_misc_integration",
     size = "large",
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
-    data = DATA,
-    env = ENV,
+    compile_data = glob(["tests/test-data/**"]),
+    data = DATA + [
+        "//rs/rust_canisters/backtrace_canister:backtrace-canister",
+        "//rs/universal_canister/impl:universal_canister.module",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        "//testnet/prebuilt-canisters:image-classification",
+    ],
+    env = dict(ENV.items() + [
+        ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
+        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
+        ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
+        ("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH", "$(rootpath //testnet/prebuilt-canisters:image-classification)"),
+    ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
-        "test_macos",
+        "test_macos_slow",
     ],
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -145,83 +166,104 @@ rust_doc_test(
 )
 
 BENCH_DEPENDENCIES = [
+    # Keep sorted.
     ":execution_environment",
+    "//packages/ic-error-types",
     "//rs/config",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/constants",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/rust_canisters/canister_test",
     "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
-    "//rs/types/error_types",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
+    "//rs/universal_canister/lib",
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
-    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
 
-rust_library(
-    name = "execution_environment_bench",
-    srcs = glob(["benches/lib/src/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
-    deps = BENCH_DEPENDENCIES,
-)
-
-rust_bench(
+rust_ic_bench(
     name = "execute_inspect_message_bench",
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     data = DATA,
     env = ENV,
-    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+    with_test = True,
+    deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "execute_query_bench",
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
     env = ENV,
-    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+    with_test = True,
+    deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "execute_update_bench",
     srcs = ["benches/system_api/execute_update.rs"],
     data = DATA,
     env = ENV,
-    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+    with_test = True,
+    deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "wasm_instructions_bench",
-    srcs = ["benches/wasm_instructions/main.rs"],
+    srcs = glob(["benches/wasm_instructions/*.rs"]),
     data = DATA,
     env = ENV,
-    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+    deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "scheduler_bench",
     srcs = ["benches/scheduler.rs"],
     data = DATA,
     env = ENV,
     deps = [
-        ":execution_environment_bench",
+        # Keep sorted.
+        "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
-        "//rs/types/base_types",
         "//rs/types/types_test_utils",
     ] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
+    name = "load_simulator_canisters_bench",
+    srcs = ["benches/load_simulator_canisters.rs"],
+    data = DATA + [
+        "//rs/rust_canisters/canister_creator:canister_creator_canister",
+        "//rs/rust_canisters/load_simulator:load_simulator_canister",
+    ],
+    env = dict(ENV.items() + [
+        ("CANISTER_CREATOR_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)"),
+        ("LOAD_SIMULATOR_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/load_simulator:load_simulator_canister)"),
+    ]),
+    deps = [
+        # Keep sorted.
+        "//rs/execution_environment/benches/lib:execution_environment_bench",
+        "//rs/state_machine_tests",
+        "//rs/types/types_test_utils",
+    ] + BENCH_DEPENDENCIES,
+)
+
+rust_ic_bench(
     name = "100k_canisters_bench",
     srcs = ["benches/100k_canisters.rs"],
     data = DATA + ["//rs/rust_canisters/canister_creator:canister_creator_canister"],
@@ -229,60 +271,44 @@ rust_bench(
         ("CANISTER_CREATOR_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)"),
     ]),
     deps = [
-        ":execution_environment_bench",
-        "//rs/rust_canisters/canister_test",
+        # Keep sorted.
+        "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
-        "//rs/types/base_types",
         "//rs/types/types_test_utils",
     ] + BENCH_DEPENDENCIES,
 )
 
 rust_library(
     name = "utils",
+    testonly = True,
     srcs = ["benches/management_canister/utils.rs"],
     aliases = ALIASES,
     deps = [
-        ":execution_environment_bench",
-        "//rs/rust_canisters/canister_test",
+        # Keep sorted.
+        "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
         "@crate_index//:candid",
         "@crate_index//:serde",
     ] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "management_canister_bench",
     srcs = glob(["benches/management_canister/*.rs"]),
-    data = DATA + ["//rs/execution_environment/benches/management_canister/test_canister"],
+    data = DATA + [
+        "//rs/execution_environment/benches/management_canister/test_canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
     env = dict(ENV.items() + [
         ("TEST_CANISTER_WASM_PATH", "$(rootpath //rs/execution_environment/benches/management_canister/test_canister)"),
+        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
     ]),
     deps = [
-        ":execution_environment_bench",
+        # Keep sorted.
         ":utils",
-        "//rs/rust_canisters/canister_test",
+        "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
         "@crate_index//:candid",
         "@crate_index//:serde",
     ] + BENCH_DEPENDENCIES,
-)
-
-rust_binary(
-    name = "fees_and_limits",
-    srcs = ["tools/src/fees_and_limits.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [
-        "//rs/config",
-        "//rs/embedders",
-        "//rs/replicated_state",
-        "//rs/system_api",
-        "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:clap",
-        "@crate_index//:eyre",
-        "@crate_index//:ic-agent",
-        "@crate_index//:serde_json",
-        "@crate_index//:tokio",
-    ],
 )

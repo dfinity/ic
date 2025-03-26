@@ -9,7 +9,7 @@ fn test_round_trip() {
         expected_e8s: u64,
         expected_formatted_str: &str,
     ) {
-        #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+        #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
         struct T {
             #[serde(with = "crate::serde::tokens")]
             amount: Tokens,
@@ -31,7 +31,7 @@ fn test_round_trip() {
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("---\namount: {}\n", expected_formatted_str),
+            format!("amount: {}\n", expected_formatted_str),
             "original_amount_str = {:?}",
             original_amount_str,
         );

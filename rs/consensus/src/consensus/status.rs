@@ -6,7 +6,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{Height, ReplicaVersion, SubnetId};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Status {
     /// The Consensus is running normally.
     Running,
@@ -52,7 +52,7 @@ pub fn get_status(
     Some(Status::Running)
 }
 
-fn should_halt(
+pub fn should_halt(
     height: Height,
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
@@ -111,9 +111,9 @@ mod tests {
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::ReplicaVersion;
 
     use super::*;

@@ -1,10 +1,3 @@
-pub mod fake_tls_handshake;
-
-pub use ic_crypto_test_utils::files as temp_dir;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
-use tokio_rustls::rustls::{ClientConfig, PrivateKey, RootCertStore, ServerConfig};
-
-use crate::types::ids::node_test_id;
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
@@ -14,12 +7,14 @@ use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_types::ids::node_test_id;
 use ic_types::crypto::canister_threshold_sig::error::*;
 use ic_types::crypto::canister_threshold_sig::idkg::*;
 use ic_types::crypto::canister_threshold_sig::*;
@@ -43,11 +38,6 @@ use ic_types::{NodeId, RegistryVersion};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
-
-const DUMMY_EDDSA_PRIVATE_KEY: [u8; 48] = [
-    48, 46, 2, 1, 0, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-];
 
 pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
     Arc::new(FakeRegistryClient::new(Arc::new(
@@ -185,7 +175,7 @@ impl<T: Signable> ThresholdSigner<T> for CryptoReturningOk {
     fn sign_threshold(
         &self,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<ThresholdSigShareOf<T>> {
         Ok(ThresholdSigShareOf::new(ThresholdSigShare(vec![])))
     }
@@ -196,7 +186,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &ThresholdSigShareOf<T>,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
         _signer: NodeId,
     ) -> CryptoResult<()> {
         Ok(())
@@ -205,7 +195,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
     fn combine_threshold_sig_shares(
         &self,
         _shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         Ok(CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])))
     }
@@ -214,7 +204,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &CombinedThresholdSigOf<T>,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<()> {
         Ok(())
     }
@@ -265,11 +255,11 @@ impl NiDkgAlgorithm for CryptoReturningOk {
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
-            config.dkg_id().dkg_tag,
+            config.dkg_id().dkg_tag.clone(),
             config.threshold().get().get(),
             config.registry_version().get(),
         );
-        transcript.dkg_id = config.dkg_id();
+        transcript.dkg_id = config.dkg_id().clone();
         Ok(transcript)
     }
 
@@ -280,7 +270,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         self.loaded_transcripts
             .write()
             .unwrap()
-            .insert(transcript.dkg_id);
+            .insert(transcript.dkg_id.clone());
         Ok(LoadTranscriptResult::SigningKeyAvailable)
     }
 
@@ -291,7 +281,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         self.retained_transcripts
             .write()
             .unwrap()
-            .push(transcripts.iter().map(|t| t.dkg_id).collect());
+            .push(transcripts.into_iter().map(|t| t.dkg_id).collect());
         Ok(())
     }
 }
@@ -452,10 +442,10 @@ impl IDkgProtocol for CryptoReturningOk {
 }
 
 impl ThresholdEcdsaSigner for CryptoReturningOk {
-    fn sign_share(
+    fn create_sig_share(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
         Ok(ThresholdEcdsaSigShare {
             sig_share_raw: vec![],
         })
@@ -489,42 +479,86 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
     }
 }
 
-impl TlsConfig for CryptoReturningOk {
-    fn server_config(
+impl ThresholdSchnorrSigner for CryptoReturningOk {
+    fn create_sig_share(
         &self,
-        _allowed_clients: SomeOrAllNodes,
-        _registry_version: RegistryVersion,
-    ) -> Result<ServerConfig, TlsConfigError> {
-        Ok(ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            // Random Ed25519 private key since valid format is checked when building the config.
-            .with_single_cert(Vec::new(), PrivateKey(DUMMY_EDDSA_PRIVATE_KEY.to_vec()))
-            .expect("bad certificate/key"))
+        _inputs: &ThresholdSchnorrSigInputs,
+    ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+        Ok(ThresholdSchnorrSigShare {
+            sig_share_raw: vec![],
+        })
     }
-    fn server_config_without_client_auth(
+}
+
+impl ThresholdSchnorrSigVerifier for CryptoReturningOk {
+    fn verify_sig_share(
         &self,
-        _registry_version: RegistryVersion,
-    ) -> Result<ServerConfig, TlsConfigError> {
-        Ok(ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(
-                Vec::new(),
-                // Random Ed25519 private key since valid format is checked when building the config.
-                PrivateKey(DUMMY_EDDSA_PRIVATE_KEY.to_vec()),
-            )
-            .expect("bad certificate/key"))
+        _signer: NodeId,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _share: &ThresholdSchnorrSigShare,
+    ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+        Ok(())
     }
-    fn client_config(
+
+    fn combine_sig_shares(
         &self,
-        _server: NodeId,
-        _registry_version: RegistryVersion,
-    ) -> Result<ClientConfig, TlsConfigError> {
-        Ok(ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(RootCertStore { roots: Vec::new() })
-            .with_no_client_auth())
+        _inputs: &ThresholdSchnorrSigInputs,
+        _shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+    ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError> {
+        Ok(ThresholdSchnorrCombinedSignature { signature: vec![] })
+    }
+
+    fn verify_combined_sig(
+        &self,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _signature: &ThresholdSchnorrCombinedSignature,
+    ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+        Ok(())
+    }
+}
+
+use ic_types::crypto::vetkd::{
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+    VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
+    VetKdKeyVerificationError,
+};
+
+impl VetKdProtocol for CryptoReturningOk {
+    fn create_encrypted_key_share(
+        &self,
+        _args: VetKdArgs,
+    ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+        Ok(VetKdEncryptedKeyShare {
+            encrypted_key_share: VetKdEncryptedKeyShareContent(vec![]),
+            node_signature: vec![],
+        })
+    }
+
+    fn verify_encrypted_key_share(
+        &self,
+        _signer: NodeId,
+        _key_share: &VetKdEncryptedKeyShare,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyShareVerificationError> {
+        Ok(())
+    }
+
+    fn combine_encrypted_key_shares(
+        &self,
+        _shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+        _args: &VetKdArgs,
+    ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+        Ok(VetKdEncryptedKey {
+            encrypted_key: vec![],
+        })
+    }
+
+    fn verify_encrypted_key(
+        &self,
+        _key: &VetKdEncryptedKey,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyVerificationError> {
+        Ok(())
     }
 }
 

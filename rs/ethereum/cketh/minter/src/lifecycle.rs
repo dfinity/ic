@@ -10,16 +10,17 @@ mod tests;
 
 pub mod init;
 pub mod upgrade;
+
 pub use upgrade::post_upgrade;
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum MinterArg {
     InitArg(InitArg),
     UpgradeArg(UpgradeArg),
 }
 
 #[derive(
-    CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Hash, Encode, Decode,
+    Copy, Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Decode, Deserialize, Encode,
 )]
 #[cbor(index_only)]
 pub enum EthereumNetwork {
@@ -35,6 +36,18 @@ impl EthereumNetwork {
         match self {
             EthereumNetwork::Mainnet => 1,
             EthereumNetwork::Sepolia => 11155111,
+        }
+    }
+}
+
+impl TryFrom<u64> for EthereumNetwork {
+    type Error = String;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(EthereumNetwork::Mainnet),
+            11155111 => Ok(EthereumNetwork::Sepolia),
+            _ => Err("Unknown Ethereum Network".to_string()),
         }
     }
 }

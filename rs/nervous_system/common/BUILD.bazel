@@ -1,34 +1,31 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
-    "//rs/nns/constants",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/ledger_core",
-    "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/http_types",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/runtime",
+    "//rs/nns/constants",
+    "//rs/rust_canisters/canister_log",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
-    "@crate_index//:anyhow",
+    "@crate_index//:base64",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:by_address",
-    "@crate_index//:candid",
-    "@crate_index//:ic-stable-structures",
+    "@crate_index//:bytes",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:json5",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
+    "@crate_index//:num-traits",
     "@crate_index//:priority-queue",
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
@@ -37,16 +34,19 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/nns/governance",
+    # Keep sorted.
+    "//rs/nns/governance/api",
     "@crate_index//:proptest",
     "@crate_index//:serde_bytes",
 ] + select({
@@ -56,9 +56,7 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = [
-    "@crate_index//:serde_derive",
-]
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -67,17 +65,17 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
 )
 
 rust_library(
     name = "common",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nervous_system_common",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 

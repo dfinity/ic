@@ -1,7 +1,6 @@
 use crate::pb::v1::{
-    CanisterCallError, GovernanceError, SetDappControllersRequest, SetDappControllersResponse,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse,
+    CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
+    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
 };
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
@@ -34,14 +33,10 @@ impl SnsRootClient for RealSnsRootClient {
         &mut self,
         request: SetDappControllersRequest,
     ) -> Result<SetDappControllersResponse, CanisterCallError> {
-        dfn_core::api::call(
-            self.canister_id,
-            "set_dapp_controllers",
-            dfn_candid::candid_one,
-            request,
-        )
-        .await
-        .map_err(CanisterCallError::from)
+        ic_cdk::call(self.canister_id.get().0, "set_dapp_controllers", (request,))
+            .await
+            .map(|response: (SetDappControllersResponse,)| response.0)
+            .map_err(CanisterCallError::from)
     }
 }
 
@@ -76,52 +71,35 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
         &mut self,
         request: ManageNeuron,
     ) -> Result<ManageNeuronResponse, CanisterCallError> {
-        dfn_core::api::call(
-            self.canister_id,
-            "manage_neuron",
-            dfn_candid::candid_one,
-            request,
-        )
-        .await
-        .map_err(CanisterCallError::from)
+        ic_cdk::call(self.canister_id.get().0, "manage_neuron", (request,))
+            .await
+            .map(|response: (ManageNeuronResponse,)| response.0)
+            .map_err(CanisterCallError::from)
     }
 
     async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
         // TODO: Eliminate repetitive code. At least textually, the only
         // difference is the second argument that gets passed to
-        // dfn_core::api::call (the name of the method).
-        dfn_core::api::call(
-            self.canister_id,
-            "set_mode",
-            dfn_candid::candid_one,
-            request,
-        )
-        .await
-        .map_err(CanisterCallError::from)
+        // ic_cdk::call (the name of the method).
+        ic_cdk::call(self.canister_id.get().0, "set_mode", (request,))
+            .await
+            .map(|response: (SetModeResponse,)| response.0)
+            .map_err(CanisterCallError::from)
     }
 
     async fn claim_swap_neurons(
         &mut self,
         request: ClaimSwapNeuronsRequest,
     ) -> Result<ClaimSwapNeuronsResponse, CanisterCallError> {
-        dfn_core::api::call(
-            self.canister_id,
-            "claim_swap_neurons",
-            dfn_candid::candid_one,
-            request,
-        )
-        .await
-        .map_err(CanisterCallError::from)
+        ic_cdk::call(self.canister_id.get().0, "claim_swap_neurons", (request,))
+            .await
+            .map(|response: (ClaimSwapNeuronsResponse,)| response.0)
+            .map_err(CanisterCallError::from)
     }
 }
 
 #[async_trait]
 pub trait NnsGovernanceClient {
-    async fn settle_community_fund_participation(
-        &mut self,
-        request: SettleCommunityFundParticipation,
-    ) -> Result<Result<(), GovernanceError>, CanisterCallError>;
-
     async fn settle_neurons_fund_participation(
         &mut self,
         request: SettleNeuronsFundParticipationRequest,
@@ -140,31 +118,17 @@ impl RealNnsGovernanceClient {
 
 #[async_trait]
 impl NnsGovernanceClient for RealNnsGovernanceClient {
-    async fn settle_community_fund_participation(
-        &mut self,
-        request: SettleCommunityFundParticipation,
-    ) -> Result<Result<(), GovernanceError>, CanisterCallError> {
-        dfn_core::api::call(
-            self.canister_id,
-            "settle_community_fund_participation",
-            dfn_candid::candid_one,
-            request,
-        )
-        .await
-        .map_err(CanisterCallError::from)
-    }
-
     async fn settle_neurons_fund_participation(
         &mut self,
         request: SettleNeuronsFundParticipationRequest,
     ) -> Result<SettleNeuronsFundParticipationResponse, CanisterCallError> {
-        dfn_core::api::call(
-            self.canister_id,
+        ic_cdk::call(
+            self.canister_id.get().0,
             "settle_neurons_fund_participation",
-            dfn_candid::candid_one,
-            request,
+            (request,),
         )
         .await
+        .map(|response: (SettleNeuronsFundParticipationResponse,)| response.0)
         .map_err(CanisterCallError::from)
     }
 }

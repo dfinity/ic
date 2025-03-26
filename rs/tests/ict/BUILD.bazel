@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "ict_lib",
@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/dfinity/ic/rs/tests/ict",
     visibility = ["//visibility:private"],
     deps = [
+        # Keep sorted.
         "//rs/tests/ict/cmd",
         "@com_github_fatih_color//:color",
         "@com_github_spf13_cobra//:cobra",

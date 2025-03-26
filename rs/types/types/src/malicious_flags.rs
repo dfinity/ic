@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// Groups all available malicious flags.
-#[derive(Clone, Default, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
 pub struct MaliciousFlags {
     pub maliciously_propose_equivocating_blocks: bool,
     pub maliciously_propose_empty_blocks: bool,
@@ -25,7 +25,7 @@ pub struct MaliciousFlags {
     pub maliciously_disable_execution: bool,
     pub maliciously_corrupt_own_state_at_heights: Vec<u64>,
     pub maliciously_disable_ingress_validation: bool,
-    pub maliciously_corrupt_ecdsa_dealings: bool,
+    pub maliciously_corrupt_idkg_dealings: bool,
     /// Delay execution such that it takes at least [`Duration`] time
     pub maliciously_delay_execution: Option<Duration>,
     /// Delay state sync such that it takes at least [`Duration`] time
@@ -33,6 +33,15 @@ pub struct MaliciousFlags {
     /// Alter the signed hash in the certification before verifying a
     /// stream slice's signature.
     pub maliciously_alter_certified_hash: bool,
+    pub maliciously_alter_state_sync_chunk_sending_side: bool,
+    pub maliciously_alter_state_sync_chunk_receiving_side: Option<InvalidChunksAllowance>,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
+pub struct InvalidChunksAllowance {
+    pub meta_manifest_chunk_error_allowance: u32,
+    pub manifest_chunk_error_allowance: u32,
+    pub state_chunk_error_allowance: u32,
 }
 
 impl MaliciousFlags {
@@ -43,6 +52,12 @@ impl MaliciousFlags {
             || self.maliciously_propose_empty_blocks
             || self.maliciously_finalize_all
             || self.maliciously_notarize_all
+    }
+
+    /// This function is to distinguish maliciousness gated by idkg's
+    /// implementation.
+    pub fn is_idkg_malicious(&self) -> bool {
+        self.maliciously_corrupt_idkg_dealings
     }
 
     /// Delay the execution as specified by `maliciously_delay_execution`

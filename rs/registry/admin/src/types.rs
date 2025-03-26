@@ -1,17 +1,29 @@
 //! Helper types used by `ic-admin`.
 
+use crate::helpers::get_subnet_ids;
+use async_trait::async_trait;
+use candid::CandidType;
+use ic_canister_client::{Agent, Sender};
+use ic_nns_common::types::NeuronId;
+use ic_nns_governance_api::pb::v1::ProposalActionRequest;
 use ic_protobuf::registry::{
+    node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
-    subnet::v1::{GossipConfig as GossipConfigProto, SubnetRecord as SubnetRecordProto},
+    subnet::v1::SubnetRecord as SubnetRecordProto,
 };
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::PrincipalId;
+use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
-use serde::Serialize;
-use std::convert::{From, TryFrom, TryInto};
-use std::str::FromStr;
+use serde::{Deserialize, Serialize};
+use std::{
+    convert::{From, TryFrom, TryInto},
+    net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
+};
+use strum_macros::EnumString;
 
 /// All or part of the registry
 #[derive(Default, Serialize)]
@@ -44,7 +56,7 @@ pub(crate) enum RegistryValue {
 
 /// User-friendly representation of a v1::SubnetRecord. For instance,
 /// the `membership` field is a `Vec<String>` to pretty-print the node IDs.
-#[derive(Default, Serialize, Clone)]
+#[derive(Clone, Default, Serialize)]
 pub(crate) struct SubnetRecord {
     pub membership: Vec<String>,
     pub nodes: IndexMap<PrincipalId, NodeDetails>,
@@ -55,17 +67,14 @@ pub(crate) struct SubnetRecord {
     pub initial_notary_delay_millis: u64,
     pub replica_version_id: String,
     pub dkg_interval_length: u64,
-    pub gossip_config: Option<GossipConfigProto>,
+    pub dkg_dealings_per_block: u64,
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
-    pub max_instructions_per_message: u64,
-    pub max_instructions_per_round: u64,
-    pub max_instructions_per_install_code: u64,
     pub features: SubnetFeatures,
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-    pub ecdsa_config: Option<EcdsaConfig>,
+    pub chain_key_config: Option<ChainKeyConfig>,
 }
 
 impl SubnetRecord {
@@ -107,31 +116,57 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             initial_notary_delay_millis: value.initial_notary_delay_millis,
             replica_version_id: value.replica_version_id.clone(),
             dkg_interval_length: value.dkg_interval_length,
-            gossip_config: value.gossip_config.clone(),
+            dkg_dealings_per_block: value.dkg_dealings_per_block,
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
-            max_instructions_per_message: value.max_instructions_per_message,
-            max_instructions_per_round: value.max_instructions_per_round,
-            max_instructions_per_install_code: value.max_instructions_per_install_code,
-            features: value.features.clone().unwrap_or_default().into(),
+            features: value.features.unwrap_or_default().into(),
             max_number_of_canisters: value.max_number_of_canisters,
             ssh_readonly_access: value.ssh_readonly_access.clone(),
             ssh_backup_access: value.ssh_backup_access.clone(),
-            ecdsa_config: value
-                .ecdsa_config
+            chain_key_config: value
+                .chain_key_config
                 .as_ref()
                 .map(|c| c.clone().try_into().unwrap()),
         }
     }
 }
 
+/// User-friendly representation of the v1::IPv4InterfaceConfig.
+/// Ipv4 is parsed into Ipv4Addr. Other fields are omitted for now.
+#[derive(Clone, Serialize)]
+pub(crate) struct IPv4Interface {
+    pub address: Ipv4Addr,
+    pub gateways: Vec<Ipv4Addr>,
+    pub prefix_length: u32,
+}
+
 /// Encapsulates a node/node operator id pair.
-#[derive(Serialize, Clone)]
+#[derive(Clone, Serialize)]
 pub(crate) struct NodeDetails {
-    pub ipv6: std::net::Ipv6Addr,
+    pub ipv6: Ipv6Addr,
+    pub ipv4: Option<IPv4Interface>,
     pub node_operator_id: PrincipalId,
     pub node_provider_id: PrincipalId,
     pub dc_id: String,
+    pub hostos_version_id: Option<String>,
+    pub domain: Option<String>,
+}
+
+impl From<IPv4InterfaceConfig> for IPv4Interface {
+    fn from(value: IPv4InterfaceConfig) -> Self {
+        Self {
+            address: value
+                .ip_addr
+                .parse::<Ipv4Addr>()
+                .expect("couldn't parse ipv4 address"),
+            gateways: value
+                .gateway_ip_addr
+                .into_iter()
+                .map(|s| s.parse::<Ipv4Addr>().expect("couldn't parse ipv4 address"))
+                .collect(),
+            prefix_length: value.prefix_length,
+        }
+    }
 }
 
 /// User-friendly representation of a v1::ProvisionalWhitelist.
@@ -153,4 +188,77 @@ impl From<ProvisionalWhitelistProto> for ProvisionalWhitelistRecord {
             ),
         }
     }
+}
+
+/// Trait to extract metadata from a proposal subcommand.
+/// This trait is totally implemented in macros and should
+/// be used within the derive directive.
+pub trait ProposalMetadata {
+    fn summary(&self) -> String;
+    fn url(&self) -> String;
+    fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender);
+    fn is_dry_run(&self) -> bool;
+    fn is_json(&self) -> bool;
+}
+
+/// A description of a subnet, either by index, or by id.
+#[derive(Copy, Clone)]
+pub enum SubnetDescriptor {
+    Id(PrincipalId),
+    Index(usize),
+}
+
+impl FromStr for SubnetDescriptor {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let maybe_index = usize::from_str(s);
+        let maybe_principal = PrincipalId::from_str(s);
+        match (maybe_index, maybe_principal) {
+            (Err(e1), Err(e2)) => Err(format!(
+                "Cannot parse argument '{}' as a subnet descriptor. \
+                 It is not an index because {}. It is not a principal because {}.",
+                s, e1, e2
+            )),
+            (Ok(i), Err(_)) => Ok(Self::Index(i)),
+            (Err(_), Ok(id)) => Ok(Self::Id(id)),
+            (Ok(_), Ok(_)) => Err(format!(
+                "Well that's embarrassing. {} can be interpreted both as an index and as a \
+                 principal. I did not think this was possible!",
+                s
+            )),
+        }
+    }
+}
+
+impl SubnetDescriptor {
+    pub async fn get_id(&self, registry_canister: &RegistryCanister) -> SubnetId {
+        match self {
+            Self::Id(p) => SubnetId::new(*p),
+            Self::Index(i) => {
+                let subnets = get_subnet_ids(registry_canister).await;
+                *(subnets.get(*i)
+                    .unwrap_or_else(|| panic!("Tried to get subnet of index {}, but there are only {} subnets according to the registry", i, subnets.len())))
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumString, Serialize)]
+pub enum LogVisibility {
+    #[strum(serialize = "controllers")]
+    Controllers,
+    #[strum(serialize = "public")]
+    Public,
+}
+
+/// Trait to extract the payload for each proposal type.
+/// This trait is async as building some payloads requires async calls.
+#[async_trait]
+pub trait ProposalPayload<T: CandidType> {
+    async fn payload(&self, agent: &Agent) -> T;
+}
+
+#[async_trait]
+pub trait ProposalAction {
+    async fn action(&self) -> ProposalActionRequest;
 }

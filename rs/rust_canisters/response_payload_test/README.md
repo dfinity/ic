@@ -21,7 +21,7 @@ Run
 ---
 
 ```bash
-NODE='http://[2001:4d78:40d:0:5000:67ff:fe4f:650d]:8080'
+NODE='http://[2602:fb2b:110:10:5000:67ff:fe4f:650d]:8080'
 # Payload (a json string) has to be encoded in hex.
 PAYLOAD=$(echo -n '{"response_size":  5000000}'|od -t x1 -A none|xargs|sed -e 's/ //g')
 # Run a query

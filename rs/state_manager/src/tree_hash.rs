@@ -61,42 +61,44 @@ mod tests {
     use super::*;
     use hex::FromHex;
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_canonical_state::CertificationVersion;
+    use ic_canonical_state::{all_supported_versions, CertificationVersion};
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, Global, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{
-                CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
-            },
+            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
             system_state::CyclesUseCase,
         },
-        metadata_state::{Stream, SubnetMetrics},
+        metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
-        ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
+        ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
-    use ic_test_utilities::{
-        state::new_canister_state,
-        types::ids::{
-            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
-        },
-        types::messages::{RequestBuilder, ResponseBuilder},
+    use ic_test_utilities_state::new_canister_state;
+    use ic_test_utilities_types::ids::{
+        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
+    use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::{
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
-        messages::RequestMetadata,
+        messages::{RequestMetadata, NO_DEADLINE},
         nominal_cycles::NominalCycles,
-        xnet::{StreamIndex, StreamIndexedQueue},
-        CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
+        time::CoarseTime,
+        xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
+        CryptoHashOfPartialState, Cycles, Time,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::{collections::BTreeSet, sync::Arc};
-    use strum::{EnumCount, IntoEnumIterator};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    };
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -182,18 +184,15 @@ mod tests {
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
-            let execution_state = ExecutionState {
-                canister_root: "NOT_USED".into(),
-                session_nonce: None,
+            let execution_state = ExecutionState::new(
+                "NOT_USED".into(),
                 wasm_binary,
+                ExportedFunctions::new(BTreeSet::new()),
                 wasm_memory,
-                stable_memory: Memory::new_for_testing(),
-                exported_globals: vec![Global::I32(1)],
-                exports: ExportedFunctions::new(BTreeSet::new()),
+                Memory::new_for_testing(),
+                vec![Global::I32(1)],
                 metadata,
-                last_executed_round: ExecutionRound::from(0),
-                next_scheduled_method: NextScheduledMethod::default(),
-            };
+            );
             canister_state.execution_state = Some(execution_state);
 
             state.put_canister_state(canister_state);
@@ -202,32 +201,44 @@ mod tests {
                 StreamIndexedQueue::with_begin(StreamIndex::from(4)),
                 StreamIndex::new(10),
             );
-            for _ in 1..6 {
-                stream.push(ResponseBuilder::new().build().into());
-            }
+            let maybe_deadline = |i: u64| {
+                if certification_version >= CertificationVersion::V18 && i % 2 != 0 {
+                    CoarseTime::from_secs_since_unix_epoch(i as u32)
+                } else {
+                    NO_DEADLINE
+                }
+            };
             for i in 1..6 {
                 stream.push(
-                    RequestBuilder::new()
-                        .metadata(
-                            (certification_version >= CertificationVersion::V14).then_some(
-                                RequestMetadata {
-                                    call_tree_depth: (i % 2 > 0).then_some(i % 3),
-                                    call_tree_start_time: (i % 3 > 0)
-                                        .then_some(i % 2)
-                                        .map(Time::from_nanos_since_unix_epoch),
-                                    call_subtree_deadline: (i % 4 > 0)
-                                        .then_some(i % 3)
-                                        .map(Time::from_nanos_since_unix_epoch),
-                                },
-                            ),
-                        )
+                    ResponseBuilder::new()
+                        .deadline(maybe_deadline(i))
                         .build()
                         .into(),
                 );
             }
-            if certification_version >= CertificationVersion::V8 {
-                stream.push_reject_signal(10.into());
-                stream.increment_signals_end();
+            for i in 1..6 {
+                stream.push(
+                    RequestBuilder::new()
+                        .metadata(RequestMetadata::new(
+                            i % 3,
+                            Time::from_nanos_since_unix_epoch(i % 2),
+                        ))
+                        .deadline(maybe_deadline(i))
+                        .build()
+                        .into(),
+                );
+            }
+            stream.push_reject_signal(RejectReason::CanisterMigrating);
+            stream.set_reverse_stream_flags(StreamFlags {
+                deprecated_responses_only: true,
+            });
+            if certification_version >= CertificationVersion::V19 {
+                stream.push_reject_signal(RejectReason::CanisterNotFound);
+                stream.push_reject_signal(RejectReason::QueueFull);
+                stream.push_reject_signal(RejectReason::CanisterStopped);
+                stream.push_reject_signal(RejectReason::OutOfMemory);
+                stream.push_reject_signal(RejectReason::Unknown);
+                stream.push_reject_signal(RejectReason::CanisterStopping);
             }
             state.modify_streams(|streams| {
                 streams.insert(subnet_test_id(5), stream);
@@ -241,25 +252,38 @@ mod tests {
                 );
             }
 
-            if certification_version >= CertificationVersion::V11 {
-                state.set_ingress_status(
-                    message_test_id(7),
-                    IngressStatus::Known {
-                        state: IngressState::Failed(UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            "canister not found",
-                        )),
-                        receiver: canister_id.into(),
-                        user_id: user_test_id(1),
-                        time: Time::from_nanos_since_unix_epoch(12345),
-                    },
-                    NumBytes::from(u64::MAX),
-                );
-            }
+            state.set_ingress_status(
+                message_test_id(7),
+                IngressStatus::Known {
+                    state: IngressState::Failed(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        "canister not found",
+                    )),
+                    receiver: canister_id.into(),
+                    user_id: user_test_id(1),
+                    time: Time::from_nanos_since_unix_epoch(12345),
+                },
+                NumBytes::from(u64::MAX),
+            );
 
             state.metadata.node_public_keys = btreemap! {
                 node_test_id(1) => vec![1; 44],
                 node_test_id(2) => vec![2; 44],
+            };
+
+            state.metadata.api_boundary_nodes = btreemap! {
+                node_test_id(11) => ApiBoundaryNodeEntry {
+                    domain: "api-bn11-example.com".to_string(),
+                    ipv4_address: Some("127.0.0.1".to_string()),
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                    pubkey: None,
+                },
+                node_test_id(12) => ApiBoundaryNodeEntry {
+                    domain: "api-bn12-example.com".to_string(),
+                    ipv4_address: None,
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                    pubkey: None,
+                },
             };
 
             let mut routing_table = RoutingTable::new();
@@ -286,7 +310,6 @@ mod tests {
             subnet_metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
             subnet_metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
             subnet_metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
-            subnet_metrics.ecdsa_signature_agreements = 2;
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;
@@ -298,6 +321,16 @@ mod tests {
                 CyclesUseCase::RequestAndResponseTransmission,
                 NominalCycles::from(20_000_000_000),
             );
+            let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+                name: "schnorr_key_id".into(),
+            });
+            let ecdsa_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "ecdsa_key_id".into(),
+            });
+            subnet_metrics.threshold_signature_agreements =
+                BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
             state.metadata.subnet_metrics = subnet_metrics;
 
@@ -324,31 +357,17 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes: [&str; CertificationVersion::COUNT] = [
-            "1B931426F36191153996B82CE305BE659AAE65D8AE75B4839736176C0453BDF3",
-            "3B3F058CD6BAF16A990585223CDD9ED98BC5507B51403707E486B764F1FF5DAE",
-            "5F17DC054CBE03F1887400247E4255764AAF3CDBFBA0AD4F414CB7ABAA4782C2",
-            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
-            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
-            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
-            "F86FEBBF994627432621BE7DEBD9D59BECEBD922C9C8B4F7F37BD34A5709F16B",
-            "F86FEBBF994627432621BE7DEBD9D59BECEBD922C9C8B4F7F37BD34A5709F16B",
-            "410BD1929B6884DE65DDBACC54749FDCC2A5FA3585898B9B2644147DE2760678",
-            "410BD1929B6884DE65DDBACC54749FDCC2A5FA3585898B9B2644147DE2760678",
-            "4BAB4FD35605188FDDCA534204C8E8852C9E450CEB6BE53129FB84DF109D8905",
-            "1ED37E00D177681A4111B6D45F518DF3E414B0B614333BB6552EBC0D8492B687",
-            "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
-            "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
-            "E1108326097AE9BF8212F333F4F46B9619B947CDF2A73F3223BBEBC6FC2033B6",
-            "EEC0156BE3C97CE6D7E7FBE683FFB4641463648DB6AC6818DCF90114E6A9DA72",
+        let expected_hashes: [&str; 3] = [
+            "0BD567305B9828C7BDE2A03E25871C382742A2598308761A47745BAA9E3495FF",
+            "28BCC63FA7C215C8308EE8201CDEBDC06B62AFB2E9F4C2AB31452A4DBBD73B90",
+            "4677DFA14CC8B349B1F0D88651CD961FE8DF2E905C3C886B9116972D798B1C1E",
         ];
+        assert_eq!(expected_hashes.len(), all_supported_versions().count());
 
-        for certification_version in CertificationVersion::iter() {
-            assert_partial_state_hash_matches(
-                certification_version,
-                // expected_hash
-                expected_hashes[certification_version as usize],
-            );
+        for (certification_version, expected_hash) in
+            all_supported_versions().zip(expected_hashes.iter())
+        {
+            assert_partial_state_hash_matches(certification_version, expected_hash);
         }
     }
 }

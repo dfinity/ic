@@ -1,6 +1,10 @@
+use std::{net::IpAddr, sync::Arc};
+
 use anyhow::anyhow;
-use axum::{error_handling::HandleErrorLayer, response::IntoResponse, BoxError, Router};
+use axum::Router;
+use candid::Principal;
 use http::request::Request;
+use ic_bn_lib::http::ConnInfo;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
 use tower::ServiceBuilder;
@@ -9,7 +13,7 @@ use tower_governor::{
     GovernorLayer,
 };
 
-use crate::{routes::ApiError, snapshot::Node};
+use crate::persist::RouteSubnet;
 
 pub struct RateLimit {
     requests_per_second: u32, // requests per second allowed
@@ -28,18 +32,33 @@ impl TryFrom<u32> for RateLimit {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 struct SubnetRateToken;
 
 impl KeyExtractor for SubnetRateToken {
-    type Key = candid::types::principal::Principal;
+    type Key = Principal;
+
     fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, GovernorError> {
         // This should always work, because we extract the subnet id after preprocess_request puts it there.
         Ok(req
             .extensions()
-            .get::<Node>()
+            .get::<Arc<RouteSubnet>>()
             .ok_or(GovernorError::UnableToExtractKey)?
-            .subnet_id)
+            .id)
+    }
+}
+
+#[derive(Clone)]
+struct IpKeyExtractor;
+
+impl KeyExtractor for IpKeyExtractor {
+    type Key = IpAddr;
+
+    fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, GovernorError> {
+        req.extensions()
+            .get::<Arc<ConnInfo>>()
+            .map(|x| x.remote_addr.ip())
+            .ok_or(GovernorError::UnableToExtractKey)
     }
 }
 
@@ -52,23 +71,16 @@ impl RateLimit {
             .checked_div(self.requests_per_second)
             .unwrap();
 
-        let governor_conf = Box::new(
-            GovernorConfigBuilder::default()
-                .per_nanosecond(interval.as_nanos().try_into().unwrap())
-                .burst_size(self.requests_per_second)
-                .finish()
-                .unwrap(),
-        );
+        let governor_conf = GovernorConfigBuilder::default()
+            .per_nanosecond(interval.as_nanos().try_into().unwrap())
+            .burst_size(self.requests_per_second)
+            .key_extractor(IpKeyExtractor)
+            .finish()
+            .unwrap();
 
-        router.layer(
-            ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    ApiError::from(e).into_response()
-                }))
-                .layer(GovernorLayer {
-                    config: Box::leak(governor_conf),
-                }),
-        )
+        router.layer(ServiceBuilder::new().layer(GovernorLayer {
+            config: Arc::new(governor_conf),
+        }))
     }
 
     // Per subnet rate limiting.
@@ -79,26 +91,22 @@ impl RateLimit {
             .checked_div(self.requests_per_second)
             .unwrap();
 
-        let governor_conf = Box::new(
-            GovernorConfigBuilder::default()
-                .per_nanosecond(interval.as_nanos().try_into().unwrap())
-                .burst_size(self.requests_per_second)
-                .key_extractor(SubnetRateToken)
-                .finish()
-                .unwrap(),
-        );
+        let governor_conf = GovernorConfigBuilder::default()
+            .per_nanosecond(interval.as_nanos().try_into().unwrap())
+            .burst_size(self.requests_per_second)
+            .key_extractor(SubnetRateToken)
+            .finish()
+            .unwrap();
 
-        router.layer(
-            ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    ApiError::from(e).into_response()
-                }))
-                .layer(GovernorLayer {
-                    config: Box::leak(governor_conf),
-                }),
-        )
+        router.layer(ServiceBuilder::new().layer(GovernorLayer {
+            config: Arc::new(governor_conf),
+        }))
     }
 }
+
+pub mod fetcher;
+pub mod generic;
+pub mod sharded;
 
 #[cfg(test)]
 pub mod test;

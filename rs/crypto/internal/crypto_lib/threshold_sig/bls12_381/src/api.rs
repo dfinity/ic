@@ -42,11 +42,10 @@ use crate::api::threshold_sign_error::ClibThresholdSignError;
 use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
 use crate::types::PublicKey;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_bls12381_der as der;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
-    crypto::{AlgorithmId, CryptoError, CryptoResult},
+    crypto::{CryptoError, CryptoResult},
     NodeIndex, NumberOfNodes,
 };
 use std::convert::{TryFrom, TryInto};
@@ -283,34 +282,4 @@ pub fn verify_combined_signature_with_cache(
 /// Return statistics related to the verify_combined_signature_with_cache cache
 pub fn bls_signature_cache_statistics() -> crate::cache::SignatureCacheStatistics {
     crate::cache::SignatureCache::global().cache_statistics()
-}
-
-/// Converts public key bytes into its DER-encoded form.
-///
-/// See [the Interface Spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate) and [RFC 5480](https://tools.ietf.org/html/rfc5480).
-pub fn public_key_to_der(key: PublicKeyBytes) -> CryptoResult<Vec<u8>> {
-    der::public_key_to_der(&key.0).map_err(|e| CryptoError::MalformedPublicKey {
-        algorithm: AlgorithmId::ThresBls12_381,
-        key_bytes: Some(key.0.to_vec()),
-        internal_error: format!("Conversion to DER failed with error {}", e),
-    })
-}
-
-/// Parses a `PublicKeyBytes` from its DER-encoded form.
-///
-/// See [the Interface Spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate)
-/// and [RFC 5480](https://tools.ietf.org/html/rfc5480).
-///
-/// # Errors
-/// * `CryptoError::MalformedPublicKey` if the given `bytes` are not valid
-///   ASN.1, or include unexpected ASN.1 structures..
-pub fn public_key_from_der(bytes: &[u8]) -> CryptoResult<PublicKeyBytes> {
-    match der::public_key_from_der(bytes) {
-        Ok(key_bytes) => Ok(PublicKeyBytes(key_bytes)),
-        Err(internal_error) => Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::ThresBls12_381,
-            key_bytes: Some(bytes.to_vec()),
-            internal_error,
-        }),
-    }
 }

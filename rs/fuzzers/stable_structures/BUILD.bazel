@@ -1,0 +1,21 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary_afl")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_fuzz_test_binary_afl(
+    name = "stable_structures_multiple_ops_persistent",
+    srcs = [
+        "fuzz_targets/data.rs",
+        "fuzz_targets/stable_structures_multiple_ops_persistent.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:arbitrary",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:libfuzzer-sys",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:tempfile",
+    ],
+)

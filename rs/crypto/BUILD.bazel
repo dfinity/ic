@@ -1,65 +1,74 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load(
+    "@rules_rust//rust:defs.bzl",
+    "rust_binary",
+    "rust_doc",
+    "rust_doc_test",
+    "rust_library",
+    "rust_test",
+    "rust_test_suite",
+)
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/config",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-    "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
+    "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/internal/logmon",
     "//rs/crypto/node_key_validation/tls_cert_validation",
     "//rs/crypto/standalone-sig-verifier",
-    "//rs/crypto/tecdsa",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
-    "//rs/crypto/utils/time",
+    "//rs/crypto/utils/canister_threshold_sig",
     "//rs/crypto/utils/tls",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
-    "//rs/registry/fake",
     "//rs/registry/helpers",
     "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:bincode",
-    "@crate_index//:clap",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
     "@crate_index//:parking_lot",
+    "@crate_index//:rustls",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-secp256k1",
+    "//packages/ic-vetkd-utils",
     "//rs/certification/test-utils",
     "//rs/crypto/ecdsa_secp256r1",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/for_verification_only",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
     "//rs/crypto/internal/crypto_lib/tls",
     "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
@@ -69,26 +78,29 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
-    "//rs/crypto/test_utils/tls",
     "//rs/crypto/test_utils/canister_sigs",
     "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/crypto/test_utils/csp",
     "//rs/crypto/test_utils/keygen",
     "//rs/crypto/test_utils/keys",
-    "//rs/crypto/test_utils/csp",
     "//rs/crypto/test_utils/local_csp_vault",
     "//rs/crypto/test_utils/metrics",
     "//rs/crypto/test_utils/multi_sigs",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/test_utils/tls",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry/mocks",
     "//rs/registry/client",
-    "//rs/test_utilities",
+    "//rs/registry/fake",
+    "//rs/registry/proto_data_provider",
     "//rs/test_utilities/in_memory_logger",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/time",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
+    "@crate_index//:k256",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
     "@crate_index//:proptest",
@@ -101,6 +113,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest-derive",
 ]
 
@@ -112,7 +125,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -126,11 +139,12 @@ rust_binary(
     srcs = ["src/bin/ic-crypto-csp.rs"],
     crate_name = "ic_crypto_csp",
     deps = [
-        "//rs/async_utils",
+        # Keep sorted.
         "//rs/config",
         "//rs/crypto/internal/crypto_service_provider",
         "//rs/crypto/internal/logmon",
-        "//rs/monitoring/adapter_metrics_server",
+        "//rs/http_endpoints/async_utils",
+        "//rs/monitoring/adapter_metrics/server",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "@crate_index//:clap",
@@ -148,21 +162,12 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+rust_test_suite(
     name = "integration_suite",
     srcs = glob(
-        ["tests/**/*.rs"],
-        exclude = [
-            "tests/**/test_*.rs",
-            "tests/*_utils/*.rs",
-            "tests/parallelism/*.rs",
-        ],
+        ["tests/*.rs"],
     ),
     aliases = ALIASES,
-    extra_srcs = glob([
-        "tests/**/test_*.rs",
-        "tests/*_utils/*.rs",
-    ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -178,6 +183,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/basic_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -196,6 +202,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/threshold_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":crypto"],
 )
@@ -205,6 +212,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/ni_dkg.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -214,6 +222,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/idkg.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -223,6 +232,17 @@ rust_bench(
     testonly = True,
     srcs = ["benches/tecdsa.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "tschnorr_bench",
+    testonly = True,
+    srcs = ["benches/tschnorr.rs"],
+    aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -232,6 +252,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/multi_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -241,6 +262,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/canister_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

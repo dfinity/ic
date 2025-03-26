@@ -339,7 +339,9 @@ mod try_from {
         use crate::messages::http::{
             Authentication, HttpQueryContent, HttpRequestError, HttpUserQuery,
         };
-        use crate::messages::{Blob, HttpRequest, HttpRequestEnvelope, UserQuery, UserSignature};
+        use crate::messages::{
+            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, UserSignature,
+        };
         use crate::UserId;
         use assert_matches::assert_matches;
 
@@ -354,14 +356,16 @@ mod try_from {
             }
         }
 
-        pub fn default_user_query_content() -> UserQuery {
-            UserQuery {
-                source: UserId::from(fixed::principal_id()),
+        pub fn default_user_query_content() -> Query {
+            Query {
+                source: QuerySource::User {
+                    user_id: UserId::from(fixed::principal_id()),
+                    ingress_expiry: fixed::ingress_expiry(),
+                    nonce: Some(fixed::nonce()),
+                },
                 receiver: fixed::canister_id(),
                 method_name: fixed::method_name(),
                 method_payload: fixed::arg().0,
-                ingress_expiry: fixed::ingress_expiry(),
-                nonce: Some(fixed::nonce()),
             }
         }
 
@@ -726,7 +730,6 @@ mod cbor_serialization {
     fn encoding_status_without_root_key() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: None,
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -734,7 +737,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("starting"),
             }),
@@ -745,7 +747,6 @@ mod cbor_serialization {
     fn encoding_status_with_root_key() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -753,7 +754,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("healthy"),
@@ -765,7 +765,6 @@ mod cbor_serialization {
     fn encoding_status_without_health_status() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -773,7 +772,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
             }),
@@ -784,7 +782,6 @@ mod cbor_serialization {
     fn encoding_status_with_certified_height() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -792,7 +789,6 @@ mod cbor_serialization {
                 certified_height: Some(AmountOf::new(1)),
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("healthy"),

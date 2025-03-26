@@ -1,23 +1,23 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use canister_test::Project;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, SubnetId};
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
-use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities_metrics::fetch_int_counter_vec;
+use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse},
     xnet::{StreamHeader, StreamIndexedQueue},
     Cycles,
 };
 use maplit::btreemap;
-use std::collections::BTreeSet;
 use std::sync::Arc;
-use xnet_test::Metrics;
+use std::{collections::BTreeSet, vec};
+use xnet_test::{Metrics, StartArgs};
 
 const MAX_TICKS: u64 = 100;
 
@@ -33,23 +33,21 @@ struct SubnetPairProxy {
     pub local_canister_id: CanisterId,
     pub remote_env: Arc<StateMachine>,
     pub remote_canister_id: CanisterId,
+    call_timeouts_seconds: Vec<Option<u32>>,
 }
 
 impl SubnetPairProxy {
-    const LOCAL_SUBNET_ID_U64: u64 = 1;
-    const REMOTE_SUBNET_ID_U64: u64 = 2;
-    const DESTINATION_SUBNET_ID_U64: u64 = 3;
+    const LOCAL_SUBNET_ID: SubnetId = SUBNET_0;
+    const REMOTE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
     /// Generates a new proxy of new subnets using default subnet ids.
     fn with_new_subnets() -> Self {
-        let local_subnet_id = subnet_test_id(Self::LOCAL_SUBNET_ID_U64);
-        let remote_subnet_id = subnet_test_id(Self::REMOTE_SUBNET_ID_U64);
-
         let routing_table = Self::make_routing_table();
         let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]).bytes();
 
         let local_env = StateMachineBuilder::new()
-            .with_subnet_id(local_subnet_id)
+            .with_subnet_id(Self::LOCAL_SUBNET_ID)
             .with_subnet_type(SubnetType::Application)
             .with_routing_table(routing_table.clone())
             .build();
@@ -63,7 +61,7 @@ impl SubnetPairProxy {
             .expect("Installing xnet-test-canister failed");
 
         let remote_env = StateMachineBuilder::new()
-            .with_subnet_id(remote_subnet_id)
+            .with_subnet_id(Self::REMOTE_SUBNET_ID)
             .with_subnet_type(SubnetType::Application)
             .with_routing_table(routing_table)
             .build();
@@ -76,16 +74,24 @@ impl SubnetPairProxy {
             local_canister_id,
             remote_env: Arc::from(remote_env),
             remote_canister_id,
+            // Default to a mix of guaranteed response and best-effort calls.
+            call_timeouts_seconds: vec![None, Some(u32::MAX)],
         }
+    }
+
+    /// Sets the desired call timeouts.
+    fn with_call_timeouts(mut self, call_timeouts_seconds: &[Option<u32>]) -> Self {
+        self.call_timeouts_seconds = call_timeouts_seconds.to_vec();
+        self
     }
 
     /// Generates a routing table with canister ranges for 3 subnets.
     fn make_routing_table() -> RoutingTable {
         let mut routing_table = RoutingTable::new();
         for subnet_id in [
-            subnet_test_id(Self::LOCAL_SUBNET_ID_U64),
-            subnet_test_id(Self::REMOTE_SUBNET_ID_U64),
-            subnet_test_id(Self::DESTINATION_SUBNET_ID_U64),
+            Self::LOCAL_SUBNET_ID,
+            Self::REMOTE_SUBNET_ID,
+            Self::DESTINATION_SUBNET_ID,
         ] {
             routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
         }
@@ -99,14 +105,16 @@ impl SubnetPairProxy {
         payload_size_bytes: u64,
     ) -> Result<Vec<u8>, candid::Error> {
         let network_topology = vec![
-            vec![self.local_canister_id.get().to_vec()],
-            vec![self.remote_canister_id.get().to_vec()],
+            vec![self.local_canister_id.get().into()],
+            vec![self.remote_canister_id.get().into()],
         ];
-        Encode!(
-            &network_topology,
-            &canister_to_subnet_rate,
-            &payload_size_bytes
-        )
+        Encode!(&StartArgs {
+            network_topology,
+            canister_to_subnet_rate,
+            request_payload_size_bytes: payload_size_bytes,
+            call_timeouts_seconds: self.call_timeouts_seconds.clone(),
+            response_payload_size_bytes: payload_size_bytes,
+        })
     }
 
     /// Calls the 'start' method on the local canister.
@@ -175,22 +183,22 @@ impl SubnetPairProxy {
 
     /// Generates a snapshot of the output queue on the local canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
-    fn local_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
+    fn local_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.local_env.get_latest_state(),
-            self.local_canister_id,
-            self.remote_canister_id,
+            &self.local_canister_id,
+            &self.remote_canister_id,
         )
         .map(|iter| iter.cloned().collect::<Vec<_>>())
     }
 
     /// Generates a snapshot of the output queue on the remote canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
-    fn remote_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
+    fn remote_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.remote_env.get_latest_state(),
-            self.remote_canister_id,
-            self.local_canister_id,
+            &self.remote_canister_id,
+            &self.local_canister_id,
         )
         .map(|iter| iter.cloned().collect::<Vec<_>>())
     }
@@ -207,8 +215,7 @@ impl SubnetPairProxy {
         do_until_or_panic(MAX_TICKS, |_| {
             let exit_condition = self
                 .local_output_queue_snapshot()
-                .map(|q| q.len() >= min_num_messages)
-                .unwrap_or(false);
+                .is_some_and(|q| q.len() >= min_num_messages);
             if !exit_condition {
                 self.local_env.tick();
             }
@@ -223,7 +230,7 @@ impl SubnetPairProxy {
             env.prepare_canister_migrations(
                 self.remote_canister_id..=self.remote_canister_id,
                 self.remote_env.get_subnet_id(),
-                subnet_test_id(Self::DESTINATION_SUBNET_ID_U64),
+                Self::DESTINATION_SUBNET_ID,
             );
         }
     }
@@ -235,7 +242,7 @@ impl SubnetPairProxy {
     fn move_remote_canister_to_destination_subnet(&self) -> Result<Self, String> {
         // New destination env using the same routing table as `self`.
         let destination_env = StateMachineBuilder::new()
-            .with_subnet_id(subnet_test_id(Self::DESTINATION_SUBNET_ID_U64))
+            .with_subnet_id(Self::DESTINATION_SUBNET_ID)
             .with_subnet_type(SubnetType::Application)
             .with_routing_table(Self::make_routing_table())
             .with_checkpoints_enabled(true)
@@ -252,7 +259,7 @@ impl SubnetPairProxy {
         for env in [&self.local_env, &self.remote_env, &destination_env] {
             env.reroute_canister_range(
                 self.remote_canister_id..=self.remote_canister_id,
-                subnet_test_id(Self::DESTINATION_SUBNET_ID_U64),
+                Self::DESTINATION_SUBNET_ID,
             );
         }
 
@@ -265,6 +272,7 @@ impl SubnetPairProxy {
             local_canister_id: self.local_canister_id,
             remote_env: Arc::new(destination_env),
             remote_canister_id: self.remote_canister_id,
+            call_timeouts_seconds: self.call_timeouts_seconds.clone(),
         })
     }
 }
@@ -272,19 +280,19 @@ impl SubnetPairProxy {
 /// Returns an iterator over the raw contents of a specific local canister's
 /// output queue to a specific remote canister; or `None` if the queue does not
 /// exist.
-fn get_output_queue_iter(
-    state: &Arc<ReplicatedState>,
-    local_canister_id: CanisterId,
-    remote_canister_id: CanisterId,
-) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>> {
+fn get_output_queue_iter<'a>(
+    state: &'a ReplicatedState,
+    local_canister_id: &CanisterId,
+    remote_canister_id: &'a CanisterId,
+) -> Option<impl Iterator<Item = &'a RequestOrResponse>> {
     state
         .canister_states
-        .get(&local_canister_id)
-        .and_then(|canister_state| {
+        .get(local_canister_id)
+        .and_then(move |canister_state| {
             canister_state
                 .system_state
                 .queues()
-                .output_queue_iter_for_testing(&remote_canister_id)
+                .output_queue_iter_for_testing(remote_canister_id)
         })
 }
 
@@ -343,7 +351,7 @@ fn call_stop_on_xnet_canister(
     env: &StateMachine,
     canister_id: CanisterId,
 ) -> Result<(), UserError> {
-    let wasm = env.execute_ingress(canister_id, "stop", Vec::new())?;
+    let wasm = env.execute_ingress(canister_id, "stop", Encode!().unwrap())?;
     assert_eq!(
         "stopped".to_string(),
         Decode!(&wasm.bytes(), String).unwrap()
@@ -422,7 +430,8 @@ fn test_timeout_removes_requests_from_output_queues() {
 /// an empty output queue.
 #[test]
 fn test_response_in_output_queue_causes_backpressure() {
-    let subnets = SubnetPairProxy::with_new_subnets();
+    // Guaranteed response calls only.
+    let subnets = SubnetPairProxy::with_new_subnets().with_call_timeouts(&[None]);
 
     let canister_to_subnet_rate = 10;
     let payload_size_bytes = 1024 * 1024;
@@ -446,7 +455,7 @@ fn test_response_in_output_queue_causes_backpressure() {
     induct_from_head_of_stream(&subnets.remote_env, &subnets.local_env, Some(1)).unwrap();
     assert_matches!(
         subnets.local_output_queue_snapshot().as_deref(),
-        Some([Some(RequestOrResponse::Response(_))])
+        Some([RequestOrResponse::Response(_)])
     );
 
     // Call the 'start' method on canister 1 to restart sending requests using
@@ -461,15 +470,17 @@ fn test_response_in_output_queue_causes_backpressure() {
     // reporting call errors, indicating back pressure.
     do_until_or_panic(MAX_TICKS, |_| {
         execute_round_with_timeout(&subnets.local_env);
-        let reply = subnets.query_local_canister("metrics", Vec::new()).unwrap();
+        let reply = subnets
+            .query_local_canister("metrics", Encode!().unwrap())
+            .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
     .unwrap();
 
-    // Check the local output queue is indeed of the shape [ response, None, ... ].
+    // Check that the local output queue only contains the response.
     assert_matches!(
         subnets.local_output_queue_snapshot().as_deref(),
-        Some([Some(RequestOrResponse::Response(_)), None, ..])
+        Some([RequestOrResponse::Response(_)])
     );
 
     // Call the 'stop' method on the local canister, then induct a request from the local subnet
@@ -504,7 +515,9 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         .unwrap();
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.local_env.tick();
-        let reply = subnets.query_local_canister("metrics", Vec::new()).unwrap();
+        let reply = subnets
+            .query_local_canister("metrics", Encode!().unwrap())
+            .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
     .unwrap();
@@ -515,7 +528,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.remote_env.tick();
         let reply = subnets
-            .query_remote_canister("metrics", Vec::new())
+            .query_remote_canister("metrics", Encode!().unwrap())
             .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
@@ -524,13 +537,13 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     // Try inducting all the requests successfully sent by the remote canister into
     // the local canister.
     let reply = subnets
-        .query_remote_canister("metrics", Vec::new())
+        .query_remote_canister("metrics", Encode!().unwrap())
         .unwrap();
     let metrics = Decode!(&reply.bytes(), Metrics).unwrap();
     induct_from_head_of_stream(
         &subnets.remote_env,
         &subnets.local_env,
-        Some(metrics.requests_sent),
+        Some(metrics.requests_sent()),
     )
     .unwrap();
 
@@ -543,7 +556,10 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         "type".to_string() => "request".to_string()
     });
 
-    assert_eq!(metrics.requests_sent, *requests_inducted.unwrap() as usize);
+    assert_eq!(
+        metrics.requests_sent(),
+        *requests_inducted.unwrap() as usize
+    );
 }
 
 /// Snapshot of a message in a stream or a queue that includes only the message variant and the callback id.
@@ -751,9 +767,13 @@ fn induct_messages_and_track_callback_ids(
             let (reverse_header, _) = stream_snapshot(into_subnet, from_subnet).unwrap();
             for (stream_index, msg) in messages
                 .iter()
-                .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end)
+                .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end())
             {
-                if !reverse_header.reject_signals.contains(&stream_index) {
+                if !reverse_header
+                    .reject_signals()
+                    .iter()
+                    .any(|signal| signal.index == stream_index)
+                {
                     update_callback_id_trackers(
                         msg,
                         add_callback_id_tracker,
@@ -874,7 +894,7 @@ fn induct_and_observe_until_stale(
 ///   +----> {Q, Q, P', Q} ------------------------------------+       Requests can be rejected,
 ///             stream            |            [ .. ]                  but responses receive reject
 ///                               |        reject_signals              signals and are rerouted.
-///                                                                 
+///
 ///
 /// Note that inductions on `old_subnets_proxy` can only lead to removing messages from the system
 /// if a response is consumed successfully or else responses that are routed to streams found on
@@ -954,10 +974,10 @@ fn state_machine_subnet_splitting_test() {
             old_subnets_proxy.remote_output_queue_snapshot(),
         ) {
             (Some(local_q), Some(remote_q)) => {
-                Ok(local_q.iter().any(|msg| matches!(msg, Some(Request(_))))
-                    && local_q.iter().any(|msg| matches!(msg, Some(Response(_))))
-                    && remote_q.iter().any(|msg| matches!(msg, Some(Request(_))))
-                    && remote_q.iter().any(|msg| matches!(msg, Some(Response(_)))))
+                Ok(local_q.iter().any(|msg| matches!(msg, Request(_)))
+                    && local_q.iter().any(|msg| matches!(msg, Response(_)))
+                    && remote_q.iter().any(|msg| matches!(msg, Request(_)))
+                    && remote_q.iter().any(|msg| matches!(msg, Response(_))))
             }
             _ => Ok(false),
         }
@@ -1026,9 +1046,7 @@ fn state_machine_subnet_splitting_test() {
         (&new_subnets_proxy.local_env, &new_subnets_proxy.remote_env),
         (&new_subnets_proxy.remote_env, &new_subnets_proxy.local_env),
     ] {
-        assert!(stream_snapshot(from_env, into_env)
-            .map(|(_, stream)| stream.is_empty())
-            .unwrap_or(true));
+        assert!(stream_snapshot(from_env, into_env).map_or(true, |(_, stream)| stream.is_empty()));
     }
 
     // No messages in the system must imply empty callback id trackers because of

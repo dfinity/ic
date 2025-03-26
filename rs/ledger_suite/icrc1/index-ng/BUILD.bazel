@@ -1,0 +1,227 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icrc1",
+    "//rs/rust_canisters/canister_log",
+    "//rs/rust_canisters/canister_profiler",
+    "//rs/rust_canisters/http_types",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:num-traits",
+    "@crate_index//:scopeguard",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
+]
+
+rust_library(
+    name = "index-ng",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_icrc1_index_ng",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+[
+    rust_canister(
+        name = "index_ng_canister" + name_suffix,
+        srcs = [
+            "src/logs.rs",
+            "src/main.rs",
+        ],
+        compile_data = [":index-ng.did"],
+        crate_features = features,
+        crate_name = "ic_icrc1_index_ng_canister",
+        opt = "z",
+        proc_macro_deps = MACRO_DEPENDENCIES,
+        rustc_env = {
+            "INDEX_DID_PATH": "$(location :index-ng.did)",
+        },
+        service_file = ":index-ng.did",
+        deps = [
+            # Keep sorted.
+            ":index-ng",
+        ] + DEPENDENCIES + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/ledger_suite/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+    ]
+]
+
+rust_test(
+    name = "index_ng_unit_test",
+    crate = ":_wasm_index_ng_canister",
+    data = [
+        ":index-ng.did",
+        "//rs/ledger_suite/icrc1/ledger:ledger.did",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/ledger_suite/icrc1/test_utils",
+        "@crate_index//:candid_parser",
+        "@crate_index//:proptest",
+    ],
+)
+
+[
+    rust_ic_test_suite_with_extra_srcs(
+        name = "index_ng_test" + conf["test_suffix"],
+        timeout = "long",
+        srcs = [
+            "tests/retrieve_blocks_from_ledger_interval.rs",
+            "tests/tests.rs",
+        ],
+        crate_features = conf["crate_features"],
+        data = [
+            conf["index_wasm"],
+            conf["ledger_wasm"],
+        ],
+        env = {
+            "RUST_TEST_THREADS": "4",
+            "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index-ng",
+            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
+        },
+        extra_srcs = ["tests/common/mod.rs"],
+        tags = ["cpu:4"],
+        deps = [
+            # Keep sorted.
+            ":index-ng",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ledger_suite/common/ledger_canister_core",
+            "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
+            "//rs/ledger_suite/icrc1/ledger",
+            "//rs/ledger_suite/icrc1/test_utils",
+            "//rs/ledger_suite/icrc1/tokens_u64",
+            "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+            "//rs/registry/subnet_type",
+            "//rs/rosetta-api/icp/test_utils",
+            "//rs/rust_canisters/http_types",
+            "//rs/state_machine_tests",
+            "//rs/test_utilities/load_wasm",
+            "//rs/types/base_types",
+            "//rs/types/types",
+            "@crate_index//:candid",
+            "@crate_index//:ic-agent",
+            "@crate_index//:num-traits",
+            "@crate_index//:proptest",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+            "@crate_index//:serde_json",
+        ],
+    )
+    for conf in [
+        # The Index must be backward compatible with the version of the Ledger
+        # that doesn't support ICRC-3 yet. Therefore we run a set of tests for
+        # the Ledger in the current commit, which supports ICRC-3, as well as
+        # a set of tests for the Ledger without ICRC-3 downloaded from a
+        # previous commit.
+        # - Ledger with ICRC-3 and with get-blocks
+        {
+            "crate_features": [],
+            "index_wasm": ":index_ng_canister.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
+            "test_suffix": "",
+        },
+        {
+            "crate_features": [],
+            "index_wasm": ":index_ng_canister_u256.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+            "test_suffix": "_u256",
+        },
+        # - Ledger with ICRC-3 and without get-blocks
+        {
+            "crate_features": ["get_blocks_disabled"],
+            "index_wasm": ":index_ng_canister.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_getblocksdisabled.wasm.gz",
+            "test_suffix": "_wo_getblocks",
+        },
+        {
+            "crate_features": ["get_blocks_disabled"],
+            "index_wasm": ":index_ng_canister_u256.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
+            "test_suffix": "_u256_wo_getblocks",
+        },
+        # - Ledger without ICRC-3 and with get-blocks
+        {
+            "crate_features": ["icrc3_disabled"],
+            "index_wasm": ":index_ng_canister.wasm.gz",
+            "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3.wasm.gz//file",
+            "test_suffix": "_wo_icrc3",
+        },
+        {
+            "crate_features": ["icrc3_disabled"],
+            "index_wasm": ":index_ng_canister_u256.wasm.gz",
+            "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz//file",
+            "test_suffix": "_wo_icrc3_u256",
+        },
+    ]
+]
+
+rust_ic_test_suite_with_extra_srcs(
+    name = "incompatible_token_type",
+    srcs = [
+        "tests/incompatible_token_type.rs",
+    ],
+    data = [
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
+    ],
+    env = {
+        "IC_ICRC1_INDEX_WASM_U256_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "IC_ICRC1_INDEX_WASM_U64_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister.wasm.gz)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz)",
+    },
+    extra_srcs = [
+        "tests/common/mod.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        ":index-ng",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/rust_canisters/http_types",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
+)

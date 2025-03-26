@@ -1,16 +1,16 @@
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_governance::pb::v1::NodeProvider;
+use ic_nns_governance_api::pb::v1::NodeProvider;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{add_node_provider, list_node_providers},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 
 #[test]
 fn test_list_node_providers() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // given nns canisters with test neurons
         let mut nns_builder = NnsInitPayloadsBuilder::new();
         nns_builder.with_test_neurons();

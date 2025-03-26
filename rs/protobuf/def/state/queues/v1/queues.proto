@@ -2,6 +2,7 @@ syntax = "proto3";
 package state.queues.v1;
 
 import "state/ingress/v1/ingress.proto";
+import "types/v1/errors.proto";
 import "types/v1/types.proto";
 
 message Cycles {
@@ -17,13 +18,34 @@ message Funds {
   Cycles cycles_struct = 3;
 }
 
+enum RejectReason {
+  REJECT_REASON_UNSPECIFIED = 0;
+  REJECT_REASON_CANISTER_MIGRATING = 1;
+  REJECT_REASON_CANISTER_NOT_FOUND = 2;
+  REJECT_REASON_CANISTER_STOPPED = 3;
+  REJECT_REASON_CANISTER_STOPPING = 4;
+  REJECT_REASON_QUEUE_FULL = 5;
+  REJECT_REASON_OUT_OF_MEMORY = 6;
+  REJECT_REASON_UNKNOWN = 7;
+}
+
+message RejectSignal {
+  RejectReason reason = 1;
+  uint64 index = 2;
+}
+
+message StreamFlags {
+  bool deprecated_responses_only = 1;
+}
+
 message Stream {
   uint64 messages_begin = 1;
   repeated RequestOrResponse messages = 2;
-  reserved 3, 4;
-  reserved "signals_begin", "signals";
   uint64 signals_end = 5;
-  repeated uint64 reject_signals = 6;
+  repeated RejectSignal reject_signals = 8;
+  StreamFlags reverse_stream_flags = 7;
+  reserved 3, 4, 6;
+  reserved "signals_begin", "signals", "deprecated_reject_signals";
 }
 
 message StreamEntry {
@@ -32,8 +54,15 @@ message StreamEntry {
 }
 
 message RequestMetadata {
-  optional uint64 call_tree_depth = 1;
-  optional uint64 call_tree_start_time_nanos = 2;
+  uint64 call_tree_depth = 1;
+  uint64 call_tree_start_time_nanos = 2;
+  // A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
+  // its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
+  // does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
+  // downstream calls at any point in the tree, i.e. it is allowed and desirable for a subtree to have
+  // a tighter deadline than the tree as whole.
+  //
+  // Reserved for future use (guaranteed replies won't be affected).
   optional uint64 call_subtree_deadline_nanos = 3;
 }
 
@@ -46,10 +75,14 @@ message Request {
   bytes method_payload = 6;
   Cycles cycles_payment = 7;
   RequestMetadata metadata = 8;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 9;
 }
 
 message RejectContext {
-  uint64 reject_code = 1;
+  reserved 1;
+  reserved "reject_code_old";
+  types.v1.RejectCode reject_code = 3;
   string reject_message = 2;
 }
 
@@ -63,6 +96,8 @@ message Response {
     RejectContext reject = 6;
   }
   Cycles cycles_refund = 7;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 8;
 }
 
 message RequestOrResponse {
@@ -77,42 +112,77 @@ message MessageDeadline {
   uint64 index = 2;
 }
 
-message InputOutputQueue {
-  repeated RequestOrResponse queue = 1;
-  uint64 begin = 2;
-  uint64 capacity = 3;
-  uint64 num_slots_reserved = 4;
-  // Ordered ranges of messages having the same request deadline. Each range
-  // is represented as a deadline and its end index (the `QueueIndex` just
-  // past the last request where the deadline applies). Both the deadlines and
-  // queue indices are strictly increasing.
-  repeated MessageDeadline deadline_range_ends = 5;
-  // Queue index from which request timing out will resume.
-  uint64 timeout_index = 6;
+// A pool holding all of a canister's incoming and outgoing canister messages.
+message MessagePool {
+  // A pool entry: a message keyed by its ID.
+  message Entry {
+    uint64 id = 1;
+    RequestOrResponse message = 2;
+  }
+  // A message deadline.
+  //
+  // Recorded explicitly for outbound guaranteed response requests only.
+  // Best-effort messages have explicit deadlines.
+  message MessageDeadline {
+    uint64 id = 1;
+    uint32 deadline_seconds = 2;
+  }
+
+  // Map of messages by message ID.
+  repeated Entry messages = 1;
+  // The (implicit) deadlines of all outbound guaranteed response requests (only).
+  repeated MessageDeadline outbound_guaranteed_request_deadlines = 2;
+  // Strictly monotonically increasing counter used to generate unique message
+  // IDs.
+  uint64 message_id_generator = 3;
 }
 
-message QueueEntry {
-  types.v1.CanisterId canister_id = 1;
-  InputOutputQueue queue = 2;
+message CanisterQueue {
+  // FIFO queue of references into the pool or the compact reject response maps.
+  repeated uint64 queue = 4;
+  // Maximum number of requests or responses that can be enqueued at any one time.
+  uint64 capacity = 2;
+  // Number of slots used by or reserved for responses.
+  uint64 response_slots = 3;
+
+  reserved 1;
 }
 
 message CanisterQueues {
-  reserved 1; // this is from canisterId
-  reserved "canister_id";
   repeated ingress.v1.Ingress ingress_queue = 2;
-  repeated QueueEntry input_queues = 3;
-  // Upgrade: input_schedule is mapped to local_subnet_input_schedule.
-  repeated types.v1.CanisterId input_schedule = 4;
-  repeated QueueEntry output_queues = 5;
+
+  // Input queue from and output queue to `canister_id`.
+  message CanisterQueuePair {
+    types.v1.CanisterId canister_id = 1;
+    CanisterQueue input_queue = 2;
+    CanisterQueue output_queue = 3;
+  }
+  repeated CanisterQueuePair canister_queues = 9;
+  MessagePool pool = 10;
+
+  // A reference to a callback, used as a compact reject response (e.g. an
+  // expired best-effort callback; or one whose response was shed while in an
+  // input queue.
+  message CallbackReference {
+    uint64 id = 1;
+    uint64 callback_id = 2;
+  }
+  repeated CallbackReference expired_callbacks = 13;
+  repeated CallbackReference shed_responses = 12;
+
   enum NextInputQueue {
     NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
     NEXT_INPUT_QUEUE_LOCAL_SUBNET = 1;
     NEXT_INPUT_QUEUE_INGRESS = 2;
     NEXT_INPUT_QUEUE_REMOTE_SUBNET = 3;
   }
-  NextInputQueue next_input_queue = 6;
-  // Downgrade: both queues are mapped back to input_schedule in the current
-  // release.
-  repeated types.v1.CanisterId local_subnet_input_schedule = 7;
-  repeated types.v1.CanisterId remote_subnet_input_schedule = 8;
+  NextInputQueue next_input_source = 6;
+
+  repeated types.v1.CanisterId local_sender_schedule = 7;
+  repeated types.v1.CanisterId remote_sender_schedule = 8;
+
+  uint64 guaranteed_response_memory_reservations = 11;
+
+  reserved 1, 3, 4, 5;
+  reserved "canister_id", "input_queues", "input_schedule", "output_queues";
 }

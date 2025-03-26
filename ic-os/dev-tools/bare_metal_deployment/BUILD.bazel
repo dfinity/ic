@@ -1,0 +1,15 @@
+load("@rules_python//python:pip.bzl", "whl_filegroup")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+exports_files([
+    "deploy.py",
+    "benchmark_runner.sh",
+    "benchmark_driver.sh",
+])
+
+whl_filegroup(
+    name = "redfish_scripts",
+    pattern = ".*/scripts/.*",
+    whl = "@python_deps//idracredfishsupport:whl",
+)

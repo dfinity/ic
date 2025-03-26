@@ -1,0 +1,163 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/hmac",
+    "//rs/crypto/internal/crypto_lib/seed",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/secrets_containers",
+    "//rs/crypto/sha2",
+    "//rs/types/types",
+    "@crate_index//:curve25519-dalek",
+    "@crate_index//:group",
+    "@crate_index//:hex",
+    "@crate_index//:hex-literal",
+    "@crate_index//:k256",
+    "@crate_index//:lazy_static",
+    "@crate_index//:p256",
+    "@crate_index//:rand",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:strum",
+    "@crate_index//:subtle",
+    "@crate_index//:zeroize",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/fe-derive",
+    "@crate_index//:paste",
+    "@crate_index//:strum_macros",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:assert_matches",
+    "@crate_index//:bip32",
+    "@crate_index//:criterion",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:num-traits",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "canister_threshold_sig",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_internal_threshold_sig_canister_threshold_sig",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "canister_threshold_sig_test",
+    aliases = ALIASES,
+    crate = ":canister_threshold_sig",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "integration",
+    srcs = glob(
+        ["tests/**/*.rs"],
+    ),
+    aliases = ALIASES,
+    compile_data = glob(["tests/data/*"]),
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":canister_threshold_sig"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "dealings_bench",
+    testonly = True,
+    srcs = ["benches/dealings.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_bench(
+    name = "group_ops_bench",
+    testonly = True,
+    srcs = ["benches/group_ops.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_bench(
+    name = "hash2curve_bench",
+    testonly = True,
+    srcs = ["benches/hash2curve.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "@crate_index//:criterion",
+    ],
+)
+
+rust_bench(
+    name = "key_derivation_bench",
+    testonly = True,
+    srcs = ["benches/key_derivation.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_bench(
+    name = "poly_bench",
+    testonly = True,
+    srcs = ["benches/poly.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_bench(
+    name = "zk_bench",
+    testonly = True,
+    srcs = ["benches/zk.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)

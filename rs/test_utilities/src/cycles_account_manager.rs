@@ -1,7 +1,7 @@
-use crate::types::ids::subnet_test_id;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{Cycles, NumInstructions, SubnetId};
 
 pub struct CyclesAccountManagerBuilder {
@@ -49,6 +49,11 @@ impl CyclesAccountManagerBuilder {
         self
     }
 
+    pub fn with_ten_update_instructions_execution_fee_wasm64(mut self, fee: Cycles) -> Self {
+        self.config.ten_update_instructions_execution_fee_wasm64 = fee;
+        self
+    }
+
     pub fn with_cycles_limit_per_canister(
         mut self,
         cycles_limit_per_canister: Option<Cycles>,
@@ -59,6 +64,11 @@ impl CyclesAccountManagerBuilder {
 
     pub fn with_ecdsa_signature_fee(mut self, ecdsa_signature_fee: Cycles) -> Self {
         self.config.ecdsa_signature_fee = ecdsa_signature_fee;
+        self
+    }
+
+    pub fn with_schnorr_signature_fee(mut self, schnorr_signature_fee: Cycles) -> Self {
+        self.config.schnorr_signature_fee = schnorr_signature_fee;
         self
     }
 

@@ -1,29 +1,26 @@
 use crate::common::EXPECTED_SNS_CREATION_FEE;
 use canister_test::Project;
 use common::set_up_state_machine_with_nns;
-use ic_base_types::CanisterId;
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     sns_wasm,
     sns_wasm::{add_dummy_wasms_to_sns_wasms, test_wasm, wasm_map_to_sns_version},
-    state_test_helpers::set_up_universal_canister,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{GetNextSnsVersionRequest, SnsCanisterType, SnsUpgrade, SnsVersion};
-use ic_types::Cycles;
 
 pub mod common;
 
 /// Add WASMs, perform a canister upgrade, then assert that the added WASMs and upgrade
 /// path are still available
 #[test]
-fn test_sns_wasm_upgrade_legacy() {
+fn test_sns_wasm_upgrade() {
     let sns_wasm_wasm = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
-    let wallet_canister_id = CanisterId::from_u64(11);
-    let machine = set_up_state_machine_with_nns(vec![wallet_canister_id.into()]);
-    let wallet_canister =
-        set_up_universal_canister(&machine, Some(Cycles::new(EXPECTED_SNS_CREATION_FEE)));
+    let machine = set_up_state_machine_with_nns();
+
+    // Add cycles to the SNS-W canister to deploy an SNS.
+    machine.add_cycles(SNS_WASM_CANISTER_ID, EXPECTED_SNS_CREATION_FEE);
 
     let types_to_wasms_one = add_dummy_wasms_to_sns_wasms(&machine, None);
     let types_to_wasms_two = add_dummy_wasms_to_sns_wasms(&machine, Some(1));
@@ -53,12 +50,16 @@ fn test_sns_wasm_upgrade_legacy() {
 
     // Next we deploy an SNS so that we can add a custom path for it.
 
+    let sns_init_payload = SnsInitPayload {
+        dapp_canisters: None,
+        ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+    };
+
     let sns_1_response = sns_wasm::deploy_new_sns(
         &machine,
-        wallet_canister,
+        GOVERNANCE_CANISTER_ID,
         SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_legacy_values_for_testing(),
-        EXPECTED_SNS_CREATION_FEE,
+        sns_init_payload,
     );
     assert_eq!(sns_1_response.error, None);
 

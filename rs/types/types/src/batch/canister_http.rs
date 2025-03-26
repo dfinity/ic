@@ -7,10 +7,10 @@ use crate::{
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
     signature::{BasicSignature, BasicSignatureBatch},
-    CountBytes, Time,
+    Time,
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
-use ic_error_types::{RejectCode, TryFromError};
+use ic_error_types::RejectCode;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
@@ -23,7 +23,7 @@ use std::{collections::BTreeMap, convert::TryFrom};
 pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
 /// Payload that contains CanisterHttpPayload messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpPayload {
     pub responses: Vec<CanisterHttpResponseWithConsensus>,
@@ -148,14 +148,6 @@ impl TryFrom<pb::CanisterHttpResponseDivergence> for CanisterHttpResponseDiverge
     }
 }
 
-impl CountBytes for CanisterHttpPayload {
-    fn count_bytes(&self) -> usize {
-        let timeouts_size: usize = self.timeouts.iter().map(CountBytes::count_bytes).sum();
-        let response_size: usize = self.responses.iter().map(CountBytes::count_bytes).sum();
-        timeouts_size + response_size
-    }
-}
-
 impl From<&CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
     fn from(content: &CanisterHttpResponseContent) -> Self {
         let inner = match content {
@@ -164,8 +156,8 @@ impl From<&CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
             }
             CanisterHttpResponseContent::Reject(error) => {
                 pb::canister_http_response_content::Status::Reject(pb::CanisterHttpReject {
-                    reject_code: error.reject_code as u32,
                     message: error.message.clone(),
+                    reject_code: pb::RejectCode::from(error.reject_code).into(),
                 })
             }
         };
@@ -190,15 +182,13 @@ impl TryFrom<pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
                 }
                 pb::canister_http_response_content::Status::Reject(error) => {
                     CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code: RejectCode::try_from(error.reject_code as u64).map_err(
-                            |err| match err {
-                                TryFromError::ValueOutOfRange(range) => {
-                                    ProxyDecodeError::ValueOutOfRange {
-                                        typ: "reject_code",
-                                        err: format!("value out of range: {}", range),
-                                    }
+                        reject_code: RejectCode::try_from(
+                            pb::RejectCode::try_from(error.reject_code).map_err(|_| {
+                                ProxyDecodeError::ValueOutOfRange {
+                                    typ: "reject_code",
+                                    err: format!("value out of range: {}", error.reject_code),
                                 }
-                            },
+                            })?,
                         )?,
                         message: error.message,
                     })
@@ -268,14 +258,16 @@ mod tests {
                 timeout: Time::from_nanos_since_unix_epoch(1234),
                 canister_id: crate::CanisterId::from(1),
                 content: CanisterHttpResponseContent::Success(
-                    Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                        status: 200,
-                        headers: vec![ic_ic00_types::HttpHeader {
-                            name: "test_header1".to_string(),
-                            value: "value1".to_string()
-                        }],
-                        body: b"Test data in body".to_vec(),
-                    })
+                    Encode!(
+                        &ic_management_canister_types_private::CanisterHttpResponsePayload {
+                            status: 200,
+                            headers: vec![ic_management_canister_types_private::HttpHeader {
+                                name: "test_header1".to_string(),
+                                value: "value1".to_string()
+                            }],
+                            body: b"Test data in body".to_vec(),
+                        }
+                    )
                     .unwrap(),
                 ),
             },

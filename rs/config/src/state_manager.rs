@@ -2,15 +2,21 @@ use crate::flag_status::FlagStatus;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct LsmtConfig {
+    /// Number of pages per shard in sharded overlays; u64::MAX if unlimited.
+    pub shard_num_pages: u64,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub state_root: PathBuf,
     /// A feature flag that enables/disables the file backed memory allocator.
     #[serde(default = "file_backed_memory_allocator_default")]
     pub file_backed_memory_allocator: FlagStatus,
-    /// A feature flag that enables/disables the log structure merge tree based storage
-    #[serde(default = "lsmt_storage_default")]
-    pub lsmt_storage: FlagStatus,
+    /// A config for LSMT storage.
+    #[serde(default = "lsmt_config_default")]
+    pub lsmt_config: LsmtConfig,
 }
 
 impl Config {
@@ -18,7 +24,7 @@ impl Config {
         Self {
             state_root,
             file_backed_memory_allocator: file_backed_memory_allocator_default(),
-            lsmt_storage: lsmt_storage_default(),
+            lsmt_config: lsmt_config_default(),
         }
     }
 
@@ -34,9 +40,14 @@ impl Config {
 }
 
 fn file_backed_memory_allocator_default() -> FlagStatus {
-    FlagStatus::Enabled
+    FlagStatus::Disabled
 }
 
-pub fn lsmt_storage_default() -> FlagStatus {
-    FlagStatus::Disabled
+pub fn lsmt_config_default() -> LsmtConfig {
+    LsmtConfig {
+        // 40GiB
+        // DO NOT CHANGE after LSMT is enabled, as it would crash the new replica trying to merge
+        // old data.
+        shard_num_pages: 10 * 1024 * 1024,
+    }
 }

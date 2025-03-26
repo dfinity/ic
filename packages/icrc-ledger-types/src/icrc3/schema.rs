@@ -8,12 +8,14 @@ use crate::icrc::{
     },
 };
 
+/// Validate if a block is compatible with the ICRC-3 schema.
+// TODO(FI-1241): make it compatible with the final ICRC-3 schema
 pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
     use ItemRequirement::*;
 
     let is_zero = or(vec![
         and(vec![is_int(), is(Value::Int(0.into()))]),
-        and(vec![is_nat(), is(Value::Nat(0.into()))]),
+        and(vec![is_nat(), is(Value::Nat(0_u8.into()))]),
         and(vec![is_nat64(), is(Value::Nat64(0))]),
     ]);
     let is_positive = or(vec![is_zero, is_more_than(0)]);

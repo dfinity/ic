@@ -1,5 +1,5 @@
 #![no_main]
-use candid::{define_function, CandidType, Decode, Deserialize, Nat};
+use candid::{define_function, CandidType, Decode, DecoderConfig, Deserialize, Nat};
 use libfuzzer_sys::fuzz_target;
 use serde_bytes::ByteBuf;
 
@@ -18,7 +18,7 @@ pub struct CallbackStrategy {
     pub token: Token,
 }
 
-#[derive(CandidType, Clone, Deserialize)]
+#[derive(Clone, CandidType, Deserialize)]
 pub struct HeaderField(pub String, pub String);
 
 #[derive(CandidType, Deserialize)]
@@ -37,7 +37,11 @@ pub struct HttpResponse {
 
 fuzz_target!(|data: &[u8]| {
     let payload = data.to_vec();
-    let _decoded = match Decode!(payload.as_slice(), HttpResponse) {
+
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(10_000);
+
+    let _decoded = match Decode!([config]; payload.as_slice(), HttpResponse) {
         Ok(_v) => _v,
         Err(_e) => return,
     };

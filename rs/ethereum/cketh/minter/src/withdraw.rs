@@ -1,32 +1,35 @@
-use crate::eth_rpc::JsonRpcResult;
-use crate::eth_rpc::{
-    BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity, SendRawTransactionResult,
-};
-use crate::eth_rpc_client::requests::GetTransactionCountParams;
+use crate::eth_logs::LedgerSubaccount;
+use crate::eth_rpc::SendRawTransactionResult;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
-use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount};
+use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
 use crate::state::audit::{process_event, EventType};
 use crate::state::transactions::{
-    create_transaction, CreateTransactionError, Reimbursed, ReimbursementRequest,
+    create_transaction, CreateTransactionError, Reimbursed, ReimbursementIndex,
+    ReimbursementRequest, WithdrawalRequest,
 };
 use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::tx::{estimate_transaction_price, TransactionPrice};
+use crate::tx::{lazy_refresh_gas_fee_estimate, GasFeeEstimate};
 use candid::Nat;
 use futures::future::join_all;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use num_traits::ToPrimitive;
+use scopeguard::ScopeGuard;
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::zip;
 
 const WITHDRAWAL_REQUESTS_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
+
+pub const CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
+pub const CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(65_000);
 
 pub async fn process_reimbursement() {
     let _guard = match TimerGuard::new(TaskType::Reimbursement) {
@@ -37,32 +40,44 @@ pub async fn process_reimbursement() {
         }
     };
 
-    let reimbursement_requests: Vec<ReimbursementRequest> =
-        read_state(|s| s.eth_transactions.get_reimbursement_requests());
-    if reimbursement_requests.is_empty() {
+    let reimbursements: Vec<(ReimbursementIndex, ReimbursementRequest)> = read_state(|s| {
+        s.eth_transactions
+            .reimbursement_requests_iter()
+            .map(|(index, request)| (index.clone(), request.clone()))
+            .collect()
+    });
+    if reimbursements.is_empty() {
         return;
     }
 
-    let ledger_canister_id = read_state(|s| s.ledger_id);
-    let client = ICRC1Client {
-        runtime: CdkRuntime,
-        ledger_canister_id,
-    };
     let mut error_count = 0;
 
-    for reimbursement_request in reimbursement_requests {
+    for (index, reimbursement_request) in reimbursements {
+        // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
+        // this reimbursement request will not be processed again.
+        let prevent_double_minting_guard = scopeguard::guard(index.clone(), |index| {
+            mutate_state(|s| process_event(s, EventType::QuarantinedReimbursement { index }));
+        });
+        let ledger_canister_id = match index {
+            ReimbursementIndex::CkEth { .. } => read_state(|s| s.cketh_ledger_id),
+            ReimbursementIndex::CkErc20 { ledger_id, .. } => ledger_id,
+        };
+        let client = ICRC1Client {
+            runtime: CdkRuntime,
+            ledger_canister_id,
+        };
+        let memo = Memo::from(reimbursement_request.clone());
         let args = TransferArg {
             from_subaccount: None,
             to: Account {
                 owner: reimbursement_request.to,
                 subaccount: reimbursement_request
                     .to_subaccount
-                    .as_ref()
-                    .map(|subaccount| subaccount.0),
+                    .map(LedgerSubaccount::to_bytes),
             },
             fee: None,
             created_at_time: None,
-            memo: Some(reimbursement_request.clone().into()),
+            memo: Some(memo),
             amount: Nat::from(reimbursement_request.reimbursed_amount),
         };
         let block_index = match client.transfer(args).await {
@@ -73,6 +88,8 @@ pub async fn process_reimbursement() {
             Ok(Err(err)) => {
                 log!(INFO, "[process_reimbursement] Failed to mint ckETH {err}");
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
             Err(err) => {
@@ -81,20 +98,34 @@ pub async fn process_reimbursement() {
                     "[process_reimbursement] Failed to send a message to the ledger ({ledger_canister_id}): {err:?}"
                 );
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
         };
-        mutate_state(|s| {
-            process_event(
-                s,
-                EventType::ReimbursedEthWithdrawal(Reimbursed {
-                    withdrawal_id: reimbursement_request.withdrawal_id,
-                    reimbursed_in_block: LedgerMintIndex::new(block_index),
-                    reimbursed_amount: reimbursement_request.reimbursed_amount,
-                    transaction_hash: reimbursement_request.transaction_hash,
-                }),
-            )
-        });
+        let reimbursed = Reimbursed {
+            burn_in_block: reimbursement_request.ledger_burn_index,
+            reimbursed_in_block: LedgerMintIndex::new(block_index),
+            reimbursed_amount: reimbursement_request.reimbursed_amount,
+            transaction_hash: reimbursement_request.transaction_hash,
+        };
+        let event = match index {
+            ReimbursementIndex::CkEth {
+                ledger_burn_index: _,
+            } => EventType::ReimbursedEthWithdrawal(reimbursed),
+            ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index,
+                ledger_id,
+                ckerc20_ledger_burn_index: _,
+            } => EventType::ReimbursedErc20Withdrawal {
+                cketh_ledger_burn_index,
+                ckerc20_ledger_id: ledger_id,
+                reimbursed,
+            },
+        };
+        mutate_state(|s| process_event(s, event));
+        // minting succeeded, defuse guard
+        ScopeGuard::into_inner(prevent_double_minting_guard);
     }
     if error_count > 0 {
         log!(
@@ -120,35 +151,20 @@ pub async fn process_retrieve_eth_requests() {
         return;
     }
 
-    let fee_history = match eth_fee_history().await {
-        Ok(fee_history) => fee_history,
-        Err(e) => {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate().await {
+        Some(gas_fee_estimate) => gas_fee_estimate,
+        None => {
             log!(
                 INFO,
-                "Failed retrieving fee history to process ETH requests: {e:?}",
+                "Failed retrieving gas fee estimate to process ETH requests",
             );
             return;
         }
     };
-    let transaction_price = match estimate_transaction_price(&fee_history) {
-        Ok(transaction_price) => transaction_price,
-        Err(e) => {
-            log!(
-                INFO,
-                "Failed estimating transaction price to process ETH requests: {e:?}",
-            );
-            return;
-        }
-    };
-    let max_transaction_fee = transaction_price.max_transaction_fee();
-    log!(
-        INFO,
-        "[withdraw]: Estimated max transaction fee: {:?}",
-        max_transaction_fee,
-    );
+
     let latest_transaction_count = latest_transaction_count().await;
-    resubmit_transactions_batch(latest_transaction_count, &transaction_price).await;
-    create_transactions_batch(transaction_price);
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
+    create_transactions_batch(gas_fee_estimate);
     sign_transactions_batch().await;
     send_transactions_batch(latest_transaction_count).await;
     finalize_transactions_batch().await;
@@ -163,12 +179,8 @@ pub async fn process_retrieve_eth_requests() {
 
 async fn latest_transaction_count() -> Option<TransactionCount> {
     match read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: crate::state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Latest),
-        })
+        .eth_get_latest_transaction_count(crate::state::minter_address().await)
         .await
-        .reduce_with_min_by_key(|transaction_count| *transaction_count)
     {
         Ok(transaction_count) => Some(transaction_count),
         Err(e) => {
@@ -179,7 +191,7 @@ async fn latest_transaction_count() -> Option<TransactionCount> {
 }
 async fn resubmit_transactions_batch(
     latest_transaction_count: Option<TransactionCount>,
-    transaction_price: &TransactionPrice,
+    gas_fee_estimate: &GasFeeEstimate,
 ) {
     if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
         return;
@@ -192,7 +204,7 @@ async fn resubmit_transactions_batch(
     };
     let transactions_to_resubmit = read_state(|s| {
         s.eth_transactions
-            .create_resubmit_transactions(latest_transaction_count, transaction_price.clone())
+            .create_resubmit_transactions(latest_transaction_count, gas_fee_estimate.clone())
     });
     for result in transactions_to_resubmit {
         match result {
@@ -218,7 +230,7 @@ async fn resubmit_transactions_batch(
     }
 }
 
-fn create_transactions_batch(transaction_price: TransactionPrice) {
+fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
     for request in read_state(|s| {
         s.eth_transactions
             .withdrawal_requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
@@ -226,7 +238,14 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
         log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
         let ethereum_network = read_state(State::ethereum_network);
         let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
-        match create_transaction(&request, nonce, transaction_price.clone(), ethereum_network) {
+        let gas_limit = estimate_gas_limit(&request);
+        match create_transaction(
+            &request,
+            nonce,
+            gas_fee_estimate.clone(),
+            gas_limit,
+            ethereum_network,
+        ) {
             Ok(transaction) => {
                 log!(
                     DEBUG,
@@ -237,26 +256,31 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
                     process_event(
                         s,
                         EventType::CreatedTransaction {
-                            withdrawal_id: request.ledger_burn_index,
+                            withdrawal_id: request.cketh_ledger_burn_index(),
                             transaction,
                         },
                     );
                 });
             }
-            Err(CreateTransactionError::InsufficientAmount {
-                ledger_burn_index,
-                withdrawal_amount,
-                max_transaction_fee,
+            Err(CreateTransactionError::InsufficientTransactionFee {
+                cketh_ledger_burn_index: ledger_burn_index,
+                allowed_max_transaction_fee: withdrawal_amount,
+                actual_max_transaction_fee: max_transaction_fee,
             }) => {
                 log!(
                     INFO,
-                    "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient
-                amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}.
-                Request moved back to end of queue."
+                    "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}. Request moved back to end of queue."
                 );
                 mutate_state(|s| s.eth_transactions.reschedule_withdrawal_request(request));
             }
         };
+    }
+}
+
+pub fn estimate_gas_limit(withdrawal_request: &WithdrawalRequest) -> GasAmount {
+    match withdrawal_request {
+        WithdrawalRequest::CkEth(_) => CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+        WithdrawalRequest::CkErc20(_) => CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     }
 }
 
@@ -320,19 +344,21 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     for (signed_tx, result) in zip(transactions_to_send, results) {
         log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
         match result {
-            Ok(JsonRpcResult::Result(tx_result)) if tx_result == SendRawTransactionResult::Ok || tx_result == SendRawTransactionResult::NonceTooLow => {
+            Ok(SendRawTransactionResult::Ok) | Ok(SendRawTransactionResult::NonceTooLow) => {
                 // In case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
                 // if the stuck transaction was mined in the meantime.
                 // It will be cleaned-up once the transaction is finalized.
             }
-            Ok(JsonRpcResult::Result(tx_result)) => log!(INFO,
-                "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
-            ),
-            Ok(JsonRpcResult::Error { code, message }) => log!(INFO,
-                "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
+            Ok(SendRawTransactionResult::InsufficientFunds)
+            | Ok(SendRawTransactionResult::NonceTooHigh) => log!(
+                INFO,
+                "Failed to send transaction {signed_tx:?}: {result:?}. Will retry later.",
             ),
             Err(e) => {
-                log!(INFO, "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later.")
+                log!(
+                    INFO,
+                    "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later."
+                )
             }
         };
     }
@@ -416,20 +442,6 @@ async fn finalize_transactions_batch() {
 async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
 {
     read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: crate::state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Finalized),
-        })
-        .await
-        .reduce_with_equality()
-}
-
-pub async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-    read_state(EthRpcClient::from_state)
-        .eth_fee_history(FeeHistoryParams {
-            block_count: Quantity::from(5_u8),
-            highest_block: BlockSpec::Tag(BlockTag::Latest),
-            reward_percentiles: vec![20],
-        })
+        .eth_get_finalized_transaction_count(crate::state::minter_address().await)
         .await
 }

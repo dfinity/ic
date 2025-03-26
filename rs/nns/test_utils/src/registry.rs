@@ -6,28 +6,34 @@ use ic_base_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_ni_dkg::{
+    dummy_initial_dkg_transcript, initial_dkg_transcript, InitialNiDkgConfig,
+};
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
-use ic_nns_common::registry::encode_or_panic;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
+    dc::v1::DataCenterRecord,
     node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
-    subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetListRecord,
+        SubnetRecord,
+    },
 };
+use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_node_operator_record_key, make_node_record_key, make_replica_version_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
+    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -39,26 +45,25 @@ use ic_registry_transport::{
     },
     serialize_get_value_request, Error,
 };
-use ic_test_utilities::types::ids::{subnet_test_id, user_test_id};
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
-    crypto::{CurrentNodePublicKeys, KeyPurpose},
-    p2p::build_default_gossip_config,
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
+        CurrentNodePublicKeys, KeyPurpose,
+    },
     NodeId, ReplicaVersion,
 };
 use maplit::btreemap;
 use on_wire::bytes;
 use prost::Message;
 use rand::RngCore;
-use registry_canister::mutations::{
-    common::decode_registry_value,
-    node_management::{
-        common::make_add_node_registry_mutations,
-        do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload},
-    },
+use registry_canister::mutations::node_management::{
+    common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
 };
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::TryFrom;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+};
 
 /// ID used in multiple tests.
 pub const TEST_ID: u64 = 999;
@@ -126,7 +131,9 @@ pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]
 ///
 /// Panics if there is no T
 pub async fn get_value_or_panic<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> T {
-    get_value::<T>(registry, key).await.unwrap()
+    get_value::<T>(registry, key).await.unwrap_or_else(|| {
+        panic!("Registry does not have a record under the key {:?}.", key);
+    })
 }
 
 pub async fn get_node_record(registry: &Canister<'_>, node_id: NodeId) -> Option<NodeRecord> {
@@ -195,14 +202,15 @@ pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[
         .update_(
             "atomic_mutate",
             bytes,
-            encode_or_panic(&RegistryAtomicMutateRequest {
+            RegistryAtomicMutateRequest {
                 mutations: vec![RegistryMutation {
                     mutation_type: Type::Insert as i32,
                     key: key.to_vec(),
-                    value: encode_or_panic(value),
+                    value: value.encode_to_vec(),
                 }],
                 preconditions: vec![],
-            }),
+            }
+            .encode_to_vec(),
         )
         .await
         .unwrap();
@@ -234,10 +242,24 @@ pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
 /// The argument `mutation_id` should be specified to a `u8` value that is
 /// unique within this registry instance.
 pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
-    let node_operator_pid = user_test_id(TEST_ID);
     let subnet_pid = subnet_test_id(TEST_ID);
+    invariant_compliant_mutation_with_subnet_id(mutation_id, subnet_pid, None)
+}
+
+pub fn invariant_compliant_mutation_with_subnet_id(
+    mutation_id: u8,
+    subnet_pid: SubnetId,
+    chain_key_config: Option<ChainKeyConfig>,
+) -> Vec<RegistryMutation> {
+    let node_operator_pid = PrincipalId::new_user_test_id(1990);
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
+
+    let mut threshold_pk_and_cup_mutations =
+        create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            subnet_pid,
+            &btreemap!(node_id => valid_pks.dkg_dealing_encryption_key().clone()),
+        );
 
     let node_record = {
         let ip_addr = format!("128.0.{mutation_id}.1");
@@ -250,14 +272,14 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
             port: 4321,
         };
         NodeRecord {
-            node_operator_id: node_operator_pid.get().to_vec(),
+            node_operator_id: node_operator_pid.to_vec(),
             xnet: Some(xnet_connection_endpoint),
             http: Some(http_connection_endpoint),
             ..Default::default()
         }
     };
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
-    let release_package_url = "http://release_package.tar.gz".to_string();
+    let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
@@ -276,27 +298,27 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         subnet_type: i32::from(SubnetType::System),
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
-        gossip_config: Some(build_default_gossip_config()),
+        chain_key_config,
         ..Default::default()
     };
 
     let mut mutations = vec![
         insert(
             make_subnet_list_record_key().as_bytes(),
-            encode_or_panic(&subnet_list),
+            subnet_list.encode_to_vec(),
         ),
         insert(
             make_subnet_record_key(subnet_pid).as_bytes(),
-            encode_or_panic(&system_subnet),
+            system_subnet.encode_to_vec(),
         ),
         routing_table_mutation(&RoutingTable::default()),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
-            encode_or_panic(&replica_version),
+            replica_version.encode_to_vec(),
         ),
         insert(
             make_blessed_replica_versions_key().as_bytes(),
-            encode_or_panic(&blessed_replica_version),
+            blessed_replica_version.encode_to_vec(),
         ),
     ];
     mutations.append(&mut make_add_node_registry_mutations(
@@ -304,6 +326,7 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         node_record,
         valid_pks,
     ));
+    mutations.append(&mut threshold_pk_and_cup_mutations);
     mutations
 }
 
@@ -330,31 +353,31 @@ pub fn new_current_node_crypto_keys_mutations(
     if let Some(pk) = &npks.node_signing_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.committee_signing_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.dkg_dealing_encryption_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.idkg_dealing_encryption_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.tls_certificate {
         mutations.push(insert(
             make_crypto_tls_cert_key(node_id),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     mutations
@@ -374,11 +397,22 @@ pub fn new_node_crypto_keys_mutations(
     new_current_node_crypto_keys_mutations(node_id, current_npks)
 }
 
+/// Make a `DataCenterRecord` with the provided `dc_id`.
+pub fn make_data_center_record(dc_id: &str) -> DataCenterRecord {
+    DataCenterRecord {
+        id: dc_id.to_string(),
+        region: "Europe,ES,Barcelona".to_string(),
+        owner: "Jorge Gomez".to_string(),
+        ..Default::default()
+    }
+}
+
 /// Make a `NodeOperatorRecord` from the provided `PrincipalId`.
-fn make_node_operator_record(principal_id: PrincipalId) -> NodeOperatorRecord {
+fn make_node_operator_record(principal_id: PrincipalId, dc_id: &str) -> NodeOperatorRecord {
     NodeOperatorRecord {
         node_allowance: 1,
         node_operator_principal_id: principal_id.into(),
+        dc_id: dc_id.to_string(),
         ..Default::default()
     }
 }
@@ -405,11 +439,74 @@ fn make_node_record(node_operator_record: &NodeOperatorRecord) -> NodeRecord {
     }
 }
 
-fn get_new_node_id_and_mutations(nor: &NodeOperatorRecord) -> (NodeId, Vec<RegistryMutation>) {
+fn get_new_node_id_and_mutations(
+    nor: &NodeOperatorRecord,
+    subnet_id: SubnetId,
+) -> (NodeId, Vec<RegistryMutation>) {
     let (valid_pks, node_id) = new_node_keys_and_node_id();
+    let dkg_dealing_encryption_pk = valid_pks.dkg_dealing_encryption_key().clone();
     let nr = make_node_record(nor);
-    let mutations = make_add_node_registry_mutations(node_id, nr, valid_pks);
+    let mut mutations = make_add_node_registry_mutations(node_id, nr, valid_pks);
+    let mut subnet_threshold_pk_and_cup_mutations =
+        create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            subnet_id,
+            &btreemap!(node_id => dkg_dealing_encryption_pk),
+        );
+    mutations.append(&mut subnet_threshold_pk_and_cup_mutations);
     (node_id, mutations)
+}
+
+pub fn create_subnet_threshold_signing_pubkey_and_cup_mutations(
+    subnet_id: SubnetId,
+    receiver_keys: &BTreeMap<NodeId, PublicKey>,
+) -> Vec<RegistryMutation> {
+    // TODO: CRP-2345: Refactor such that the `ReproducibleRng` is not instantiated here, but at
+    //  the test initialization, and passed down to this function.
+    let rng = &mut ReproducibleRng::new();
+    let subnet_transcript = generate_nidkg_initial_transcript(
+        receiver_keys,
+        subnet_test_id(rng.next_u64()),
+        NiDkgTag::HighThreshold,
+        RegistryVersion::new(1),
+        rng,
+    );
+    // Threshold signing public key
+    let subnet_threshold_sig_pk =
+        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
+            .expect("error extracting threshold sig public key from internal CSP transcript");
+
+    // CUP contents
+    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+            subnet_transcript,
+        )),
+        ..dummy_cup_for_subnet(receiver_keys.keys().copied().collect())
+    };
+
+    vec![
+        insert(
+            make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
+            PublicKey::from(subnet_threshold_sig_pk).encode_to_vec(),
+        ),
+        insert(cup_contents_key, cup_contents.encode_to_vec()),
+    ]
+}
+
+/// This creates a CatchupPackageContents for nodes that would be part of as subnet
+/// which is necessary if the underlying IC test machinery knows about the subnets you added
+/// to your registry
+fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
+    let low_threshold_transcript_record =
+        dummy_initial_dkg_transcript(nodes.clone(), NiDkgTag::LowThreshold);
+    let high_threshold_transcript_record =
+        dummy_initial_dkg_transcript(nodes, NiDkgTag::HighThreshold);
+
+    CatchUpPackageContents {
+        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript_record),
+        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript_record),
+        ..Default::default()
+    }
 }
 
 /// Setup the registry with a single subnet (containing all the ranges) which
@@ -427,20 +524,24 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         *TEST_USER6_PRINCIPAL,
         *TEST_USER7_PRINCIPAL,
     ] {
-        node_operator.push(make_node_operator_record(*principal_id));
+        node_operator.push(make_node_operator_record(*principal_id, "dc1"));
     }
 
     let mut add_node_mutations = vec![];
     let mut node_id = vec![];
+    add_node_mutations.push(insert(
+        make_data_center_record_key("dc1").as_bytes(),
+        make_data_center_record("dc1").encode_to_vec(),
+    ));
     for nor in &node_operator {
-        let (id, mut mutations) = get_new_node_id_and_mutations(nor);
+        let (id, mut mutations) = get_new_node_id_and_mutations(nor, nns_subnet_id);
         node_id.push(id);
         add_node_mutations.append(&mut mutations);
     }
 
     let replica_version_id = ReplicaVersion::default().to_string();
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
-    let release_package_url = "http://release_package.tar.gz".to_string();
+    let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
@@ -457,7 +558,6 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         subnet_type: i32::from(SubnetType::System),
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
-        gossip_config: Some(build_default_gossip_config()),
         ..Default::default()
     };
 
@@ -472,23 +572,23 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let mut mutations = vec![
         insert(
             make_subnet_list_record_key().as_bytes(),
-            encode_or_panic(&subnet_list),
+            subnet_list.encode_to_vec(),
         ),
         insert(
             make_subnet_record_key(nns_subnet_id).as_bytes(),
-            encode_or_panic(&system_subnet),
+            system_subnet.encode_to_vec(),
         ),
         insert(
             make_routing_table_record_key().as_bytes(),
-            encode_or_panic(&RoutingTablePB::try_from(routing_table).unwrap()),
+            RoutingTablePB::from(routing_table).encode_to_vec(),
         ),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
-            encode_or_panic(&replica_version),
+            replica_version.encode_to_vec(),
         ),
         insert(
             make_blessed_replica_versions_key().as_bytes(),
-            encode_or_panic(&blessed_replica_version),
+            blessed_replica_version.encode_to_vec(),
         ),
     ];
 
@@ -498,7 +598,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
                 PrincipalId::try_from(&nor.node_operator_principal_id).unwrap(),
             )
             .as_bytes(),
-            encode_or_panic(nor),
+            nor.encode_to_vec(),
         ));
     }
 
@@ -589,36 +689,24 @@ pub fn prepare_registry_with_two_node_sets(
             .map(|id| id.get().into_vec())
             .collect(),
         unit_delay_millis: 600,
-        gossip_config: Some(build_default_gossip_config()),
+        subnet_type: ic_protobuf::registry::subnet::v1::SubnetType::Application as i32,
         ..Default::default()
     };
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(17));
     mutations.push(insert(
         make_subnet_record_key(subnet_id).as_bytes(),
-        encode_or_panic(&subnet_record),
+        subnet_record.encode_to_vec(),
     ));
 
-    let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(187));
-    let registry_version = RegistryVersion::new(1);
-    let rng = &mut ReproducibleRng::new();
-    let subnet_transcript = generate_nidkg_initial_transcript(
-        &node_ids_and_dkg_keys_subnet_1,
-        dealer_subnet_id,
-        NiDkgTag::HighThreshold,
-        registry_version,
-        rng,
-    );
-    let subnet_threshold_sig_pk =
-        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
-            .expect("error extracting threshold sig public key from internal CSP transcript");
-
-    mutations.push(insert(
-        make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
-        encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
-    ));
+    let mut threshold_signing_pk_and_cup_mutations_subnet_1 =
+        create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            subnet_id,
+            &node_ids_and_dkg_keys_subnet_1,
+        );
+    mutations.append(&mut threshold_signing_pk_and_cup_mutations_subnet_1);
 
     // Subnet list record
-    let mut subnet_list = decode_registry_value::<SubnetListRecord>(mutations.remove(0).value);
+    let mut subnet_list = SubnetListRecord::decode(mutations.remove(0).value.as_slice()).unwrap();
     subnet_list.subnets.push(subnet_id.get().to_vec());
 
     let mut subnet2_id_option = None;
@@ -631,42 +719,30 @@ pub fn prepare_registry_with_two_node_sets(
                 .map(|id| id.get().into_vec())
                 .collect(),
             unit_delay_millis: 600,
-            gossip_config: Some(build_default_gossip_config()),
+            subnet_type: ic_protobuf::registry::subnet::v1::SubnetType::Application as i32,
             ..Default::default()
         };
         let subnet2_id = SubnetId::new(PrincipalId::new_subnet_test_id(18));
         subnet2_id_option = Some(subnet2_id);
         mutations.push(insert(
             make_subnet_record_key(subnet2_id).as_bytes(),
-            encode_or_panic(&subnet2_record),
+            subnet2_record.encode_to_vec(),
         ));
 
-        let subnet2_transcript = generate_nidkg_initial_transcript(
-            &node_ids_and_dkg_keys_subnet_2,
-            dealer_subnet_id,
-            NiDkgTag::HighThreshold,
-            registry_version,
-            rng,
-        );
-        let subnet2_threshold_sig_pk =
-            extract_threshold_sig_public_key(&subnet2_transcript.internal_csp_transcript)
-                .expect("error extracting threshold sig public key from internal CSP transcript");
-
-        mutations.push(insert(
-            make_crypto_threshold_signing_pubkey_key(subnet2_id).as_bytes(),
-            encode_or_panic(&PublicKey::from(subnet2_threshold_sig_pk)),
-        ));
+        let mut threshold_signing_pk_and_cup_mutations_subnet_2 =
+            create_subnet_threshold_signing_pubkey_and_cup_mutations(
+                subnet2_id,
+                &node_ids_and_dkg_keys_subnet_2,
+            );
+        mutations.append(&mut threshold_signing_pk_and_cup_mutations_subnet_2);
 
         subnet_list.subnets.push(subnet2_id.get().to_vec());
     }
 
     mutations.push(insert(
         make_subnet_list_record_key().as_bytes(),
-        encode_or_panic(&subnet_list),
+        subnet_list.encode_to_vec(),
     ));
-
-    // CUP contents
-    add_cup_to_mutations(&mut mutations, subnet_id, subnet_transcript);
 
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,
@@ -710,33 +786,14 @@ fn generate_node_keys_and_add_node_record_and_key_mutations(
                 http: Some(connection_endpoint_from_string(&format!(
                     "{ip_addr_prefix}4321"
                 ))),
-                p2p_flow_endpoints: [&format!("123,{ip_addr_prefix}10000")]
-                    .iter()
-                    .map(|x| flow_endpoint_from_string(x))
-                    .collect(),
                 node_operator_id: PrincipalId::new_user_test_id(999).to_vec(),
                 ..Default::default()
             };
-            mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
-            node_mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
+            mutations.push(insert(node_key.as_bytes(), node_record.encode_to_vec()));
+            node_mutations.push(insert(node_key.as_bytes(), node_record.encode_to_vec()));
             (node_id, node_pks.dkg_dealing_encryption_key().clone())
         })
         .collect()
-}
-
-fn add_cup_to_mutations(
-    mutations: &mut Vec<RegistryMutation>,
-    subnet_id: SubnetId,
-    transcript: NiDkgTranscript,
-) {
-    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
-    let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
-            transcript,
-        )),
-        ..Default::default()
-    };
-    mutations.push(insert(cup_contents_key, encode_or_panic(&cup_contents)));
 }
 
 pub fn generate_nidkg_initial_transcript(
@@ -769,13 +826,15 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         generate_node_keys_once(&config, None).expect("error generating node public keys");
 
     // create payload message
-    let node_signing_pk = encode_or_panic(node_public_keys.node_signing_key());
-    let committee_signing_pk = encode_or_panic(node_public_keys.committee_signing_key());
-    let ni_dkg_dealing_encryption_pk =
-        encode_or_panic(node_public_keys.dkg_dealing_encryption_key());
-    let transport_tls_cert = encode_or_panic(node_public_keys.tls_certificate());
-    let idkg_dealing_encryption_pk =
-        encode_or_panic(node_public_keys.idkg_dealing_encryption_key());
+    let node_signing_pk = node_public_keys.node_signing_key().encode_to_vec();
+    let committee_signing_pk = node_public_keys.committee_signing_key().encode_to_vec();
+    let ni_dkg_dealing_encryption_pk = node_public_keys
+        .dkg_dealing_encryption_key()
+        .encode_to_vec();
+    let transport_tls_cert = node_public_keys.tls_certificate().encode_to_vec();
+    let idkg_dealing_encryption_pk = node_public_keys
+        .idkg_dealing_encryption_key()
+        .encode_to_vec();
 
     let payload = AddNodePayload {
         node_signing_pk,
@@ -785,9 +844,13 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
         xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
         http_endpoint: format!("128.0.{mutation_id}.1:4321"),
-        p2p_flow_endpoints: vec![],
-        prometheus_metrics_endpoint: "".to_string(),
         chip_id: None,
+        public_ipv4_config: None,
+        domain: None,
+        // Unused section follows
+        p2p_flow_endpoints: Default::default(),
+        prometheus_metrics_endpoint: Default::default(),
+        node_reward_type: None,
     };
 
     (payload, node_public_keys)

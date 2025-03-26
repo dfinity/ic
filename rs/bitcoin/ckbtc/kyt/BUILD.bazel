@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:pocket-ic-tests.bzl", "pocket_ic_mainnet_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,6 +10,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_ckbtc_kyt",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:serde",
     ],
@@ -26,6 +29,7 @@ rust_canister(
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "kyt.did",
     deps = [
+        # Keep sorted.
         ":kyt",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
@@ -49,9 +53,10 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/kyt",
     },
+    deps = ["@crate_index//:candid_parser"],
 )
 
-rust_test(
+rust_ic_test(
     name = "kyt_integration_test",
     srcs = ["tests/tests.rs"],
     data = [":kyt_canister"],
@@ -60,10 +65,18 @@ rust_test(
         "IC_CKBTC_KYT_WASM_PATH": "$(rootpath :kyt_canister)",
     },
     deps = [
+        # Keep sorted.
         ":kyt",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
     ],
+)
+
+pocket_ic_mainnet_test(
+    name = "kyt_integration_test_mainnet",
+    test = ":kyt_integration_test",
 )

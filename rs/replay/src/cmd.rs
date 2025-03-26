@@ -1,8 +1,9 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
 
+#[derive(Clone)]
 pub struct ClapSubnetId(pub SubnetId);
 
 impl std::str::FromStr for ClapSubnetId {
@@ -41,22 +42,26 @@ pub struct ReplayToolArgs {
     pub replay_until_height: Option<u64>,
 }
 
-#[derive(Clone, Parser)]
+#[derive(Clone, Subcommand)]
 pub enum SubCommand {
     /// Add a new version of the replica binary to the registry.
     AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd),
+
     /// Add registry content from external registry store to the registry
     /// canister.
     AddRegistryContent(AddRegistryContentCmd),
+
     /// Update registry local store with data from the registry canister.
     UpdateRegistryLocalStore,
+
     /// Remove all nodes from the subnet record that this node belongs to.
     /// Note that this does not remove individual node records.
     RemoveSubnetNodes,
+
     /// Create a recovery CUP and write it to a file.
     GetRecoveryCup(GetRecoveryCupCmd),
 
-    /// Restore from the backup. Deprecated.
+    /// Restore from the backup.
     RestoreFromBackup(RestoreFromBackupCmd),
 
     /// The replay will add a test Neuron to the Governance canister

@@ -1,0 +1,180 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//visibility:public"])
+
+[
+    rust_library(
+        name = "ledger_suite_orchestrator" + name_suffix,
+        testonly = test_only,
+        srcs = glob(
+            ["src/**/*.rs"],
+            exclude = [
+                "src/main.rs",
+                "src/dashboard/mod.rs",
+                "src/dashboard/tests.rs",
+            ],
+        ),
+        compile_data = [
+            "//rs/ledger_suite/icrc1/ledger:" + ledger_canister,
+            "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+            "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+        ],
+        crate_name = "ic_ledger_suite_orchestrator",
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+            "@crate_index//:ic-cdk-macros",
+        ],
+        rustc_env = {
+            "LEDGER_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/ledger:" + ledger_canister + ")",
+            "INDEX_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        },
+        version = "0.1.0",
+        deps = [
+            # Keep sorted.
+            "//packages/ic-ethereum-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/crypto/sha2",
+            "//rs/ledger_suite/icrc1/index-ng",
+            "//rs/ledger_suite/icrc1/ledger",
+            "//rs/rust_canisters/http_types",
+            "//rs/types/base_types",
+            "//rs/types/management_canister_types",
+            "@crate_index//:candid",
+            "@crate_index//:ciborium",
+            "@crate_index//:futures",
+            "@crate_index//:hex",
+            "@crate_index//:ic-canister-log",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:ic-stable-structures",
+            "@crate_index//:ic0",
+            "@crate_index//:num-traits",
+            "@crate_index//:scopeguard",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+            "@crate_index//:serde_json",
+        ],
+    )
+    for (name_suffix, test_only, ledger_canister) in [
+        ("", False, "ledger_canister_u256.wasm.gz"),
+        ("_getblocksdisabled", True, "ledger_canister_u256_getblocksdisabled.wasm.gz"),
+    ]
+]
+
+rust_doc(
+    name = "doc",
+    crate = ":ledger_suite_orchestrator",
+)
+
+rust_test(
+    name = "lib_unit_tests",
+    crate = ":ledger_suite_orchestrator",
+    deps = [
+        # Keep sorted.
+        ":ledger_suite_orchestrator",
+        "@crate_index//:assert_matches",
+        "@crate_index//:maplit",
+        "@crate_index//:mockall",
+        "@crate_index//:proptest",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
+    name = "canister_unit_tests",
+    crate = ":_wasm_ledger_suite_orchestrator_canister",
+    data = [":ledger_suite_orchestrator.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",
+    },
+    deps = [
+        # Keep sorted.
+        ":ledger_suite_orchestrator",
+        "@crate_index//:candid_parser",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:scraper",
+    ],
+)
+
+[
+    rust_canister(
+        name = "ledger_suite_orchestrator_canister" + name_suffix,
+        testonly = test_only,
+        srcs = [
+            "src/dashboard/mod.rs",
+            "src/dashboard/tests.rs",
+            "src/main.rs",
+        ],
+        compile_data = [
+            "templates/dashboard.html",
+        ],
+        crate_name = "ic_ledger_suite_orchestrator_canister" + name_suffix,
+        opt = "z",
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:ic-cdk-macros",
+        ],
+        service_file = "ledger_suite_orchestrator.did",
+        deps = [
+            # Keep sorted.
+            ":ledger_suite_orchestrator" + name_suffix,
+            "//rs/rust_canisters/http_types",
+            "@crate_index//:askama",
+            "@crate_index//:candid",
+            "@crate_index//:ic-canister-log",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:serde",
+            "@crate_index//:time",
+        ],
+    )
+    for (name_suffix, test_only) in [
+        ("", False),
+        ("_getblocksdisabled", True),
+    ]
+]
+
+rust_ic_test(
+    name = "integration_tests",
+    testonly = True,
+    srcs = ["tests/tests.rs"],
+    data = [
+        "ledger_suite_orchestrator_canister.wasm.gz",
+        "ledger_suite_orchestrator_canister_getblocksdisabled.wasm.gz",
+        "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath :ledger_suite_orchestrator_canister.wasm.gz)",
+        "LEDGER_SUITE_ORCHESTRATOR_GET_BLOCKS_DISABLED_WASM_PATH": "$(rootpath :ledger_suite_orchestrator_canister_getblocksdisabled.wasm.gz)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "LEDGER_CANISTER_GET_BLOCKS_DISABLED_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz)",
+        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    proc_macro_deps = [],
+    deps = [
+        # Keep sorted.
+        ":ledger_suite_orchestrator",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/rust_canisters/http_types",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:proptest",
+    ],
+)

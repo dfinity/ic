@@ -1,0 +1,40 @@
+# THIS FILE IS FOR LOCAL DEVELOPMENT AND SPECIAL USAGE ONLY
+# It is not maintained by IDX.   
+# `requirements.txt` is the source of truth for python dependencies within the ic repo.
+# The bazel target is for normal usage. See readme.md.
+# Why use this? For local development inside poetry virtual env (and using LSP) but not inside the devenv VM or devenv container, or for deploying multiple machines or images at once.
+
+[tool.poetry]
+name = "bmc-remote-deployer"
+version = "0.1.0"
+description = "Deploys img files to Dells via iDRAC"
+authors = ["Gary McElroy <gary.mcelroy@dfinity.org>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+fabric = "^3.2.2"
+icmplib = "^3.0.4"
+idracredfishsupport = "^0.0.8"
+invoke = "^2.0.0"
+loguru = "^0.7.2"
+python = "^3.8"
+pyyaml = "^6.0.1"
+requests = "^2.28.2"
+simple-parsing = "^0.1.4"
+tqdm = "^4.65.0"
+pylsp-mypy = "^0.6.8"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+ipython = "^8.12.0"
+pylsp-mypy = "^0.6.8"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pylsp-mypy]
+enabled = true
+live_mode = true
+strict = false
+exclude = []

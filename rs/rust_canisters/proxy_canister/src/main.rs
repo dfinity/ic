@@ -7,8 +7,11 @@
 //!
 use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
+use ic_cdk::caller;
 use ic_cdk_macros::{query, update};
-use ic_ic00_types::{CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs};
+use ic_management_canister_types_private::{
+    CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
+};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -110,15 +113,32 @@ fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
     transformed
 }
 
+fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, context) = (raw.response, raw.context);
+    let mut transformed = response;
+    transformed.headers = vec![
+        HttpHeader {
+            name: "hello".to_string(),
+            value: "bonjour".to_string(),
+        },
+        HttpHeader {
+            name: "caller".to_string(),
+            value: caller().to_string(),
+        },
+    ];
+    transformed.body = context;
+    transformed.status = 202;
+    transformed
+}
+
 #[query]
 fn test_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
-    let (response, _) = (raw.response, raw.context);
-    let mut transformed = response;
-    transformed.headers = vec![HttpHeader {
-        name: "hello".to_string(),
-        value: "bonjour".to_string(),
-    }];
-    transformed
+    test_transform_(raw)
+}
+
+#[query(composite = true)]
+fn test_composite_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    test_transform_(raw)
 }
 
 #[query]
@@ -137,7 +157,7 @@ fn main() {}
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
-    use ic_ic00_types::HttpHeader;
+    use ic_management_canister_types_private::HttpHeader;
 
     #[test]
     fn test_transform() {

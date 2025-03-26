@@ -1,15 +1,17 @@
 use super::CanisterId;
 
 use hex::decode;
-use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
+use ic_execution_environment::execution::upgrade::ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION;
+use ic_management_canister_types_private::{
+    self as ic00, CanisterInstallModeV2, CanisterUpgradeOptions, Payload, WasmMemoryPersistence,
+};
 use ic_types::{
-    messages::{SignedIngress, UserQuery},
+    messages::{Query, QuerySource, SignedIngress},
     time::expiry_time_from_now,
     PrincipalId, UserId,
 };
 
 use std::{
-    convert::TryFrom,
     fmt,
     fs::File,
     io::{self, Read},
@@ -17,10 +19,10 @@ use std::{
     string::FromUtf8Error,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum Message {
     Ingress(SignedIngress),
-    Query(UserQuery),
+    Query(Query),
     Install(SignedIngress),
     Create(SignedIngress),
 }
@@ -28,7 +30,7 @@ pub(crate) enum Message {
 #[derive(Debug)]
 pub enum LineIteratorError {
     IoError(io::Error),
-    BufferLengthExceeded(Vec<u8>),
+    BufferLengthExceeded,
     FromUtf8Error(FromUtf8Error),
 }
 
@@ -38,7 +40,7 @@ impl fmt::Display for LineIteratorError {
 
         match self {
             IoError(e) => write!(f, "IO error: {}", e),
-            BufferLengthExceeded(_) => write!(f, "Line length exceeds buffer length"),
+            BufferLengthExceeded => write!(f, "Line length exceeds buffer length"),
             FromUtf8Error(e) => write!(f, "UTF-8 conversion error: {}", e),
         }
     }
@@ -112,9 +114,8 @@ impl<R: Read> Iterator for LineIterator<R> {
                 Ok(_) => match self.split_line() {
                     Some(line) => return Some(line),
                     None if self.buffer.len() == LINE_ITERATOR_BUFFER_SIZE => {
-                        let bytes = self.buffer.clone();
                         self.buffer.clear();
-                        return Some(Err(LineIteratorError::BufferLengthExceeded(bytes)));
+                        return Some(Err(LineIteratorError::BufferLengthExceeded));
                     }
                     None => continue,
                 },
@@ -151,7 +152,7 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
     match &tokens[..] {
         [] => Err("Too few arguments.".to_string()),
         ["ingress", canister_id, method_name, payload] => {
-            use ic_test_utilities::types::messages::SignedIngressBuilder;
+            use ic_test_utilities_types::messages::SignedIngressBuilder;
 
             let canister_id = parse_canister_id(canister_id)?;
             let method_name = validate_method_name(method_name)?;
@@ -159,7 +160,7 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
 
             let signed_ingress = SignedIngressBuilder::new()
                 // `source` should become a self-authenticating id according
-                // to https://sdk.dfinity.org/docs/interface-spec/index.html#id-classes
+                // to https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes
                 .canister_id(canister_id)
                 .method_name(method_name)
                 .method_payload(method_payload)
@@ -167,13 +168,15 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
                 .build();
             Ok(Message::Ingress(signed_ingress))
         }
-        ["query", canister_id, method_name, payload] => Ok(Message::Query(UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        ["query", canister_id, method_name, payload] => Ok(Message::Query(Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+                nonce: Some(nonce.to_le_bytes().to_vec()),
+            },
             receiver: parse_canister_id(canister_id)?,
             method_name: validate_method_name(method_name)?,
             method_payload: parse_octet_string(payload)?,
-            ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
-            nonce: Some(nonce.to_le_bytes().to_vec()),
         })),
         ["create"] => parse_create(nonce),
         ["install", canister_id, wasm_file, payload] => {
@@ -204,7 +207,7 @@ fn parse_canister_id(canister_id: &str) -> Result<CanisterId, String> {
 }
 
 fn parse_create(nonce: u64) -> Result<Message, String> {
-    use ic_test_utilities::types::messages::SignedIngressBuilder;
+    use ic_test_utilities_types::messages::SignedIngressBuilder;
 
     let signed_ingress = SignedIngressBuilder::new()
         .method_name(ic00::Method::ProvisionalCreateCanisterWithCycles)
@@ -216,6 +219,21 @@ fn parse_create(nonce: u64) -> Result<Message, String> {
     Ok(Message::Create(signed_ingress))
 }
 
+fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
+    use wasmparser::{Parser, Payload::CustomSection};
+
+    let icp_section_name = format!("icp:private {name}");
+    let parser = Parser::new(0);
+    for payload in parser.parse_all(wasm_binary) {
+        if let CustomSection(reader) = payload.map_err(|e| format!("Wasm parsing error: {}", e))? {
+            if reader.name() == icp_section_name {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 fn parse_install(
     nonce: u64,
     canister_id: &str,
@@ -223,7 +241,7 @@ fn parse_install(
     wasm_file: &str,
     mode: &str,
 ) -> Result<Message, String> {
-    use ic_test_utilities::types::messages::SignedIngressBuilder;
+    use ic_test_utilities_types::messages::SignedIngressBuilder;
 
     let mut wasm_data = Vec::new();
     let mut wasm_file = File::open(wasm_file)
@@ -235,22 +253,36 @@ fn parse_install(
     let canister_id = parse_canister_id(canister_id)?;
     let payload = parse_octet_string(payload)?;
 
+    let install_mode = match mode {
+        "install" => CanisterInstallModeV2::Install,
+        "reinstall" => CanisterInstallModeV2::Reinstall,
+        "upgrade" => {
+            let wasm_memory_persistence = if contains_icp_private_custom_section(
+                wasm_data.as_ref(),
+                ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION,
+            )? {
+                Some(WasmMemoryPersistence::Keep)
+            } else {
+                None
+            };
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence,
+            }))
+        }
+        _ => {
+            return Err(String::from("Unsupported install mode: {mode}"));
+        }
+    };
+
     let signed_ingress = SignedIngressBuilder::new()
         // `source` should become a self-authenticating id according
-        // to https://sdk.dfinity.org/docs/interface-spec/index.html#id-classes
+        // to https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes
         .canister_id(ic00::IC_00)
         .method_name(ic00::Method::InstallCode)
         .method_payload(
-            ic00::InstallCodeArgs::new(
-                CanisterInstallMode::try_from(mode.to_string()).unwrap(),
-                canister_id,
-                wasm_data,
-                payload,
-                None,
-                Some(8 * 1024 * 1024 * 1024), // drun users dont care about memory limits
-                None,
-            )
-            .encode(),
+            ic00::InstallCodeArgsV2::new(install_mode, canister_id, wasm_data, payload, None, None)
+                .encode(),
         )
         .nonce(nonce)
         .build();
@@ -365,7 +397,7 @@ enum Radix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_test_utilities::types::{ids::canister_test_id, messages::SignedIngressBuilder};
+    use ic_test_utilities_types::{ids::canister_test_id, messages::SignedIngressBuilder};
     use std::io::Cursor;
 
     const APP_CANISTER_URL: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
@@ -423,19 +455,24 @@ mod tests {
         let nonce: u64 = 0;
         let parsed_message = parse_message(s, 0).unwrap();
         let ingress_expiry = match &parsed_message {
-            Message::Query(query) => query.ingress_expiry,
+            Message::Query(query) => match query.source {
+                QuerySource::User { ingress_expiry, .. } => ingress_expiry,
+                QuerySource::Anonymous => panic!("Expected a user query but got an anonymous one"),
+            },
             _ => panic!(
                 "parse_message() returned an unexpected message type: {:?}",
                 parsed_message
             ),
         };
-        let expected = Message::Query(UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let expected = Message::Query(Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry,
+                nonce: Some(nonce.to_le_bytes().to_vec()),
+            },
             receiver: canister_test_id(APP_CANISTER_ID),
             method_name: String::from("read"),
             method_payload: vec![1, 2, 3],
-            ingress_expiry,
-            nonce: Some(nonce.to_le_bytes().to_vec()),
         });
         assert_eq!(expected, parsed_message);
     }

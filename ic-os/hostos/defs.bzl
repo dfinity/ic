@@ -2,6 +2,7 @@
 Hold manifest common to all HostOS variants.
 """
 
+load("//ic-os/components:hostos.bzl", "component_files")
 load("//toolchains/sysimage:toolchain.bzl", "lvm_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -14,78 +15,92 @@ def image_deps(mode, _malicious = False):
     Define all HostOS inputs.
 
     Args:
-      mode: Variant to be built, dev, dev-sev or prod.
+      mode: Variant to be built, dev or prod.
       _malicious: Unused, but currently needed to fit generic build structure.
     Returns:
       A dict containing inputs to build this image.
     """
 
     deps = {
-        # Define rootfs and bootfs
-        "bootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-        },
-        "rootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
+        "base_dockerfile": "//ic-os/hostos/context:Dockerfile.base",
+        "dockerfile": "//ic-os/hostos/context:Dockerfile",
 
+        # Extra files to be added to rootfs and bootfs
+        "bootfs": {},
+        "rootfs": {
             # additional files to install
-            "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
-            "//publish/binaries:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
-            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
-            "//ic-os:scripts/build-bootstrap-config-image.sh": "/opt/ic/bin/build-bootstrap-config-image.sh:0755",
+            "//rs/ic_os/release:vsock_host": "/opt/ic/bin/vsock_host:0755",
+            "//rs/ic_os/release:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
+            "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
+            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+
+            # additional libraries to install
+            "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
         },
 
         # Set various configuration values
-        "container_context_files": Label("//ic-os/hostos:rootfs-files"),
+        "container_context_files": Label("//ic-os/hostos/context:context-files"),
+        "component_files": component_files,
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/hostos:grub.cfg"),
-        "extra_boot_args": Label("//ic-os/hostos:rootfs/extra_boot_args"),
+        "extra_boot_args": Label("//ic-os/hostos/context:extra_boot_args"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": _custom_partitions,
     }
 
-    extra_deps = {
+    dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
+    prod_build_args = ["BUILD_TYPE=prod"]
+    dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
+    prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
+
+    image_variants = {
         "dev": {
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
-        "dev-sev": {
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev-sev:build_container_filesystem_config.txt",
+        "local-base-dev": {
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
+        },
+        "local-base-prod": {
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
         "prod": {
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
     }
 
-    deps.update(extra_deps[mode])
+    deps.update(image_variants[mode])
+
+    if "dev" in mode:
+        deps["rootfs"].update({"//ic-os/components:hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh": "/opt/ic/bin/generate-guestos-config.sh:0755"})
 
     return deps
 
 # Inject a step building an LVM partition. This depends on boot and root built
 # earlier in the pipeline, and is depended on by the final disk image.
-def _custom_partitions():
+def _custom_partitions(_):
     lvm_image(
-        name = "partition-hostlvm.tar",
+        name = "partition-hostlvm.tzst",
         layout = Label("//ic-os/hostos:volumes.csv"),
         partitions = [
-            Label("//ic-os/hostos:partition-config.tar"),
-            ":partition-boot.tar",
-            ":partition-root.tar",
+            Label("//ic-os/hostos:partition-config.tzst"),
+            ":partition-boot.tzst",
+            ":partition-root.tzst",
         ],
         vg_name = "hostlvm",
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
     )
 
-    return [":partition-hostlvm.tar"]
+    return [":partition-hostlvm.tzst"]

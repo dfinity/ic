@@ -5,35 +5,38 @@ use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
+use ic_replicated_state::{
+    CallOrigin, Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, SubnetTopology,
+    SystemState,
+};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
+    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
 };
-use ic_test_utilities::{
-    mock_time,
-    state::SystemStateBuilder,
-    types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::{
+    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext},
+    messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
     methods::SystemMethod,
+    time::UNIX_EPOCH,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
 };
 use maplit::btreemap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
-pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: NumBytes = NumBytes::new(0);
+pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: MessageMemoryUsage = MessageMemoryUsage::ZERO;
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
-pub fn execution_parameters() -> ExecutionParameters {
+pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
             FlagStatus::Disabled,
@@ -41,10 +44,12 @@ pub fn execution_parameters() -> ExecutionParameters {
             NumInstructions::from(5_000_000_000),
         ),
         canister_memory_limit: NumBytes::new(4 << 30),
+        wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
+        canister_guaranteed_callback_quota: 50,
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
+        execution_mode,
         subnet_memory_saturation: ResourceSaturation::default(),
     }
 }
@@ -79,7 +84,7 @@ pub struct ApiTypeBuilder;
 impl ApiTypeBuilder {
     pub fn build_update_api() -> ApiType {
         ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::zero(),
             user_test_id(1).get(),
@@ -91,14 +96,48 @@ impl ApiTypeBuilder {
         ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterHeartbeat,
-            mock_time(),
+            UNIX_EPOCH,
             CallContextId::from(1),
+        )
+    }
+
+    pub fn build_replicated_query_api() -> ApiType {
+        ApiType::replicated_query(
+            UNIX_EPOCH,
+            vec![],
+            user_test_id(1).get(),
+            CallContextId::new(1),
+        )
+    }
+
+    pub fn build_non_replicated_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Pure,
+        )
+    }
+
+    pub fn build_composite_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Stateful {
+                call_context_id: CallContextId::from(1),
+                outgoing_request: None,
+            },
         )
     }
 
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
-            mock_time(),
+            UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             vec![],
             incoming_cycles,
@@ -109,9 +148,22 @@ impl ApiTypeBuilder {
         )
     }
 
+    pub fn build_composite_reply_api(incoming_cycles: Cycles) -> ApiType {
+        ApiType::reply_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            vec![],
+            incoming_cycles,
+            CallContextId::new(1),
+            false,
+            ExecutionMode::NonReplicated,
+            0.into(),
+        )
+    }
+
     pub fn build_reject_api(reject_context: RejectContext) -> ApiType {
         ApiType::reject_callback(
-            mock_time(),
+            UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             reject_context,
             Cycles::zero(),
@@ -121,6 +173,40 @@ impl ApiTypeBuilder {
             0.into(),
         )
     }
+
+    pub fn build_composite_reject_api(reject_context: RejectContext) -> ApiType {
+        ApiType::reject_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            reject_context,
+            Cycles::zero(),
+            call_context_test_id(1),
+            false,
+            ExecutionMode::NonReplicated,
+            0.into(),
+        )
+    }
+
+    pub fn build_inspect_message_api() -> ApiType {
+        ApiType::inspect_message(
+            PrincipalId::new_anonymous(),
+            "test".to_string(),
+            vec![],
+            UNIX_EPOCH,
+        )
+    }
+
+    pub fn build_start_api() -> ApiType {
+        ApiType::start(UNIX_EPOCH)
+    }
+
+    pub fn build_init_api() -> ApiType {
+        ApiType::init(UNIX_EPOCH, vec![], user_test_id(1).get())
+    }
+
+    pub fn build_pre_upgrade_api() -> ApiType {
+        ApiType::pre_upgrade(UNIX_EPOCH, user_test_id(1).get())
+    }
 }
 
 pub fn get_system_api(
@@ -128,30 +214,34 @@ pub fn get_system_api(
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut execution_parameters = execution_parameters(api_type.execution_mode());
+    execution_parameters.subnet_type = cycles_account_manager.subnet_type();
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters().compute_allocation,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
+        Default::default(),
+        api_type.caller(),
+        api_type.call_context_id(),
     );
     SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(),
+        execution_parameters,
         SubnetAvailableMemory::new(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
         ),
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        NumWasmPages::from(0),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
 }
@@ -159,13 +249,13 @@ pub fn get_system_api(
 pub fn get_system_state() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
+            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-        );
+            Default::default(),
+        )
+        .unwrap();
     system_state
 }
 

@@ -17,7 +17,7 @@ pub struct CliArgs {
     source: CommandArg,
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Clone, Debug, Parser)]
 #[clap(name = "ic-regedit", about = "Registry (Local Store) Editor.", version)]
 pub enum CommandArg {
     Snapshot {
@@ -36,17 +36,15 @@ pub enum CommandArg {
         keys: Option<String>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
     },
     CanisterToProto {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long, parse(try_from_str = url::Url::parse))]
+        #[clap(long)]
         url: Url,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         path: PathBuf,
 
         /// The registry version where the delta starts. (default: 0)
@@ -60,7 +58,6 @@ pub enum CommandArg {
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
-        #[clap(parse(from_os_str))]
         nns_public_key: Option<PathBuf>,
     },
     ShowDiff {
@@ -70,11 +67,9 @@ pub enum CommandArg {
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     ApplyUpdate {
@@ -84,23 +79,21 @@ pub enum CommandArg {
         amend: bool,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     CanisterSnapshot {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long, parse(try_from_str = url::Url::parse))]
+        #[clap(long)]
         url: Url,
 
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
-        #[clap(long, parse(from_os_str))]
+        #[clap(long)]
         nns_public_key: Option<PathBuf>,
 
         /// The registry version of the snapshot. (default: latest available
@@ -120,13 +113,12 @@ pub enum CommandArg {
     CanisterShowDiff {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long, parse(try_from_str = url::Url::parse))]
+        #[clap(long)]
         url: Url,
 
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
-        #[clap(parse(from_os_str))]
         nns_public_key: Option<PathBuf>,
 
         /// The registry version of the snapshot. (default: latest available
@@ -135,7 +127,6 @@ pub enum CommandArg {
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
 }
@@ -295,19 +286,19 @@ pub enum ArgError {
     JsonError(PathBuf, serde_json::Error),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RegistrySpec {
     pub version: VersionSpec,
     pub source: SourceSpec,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum SourceSpec {
     LocalStore(PathBuf),
     Canister(Url, Option<ThresholdSigPublicKey>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum Command {
     Snapshot {
         registry_spec: RegistrySpec,
@@ -330,7 +321,7 @@ pub enum Command {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VersionSpec {
     RelativeToLatest(u64),
     Absolute(RegistryVersion),

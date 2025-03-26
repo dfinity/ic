@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.41"
+async-trait = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
 ic-crypto = { path = ".." }
@@ -15,27 +15,27 @@ ic-crypto-interfaces-sig-verification = { path = "../interfaces/sig_verification
 ic-crypto-internal-csp = { path = "../internal/crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "../internal/logmon" }
 ic-crypto-node-key-generation = { path = "../node_key_generation" }
-ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-temp-crypto-vault = { path = "temp_vault" }
-ic-crypto-utils-basic-sig = { path = "../utils/basic_sig"}
-ic-crypto-utils-time = { path = "../utils/time" }
+ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
+ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }
-rand = "0.8"
-tempfile = "3.1.0"
+rand = { workspace = true }
+rustls = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-rustls = "0.24.0"
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-crypto-test-utils = { path = "../test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
-ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }

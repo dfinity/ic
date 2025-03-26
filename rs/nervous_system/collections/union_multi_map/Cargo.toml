@@ -1,0 +1,10 @@
+[package]
+name = "ic-nervous-system-collections-union-multi-map"
+edition = "2021"
+version = "0.0.1"
+
+[dependencies]
+# This section intentionally left blank.
+
+[dev-dependencies]
+maplit = "1.0.2"

@@ -1,4 +1,4 @@
-use ic_interfaces::canister_http::CanisterHttpPermanentValidationError;
+use ic_interfaces::canister_http::InvalidCanisterHttpPayloadReason;
 use ic_types::{
     batch::ValidationContext,
     canister_http::{
@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// **NOTE**: The signature is not checked
 pub(crate) fn check_response_consistency(
     response: &CanisterHttpResponseWithConsensus,
-) -> Result<(), CanisterHttpPermanentValidationError> {
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
     let content = &response.content;
     let metadata = &response.proof.content;
 
@@ -30,7 +30,7 @@ pub(crate) fn check_response_consistency(
     ) {
         (true, true) => (),
         _ => {
-            return Err(CanisterHttpPermanentValidationError::InvalidMetadata {
+            return Err(InvalidCanisterHttpPayloadReason::InvalidMetadata {
                 metadata_id: metadata.id,
                 content_id: content.id,
                 metadata_timeout: metadata.timeout,
@@ -42,7 +42,7 @@ pub(crate) fn check_response_consistency(
     // Check the calculated hash matches the metadata hash
     let calculated_hash = crypto_hash(content);
     if calculated_hash != metadata.content_hash {
-        return Err(CanisterHttpPermanentValidationError::ContentHashMismatch {
+        return Err(InvalidCanisterHttpPayloadReason::ContentHashMismatch {
             metadata_hash: metadata.content_hash.clone(),
             calculated_hash,
         });
@@ -56,10 +56,10 @@ pub(crate) fn check_response_against_context(
     registry_version: RegistryVersion,
     response: &CanisterHttpResponseWithConsensus,
     context: &ValidationContext,
-) -> Result<(), CanisterHttpPermanentValidationError> {
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
     // Check that response has not timed out
     if response.content.timeout < context.time {
-        return Err(CanisterHttpPermanentValidationError::Timeout {
+        return Err(InvalidCanisterHttpPayloadReason::Timeout {
             timed_out_at: response.content.timeout,
             validation_time: context.time,
         });
@@ -67,12 +67,10 @@ pub(crate) fn check_response_against_context(
 
     // Check that registry version matched
     if response.proof.content.registry_version != registry_version {
-        return Err(
-            CanisterHttpPermanentValidationError::RegistryVersionMismatch {
-                expected: registry_version,
-                received: response.proof.content.registry_version,
-            },
-        );
+        return Err(InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
+            expected: registry_version,
+            received: response.proof.content.registry_version,
+        });
     }
 
     Ok(())
@@ -97,13 +95,13 @@ pub(crate) fn check_share_against_context(
 ///
 /// Specifically, what is done is as follows:
 /// - The sets of shares are sorted from largest to smallest, and then the
-/// largest set is removed.
+///   largest set is removed.
 /// - A new set of "diverging signers" is created by collecting every node id
-/// that has signed a share not in the largest group.
+///   that has signed a share not in the largest group.
 /// - Finally any signers appearing in the largest group are
-/// removed from the diverging signers group.
+///   removed from the diverging signers group.
 /// - If the size of this group exceeds the number of faults tolerated, then the
-/// divergence criteria is met.
+///   divergence criteria is met.
 pub(crate) fn grouped_shares_meet_divergence_criteria(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     faults_tolerated: usize,
@@ -113,7 +111,7 @@ pub(crate) fn grouped_shares_meet_divergence_criteria(
         .map(|(_, shares)| shares.iter().map(|share| share.signature.signer).collect())
         .collect();
     share_for_content_signers.sort_by_key(|b| core::cmp::Reverse(b.len()));
-    if let Some(largest_signers) = share_for_content_signers.get(0) {
+    if let Some(largest_signers) = share_for_content_signers.first() {
         let mut non_largest_signers = BTreeSet::new();
         for signer_group in share_for_content_signers.iter().skip(1) {
             for signer in signer_group.iter() {

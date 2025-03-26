@@ -381,6 +381,53 @@ impl<T: Update> Update for WithMetrics<T> {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum ListError {
+    #[error("Unauthorized")]
+    Unauthorized,
+
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait List {
+    fn list(&self) -> Result<Vec<(String, Registration)>, ListError>;
+}
+
+pub struct Lister {
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
+}
+
+impl Lister {
+    pub fn new(registrations: LocalRef<StableMap<StorableId, Registration>>) -> Self {
+        Self { registrations }
+    }
+}
+
+impl List for Lister {
+    fn list(&self) -> Result<Vec<(String, Registration)>, ListError> {
+        Ok(self.registrations.with(|rs| {
+            rs.borrow()
+                .iter()
+                .map(|(id, r)| (id.to_string(), r))
+                .collect()
+        }))
+    }
+}
+
+impl<T: List, A: Authorize> List for WithAuthorize<T, A> {
+    fn list(&self) -> Result<Vec<(String, Registration)>, ListError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => ListError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => ListError::UnexpectedError(err),
+            });
+        };
+
+        self.0.list()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum RemoveError {
     #[error("Not found")]
     NotFound,

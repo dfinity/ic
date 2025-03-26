@@ -5,11 +5,12 @@ use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
     certification::CertificationContent,
     dkg::DealingContent,
-    ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare},
+    idkg::{IDkgComplaintContent, IDkgOpeningContent},
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
+use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
 use std::convert::TryFrom;
@@ -61,9 +62,8 @@ mod private {
     impl SignatureDomainSeal for FinalizationContent {}
     impl SignatureDomainSeal for IDkgDealing {}
     impl SignatureDomainSeal for SignedIDkgDealing {}
-    impl SignatureDomainSeal for EcdsaSigShare {}
-    impl SignatureDomainSeal for EcdsaComplaintContent {}
-    impl SignatureDomainSeal for EcdsaOpeningContent {}
+    impl SignatureDomainSeal for IDkgComplaintContent {}
+    impl SignatureDomainSeal for IDkgOpeningContent {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
     impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
@@ -75,6 +75,7 @@ mod private {
     impl SignatureDomainSeal for RandomTapeContent {}
     impl SignatureDomainSeal for SignableMock {}
     impl SignatureDomainSeal for QueryResponseHash {}
+    impl SignatureDomainSeal for VetKdEncryptedKeyShareContent {}
 }
 
 impl SignatureDomain for CanisterHttpResponseMetadata {
@@ -121,22 +122,15 @@ impl SignatureDomain for SignedIDkgDealing {
     }
 }
 
-impl SignatureDomain for EcdsaSigShare {
-    // ECDSA is an external standard, hence no domain is used.
+impl SignatureDomain for IDkgComplaintContent {
     fn domain(&self) -> Vec<u8> {
-        vec![]
+        domain_with_prepended_length(DomainSeparator::IDkgComplaintContent.as_str())
     }
 }
 
-impl SignatureDomain for EcdsaComplaintContent {
+impl SignatureDomain for IDkgOpeningContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DomainSeparator::EcdsaComplaintContent.as_str())
-    }
-}
-
-impl SignatureDomain for EcdsaOpeningContent {
-    fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DomainSeparator::EcdsaOpeningContent.as_str())
+        domain_with_prepended_length(DomainSeparator::IDkgOpeningContent.as_str())
     }
 }
 
@@ -198,6 +192,12 @@ impl SignatureDomain for QueryResponseHash {
     }
 }
 
+impl SignatureDomain for VetKdEncryptedKeyShareContent {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DomainSeparator::VetKdEncryptedKeyShareContent.as_str())
+    }
+}
+
 // Returns a vector of bytes that contains the given domain
 // prepended with a single byte that holds the length of the domain.
 // This is the recommended format for non-empty domain separators,
@@ -227,7 +227,7 @@ fn domain_with_prepended_length(domain: &str) -> Vec<u8> {
 /// Ideally, this struct would be annotated with `#[cfg(test)]` so that it is
 /// only available in test code, however, then it would not be visible outside
 /// of this crate where it is needed.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SignableMock {
     pub domain: Vec<u8>,
     pub signed_bytes_without_domain: Vec<u8>,

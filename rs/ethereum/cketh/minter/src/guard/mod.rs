@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 pub const MAX_CONCURRENT: usize = 100;
 pub const MAX_PENDING: usize = 100;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum GuardError {
     AlreadyProcessing,
     TooManyConcurrentRequests,
@@ -21,12 +21,12 @@ pub trait RequestsGuardedByPrincipal {
     fn pending_requests_count(state: &State) -> usize;
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct PendingRetrieveEthRequests;
+#[derive(Eq, PartialEq, Debug)]
+pub struct PendingWithdrawalRequests;
 
-impl RequestsGuardedByPrincipal for PendingRetrieveEthRequests {
+impl RequestsGuardedByPrincipal for PendingWithdrawalRequests {
     fn guarded_principals(state: &mut State) -> &mut BTreeSet<Principal> {
-        &mut state.retrieve_eth_principals
+        &mut state.pending_withdrawal_principals
     }
 
     fn pending_requests_count(state: &State) -> usize {
@@ -37,7 +37,7 @@ impl RequestsGuardedByPrincipal for PendingRetrieveEthRequests {
 /// Guards a block from executing twice when called by the same user and from being
 /// executed [MAX_CONCURRENT] or more times in parallel.
 #[must_use]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct Guard<PR: RequestsGuardedByPrincipal> {
     principal: Principal,
     _marker: PhantomData<PR>,
@@ -74,18 +74,18 @@ impl<PR: RequestsGuardedByPrincipal> Drop for Guard<PR> {
     }
 }
 
-pub fn retrieve_eth_guard(
+pub fn retrieve_withdraw_guard(
     principal: Principal,
-) -> Result<Guard<PendingRetrieveEthRequests>, GuardError> {
+) -> Result<Guard<PendingWithdrawalRequests>, GuardError> {
     Guard::new(principal)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum TimerGuardError {
     AlreadyProcessing,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct TimerGuard {
     task: TaskType,
 }

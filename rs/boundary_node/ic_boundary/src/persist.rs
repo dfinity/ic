@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
 use rand::seq::SliceRandom;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 use crate::{
     metrics::{MetricParamsPersist, WithMetricsPersist},
@@ -46,16 +46,16 @@ fn principal_bytes_to_u256(p: &[u8]) -> u256 {
 // This is more efficient than lexographically sorted hexadecimal strings as done in JS router
 // Currently the largest canister_id range is somewhere around 2^40 - so probably using one u128 would work for a long time
 // But going u256 makes it future proof and according to spec
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct RouteSubnet {
-    pub id: String,
+    pub id: Principal,
     pub range_start: u256,
     pub range_end: u256,
-    pub nodes: Vec<Node>,
+    pub nodes: Vec<Arc<Node>>,
 }
 
 impl RouteSubnet {
-    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Node>, ErrorCause> {
+    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
         let nodes = self
             .nodes
             .choose_multiple(&mut rand::thread_rng(), n)
@@ -68,18 +68,45 @@ impl RouteSubnet {
 
         Ok(nodes)
     }
+
+    // max acceptable number of malicious nodes in a subnet
+    pub fn fault_tolerance_factor(&self) -> usize {
+        (self.nodes.len() - 1) / 3
+    }
+
+    pub fn pick_n_out_of_m_closest(
+        &self,
+        n: usize,
+        m: usize,
+    ) -> Result<Vec<Arc<Node>>, ErrorCause> {
+        // nodes should already be sorted by latency after persist() invocation
+        let m = std::cmp::min(m, self.nodes.len());
+        let nodes = &self.nodes[0..m];
+
+        let picked_nodes = nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .map(Arc::clone)
+            .collect::<Vec<_>>();
+
+        if picked_nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(picked_nodes)
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct Routes {
     pub node_count: u32,
     // subnets should be sorted by `range_start` field for the binary search to work
     pub subnets: Vec<Arc<RouteSubnet>>,
+    pub subnet_map: HashMap<Principal, Arc<RouteSubnet>>,
 }
 
 impl Routes {
     // Look up the subnet by canister_id
-    pub fn lookup(&self, canister_id: Principal) -> Option<Arc<RouteSubnet>> {
+    pub fn lookup_by_canister_id(&self, canister_id: Principal) -> Option<Arc<RouteSubnet>> {
         let canister_id_u256 = principal_bytes_to_u256(canister_id.as_slice());
 
         let idx = match self
@@ -111,11 +138,15 @@ impl Routes {
 
         Some(subnet)
     }
+
+    // Look up the subnet by subnet_id
+    pub fn lookup_by_id(&self, subnet_id: Principal) -> Option<Arc<RouteSubnet>> {
+        self.subnet_map.get(&subnet_id).cloned()
+    }
 }
 
-#[async_trait]
 pub trait Persist: Send + Sync {
-    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus;
+    fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus;
 }
 
 pub struct Persister {
@@ -131,28 +162,37 @@ impl Persister {
 #[async_trait]
 impl Persist for Persister {
     // Construct a lookup table based on the provided subnet list
-    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
+    fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
         if subnets.is_empty() {
             return PersistStatus::SkippedEmpty;
         }
 
+        let node_count = subnets.iter().map(|x| x.nodes.len()).sum::<usize>() as u32;
+
         // Generate a list of subnets with a single canister range
         // Can contain several entries with the same subnet ID
-        let mut rt_subnets = vec![];
+        let mut rt_subnets = subnets
+            .into_iter()
+            .flat_map(|subnet| {
+                let mut nodes = subnet.nodes;
+                // Sort nodes by latency before publishing to avoid sorting on each retry_request() call.
+                nodes.sort_by(|a, b| a.avg_latency_secs.partial_cmp(&b.avg_latency_secs).unwrap());
 
-        let mut node_count: u32 = 0;
-        for subnet in subnets.into_iter() {
-            node_count += subnet.nodes.len() as u32;
+                subnet.ranges.into_iter().map(move |range| {
+                    Arc::new(RouteSubnet {
+                        id: subnet.id,
+                        range_start: principal_bytes_to_u256(range.start.as_slice()),
+                        range_end: principal_bytes_to_u256(range.end.as_slice()),
+                        nodes: nodes.clone(),
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
 
-            for range in subnet.ranges.into_iter() {
-                rt_subnets.push(Arc::new(RouteSubnet {
-                    id: subnet.id.to_string(),
-                    range_start: principal_bytes_to_u256(range.start.as_slice()),
-                    range_end: principal_bytes_to_u256(range.end.as_slice()),
-                    nodes: subnet.nodes.clone(),
-                }))
-            }
-        }
+        let subnet_map = rt_subnets
+            .iter()
+            .map(|subnet| (subnet.id, subnet.clone()))
+            .collect::<HashMap<_, _>>();
 
         // Sort subnets by range_start for the binary search to work in lookup()
         rt_subnets.sort_by_key(|x| x.range_start);
@@ -160,6 +200,7 @@ impl Persist for Persister {
         let rt = Arc::new(Routes {
             node_count,
             subnets: rt_subnets,
+            subnet_map,
         });
 
         // Load old subnet to get previous numbers
@@ -183,8 +224,8 @@ impl Persist for Persister {
 
 #[async_trait]
 impl<T: Persist> Persist for WithMetricsPersist<T> {
-    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
-        let out = self.0.persist(subnets).await;
+    fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
+        let out = self.0.persist(subnets);
         let MetricParamsPersist { nodes, ranges } = &self.1;
 
         match out {
@@ -196,7 +237,7 @@ impl<T: Persist> Persist for WithMetricsPersist<T> {
                 nodes.set(s.nodes_new as i64);
                 ranges.set(s.ranges_new as i64);
 
-                info!(
+                debug!(
                     action = "persist",
                     "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
                     s.ranges_old,

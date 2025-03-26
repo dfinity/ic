@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
 #
 # Builds a lvm image from individual partition images and a volume
-# table description. The actual lvm image is wrapped up into a tar file
+# table description. The actual lvm image is wrapped up into a tzst file
 # because the raw file is sparse.
 #
-# The input partition images are also expected to be given as tar files,
-# where each tar archive must contain a single file named "partition.img".
+# The input partition images are also expected to be given as tzst files,
 #
 # Call example:
-#   build_lvm_image -v volumes.csv -o partition-hostlvm.tar part1.tar part2.tar ...
+#   build_lvm_image -v volumes.csv -o partition-hostlvm.tzst part1.tzst part2.tzst ...
 #
 import argparse
 import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 from crc import INITIAL_CRC, calc_crc
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 LVM_HEADER_SIZE_BYTES = int(2048 * 512)
-BYTES_PER_MEBIBYTE = int(2 ** 20)
+BYTES_PER_MEBIBYTE = int(2**20)
 EXTENT_SIZE_BYTES = int(4 * BYTES_PER_MEBIBYTE)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-o", "--out", help="Target (tar) file to write lvm image to", type=str)
+    parser.add_argument("-o", "--out", help="Target (tzst) file to write lvm image to", type=str)
     parser.add_argument("-v", "--volume_table", help="CSV file describing the volume table", type=str)
     parser.add_argument("-n", "--vg-name", metavar="vg_name", help="Volume Group name to use", type=str)
     parser.add_argument("-u", "--vg-uuid", metavar="vg_uuid", help="UUID to use for Volume Group", type=str)
@@ -38,6 +37,7 @@ def main():
         nargs="*",
         help="Partitions to write. These must match the CSV volume table entries.",
     )
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -52,7 +52,9 @@ def main():
         lvm_entries = read_volume_description(f.read())
     validate_volume_table(lvm_entries)
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     lvm_image = os.path.join(tmpdir, "partition.img")
     prepare_lvm_image(lvm_entries, lvm_image, vg_name, vg_uuid, pv_uuid)
@@ -73,29 +75,36 @@ def main():
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
-            write_partition_image_from_tar(entry, lvm_image, tarfile.open(partition_file, mode="r:"))
+            write_partition_image_from_tzst(entry, lvm_image, partition_file)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    temp_tar = os.path.join(tmpdir, "partition.tar")
     subprocess.run(
         [
-            "tar",
-            "cf",
-            out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "partition.img",
+            args.dflate,
+            "--input",
+            lvm_image,
+            "--output",
+            temp_tar,
         ],
         check=True,
     )
 
-    print_artifact_info(out_file)
+    subprocess.run(
+        [
+            "zstd",
+            "-q",
+            "--threads=0",
+            temp_tar,
+            "-o",
+            out_file,
+        ],
+        check=True,
+    )
 
 
 def read_volume_description(data):
@@ -166,25 +175,33 @@ def select_partition_file(name, partition_files):
     return None
 
 
-def write_partition_image_from_tar(lvm_entry, image_file, partition_tf):
-    base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
-    with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
-        for member in partition_tf:
-            if member.path != "partition.img":
-                continue
-            if member.size > lvm_entry["size"] * EXTENT_SIZE_BYTES:
-                raise RuntimeError("Image too large for partition %s" % lvm_entry["name"])
-            source = partition_tf.extractfile(member)
-            if member.type == tarfile.GNUTYPE_SPARSE:
-                for offset, size in member.sparse:
-                    if size == 0:
-                        continue
-                    source.seek(offset)
-                    target.seek(offset + base)
-                    _copyfile(source, target, size)
-            else:
-                target.seek(base)
-                _copyfile(source, target, member.size)
+def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst):
+    base_temp_dir = os.getenv("ICOS_TMPDIR")
+    if not base_temp_dir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    with tempfile.TemporaryDirectory(dir=base_temp_dir) as tmpdir:
+        partition_tf = os.path.join(tmpdir, "partition.tar")
+        subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+
+        partition_tf = tarfile.open(partition_tf, mode="r:")
+        base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
+        with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
+            for member in partition_tf:
+                if member.path != "partition.img":
+                    continue
+                if member.size > lvm_entry["size"] * EXTENT_SIZE_BYTES:
+                    raise RuntimeError("Image too large for partition %s" % lvm_entry["name"])
+                source = partition_tf.extractfile(member)
+                if member.type == tarfile.GNUTYPE_SPARSE:
+                    for offset, size in member.sparse:
+                        if size == 0:
+                            continue
+                        source.seek(offset)
+                        target.seek(offset + base)
+                        _copyfile(source, target, size)
+                else:
+                    target.seek(base)
+                    _copyfile(source, target, member.size)
 
 
 def _copyfile(source, target, size):

@@ -1,9 +1,24 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    # Keep sorted.
+    "//publish/canisters:__pkg__",
+    "//rs/ledger_suite/icp:__subpackages__",
+    "//rs/nervous_system/canisters:__subpackages__",
+    "//rs/nervous_system/clients:__pkg__",
+    "//rs/nervous_system/common:__subpackages__",
+    "//rs/nervous_system/root:__pkg__",
+    "//rs/nervous_system/runtime:__pkg__",
+    "//rs/nns:__subpackages__",
+    "//rs/registry/canister:__pkg__",
+    "//rs/rust_canisters:__subpackages__",
+    "//rs/sns:__subpackages__",
+])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
 ]
@@ -11,6 +26,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_json",
 ]
@@ -21,11 +37,11 @@ ALIASES = {}
 
 rust_library(
     name = "dfn_core",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "dfn_core",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -46,21 +62,17 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "dfn_core_integration_test",
     srcs = ["test/test.rs"],
     aliases = ALIASES,
     crate_root = "test/test.rs",
     data = [
         ":wasm",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/dfn_core",
         "WASM_WASM_PATH": "$(rootpath :wasm)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":dfn_core"],
@@ -70,6 +82,7 @@ rust_doc_test(
     name = "dfn_core_doc_test",
     crate = ":dfn_core",
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/dfn_json",
     ],
 )

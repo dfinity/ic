@@ -8,6 +8,7 @@ rust_fuzz_test_binary(
         "fuzz_targets/candid_parser.rs",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:libfuzzer-sys",
     ],
@@ -19,6 +20,7 @@ rust_fuzz_test_binary(
         "fuzz_targets/candid_type_decoder.rs",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:libfuzzer-sys",
         "@crate_index//:serde",

@@ -1,6 +1,7 @@
+#![allow(clippy::disallowed_types)]
+
 use std::{
-    pin::Pin,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, RwLock},
     time::Instant,
 };
 
@@ -8,40 +9,38 @@ use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
-    body::Body,
-    extract::State,
-    http::Request,
+    extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
     Extension,
 };
-use bytes::Buf;
-use futures::task::{Context as FutContext, Poll};
-use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
-use http_body::Body as HttpBody;
-use ic_types::{messages::ReplicaHealthStatus, CanisterId};
-use jemalloc_ctl::{epoch, stats};
+use http::header::CONTENT_TYPE;
+use ic_bn_lib::http::{body::CountingBody, http_version, ConnInfo};
+use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
 use prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
-use tokio::sync::RwLock;
+use sha3::{Digest, Sha3_256};
+use tikv_jemalloc_ctl::{epoch, stats};
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
+    geoip,
+    persist::RouteSubnet,
     retry::RetryResult,
-    routes::{ErrorCause, RequestContext},
+    routes::{ErrorCause, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
 };
 
 const KB: f64 = 1024.0;
 
-pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.2, 1.0, 2.0];
+pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.2, 0.5, 1.0, 2.0, 4.0, 7.0, 11.0];
 pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] = &[128.0, KB, 2.0 * KB, 4.0 * KB, 8.0 * KB];
 pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] = &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB];
 
@@ -50,7 +49,7 @@ const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 
 const NODE_ID_LABEL: &str = "node_id";
 const SUBNET_ID_LABEL: &str = "subnet_id";
-
+const SUBNET_ID_UNKNOWN: &str = "unknown";
 pub struct MetricsCache {
     buffer: Vec<u8>,
 }
@@ -67,11 +66,11 @@ impl MetricsCache {
 // Iterates over given metric families and removes metrics that have
 // node_id+subnet_id labels and where the corresponding nodes are
 // not present in the registry snapshot
-fn remove_stale_nodes(
+fn remove_stale_metrics(
     snapshot: Arc<RegistrySnapshot>,
     mut mfs: Vec<MetricFamily>,
 ) -> Vec<MetricFamily> {
-    for mf in mfs.iter_mut() {
+    mfs.iter_mut().for_each(|mf| {
         // Iterate over the metrics in the metric family
         let metrics = mf
             .take_metric()
@@ -90,8 +89,8 @@ fn remove_stale_nodes(
                     .find(|&v| v.get_name() == SUBNET_ID_LABEL)
                     .map(|x| x.get_value());
 
-                // Check if we got both node_id and subnet_id labels
                 match (node_id, subnet_id) {
+                    // Check if we got both node_id and subnet_id labels
                     (Some(node_id), Some(subnet_id)) => snapshot
                         .nodes
                         // Check if the node_id is in the snapshot
@@ -100,6 +99,17 @@ fn remove_stale_nodes(
                         .map(|x| x.subnet_id.to_string() == subnet_id)
                         .unwrap_or(false),
 
+                    // If there's only subnet_id label - check if this subnet exists
+                    // TODO create a hashmap of subnets in snapshot for faster lookup, currently complexity is O(n)
+                    // but since we have very few subnets currently (<40) probably it's Ok
+                    (None, Some(subnet_id)) => {
+                        subnet_id == SUBNET_ID_UNKNOWN
+                            || snapshot
+                                .subnets
+                                .iter()
+                                .any(|x| x.id.to_string() == subnet_id)
+                    }
+
                     // Otherwise just pass this metric through
                     _ => true,
                 }
@@ -107,7 +117,7 @@ fn remove_stale_nodes(
             .collect();
 
         mf.set_metric(metrics);
-    }
+    });
 
     mfs
 }
@@ -205,11 +215,11 @@ impl Run for MetricsRunner {
 
         // If we have a published snapshot - use it to remove the metrics not present anymore
         if let Some(snapshot) = self.published_registry_snapshot.load_full() {
-            metric_families = remove_stale_nodes(snapshot, metric_families);
+            metric_families = remove_stale_metrics(snapshot, metric_families);
         }
 
         // Take a write lock, truncate the vector and encode the metrics into it
-        let mut metrics_cache = self.metrics_cache.write().await;
+        let mut metrics_cache = self.metrics_cache.write().unwrap();
         metrics_cache.buffer.clear();
         self.encoder
             .encode(&metric_families, &mut metrics_cache.buffer)?;
@@ -218,139 +228,10 @@ impl Run for MetricsRunner {
     }
 }
 
-// A wrapper for http::Body implementations that tracks the number of bytes sent
-pub struct MetricsBody<D, E> {
-    inner: Pin<Box<dyn HttpBody<Data = D, Error = E> + Send + 'static>>,
-    // TODO see if we can make this FnOnce somehow
-    callback: Box<dyn Fn(u64, Result<(), String>) + Send + 'static>,
-    callback_done: AtomicBool,
-    expected_size: Option<u64>,
-    bytes_sent: u64,
-}
-
-impl<D, E> MetricsBody<D, E> {
-    pub fn new<B>(
-        body: B,
-        content_length: Option<HeaderValue>,
-        callback: impl Fn(u64, Result<(), String>) + Send + 'static,
-    ) -> Self
-    where
-        B: HttpBody<Data = D, Error = E> + Send + 'static,
-        D: Buf,
-    {
-        // Body can sometimes provide an exact size in the hint, use that
-        let expected_size = body.size_hint().exact().or_else(|| {
-            // Try to parse header if provided otherwise
-            content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()))
-        });
-
-        let mut body = Self {
-            inner: Box::pin(body),
-            callback: Box::new(callback),
-            callback_done: AtomicBool::new(false),
-            expected_size,
-            bytes_sent: 0,
-        };
-
-        // If the size is known and zero - just execute the callback now, it won't be called anywhere else
-        if expected_size == Some(0) {
-            body.do_callback(Ok(()));
-        }
-
-        body
-    }
-
-    // In certain cases the users of HttpBody trait can cause us to run callbacks more than once
-    // Use AtomicBool to prevent that and run it at most once
-    pub fn do_callback(&mut self, res: Result<(), String>) {
-        // Make locking scope shorter
-        {
-            let done = self.callback_done.get_mut();
-            if *done {
-                return;
-            }
-            *done = true;
-        }
-
-        (self.callback)(self.bytes_sent, res);
-    }
-}
-
-// According to the research, the users of HttpBody can determine the time when
-// there's no more data to fetch in several ways:
-//
-// 1) When there's no Content-Length header they just call poll_data() until it yields Poll::Ready(None)
-// 2) When there's such header - they call poll_data() until they get advertised in the header number of bytes
-//    and don't call poll_data() anymore so Poll::Ready(None) variant is never reached
-// 3) They call is_end_stream() and if it returns true then they don't call poll_data() anymore
-// 4) By using size_hint() if it yields an exact number
-//
-// So we have to cover all these:
-// * We don't implement is_end_stream() (default impl in Trait just returns false) so that
-//   the caller will have to use poll_data()
-// * We have to have a Content-Length stored to check if we got already that much data
-// * We check size_hint() for an exact value
-
-impl<D, E> HttpBody for MetricsBody<D, E>
-where
-    D: Buf,
-    E: std::string::ToString,
-{
-    type Data = D;
-    type Error = E;
-
-    fn poll_data(
-        mut self: Pin<&mut Self>,
-        cx: &mut FutContext<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let poll = self.inner.as_mut().poll_data(cx);
-
-        match &poll {
-            // There is still some data available
-            Poll::Ready(Some(v)) => match v {
-                Ok(buf) => {
-                    self.bytes_sent += buf.remaining() as u64;
-
-                    // Check if we already got what was expected
-                    if Some(self.bytes_sent) >= self.expected_size {
-                        self.do_callback(Ok(()));
-                    }
-                }
-
-                // Error occured, execute callback
-                Err(e) => {
-                    // Error is not Copy/Clone so use string instead
-                    self.do_callback(Err(e.to_string()));
-                }
-            },
-
-            // Nothing left, execute callback
-            Poll::Ready(None) => {
-                self.do_callback(Ok(()));
-            }
-
-            // Do nothing
-            Poll::Pending => {}
-        }
-
-        poll
-    }
-
-    fn poll_trailers(
-        mut self: Pin<&mut Self>,
-        cx: &mut FutContext<'_>,
-    ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
-        self.inner.as_mut().poll_trailers(cx)
-    }
-
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.inner.size_hint()
-    }
-}
-
+#[derive(Clone, Debug)]
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MetricParams {
     pub action: String,
     pub counter: IntCounterVec,
@@ -426,6 +307,7 @@ impl MetricParamsPersist {
     }
 }
 
+#[derive(Clone)]
 pub struct WithMetricsCheck<T>(pub T, pub MetricParamsCheck);
 
 #[derive(Clone)]
@@ -472,26 +354,34 @@ impl MetricParamsCheck {
 #[derive(Clone)]
 pub struct HttpMetricParams {
     pub action: String,
+    pub log_failed_requests_only: bool,
     pub counter: IntCounterVec,
     pub durationer: HistogramVec,
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
-    pub cache_counter: IntCounterVec,
-    pub retry_counter: IntCounterVec,
+    pub anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
 }
 
 impl HttpMetricParams {
-    pub fn new(registry: &Registry, action: &str) -> Self {
+    pub fn new(
+        registry: &Registry,
+        action: &str,
+        log_failed_requests_only: bool,
+        anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    ) -> Self {
         const LABELS_HTTP: &[&str] = &[
             "request_type",
             "status_code",
             SUBNET_ID_LABEL,
-            NODE_ID_LABEL,
             "error_cause",
+            "cache_status",
+            "cache_bypass",
+            "retry",
         ];
 
         Self {
             action: action.to_string(),
+            log_failed_requests_only,
 
             counter: register_int_counter_vec_with_registry!(
                 format!("{action}_total"),
@@ -528,18 +418,32 @@ impl HttpMetricParams {
             )
             .unwrap(),
 
-            cache_counter: register_int_counter_vec_with_registry!(
-                format!("{action}_cache"),
-                format!("Counts cache results"),
-                &["cache_status", "cache_bypass"],
+            anonymization_salt,
+        }
+    }
+}
+
+pub struct WithMetricsSnapshot<T>(pub T, pub MetricParamsSnapshot);
+
+#[derive(Clone)]
+pub struct MetricParamsSnapshot {
+    pub version: IntGauge,
+    pub timestamp: IntGauge,
+}
+
+impl MetricParamsSnapshot {
+    pub fn new(registry: &Registry) -> Self {
+        Self {
+            version: register_int_gauge_with_registry!(
+                format!("registry_version"),
+                format!("Currently published registry version"),
                 registry
             )
             .unwrap(),
 
-            retry_counter: register_int_counter_vec_with_registry!(
-                format!("{action}_retry"),
-                format!("Counts per-subnet retry results"),
-                &["subnet_id", "success"],
+            timestamp: register_int_gauge_with_registry!(
+                format!("registry_timestamp"),
+                format!("Timestamp of the last registry update"),
                 registry
             )
             .unwrap(),
@@ -568,51 +472,103 @@ impl HttpMetricParamsStatus {
 
 pub async fn metrics_middleware_status(
     State(metric_params): State<HttpMetricParamsStatus>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> impl IntoResponse {
     let response = next.run(request).await;
     let health = response
         .extensions()
         .get::<ReplicaHealthStatus>()
         .unwrap()
-        .to_string();
+        .as_ref();
 
     let HttpMetricParamsStatus { counter } = metric_params;
-    counter.with_label_values(&[health.as_str()]).inc();
+    counter.with_label_values(&[health]).inc();
 
     response
 }
 
-// middleware to log and measure proxied requests
+// middleware to log and measure proxied canister and subnet requests
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> impl IntoResponse {
-    let request_id = request_id
-        .header_value()
-        .to_str()
-        .unwrap_or("bad_request_id")
-        .to_string();
+    let request_id = request_id.header_value().to_str().unwrap_or("").to_string();
+
+    let ip_family = request
+        .extensions()
+        .get::<Arc<ConnInfo>>()
+        .map(|x| {
+            let f = x.remote_addr.family();
+            if f == "v4" {
+                4
+            } else if f == "v6" {
+                6
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0);
+
+    let remote_addr = request
+        .extensions()
+        .get::<Arc<ConnInfo>>()
+        .map(|x| x.remote_addr.ip().to_canonical().to_string())
+        .unwrap_or_default();
+
+    let request_type = &request
+        .extensions()
+        .get::<RequestType>()
+        .cloned()
+        .unwrap_or_default();
+    let request_type: &'static str = request_type.into();
+
+    let country_code = request
+        .extensions()
+        .get::<geoip::GeoData>()
+        .map(|x| x.country_code.clone())
+        .unwrap_or("N/A".into());
+
+    // for canister requests we extract canister_id
+    let canister_id = request
+        .extensions()
+        .get::<CanisterId>()
+        .map(|x| x.to_string());
+
+    // for /api/v2/subnet requests we extract subnet_id directly from extension
+    let subnet_id = request
+        .extensions()
+        .get::<SubnetId>()
+        .map(|x| x.to_string());
+
+    let http_version = http_version(request.version());
 
     // Perform the request & measure duration
     let start_time = Instant::now();
     let response = next.run(request).await;
     let proc_duration = start_time.elapsed().as_secs_f64();
 
+    // in case subnet_id=None (i.e. for /api/v2/canister/... request), we get the target subnet_id from the RouteSubnet extension
+    let subnet_id = subnet_id.or(response
+        .extensions()
+        .get::<Arc<RouteSubnet>>()
+        .map(|x| x.id.to_string()));
+
     // Extract extensions
     let ctx = response
         .extensions()
-        .get::<RequestContext>()
+        .get::<Arc<RequestContext>>()
         .cloned()
         .unwrap_or_default();
 
+    // Actual canister id is the one the request was routed to.
+    // Might be different from request canister id
+    let canister_id_actual = response.extensions().get::<CanisterId>().cloned();
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
     let retry_result = response.extensions().get::<RetryResult>().cloned();
-    let canister_id = response.extensions().get::<CanisterId>().cloned();
-    let node = response.extensions().get::<Node>().cloned();
+    let node = response.extensions().get::<Arc<Node>>();
     let cache_status = response
         .extensions()
         .get::<CacheStatus>()
@@ -620,25 +576,29 @@ pub async fn metrics_middleware(
         .unwrap_or_default();
 
     // Prepare fields
-    let request_type = ctx.request_type.to_string();
     let status_code = response.status();
     let sender = ctx.sender.map(|x| x.to_string());
     let node_id = node.as_ref().map(|x| x.id.to_string());
-    let subnet_id = node.as_ref().map(|x| x.subnet_id.to_string());
 
     let HttpMetricParams {
         action,
+        log_failed_requests_only,
         counter,
         durationer,
         request_sizer,
         response_sizer,
-        cache_counter,
-        retry_counter,
+        anonymization_salt,
     } = metric_params;
 
-    // Closure that gets called when the response body is fully read (or an error occurs)
-    let record_metrics = move |response_size: u64, body_result: Result<(), String>| {
+    let (parts, body) = response.into_parts();
+    let (body, rx) = CountingBody::new(body);
+
+    tokio::spawn(async move {
+        // Wait for the streaming to finish
+        let response_size = rx.await.unwrap_or(Ok(0)).unwrap_or(0);
+
         let full_duration = start_time.elapsed().as_secs_f64();
+        let failed = error_cause.is_some() || !status_code.is_success();
 
         let (error_cause, error_details) = match &error_cause {
             Some(v) => (Some(v.to_string()), v.details()),
@@ -650,29 +610,35 @@ pub async fn metrics_middleware(
             _ => None,
         };
 
+        let retry_result = retry_result.clone();
+
         // Prepare labels
         // Otherwise "temporary value dropped" error occurs
         let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
-        let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
-        let node_id_lbl = node_id.clone().unwrap_or("unknown".to_string());
+        let subnet_id_lbl = subnet_id.clone().unwrap_or(SUBNET_ID_UNKNOWN.to_string());
         let cache_status_lbl = &cache_status.to_string();
         let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
+        let retry_lbl =
+            // Check if retry happened and if it succeeded
+            if let Some(v) = &retry_result {
+                if v.success {
+                    "ok"
+                } else {
+                    "fail"
+                }
+            } else {
+                "no"
+            };
 
-        // TODO Potential cardinality is up to 900K which is a lot
-        // In reality it's less thank 80K which is still high
-        // Check over a long period
+        // Average cardinality up to 150k
         let labels = &[
-            request_type.as_str(),    // x3
-            status_code.as_str(),     // x27 but usually x8
-            subnet_id_lbl.as_str(),   // x37 but since each node is in a single subnet -> x1
-            node_id_lbl.as_str(),     // x550
-            error_cause_lbl.as_str(), // x15 but usually x6
-        ];
-
-        // Cardinality x9
-        let labels_cache = &[
-            cache_status_lbl.as_str(),        // x5
-            cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x10
+            request_type,                     // x3
+            status_code.as_str(),             // x27 but usually x8
+            subnet_id_lbl.as_str(),           // x37 as of now
+            error_cause_lbl.as_str(),         // x15 but usually x6
+            cache_status_lbl.as_str(),        // x4
+            cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x9
+            retry_lbl,                        // x3
         ];
 
         counter.with_label_values(labels).inc();
@@ -683,47 +649,60 @@ pub async fn metrics_middleware(
         response_sizer
             .with_label_values(labels)
             .observe(response_size as f64);
-        cache_counter.with_label_values(labels_cache).inc();
 
-        let retry_result = retry_result.clone();
+        // Anonymization
+        let salt = anonymization_salt.load();
 
-        // Count the retry if one happened
-        if let Some(v) = &retry_result {
-            retry_counter
-                .with_label_values(&[subnet_id_lbl.as_str(), if v.success { "yes" } else { "no" }])
-                .inc();
+        let hash_fn = |input: &str| -> String {
+            let mut hasher = Sha3_256::new();
+
+            if let Some(v) = salt.as_ref() {
+                hasher.update(v.as_slice());
+            } else {
+                return "N/A".to_string();
+            }
+
+            hasher.update(input);
+            let result = hasher.finalize();
+
+            // SHA3-256 is guaranteed to be 32 bytes, so this is safe
+            hex::encode(&result[..16])
+        };
+
+        let remote_addr = hash_fn(&remote_addr);
+        let sender = hash_fn(&sender.unwrap_or_default());
+
+        // Log
+        if !log_failed_requests_only || failed {
+            info!(
+                action,
+                request_id,
+                http = http_version,
+                request_type,
+                error_cause,
+                error_details,
+                status = status_code.as_u16(),
+                subnet_id,
+                node_id,
+                canister_id,
+                canister_id_actual = canister_id_actual.map(|x| x.to_string()),
+                canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
+                sender,
+                remote_addr,
+                method = ctx.method_name,
+                duration = proc_duration,
+                duration_full = full_duration,
+                request_size = ctx.request_size,
+                response_size,
+                retry_count = &retry_result.as_ref().map(|x| x.retries),
+                retry_success = &retry_result.map(|x| x.success),
+                %cache_status,
+                cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
+                country_code,
+                client_ip_family = ip_family,
+            );
         }
-
-        info!(
-            action,
-            request_id,
-            request_type = ctx.request_type.to_string(),
-            error_cause,
-            error_details,
-            status = status_code.as_u16(),
-            subnet_id,
-            node_id,
-            canister_id = canister_id.map(|x| x.to_string()),
-            canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
-            sender,
-            method_name = ctx.method_name,
-            proc_duration,
-            full_duration,
-            request_size = ctx.request_size,
-            response_size,
-            retry_count = &retry_result.as_ref().map(|x| x.retries),
-            retry_success = &retry_result.map(|x| x.success.to_string()),
-            body_error = body_result.err(),
-            %cache_status,
-            cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
-            nonce_len = ctx.nonce.clone().map(|x| x.len()),
-            arg_len = ctx.arg.clone().map(|x| x.len()),
-        );
-    };
-
-    let (parts, body) = response.into_parts();
-    let content_length = parts.headers.get(CONTENT_LENGTH).cloned();
-    let body = MetricsBody::new(body, content_length, record_metrics);
+    });
 
     Response::from_parts(parts, body)
 }
@@ -740,7 +719,7 @@ pub async fn metrics_handler(
     // Get a read lock and clone the buffer contents
     (
         [(CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
-        cache.read().await.buffer.clone(),
+        cache.read().unwrap().buffer.clone(),
     )
 }
 

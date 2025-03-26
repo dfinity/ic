@@ -5,6 +5,10 @@ use lazy_static::lazy_static;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 
+pub const TEST_NEURON_1_ID: u64 = 449479075714955186;
+pub const TEST_NEURON_2_ID: u64 = 4368585614685248742;
+pub const TEST_NEURON_3_ID: u64 = 4884056990215423907;
+
 lazy_static! {
     // A set of keys/principals to be used in tests.
     // Note that we use multiple rng's because declaring a single one an reusing it causes conflicts

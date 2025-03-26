@@ -1,8 +1,7 @@
 use ic_canister_client::Sender;
 use ic_canister_client_sender::{Secp256k1KeyPair, SigKeys};
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandResult};
-use std::path::Path;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 /// An abstract message signer interface.
 pub trait Signer: Send + Sync {
@@ -35,7 +34,6 @@ impl Signer for Hsm {
     }
 }
 
-/// Signer for https://dfinity.atlassian.net/browse/NODE-439
 pub struct NodeProviderSigner {
     keypair: Secp256k1KeyPair,
 }

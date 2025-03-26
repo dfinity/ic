@@ -1,33 +1,42 @@
+use self::routing::demux::Demux;
+use self::routing::stream_handler::StreamHandler;
+use self::scheduling::valid_set_rule::ValidSetRule;
+use crate::routing::demux::DemuxImpl;
+
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_ni_dkg::{
     dummy_transcript_for_tests, dummy_transcript_for_tests_with_params,
 };
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
+use ic_protobuf::registry::{
+    api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
+    node::v1::NodeRecord,
+};
 use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_keys::make_chain_key_signing_subnet_list_key;
 use ic_registry_local_registry::LocalRegistry;
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
-use ic_test_utilities::{
-    notification::{Notification, WaitResult},
-    state::CanisterStateBuilder,
-    types::{
-        batch::BatchBuilder,
-        ids::{canister_test_id, node_test_id, subnet_test_id},
-    },
-};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
-use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
+use ic_test_utilities_registry::{get_mainnet_delta_00_6d_c1, SubnetRecordBuilder};
+use ic_test_utilities_state::CanisterStateBuilder;
+use ic_test_utilities_types::{
+    batch::BatchBuilder,
+    ids::{canister_test_id, node_test_id, subnet_test_id},
+};
 use ic_types::batch::BlockmakerMetrics;
+use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
+use ic_types::ReplicaVersion;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -37,7 +46,6 @@ use ic_types::{
 };
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
-use tempfile::TempDir;
 
 /// Helper function for testing the values of the
 /// `METRIC_DELIVER_BATCH_COUNT` metric.
@@ -57,8 +65,144 @@ fn assert_deliver_batch_count_eq(
     );
 }
 
+mod notification {
+    use std::sync::{Condvar, Mutex};
+    use std::time::Duration;
+
+    /// One-off notification that can be used to synchronize two threads.
+    ///
+    /// ```no_run
+    /// use notification::{Notification, WaitResult};
+    /// use std::sync::Arc;
+    /// use std::thread;
+    /// use std::time::Duration;
+    ///
+    /// let notification = Arc::new(Notification::new());
+    /// let handle = thread::spawn({
+    ///     let notification = Arc::clone(&notification);
+    ///     move || {
+    ///         assert_eq!(
+    ///             notification.wait_with_timeout(Duration::from_secs(10)),
+    ///             WaitResult::Notified(()),
+    ///         );
+    ///     }
+    /// });
+    /// notification.notify(());
+    /// handle.join().unwrap();
+    /// ```
+    pub struct Notification<T> {
+        mutex: Mutex<Option<T>>,
+        condvar: Condvar,
+    }
+
+    /// The result of the `wait_with_timeout` call.
+    #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+    pub enum WaitResult<T> {
+        Notified(T),
+        TimedOut,
+    }
+
+    impl<T> Default for Notification<T> {
+        fn default() -> Self {
+            Self {
+                mutex: Mutex::new(None),
+                condvar: Condvar::new(),
+            }
+        }
+    }
+
+    impl<T> Notification<T>
+    where
+        T: Clone + std::fmt::Debug + PartialEq,
+    {
+        /// Create a new notification that is not raised.
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        /// Set the notification to the raised state. Once notification is
+        /// saturated, it stays saturated forever, there is no way to reset it.
+        ///
+        /// # Panics
+        ///
+        /// Panics if `notify` is called twice with different values.
+        pub fn notify(&self, value: T) {
+            {
+                let mut guard = self.mutex.lock().unwrap();
+                if let Some(ref old_value) = *guard {
+                    if value != *old_value {
+                        panic!(
+                            "Notified twice with different values: first {:?}, then {:?}",
+                            old_value, value
+                        );
+                    } else {
+                        return;
+                    }
+                }
+                *guard = Some(value);
+            }
+            self.condvar.notify_all();
+        }
+
+        /// Wait for another thread to call `notify`, but no longer than
+        /// `duration`.
+        ///
+        /// Returns `WaitResult::Notified(T)` if the notification was raised and
+        /// `WaitResult::TimedOut` if it didn't happen within `duration`.
+        pub fn wait_with_timeout(&self, duration: Duration) -> WaitResult<T> {
+            let guard = self.mutex.lock().unwrap();
+
+            if let Some(ref value) = *guard {
+                return WaitResult::Notified(value.clone());
+            }
+
+            let (guard, _result) = self.condvar.wait_timeout(guard, duration).unwrap();
+            match *guard {
+                Some(ref value) => WaitResult::Notified(value.clone()),
+                None => WaitResult::TimedOut,
+            }
+        }
+    }
+
+    #[test]
+    fn test_single_threaded_notification() {
+        let notification = Notification::<i32>::new();
+        assert_eq!(
+            notification.wait_with_timeout(Duration::from_millis(0)),
+            WaitResult::TimedOut
+        );
+
+        notification.notify(1);
+        assert_eq!(
+            notification.wait_with_timeout(Duration::from_millis(0)),
+            WaitResult::Notified(1)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "first 1, then 2")]
+    fn test_panics_on_incompatible_notify() {
+        let notification = Notification::<i32>::new();
+        notification.notify(1);
+        notification.notify(2);
+    }
+
+    #[test]
+    fn test_notify_same_value_twice_does_not_panic() {
+        let notification = Notification::<i32>::new();
+        notification.notify(1);
+        notification.notify(1);
+        assert_eq!(
+            notification.wait_with_timeout(Duration::from_millis(0)),
+            WaitResult::Notified(1)
+        );
+    }
+}
+
 #[test]
 fn message_routing_does_not_block() {
+    use notification::{Notification, WaitResult};
+
     with_test_replica_logger(|log| {
         let timeout = Duration::from_secs(10);
 
@@ -116,22 +260,22 @@ fn message_routing_does_not_block() {
 
 /// Readable version of `SubnetRecordProto` holding only the relevant entries for
 /// `BatchProcessorImpl::try_to_read_registry()`.
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 struct SubnetRecord<'a> {
     membership: &'a [NodeId],
     subnet_type: SubnetType,
     features: SubnetFeatures,
-    ecdsa_config: EcdsaConfig,
+    chain_key_config: ChainKeyConfig,
     max_number_of_canisters: u64,
 }
 
-impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
+impl From<SubnetRecord<'_>> for SubnetRecordProto {
     fn from(record: SubnetRecord) -> SubnetRecordProto {
         SubnetRecordBuilder::new()
             .with_membership(record.membership)
             .with_subnet_type(record.subnet_type)
             .with_features(record.features)
-            .with_ecdsa_config(record.ecdsa_config)
+            .with_chain_key_config(record.chain_key_config)
             .with_max_number_of_canisters(record.max_number_of_canisters)
             .build()
     }
@@ -140,7 +284,7 @@ impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
 /// Wrapper around data to be written to the registry. `Valid(_)` represents data that can be
 /// written to the registry as is. `Corrupted` represents a registry record with corrupted data in
 /// it and `Missing` represents data that is missing.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum Integrity<T: Clone> {
     Valid(T),
     Corrupted,
@@ -181,13 +325,15 @@ struct TestRecords<'a, const N: usize> {
     subnet_records: [Integrity<&'a SubnetRecord<'a>>; N],
     ni_dkg_transcripts: [Integrity<Option<&'a NiDkgTranscript>>; N],
     nns_subnet_id: Integrity<SubnetId>,
-    // EcdsaKeyId is used to make a key for the record. An empty `BTreeMap` therefore means no
+    // MasterPublicKeyId is used to make a key for the record. An empty `BTreeMap` therefore means no
     // records in the registry and wrapping it in `Integrity` would be redundant.
-    ecdsa_signing_subnets: &'a BTreeMap<EcdsaKeyId, Integrity<Vec<SubnetId>>>,
+    chain_key_enabled_subnets: &'a BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
     provisional_whitelist: Integrity<&'a ProvisionalWhitelist>,
     routing_table: Integrity<&'a RoutingTable>,
     canister_migrations: Integrity<&'a CanisterMigrations>,
     node_public_keys: &'a BTreeMap<NodeId, Integrity<PublicKeyProto>>,
+    api_boundary_node_records: &'a BTreeMap<NodeId, Integrity<ApiBoundaryNodeRecord>>,
+    node_records: &'a BTreeMap<NodeId, Integrity<NodeRecord>>,
 }
 
 /// Writes records into the registry using the `FakeRegistryClient`.
@@ -218,6 +364,7 @@ impl RegistryFixture {
         key: &str,
         value: Integrity<T>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
+        use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
         match value {
             Integrity::Valid(value) => self.data_provider.add(
                 key,
@@ -230,11 +377,11 @@ impl RegistryFixture {
                     83, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167,
                     173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251,
                 ];
-                self.data_provider.add(
-                    key,
-                    self.registry.get_latest_version().increment(),
-                    Some(corrupted_data),
-                )
+                self.data_provider.add_mutations(vec![RegistryMutation {
+                    mutation_type: Type::Insert as i32,
+                    key: key.as_bytes().to_vec(),
+                    value: corrupted_data,
+                }])
             }
             Integrity::Missing => Ok(()),
         }
@@ -319,21 +466,19 @@ impl RegistryFixture {
         )
     }
 
-    /// Writes the ECDSA signing subnets into the registry.
-    fn write_ecdsa_signing_subnets(
+    /// Writes the chain key enabled subnets into the registry.
+    fn write_chain_key_enabled_subnets(
         &self,
-        ecdsa_signing_subnets: &BTreeMap<EcdsaKeyId, Integrity<Vec<SubnetId>>>,
+        chain_key_enabled_subnets: &BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
-        use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
-        use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
         use ic_types::subnet_id_into_protobuf;
 
-        for (ecdsa_key, subnet_ids) in ecdsa_signing_subnets.iter() {
+        for (key_id, subnet_ids) in chain_key_enabled_subnets.iter() {
             self.write_record(
-                &make_ecdsa_signing_subnet_list_key(ecdsa_key),
+                &make_chain_key_signing_subnet_list_key(key_id),
                 subnet_ids
                     .as_ref()
-                    .map(|subnet_ids| EcdsaSigningSubnetList {
+                    .map(|subnet_ids| ChainKeySigningSubnetList {
                         subnets: subnet_ids
                             .iter()
                             .map(|subnet_id| subnet_id_into_protobuf(*subnet_id))
@@ -393,6 +538,32 @@ impl RegistryFixture {
         Ok(())
     }
 
+    // Writes API Boundary Node records into the registry.
+    fn write_api_boundary_nodes_records(
+        &self,
+        api_boundary_node_records: &BTreeMap<NodeId, Integrity<ApiBoundaryNodeRecord>>,
+    ) -> Result<(), ProtoRegistryDataProviderError> {
+        use ic_registry_keys::make_api_boundary_node_record_key;
+
+        for (node_id, record) in api_boundary_node_records.iter() {
+            self.write_record(&make_api_boundary_node_record_key(*node_id), record.clone())?;
+        }
+        Ok(())
+    }
+
+    // Writes node records into the registry.
+    fn write_node_records(
+        &self,
+        node_records: &BTreeMap<NodeId, Integrity<NodeRecord>>,
+    ) -> Result<(), ProtoRegistryDataProviderError> {
+        use ic_registry_keys::make_node_record_key;
+
+        for (node_id, record) in node_records.iter() {
+            self.write_record(&make_node_record_key(*node_id), record.clone())?;
+        }
+        Ok(())
+    }
+
     /// Writes the relevant records into the registry for testing
     /// `BatchProcessorImpl::try_to_read_registry()`.
     /// `subnet_ids` is used to write
@@ -420,9 +591,11 @@ impl RegistryFixture {
         self.write_routing_table(input.routing_table)?;
         self.write_canister_migrations(input.canister_migrations)?;
         self.write_root_subnet_id(input.nns_subnet_id)?;
-        self.write_ecdsa_signing_subnets(input.ecdsa_signing_subnets)?;
+        self.write_chain_key_enabled_subnets(input.chain_key_enabled_subnets)?;
         self.write_provisional_whitelist(input.provisional_whitelist)?;
         self.write_node_public_keys(input.node_public_keys)?;
+        self.write_api_boundary_nodes_records(input.api_boundary_node_records)?;
+        self.write_node_records(input.node_records)?;
         self.registry.update_to_latest_version();
         Ok(())
     }
@@ -451,10 +624,12 @@ impl StateMachine for FakeStateMachine {
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
+        api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.node_public_keys = node_public_keys;
+        state.metadata.api_boundary_nodes = api_boundary_nodes;
         let mut canister_states = BTreeMap::new();
         canister_states.insert(
             canister_test_id(1),
@@ -491,7 +666,7 @@ fn make_batch_processor(
     let registry_settings = Arc::new(Mutex::new(RegistryExecutionSettings {
         max_number_of_canisters: 0,
         provisional_whitelist: ProvisionalWhitelist::All,
-        max_ecdsa_queue_size: 0,
+        chain_key_settings: BTreeMap::new(),
         subnet_size: 0,
     }));
     let batch_processor = BatchProcessorImpl {
@@ -517,6 +692,7 @@ fn try_to_read_registry(
         SubnetFeatures,
         RegistryExecutionSettings,
         NodePublicKeys,
+        ApiBoundaryNodes,
     ),
     ReadRegistryError,
 > {
@@ -538,7 +714,6 @@ fn try_to_read_registry(
 #[test]
 fn try_read_registry_succeeds_with_fully_specified_registry_records() {
     with_test_replica_logger(|log| {
-        use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
         use Integrity::*;
 
         // Own subnet characteristics.
@@ -549,22 +724,30 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             features: SubnetFeatures {
                 canister_sandboxing: true,
                 http_requests: true,
-                sev_enabled: false,
-            },
-            ecdsa_config: EcdsaConfig {
-                key_ids: vec![
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 1".to_string(),
-                    },
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 2".to_string(),
-                    },
-                ],
-                max_queue_size: Some(891),
                 ..Default::default()
             },
+            chain_key_config: ChainKeyConfig {
+                key_configs: vec![
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 1".to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 891,
+                        max_queue_size: 891,
+                    },
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 2".to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 891,
+                        max_queue_size: 891,
+                    },
+                ],
+                ..ChainKeyConfig::default()
+            },
+
             max_number_of_canisters: 387,
         };
 
@@ -587,16 +770,16 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             PrincipalId::new_node_test_id(103),
             PrincipalId::new_subnet_test_id(107)
         });
-        let ecdsa_signing_subnets = btreemap! {
-            EcdsaKeyId {
+        let chain_key_enabled_subnets = btreemap! {
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 1".to_string(),
-            }
+            })
             => Valid(vec![subnet_test_id(1009), subnet_test_id(1013)]),
-            EcdsaKeyId {
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 2".to_string(),
-            }
+            })
             => Valid(vec![subnet_test_id(1019)]),
         };
         let mut routing_table = RoutingTable::new();
@@ -614,20 +797,62 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         let dummy_node_key_1 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [1; 32].to_vec(),
+            key_value: vec![
+                194, 4, 63, 12, 39, 41, 96, 171, 151, 5, 92, 5, 93, 46, 7, 29, 26, 73, 51, 85, 118,
+                76, 74, 0, 82, 39, 82, 75, 0, 45, 238, 3,
+            ],
             proof_data: None,
             timestamp: None,
         };
         let dummy_node_key_2 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [2; 32].to_vec(),
+            key_value: vec![
+                85, 122, 95, 50, 59, 92, 34, 104, 48, 6, 2, 64, 1, 8, 116, 27, 56, 8, 62, 96, 92,
+                28, 26, 52, 12, 45, 64, 17, 6, 20, 104, 8,
+            ],
             proof_data: None,
             timestamp: None,
         };
         let node_public_keys = btreemap! {
             node_test_id(1) => Valid(dummy_node_key_1.clone()),
             node_test_id(2) => Valid(dummy_node_key_2.clone()),
+        };
+
+        let api_boundary_node_records = btreemap! {
+            node_test_id(11) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(12) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+        };
+
+        let node_records = btreemap! {
+            node_test_id(11) => Valid(NodeRecord {
+                http : Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                        port: 1,
+                    },
+                ),
+                public_ipv4_config: Some(IPv4InterfaceConfig {
+                    ip_addr: "127.0.0.1".to_string(),
+                    ..Default::default()
+                }),
+                domain: Some("api-bn11.example.org".to_string()),
+                ..Default::default()
+            }),
+            node_test_id(12) => Valid(NodeRecord {
+                http : Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: Some("api-bn12.example.org".to_string()),
+                ..Default::default()
+            }),
         };
 
         let fixture = RegistryFixture::new();
@@ -637,21 +862,28 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 subnet_records: [Valid(&own_subnet_record), Valid(&other_subnet_record)],
                 ni_dkg_transcripts: [Valid(Some(&own_transcript)), Valid(Some(&other_transcript))],
                 nns_subnet_id: Valid(nns_subnet_id),
-                ecdsa_signing_subnets: &ecdsa_signing_subnets,
+                chain_key_enabled_subnets: &chain_key_enabled_subnets,
                 provisional_whitelist: Valid(&provisional_whitelist),
                 routing_table: Valid(&routing_table),
                 canister_migrations: Valid(&canister_migrations),
                 node_public_keys: &node_public_keys,
+                api_boundary_node_records: &api_boundary_node_records,
+                node_records: &node_records,
             })
             .unwrap();
 
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, metrics, state_manager, registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (network_topology, own_subnet_features, registry_execution_settings, node_public_keys) =
-            batch_processor
-                .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
-                .unwrap();
+        let (
+            network_topology,
+            own_subnet_features,
+            registry_execution_settings,
+            node_public_keys,
+            api_boundary_nodes,
+        ) = batch_processor
+            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
+            .unwrap();
 
         // Full specification includes the subnet size of `own_subnet_id`. Check the corresponding
         // critical error counter is untouched.
@@ -666,7 +898,9 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             let subnet_topology = network_topology.subnets.get(&subnet_id).unwrap();
             assert_eq!(
                 ic_crypto_utils_threshold_sig_der::public_key_to_der(
-                    &transcript.public_key().into_bytes()
+                    &ThresholdSigPublicKey::try_from(transcript)
+                        .expect("should extract public key from high threshold transcript")
+                        .into_bytes()
                 )
                 .unwrap(),
                 subnet_topology.public_key,
@@ -683,19 +917,19 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             assert_eq!(subnet_record.features, subnet_topology.subnet_features);
             assert_eq!(
                 subnet_record
-                    .ecdsa_config
-                    .key_ids
+                    .chain_key_config
+                    .key_configs
                     .iter()
-                    .cloned()
+                    .map(|key_config| key_config.key_id.clone())
                     .collect::<BTreeSet<_>>(),
-                subnet_topology.ecdsa_keys_held
+                subnet_topology.chain_keys_held
             );
         }
         assert_eq!(nns_subnet_id, network_topology.nns_subnet_id);
         assert_eq!(
-            ecdsa_signing_subnets,
+            chain_key_enabled_subnets,
             network_topology
-                .ecdsa_signing_subnets
+                .chain_key_enabled_subnets
                 .iter()
                 .map(|(key, val)| (key.clone(), Valid(val.clone())))
                 .collect::<BTreeMap<_, _>>()
@@ -712,10 +946,17 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             provisional_whitelist,
             registry_execution_settings.provisional_whitelist,
         );
-        assert_eq!(
-            own_subnet_record.ecdsa_config.max_queue_size,
-            Some(registry_execution_settings.max_ecdsa_queue_size),
-        );
+        for key_config in own_subnet_record.chain_key_config.key_configs {
+            assert_eq!(
+                key_config.max_queue_size,
+                registry_execution_settings
+                    .chain_key_settings
+                    .get(&key_config.key_id)
+                    .unwrap()
+                    .max_queue_size
+            );
+        }
+
         assert_eq!(
             own_subnet_record.membership.len(),
             registry_execution_settings.subnet_size,
@@ -728,18 +969,46 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             (node_test_id(2), &dummy_node_key_2),
         ] {
             assert_eq!(
-                &public_key_to_der(
-                    PublicKeyBytes::try_from(public_key).expect("invalid public key")
-                ),
-                node_public_keys.get(&node_id).unwrap(),
+                ic_ed25519::PublicKey::deserialize_raw(&public_key.key_value)
+                    .expect("invalid public key")
+                    .serialize_rfc8410_der(),
+                *node_public_keys.get(&node_id).unwrap(),
             );
         }
+
+        // Check API Boundary Nodes.
+        assert_eq!(api_boundary_nodes.len(), 2);
+        let entry_1 = api_boundary_nodes.get(&node_test_id(11)).unwrap();
+        assert_eq!(
+            entry_1,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn11.example.org".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            }
+        );
+        let entry_2 = api_boundary_nodes.get(&node_test_id(12)).unwrap();
+        assert_eq!(
+            entry_2,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn12.example.org".to_string(),
+                ipv4_address: None,
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                pubkey: None,
+            }
+        );
 
         // Commit a state with `own_subnet_id` in its metadata to ensure the latest
         // state corresponds to the registry records written above.
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(state, height.increment(), CertificationScope::Metadata);
+        state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
 
         // Check `network_topology` and `subnet_features` are mapped into the new state correctly
         // by calling `BatchProcessorImpl::process_batch()` which will pass the `network_topology` and
@@ -758,14 +1027,18 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         );
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
+            batch_summary: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            ecdsa_subnet_public_keys: BTreeMap::default(),
+            chain_key_subnet_public_keys: BTreeMap::default(),
+            idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(network_topology, latest_state.metadata.network_topology);
@@ -802,11 +1075,13 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            ecdsa_signing_subnets: &BTreeMap::default(),
+            chain_key_enabled_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         let fixture = RegistryFixture::new();
@@ -823,7 +1098,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, registry_execution_settings, _) = result.unwrap();
+        let (_, _, registry_execution_settings, _, _) = result.unwrap();
         assert_eq!(
             registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
@@ -901,11 +1176,13 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            ecdsa_signing_subnets: &BTreeMap::default(),
+            chain_key_enabled_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         // Corrupted Subnet Ids.
@@ -920,7 +1197,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.ends_with("not found")
+            Err(ReadRegistryError::Persistent(err)) if err.contains("subnet IDs") && err.contains("failed to decode")
         );
 
         // Corrupted DKG transcripts.
@@ -959,7 +1236,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.contains("err")
+            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.contains("failed to decode")
         );
 
         // Corrupted NNS Subnet Id.
@@ -1035,6 +1312,26 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             })
             .unwrap();
         assert_matches!(
+            try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
+            Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
+        );
+
+        // Corrupted node records.
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                api_boundary_node_records: &btreemap! {
+                    node_test_id(11) => Valid(ApiBoundaryNodeRecord {
+                        version: "some_version".to_string(),
+                    }),
+                },
+                node_records: &btreemap! {
+                    node_test_id(11) => Corrupted,
+                },
+                ..minimal_input
+            })
+            .unwrap();
+        assert_matches!(
             try_to_read_registry(fixture.registry, log, own_subnet_id),
             Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
         );
@@ -1045,7 +1342,6 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
 #[test]
 fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
     with_test_replica_logger(|log| {
-        use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
         use Integrity::*;
 
         let own_subnet_id = subnet_test_id(13);
@@ -1063,11 +1359,13 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            ecdsa_signing_subnets: &BTreeMap::default(),
+            chain_key_enabled_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         // An invalid node public key.
@@ -1083,7 +1381,10 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
         let valid_node_key = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [0; 32].to_vec(),
+            key_value: vec![
+                5, 33, 1, 58, 103, 6, 147, 39, 52, 223, 50, 129, 91, 4, 116, 88, 204, 9, 15, 8, 0,
+                86, 1, 18, 53, 51, 73, 136, 89, 73, 171, 53,
+            ],
             proof_data: None,
             timestamp: None,
         };
@@ -1116,15 +1417,154 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             2
         );
 
-        let (_, _, _, node_public_keys) = res.unwrap();
+        let (_, _, _, node_public_keys, _) = res.unwrap();
         assert_eq!(node_public_keys.len(), 1);
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
         assert_eq!(
-            &public_key_to_der(
-                PublicKeyBytes::try_from(&valid_node_key).expect("invalid public key")
-            ),
-            node_public_keys.get(&node_test_id(3)).unwrap(),
+            ic_ed25519::PublicKey::deserialize_raw(&valid_node_key.key_value)
+                .expect("invalid public key")
+                .serialize_rfc8410_der(),
+            *node_public_keys.get(&node_test_id(3)).unwrap(),
+        );
+    });
+}
+
+#[test]
+fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() {
+    with_test_replica_logger(|log| {
+        use Integrity::*;
+
+        let own_subnet_id = subnet_test_id(13);
+        let own_subnet_record = SubnetRecord {
+            max_number_of_canisters: 784,
+            ..Default::default()
+        };
+        let own_transcript = dummy_transcript_for_tests();
+        let nns_subnet_id = subnet_test_id(42);
+
+        let input = TestRecords {
+            subnet_ids: Valid([own_subnet_id]),
+            subnet_records: [Valid(&own_subnet_record)],
+            ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+            nns_subnet_id: Valid(nns_subnet_id),
+            chain_key_enabled_subnets: &BTreeMap::default(),
+            provisional_whitelist: Missing,
+            routing_table: Missing,
+            canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
+        };
+
+        let api_boundary_node_records = &btreemap! {
+            node_test_id(11) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(12) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(13) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(14) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(15) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(16) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+        };
+
+        let node_records = &btreemap! {
+            node_test_id(11) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: Some("api-bn12.example.org".to_string()),
+                ..Default::default()
+            }),
+            // The NodeRecord is missing.
+            node_test_id(12) => Missing,
+            // This NodeRecord does not have a domain field.
+            node_test_id(13) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7336".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: None,
+                ..Default::default()
+            }),
+            // This NodeRecord does not have a http field.
+            node_test_id(14) => Valid(NodeRecord {
+                http: None,
+                domain: Some("api-bn14.example.org".to_string()),
+                ..Default::default()
+            }),
+            // This NodeRecord has an invalid ipv6 address.
+            node_test_id(15) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "corrupted_ipv6_address".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: Some("api-bn15.example.org".to_string()),
+                ..Default::default()
+            }),
+            // This NodeRecord has an invalid ipv4 address.
+            node_test_id(16) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7337".to_string(),
+                        port: 1,
+                    },
+                ),
+                public_ipv4_config: Some(
+                    IPv4InterfaceConfig {
+                        ip_addr: "corrupted_ipv4_address".to_string(),
+                        ..Default::default()
+                    }
+                ),
+                domain: Some("api-bn15.example.org".to_string()),
+                ..Default::default()
+            }),
+        };
+
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                api_boundary_node_records,
+                node_records,
+                subnet_records: [Valid(&own_subnet_record)],
+                ..input
+            })
+            .unwrap();
+
+        let (batch_processor, metrics, _, _) =
+            make_batch_processor(fixture.registry.clone(), log.clone());
+        let res = batch_processor
+            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
+        assert_matches!(res, Ok(_));
+
+        // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
+        // Hence, only one nodes are retrieved.
+        let (_, _, _, _, api_boundary_nodes) = res.unwrap();
+        assert_eq!(api_boundary_nodes.len(), 1);
+        assert!(api_boundary_nodes.contains_key(&node_test_id(11)));
+
+        assert_eq!(
+            metrics
+                .critical_error_missing_or_invalid_api_boundary_nodes
+                .get(),
+            5
         );
     });
 }
@@ -1157,11 +1597,13 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            ecdsa_signing_subnets: &BTreeMap::default(),
+            chain_key_enabled_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         let fixture = RegistryFixture::new();
@@ -1197,22 +1639,6 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
 
         assert_eq!(metrics.critical_error_failed_to_read_registry.get(), 0);
     });
-}
-
-/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
-fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
-    let tempdir = TempDir::new().unwrap();
-    let store = LocalStoreImpl::new(tempdir.path());
-    let changelog =
-        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-            .expect("")
-            .1;
-
-    for (v, changelog_entry) in changelog.into_iter().enumerate() {
-        let v = RegistryVersion::from((v + 1) as u64);
-        store.store(v, changelog_entry).unwrap();
-    }
-    (tempdir, store)
 }
 
 pub fn mainnet_nns_subnet() -> SubnetId {
@@ -1265,23 +1691,30 @@ fn process_batch_updates_subnet_metrics() {
             features: SubnetFeatures {
                 canister_sandboxing: true,
                 http_requests: true,
-                sev_enabled: false,
-            },
-            ecdsa_config: EcdsaConfig {
-                key_ids: vec![
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 1".to_string(),
-                    },
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 2".to_string(),
-                    },
-                ],
-                max_queue_size: Some(891),
                 ..Default::default()
             },
             max_number_of_canisters: 387,
+            chain_key_config: ChainKeyConfig {
+                key_configs: vec![
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 1".to_string(),
+                        }),
+                        max_queue_size: 891,
+                        pre_signatures_to_create_in_advance: 891,
+                    },
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 2".to_string(),
+                        }),
+                        max_queue_size: 891,
+                        pre_signatures_to_create_in_advance: 891,
+                    },
+                ],
+                ..Default::default()
+            },
         };
 
         let own_transcript = dummy_transcript_for_tests_with_params(
@@ -1303,16 +1736,16 @@ fn process_batch_updates_subnet_metrics() {
             PrincipalId::new_node_test_id(103),
             PrincipalId::new_subnet_test_id(107)
         });
-        let ecdsa_signing_subnets = btreemap! {
-            EcdsaKeyId {
+        let chain_key_enabled_subnets = btreemap! {
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 1".to_string(),
-            }
+            })
             => Valid(vec![subnet_test_id(1009), subnet_test_id(1013)]),
-            EcdsaKeyId {
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 2".to_string(),
-            }
+            })
             => Valid(vec![subnet_test_id(1019)]),
         };
         let mut routing_table = RoutingTable::new();
@@ -1330,14 +1763,20 @@ fn process_batch_updates_subnet_metrics() {
         let dummy_node_key_1 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [1; 32].to_vec(),
+            key_value: vec![
+                14, 52, 33, 2, 5, 208, 188, 227, 25, 91, 30, 79, 70, 187, 95, 199, 50, 5, 99, 11,
+                66, 19, 2, 94, 30, 40, 3, 51, 32, 79, 197, 9,
+            ],
             proof_data: None,
             timestamp: None,
         };
         let dummy_node_key_2 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [2; 32].to_vec(),
+            key_value: vec![
+                5, 33, 1, 58, 103, 6, 147, 39, 52, 223, 50, 129, 91, 4, 116, 88, 204, 9, 15, 8, 0,
+                86, 1, 18, 53, 51, 73, 136, 89, 73, 171, 53,
+            ],
             proof_data: None,
             timestamp: None,
         };
@@ -1353,11 +1792,13 @@ fn process_batch_updates_subnet_metrics() {
                 subnet_records: [Valid(&own_subnet_record), Valid(&other_subnet_record)],
                 ni_dkg_transcripts: [Valid(Some(&own_transcript)), Valid(Some(&other_transcript))],
                 nns_subnet_id: Valid(nns_subnet_id),
-                ecdsa_signing_subnets: &ecdsa_signing_subnets,
+                chain_key_enabled_subnets: &chain_key_enabled_subnets,
                 provisional_whitelist: Valid(&provisional_whitelist),
                 routing_table: Valid(&routing_table),
                 canister_migrations: Valid(&canister_migrations),
                 node_public_keys: &node_public_keys,
+                api_boundary_node_records: &BTreeMap::default(),
+                node_records: &BTreeMap::default(),
             })
             .unwrap();
 
@@ -1366,18 +1807,27 @@ fn process_batch_updates_subnet_metrics() {
             make_batch_processor(fixture.registry.clone(), log);
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(state, height.increment(), CertificationScope::Metadata);
+        state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
+            batch_summary: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            ecdsa_subnet_public_keys: BTreeMap::default(),
+            chain_key_subnet_public_keys: BTreeMap::default(),
+            idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         });
 
         let latest_state = state_manager.get_latest_state().take();
@@ -1389,6 +1839,127 @@ fn process_batch_updates_subnet_metrics() {
         assert_eq!(
             latest_state.metadata.subnet_metrics.canister_state_bytes,
             canister_state
+        );
+    });
+}
+
+#[test]
+fn test_demux_delivers_certified_stream_slices() {
+    struct FakeValidSetRule;
+    impl ValidSetRule for FakeValidSetRule {
+        fn induct_messages(
+            &self,
+            _: &mut ReplicatedState,
+            _: Vec<ic_types::messages::SignedIngressContent>,
+        ) {
+            // do nothing
+        }
+    }
+
+    struct FakeStreamHandler {
+        expected_slices: BTreeMap<SubnetId, StreamSlice>,
+    }
+
+    impl FakeStreamHandler {
+        fn new(expected_slices: BTreeMap<SubnetId, StreamSlice>) -> FakeStreamHandler {
+            FakeStreamHandler { expected_slices }
+        }
+    }
+
+    impl StreamHandler for FakeStreamHandler {
+        fn process_stream_slices(
+            &self,
+            state: ReplicatedState,
+            stream_slices: BTreeMap<SubnetId, StreamSlice>,
+        ) -> ReplicatedState {
+            assert_eq!(self.expected_slices, stream_slices);
+            state
+        }
+    }
+
+    with_test_replica_logger(|log| {
+        let src_subnet_id = subnet_test_id(42);
+        let dst_subnet_id = subnet_test_id(43);
+        let other_subnet_id = subnet_test_id(44);
+
+        // Obtain a certified stream slice.
+        let certified_stream_slice = {
+            // Set up state manager.
+            let src_state_manager = FakeStateManager::new();
+
+            // Obtain tip...
+            let (mut height, mut state) = src_state_manager.take_tip();
+            // ... and use testing function to put stream to encode as certified slice
+            use ic_replicated_state::testing::ReplicatedStateTesting;
+            state.modify_streams(|streams| {
+                streams.insert(
+                    dst_subnet_id,
+                    Stream::new(
+                        StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+                        StreamIndex::new(42),
+                    ),
+                );
+            });
+
+            // Commit state with modified streams.
+            height.inc_assign();
+            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
+
+            // Encode slice.
+            src_state_manager
+                .encode_certified_stream_slice(dst_subnet_id, None, None, None, None)
+                .unwrap()
+        };
+
+        // Set up destination state manager.
+        let dst_metrics = MetricsRegistry::new();
+        let dst_state_manager = Arc::new(FakeStateManager::new());
+
+        // Make up a second slice with a different height.
+        let other_height = Height::new(99);
+        let mut certified_stream_slice_other_height = certified_stream_slice.clone();
+        certified_stream_slice_other_height.certification.height = other_height;
+
+        // Create messages to be provided as part of `BatchMessages`.
+        let certified_stream_slices = btreemap![src_subnet_id => certified_stream_slice, other_subnet_id => certified_stream_slice_other_height];
+
+        let expected_slices = certified_stream_slices
+            .clone()
+            .into_iter()
+            .map(|(subnet, slice)| {
+                (
+                    subnet,
+                    dst_state_manager
+                        .decode_valid_certified_stream_slice(&slice)
+                        .unwrap(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        let demux: Box<dyn Demux> = Box::new(DemuxImpl::new(
+            Box::new(FakeValidSetRule),
+            Box::new(FakeStreamHandler::new(expected_slices)),
+            dst_state_manager.clone(),
+            MessageRoutingMetrics::new(&dst_metrics),
+            log,
+        ));
+
+        let (_, dst_state) = dst_state_manager.take_tip();
+
+        demux.process_payload(
+            dst_state,
+            BatchMessages {
+                certified_stream_slices,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            metric_vec(&[
+                (&[(LABEL_REMOTE, &src_subnet_id.to_string())], 1),
+                (&[(LABEL_REMOTE, &other_subnet_id.to_string())], 99)
+            ]),
+            fetch_int_gauge_vec(&dst_metrics, METRIC_REMOTE_CERTIFIED_HEIGHTS)
         );
     });
 }

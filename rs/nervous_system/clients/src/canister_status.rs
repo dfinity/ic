@@ -1,7 +1,7 @@
 use crate::canister_id_record::CanisterIdRecord;
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
-use ic_ic00_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use num_traits::cast::ToPrimitive;
 
@@ -19,16 +19,17 @@ impl TryFrom<PrincipalId> for CanisterIdRecord {
 }
 
 /// Copy-paste of ic-types::ic_00::CanisterStatusType.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub enum CanisterStatusType {
     // The rename statements are mandatory to comply with the candid interface
     // of the IC management canister. For more details, see:
-    // https://sdk.dfinity.org/docs/interface-spec/index.html#ic-candid
+    // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-candid
     #[serde(rename = "running")]
     Running,
     #[serde(rename = "stopping")]
     Stopping,
     #[serde(rename = "stopped")]
+    #[default]
     Stopped,
 }
 
@@ -42,53 +43,104 @@ impl std::fmt::Display for CanisterStatusType {
     }
 }
 
-/// Partial copy-paste of ic-types::ic_00::DefiniteCanisterSettings.
-///
-/// Only the fields that we need are copied.
-/// Candid deserialization is supposed to be tolerant to having data for unknown
-/// fields (which is simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
-pub struct DefiniteCanisterSettings {
-    pub controllers: Vec<PrincipalId>,
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
+pub enum LogVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(Vec<PrincipalId>),
 }
 
-/// Partial copy-paste of ic-types::ic_00::CanisterStatusResult.
+/// Partial copy-paste of `ic_management_canister_types_private::DefiniteCanisterSettings`, and it's used
+/// for the response type in the NNS/SNS Root `canister_status` method.
 ///
-/// Only the fields that we need are copied.
-/// Candid deserialization is supposed to be tolerant to having data for unknown
-/// fields (which are simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+/// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
+/// having data for unknown fields (which is simply discarded).
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct DefiniteCanisterSettings {
+    pub controllers: Vec<PrincipalId>,
+    pub compute_allocation: Option<candid::Nat>,
+    pub memory_allocation: Option<candid::Nat>,
+    pub freezing_threshold: Option<candid::Nat>,
+    pub reserved_cycles_limit: Option<candid::Nat>,
+    pub wasm_memory_limit: Option<candid::Nat>,
+    pub log_visibility: Option<LogVisibility>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
+}
+
+/// Partial copy-paste of `ic_management_canister_types_private::CanisterStatusResultV2`, and it's used for
+/// the response type in the NNS/SNS Root `canister_status` method.
+///
+/// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
+/// having data for unknown fields (which is simply discarded).
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResult {
     pub status: CanisterStatusType,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
     pub settings: DefiniteCanisterSettings,
     pub cycles: candid::Nat,
+    pub idle_cycles_burned_per_day: Option<candid::Nat>,
+    pub reserved_cycles: Option<candid::Nat>,
+    pub query_stats: Option<QueryStats>,
 }
 
-/// Copy-paste of ic-types::ic_00::CanisterStatusResult.
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+/// Partial copy-paste of `ic_management_canister_types_private::QueryStats`, and it's used for the response
+/// type in the NNS/SNS Root `canister_status` method.
+///
+/// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
+/// having data for unknown fields (which is simply discarded).
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct QueryStats {
+    pub num_calls_total: Option<candid::Nat>,
+    pub num_instructions_total: Option<candid::Nat>,
+    pub request_payload_bytes_total: Option<candid::Nat>,
+    pub response_payload_bytes_total: Option<candid::Nat>,
+}
+
+/// Copy-paste of `ic_management_canister_types_private::CanisterStatusResultV2`, and it's used for the
+/// `canister_status`` method on the management canister.
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterStatusResultFromManagementCanister {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
     pub settings: DefiniteCanisterSettingsFromManagementCanister,
     pub cycles: candid::Nat,
-    // this is for compat with Spec 0.12/0.13
     pub idle_cycles_burned_per_day: candid::Nat,
+    pub reserved_cycles: candid::Nat,
+    pub query_stats: QueryStatsFromManagementCanister,
 }
 
-/// Partial copy-paste of ic-types::ic_00::DefiniteCanisterSettings.
+/// Partial copy-paste of `ic_management_canister_types_private::DefiniteCanisterSettingsArgs`, and it's
+/// used for the response type in the management canister `canister_status` method.
 ///
-/// Only the fields that we need are copied.
-/// Candid deserialization is supposed to be tolerant to having data for unknown
-/// fields (which is simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+/// Only the fields that we need are copied. Candid deserialization is supposed to be tolerant to
+/// having data for unknown fields (which is simply discarded).
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsFromManagementCanister {
     pub controllers: Vec<PrincipalId>,
     pub compute_allocation: candid::Nat,
     pub memory_allocation: candid::Nat,
     pub freezing_threshold: candid::Nat,
+    pub reserved_cycles_limit: candid::Nat,
+    pub wasm_memory_limit: candid::Nat,
+    pub log_visibility: LogVisibility,
+    pub wasm_memory_threshold: candid::Nat,
+}
+
+/// Partial copy-paste of `ic_management_canister_types_private::QueryStats`, and it's used for the response
+/// type in the management canister `canister_status` method.
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct QueryStatsFromManagementCanister {
+    pub num_calls_total: candid::Nat,
+    pub num_instructions_total: candid::Nat,
+    pub request_payload_bytes_total: candid::Nat,
+    pub response_payload_bytes_total: candid::Nat,
 }
 
 impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
@@ -99,19 +151,83 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
             memory_size,
             settings,
             cycles,
-
-            // Ignored.
-            idle_cycles_burned_per_day: _,
+            idle_cycles_burned_per_day,
+            reserved_cycles,
+            query_stats,
         } = value;
+
+        let settings = DefiniteCanisterSettings::from(settings);
+        let query_stats = Some(QueryStats::from(query_stats));
+
+        let idle_cycles_burned_per_day = Some(idle_cycles_burned_per_day);
+        let reserved_cycles = Some(reserved_cycles);
 
         CanisterStatusResult {
             status,
             module_hash,
             memory_size,
-            settings: DefiniteCanisterSettings {
-                controllers: settings.controllers,
-            },
+            settings,
             cycles,
+            idle_cycles_burned_per_day,
+            reserved_cycles,
+            query_stats,
+        }
+    }
+}
+
+impl From<DefiniteCanisterSettingsFromManagementCanister> for DefiniteCanisterSettings {
+    fn from(value: DefiniteCanisterSettingsFromManagementCanister) -> Self {
+        let DefiniteCanisterSettingsFromManagementCanister {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            wasm_memory_limit,
+            log_visibility,
+            wasm_memory_threshold,
+        } = value;
+
+        let compute_allocation = Some(compute_allocation);
+        let memory_allocation = Some(memory_allocation);
+        let freezing_threshold = Some(freezing_threshold);
+        let reserved_cycles_limit = Some(reserved_cycles_limit);
+        let wasm_memory_limit = Some(wasm_memory_limit);
+        let log_visibility = Some(log_visibility);
+        let wasm_memory_threshold = Some(wasm_memory_threshold);
+
+        DefiniteCanisterSettings {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            wasm_memory_limit,
+            log_visibility,
+            wasm_memory_threshold,
+        }
+    }
+}
+
+impl From<QueryStatsFromManagementCanister> for QueryStats {
+    fn from(value: QueryStatsFromManagementCanister) -> Self {
+        let QueryStatsFromManagementCanister {
+            num_calls_total,
+            num_instructions_total,
+            request_payload_bytes_total,
+            response_payload_bytes_total,
+        } = value;
+
+        let num_calls_total = Some(num_calls_total);
+        let num_instructions_total = Some(num_instructions_total);
+        let request_payload_bytes_total = Some(request_payload_bytes_total);
+        let response_payload_bytes_total = Some(response_payload_bytes_total);
+
+        QueryStats {
+            num_calls_total,
+            num_instructions_total,
+            request_payload_bytes_total,
+            response_payload_bytes_total,
         }
     }
 }
@@ -127,15 +243,26 @@ impl CanisterStatusResultFromManagementCanister {
         CanisterStatusResultFromManagementCanister {
             status: CanisterStatusType::Running,
             module_hash: None,
-            memory_size: candid::Nat::from(42),
+            memory_size: candid::Nat::from(42_u32),
             settings: DefiniteCanisterSettingsFromManagementCanister {
                 controllers,
-                compute_allocation: candid::Nat::from(44),
-                memory_allocation: candid::Nat::from(45),
-                freezing_threshold: candid::Nat::from(46),
+                compute_allocation: candid::Nat::from(44_u32),
+                memory_allocation: candid::Nat::from(45_u32),
+                freezing_threshold: candid::Nat::from(46_u32),
+                reserved_cycles_limit: candid::Nat::from(47_u32),
+                wasm_memory_limit: candid::Nat::from(48_u32),
+                log_visibility: LogVisibility::Controllers,
+                wasm_memory_threshold: candid::Nat::from(49_u32),
             },
-            cycles: candid::Nat::from(47),
-            idle_cycles_burned_per_day: candid::Nat::from(48),
+            query_stats: QueryStatsFromManagementCanister {
+                num_calls_total: candid::Nat::from(50_u32),
+                num_instructions_total: candid::Nat::from(51_u32),
+                request_payload_bytes_total: candid::Nat::from(52_u32),
+                response_payload_bytes_total: candid::Nat::from(53_u32),
+            },
+            cycles: candid::Nat::from(47_u32),
+            idle_cycles_burned_per_day: candid::Nat::from(48_u32),
+            reserved_cycles: candid::Nat::from(49_u32),
         }
     }
 }
@@ -151,8 +278,8 @@ where
         .map(|response: (CanisterStatusResultFromManagementCanister,)| response.0)
 }
 
-/// Copy-and-paste of types from ic00_types, without deprecated fields.
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+/// Copy-and-paste of types from management_canister_types, without deprecated fields.
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
@@ -161,6 +288,7 @@ pub struct CanisterStatusResultV2 {
     pub cycles: candid::Nat,
     // this is for compat with Spec 0.12/0.13
     pub idle_cycles_burned_per_day: candid::Nat,
+    pub query_stats: Option<QueryStats>,
 }
 
 impl CanisterStatusResultV2 {
@@ -175,6 +303,8 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         idle_cycles_burned_per_day: u128,
+        wasm_memory_limit: u64,
+        wasm_memory_threshold: u64,
     ) -> Self {
         Self {
             status,
@@ -188,8 +318,16 @@ impl CanisterStatusResultV2 {
                 compute_allocation,
                 memory_allocation,
                 freezing_threshold,
+                Some(wasm_memory_limit),
+                Some(wasm_memory_threshold),
             ),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
+            query_stats: Some(QueryStats {
+                num_calls_total: Some(candid::Nat::from(0_u64)),
+                num_instructions_total: Some(candid::Nat::from(0_u64)),
+                request_payload_bytes_total: Some(candid::Nat::from(0_u64)),
+                response_payload_bytes_total: Some(candid::Nat::from(0_u64)),
+            }),
         }
     }
 
@@ -233,6 +371,8 @@ impl CanisterStatusResultV2 {
             None,              // memory_allocation
             45,                // freezing_threshold
             46,                // idle_cycles_burned_per_day
+            47,                // wasm_memory_limit
+            41,                // wasm_memory_threshold
         )
     }
 
@@ -247,12 +387,29 @@ impl CanisterStatusResultV2 {
 ///     compute_allocation: nat;
 ///     memory_allocation: opt nat;
 /// })`
-#[derive(CandidType, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
     pub controllers: Vec<PrincipalId>,
     pub compute_allocation: candid::Nat,
     pub memory_allocation: candid::Nat,
     pub freezing_threshold: candid::Nat,
+    pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
+}
+
+impl From<ic_management_canister_types_private::DefiniteCanisterSettingsArgs>
+    for DefiniteCanisterSettingsArgs
+{
+    fn from(settings: ic_management_canister_types_private::DefiniteCanisterSettingsArgs) -> Self {
+        Self {
+            controllers: settings.controllers(),
+            compute_allocation: settings.compute_allocation(),
+            memory_allocation: settings.memory_allocation(),
+            freezing_threshold: settings.freezing_threshold(),
+            wasm_memory_limit: Some(settings.wasm_memory_limit()),
+            wasm_memory_threshold: Some(settings.wasm_memory_threshold()),
+        }
+    }
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -261,9 +418,11 @@ impl DefiniteCanisterSettingsArgs {
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
+        wasm_memory_limit: Option<u64>,
+        wasm_memory_threshold: Option<u64>,
     ) -> Self {
         let memory_allocation = match memory_allocation {
-            None => candid::Nat::from(0),
+            None => candid::Nat::from(0_u32),
             Some(memory) => candid::Nat::from(memory),
         };
         Self {
@@ -271,6 +430,8 @@ impl DefiniteCanisterSettingsArgs {
             compute_allocation: candid::Nat::from(compute_allocation),
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
+            wasm_memory_limit: wasm_memory_limit.map(candid::Nat::from),
+            wasm_memory_threshold: wasm_memory_threshold.map(candid::Nat::from),
         }
     }
 
@@ -301,16 +462,26 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResultV2
                 compute_allocation: value.settings.compute_allocation,
                 memory_allocation: value.settings.memory_allocation,
                 freezing_threshold: value.settings.freezing_threshold,
+                wasm_memory_limit: Some(value.settings.wasm_memory_limit),
+                wasm_memory_threshold: Some(value.settings.wasm_memory_threshold),
             },
             memory_size: value.memory_size,
             cycles: value.cycles,
             idle_cycles_burned_per_day: value.idle_cycles_burned_per_day,
+            query_stats: Some(QueryStats {
+                num_calls_total: Some(value.query_stats.num_calls_total),
+                num_instructions_total: Some(value.query_stats.num_instructions_total),
+                request_payload_bytes_total: Some(value.query_stats.request_payload_bytes_total),
+                response_payload_bytes_total: Some(value.query_stats.response_payload_bytes_total),
+            }),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::canister_status::{
         CanisterStatusResult, CanisterStatusResultFromManagementCanister, CanisterStatusType,
         DefiniteCanisterSettings, DefiniteCanisterSettingsFromManagementCanister,
@@ -324,25 +495,51 @@ mod tests {
         let m = CanisterStatusResultFromManagementCanister {
             status: CanisterStatusType::Running,
             module_hash: Some(vec![1, 2, 3]),
-            memory_size: candid::Nat::from(100),
+            memory_size: candid::Nat::from(100_u32),
             settings: DefiniteCanisterSettingsFromManagementCanister {
                 controllers: vec![test_principal],
-                compute_allocation: candid::Nat::from(100),
-                memory_allocation: candid::Nat::from(100),
-                freezing_threshold: candid::Nat::from(100),
+                compute_allocation: candid::Nat::from(99_u32),
+                memory_allocation: candid::Nat::from(98_u32),
+                freezing_threshold: candid::Nat::from(97_u32),
+                reserved_cycles_limit: candid::Nat::from(96_u32),
+                wasm_memory_limit: candid::Nat::from(95_u32),
+                log_visibility: LogVisibility::Controllers,
+                wasm_memory_threshold: candid::Nat::from(94_u32),
             },
-            cycles: candid::Nat::from(100),
-            idle_cycles_burned_per_day: candid::Nat::from(100),
+            cycles: candid::Nat::from(999_u32),
+            idle_cycles_burned_per_day: candid::Nat::from(998_u32),
+            reserved_cycles: candid::Nat::from(997_u32),
+            query_stats: QueryStatsFromManagementCanister {
+                num_calls_total: candid::Nat::from(93_u32),
+                num_instructions_total: candid::Nat::from(92_u32),
+                request_payload_bytes_total: candid::Nat::from(91_u32),
+                response_payload_bytes_total: candid::Nat::from(90_u32),
+            },
         };
 
         let expected_canister_status_result = CanisterStatusResult {
             status: CanisterStatusType::Running,
             module_hash: Some(vec![1, 2, 3]),
-            memory_size: candid::Nat::from(100),
+            memory_size: candid::Nat::from(100_u32),
             settings: DefiniteCanisterSettings {
                 controllers: vec![test_principal],
+                compute_allocation: Some(candid::Nat::from(99_u32)),
+                memory_allocation: Some(candid::Nat::from(98_u32)),
+                freezing_threshold: Some(candid::Nat::from(97_u32)),
+                reserved_cycles_limit: Some(candid::Nat::from(96_u32)),
+                wasm_memory_limit: Some(candid::Nat::from(95_u32)),
+                log_visibility: Some(LogVisibility::Controllers),
+                wasm_memory_threshold: Some(candid::Nat::from(94_u32)),
             },
-            cycles: candid::Nat::from(100),
+            cycles: candid::Nat::from(999_u32),
+            idle_cycles_burned_per_day: Some(candid::Nat::from(998_u32)),
+            reserved_cycles: Some(candid::Nat::from(997_u32)),
+            query_stats: Some(QueryStats {
+                num_calls_total: Some(candid::Nat::from(93_u32)),
+                num_instructions_total: Some(candid::Nat::from(92_u32)),
+                request_payload_bytes_total: Some(candid::Nat::from(91_u32)),
+                response_payload_bytes_total: Some(candid::Nat::from(90_u32)),
+            }),
         };
 
         let actual_canister_status_result = CanisterStatusResult::from(m);

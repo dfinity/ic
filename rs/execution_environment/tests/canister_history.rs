@@ -1,9 +1,13 @@
-use ic00::CanisterSettingsArgsBuilder;
+use ic00::{
+    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
+    TakeCanisterSnapshotArgs,
+};
+use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_ic00_types::{
+use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, InstallCodeArgs, Method,
     Payload, UpdateSettingsArgs,
@@ -12,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
     CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
 };
-use ic_state_machine_tests::{PrincipalId, StateMachine, StateMachineConfig};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
@@ -77,7 +81,7 @@ fn get_canister_info(
     }
 }
 
-/// returns a StateMachine, the test canister WASM, and its module hash
+/// Returns a StateMachine, the test canister Wasm, and its module hash.
 fn test_setup(
     subnet_type: SubnetType,
     now: std::time::SystemTime,
@@ -158,21 +162,11 @@ fn canister_history_tracks_create_install_reinstall() {
     // install test_canister via ingress from user_id2
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // check canister history
@@ -198,7 +192,6 @@ fn canister_history_tracks_create_install_reinstall() {
     // reinstall to universal_canister via ingress from user_id1
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id1,
         ic00::IC_00,
@@ -206,9 +199,8 @@ fn canister_history_tracks_create_install_reinstall() {
         InstallCodeArgs::new(
             Reinstall,
             canister_id,
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
             None,
             None,
         )
@@ -220,7 +212,7 @@ fn canister_history_tracks_create_install_reinstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Reinstall, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Reinstall, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -281,21 +273,11 @@ fn canister_history_tracks_upgrade() {
     // install test_canister via ingress from user_id2
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // update reference canister history
@@ -309,7 +291,6 @@ fn canister_history_tracks_upgrade() {
     // upgrade to universal_canister via ingress from user_id1
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id1,
         ic00::IC_00,
@@ -321,7 +302,6 @@ fn canister_history_tracks_upgrade() {
             vec![],
             None,
             None,
-            None,
         )
         .encode(),
     )
@@ -331,7 +311,7 @@ fn canister_history_tracks_upgrade() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -392,21 +372,11 @@ fn canister_history_tracks_uninstall() {
     // install test_canister via ingress from user_id2
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // update reference canister history
@@ -420,7 +390,6 @@ fn canister_history_tracks_uninstall() {
     // uninstall code via ingress from user_id1
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     let canister_id_record: CanisterIdRecord = canister_id.into();
     env.execute_ingress_as(
         user_id1,
@@ -497,7 +466,6 @@ fn canister_history_tracks_controllers_change() {
         let new_controllers = vec![user_id1, user_id2];
         now += Duration::from_secs(5);
         env.set_time(now);
-        env.tick();
         env.execute_ingress_as(
             user_id2,
             ic00::IC_00,
@@ -580,7 +548,6 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     // install test_canister via ingress from user_id2
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id2,
         ic00::IC_00,
@@ -591,7 +558,6 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
             test_canister,
             vec![],
             Some(1), // set compute allocation to 1 per cent
-            None,
             None,
         )
         .encode(),
@@ -645,7 +611,7 @@ fn canister_history_tracks_changes_from_canister() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -659,7 +625,6 @@ fn canister_history_tracks_changes_from_canister() {
     // create a canister via inter-canister call from ucan
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     let ucan_payload = universal_canister_payload(
         &PrincipalId::default(),
         "create_canister",
@@ -669,7 +634,7 @@ fn canister_history_tracks_changes_from_canister() {
                     .with_controllers(vec![ucan.into(), user_id1, user_id2])
                     .build(),
             ),
-            sender_canister_version: Some(3), // specified sender_canister_version
+            sender_canister_version: Some(2), // specified sender_canister_version
         }
         .encode(),
         INITIAL_CYCLES_BALANCE,
@@ -683,9 +648,9 @@ fn canister_history_tracks_changes_from_canister() {
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
         0,
-        CanisterChangeOrigin::from_canister(ucan.into(), Some(3)),
+        CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
     )];
     let history = get_canister_history(&env, canister_id);
@@ -704,26 +669,16 @@ fn canister_history_tracks_changes_from_canister() {
     // install test_canister via inter-canister call from ucan
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     let ucan_payload = universal_canister_payload(
         &PrincipalId::default(),
         "install_code",
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
         Cycles::new(0),
     );
     env.execute_ingress(ucan, "update", ucan_payload).unwrap();
     // check canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is installed in the next round after the ingress message is received
         1,
         CanisterChangeOrigin::from_canister(ucan.into(), None),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -755,7 +710,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -793,7 +748,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     };
     // update reference canister history
     let reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the universal canister is created in 1st round, installed in 2nd round, this canister is created in 3rd round
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
@@ -806,11 +761,10 @@ fn canister_history_fails_with_incorrect_sender_version() {
         InstallCodeArgs {
             mode: Install,
             canister_id: canister_id.into(),
-            wasm_module: UNIVERSAL_CANISTER_WASM.into(),
+            wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
             sender_canister_version: Some(666), // this value of sender_canister_version does not match the actual sender_canister_version
         }
         .encode(),
@@ -886,21 +840,11 @@ fn canister_info_retrieval() {
     // install test_canister via ingress from user_id2
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // update reference canister history
@@ -914,7 +858,6 @@ fn canister_info_retrieval() {
     // upgrade to universal_canister via ingress from user_id1
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     env.execute_ingress_as(
         user_id1,
         ic00::IC_00,
@@ -926,7 +869,6 @@ fn canister_info_retrieval() {
             vec![],
             None,
             None,
-            None,
         )
         .encode(),
     )
@@ -936,13 +878,13 @@ fn canister_info_retrieval() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
 
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -962,8 +904,8 @@ fn canister_info_retrieval() {
     assert_eq!(
         res,
         Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            format!("{} cannot be called by a user.", Method::CanisterInfo)
+            ErrorCode::CanisterRejectedMessage,
+            "Only canisters can call ic00 method canister_info"
         ))
     );
 
@@ -1024,7 +966,6 @@ fn canister_info_retrieval() {
     // uninstall code via ingress from user_id2
     now += Duration::from_secs(5);
     env.set_time(now);
-    env.tick();
     let canister_id_record: CanisterIdRecord = canister_id.into();
     env.execute_ingress_as(
         user_id2,
@@ -1036,7 +977,7 @@ fn canister_info_retrieval() {
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
-        20,
+        18,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::CanisterCodeUninstall,
     ));
@@ -1050,4 +991,156 @@ fn canister_info_retrieval() {
     assert_eq!(canister_info.changes(), reference_change_entries);
     assert_eq!(canister_info.module_hash(), None);
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+}
+
+#[test]
+fn canister_history_load_snapshot_fails_incorrect_sender_version() {
+    // Setup:
+    let mut now = std::time::SystemTime::now();
+    let (_, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
+
+    // Set up StateMachine
+    let env = StateMachineBuilder::new().build();
+    // Set time of StateMachine to current system time
+    env.set_time(now);
+
+    // Declare user IDs
+    let anonymous_user = PrincipalId::new_anonymous();
+    let user_id1 = user_test_id(7).get();
+    let user_id2 = user_test_id(8).get();
+
+    // Create and install universal_canister
+    let ucan = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![anonymous_user, user_id1, user_id2])
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE * 2_u64,
+        )
+        .unwrap();
+
+    // Create a canister via inter-canister call from ucan
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    let ucan_payload = universal_canister_payload(
+        &PrincipalId::default(),
+        "create_canister",
+        CreateCanisterArgs {
+            settings: Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![ucan.into(), user_id1, user_id2])
+                    .build(),
+            ),
+            sender_canister_version: Some(2), // specified sender_canister_version
+        }
+        .encode(),
+        INITIAL_CYCLES_BALANCE,
+    );
+    let wasm_result = env.execute_ingress(ucan, "update", ucan_payload).unwrap();
+    let canister_id = match wasm_result {
+        WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
+            .expect("failed to decode canister ID record")
+            .get_canister_id(),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+    };
+
+    let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
+        0,
+        CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
+        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
+    )];
+
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    let wasm_result = env
+        .execute_ingress_as(
+            ucan.into(),
+            ic00::IC_00,
+            Method::InstallCode,
+            InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
+        )
+        .unwrap();
+    match wasm_result {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(reason) => panic!("install_code call rejected: {}", reason),
+    };
+    // Check canister history.
+    reference_change_entries.push(CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        1,
+        CanisterChangeOrigin::from_user(ucan.into()),
+        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+    ));
+    let history = get_canister_history(&env, canister_id);
+    assert_eq!(
+        history.get_total_num_changes(),
+        reference_change_entries.len() as u64
+    );
+    assert_eq!(
+        history
+            .get_changes(history.get_total_num_changes() as usize)
+            .map(|c| (**c).clone())
+            .collect::<Vec<CanisterChange>>(),
+        reference_change_entries
+    );
+
+    // Create canister snapshot.
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let ucan_payload = universal_canister_payload(
+        &PrincipalId::default(),
+        "take_canister_snapshot",
+        args.encode(),
+        Cycles::new(0),
+    );
+    let wasm_result = env.execute_ingress(ucan, "update", ucan_payload).unwrap();
+    let result = match wasm_result {
+        WasmResult::Reply(bytes) => {
+            CanisterSnapshotResponse::decode(&bytes[..]).expect("failed to decode record")
+        }
+        WasmResult::Reject(reason) => panic!("take_canister_snapshot call rejected: {}", reason),
+    };
+    let snapshot_id = result.snapshot_id();
+
+    // Load snapshot on test_canister via inter-canister call from ucan
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    // This value of sender_canister_version does not match the actual sender_canister_version.
+    // Attach illegal sender_canister_version (call fails and canister history is not updated).
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, Some(444));
+    let ucan_payload = universal_canister_payload(
+        &PrincipalId::default(),
+        "load_canister_snapshot",
+        args.encode(),
+        Cycles::new(0),
+    );
+    let wasm_result = env.execute_ingress(ucan, "update", ucan_payload).unwrap();
+    // Check failure.
+    match wasm_result {
+        WasmResult::Reply(_) => {
+            panic!("Sender canister version should not match the actual canister version.")
+        }
+        WasmResult::Reject(_) => (),
+    };
+
+    // Check canister history is unchanged.
+    let history = get_canister_history(&env, canister_id);
+    assert_eq!(
+        history.get_total_num_changes(),
+        reference_change_entries.len() as u64
+    );
+    assert_eq!(
+        history
+            .get_changes(history.get_total_num_changes() as usize)
+            .map(|c| (**c).clone())
+            .collect::<Vec<CanisterChange>>(),
+        reference_change_entries
+    );
 }

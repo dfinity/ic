@@ -1,30 +1,33 @@
 //! Replica -- Internet Computer
 
-use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_http_endpoints_async_utils::{abort_on_panic, shutdown_signal};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
-use ic_types::consensus::CatchUpPackage;
-use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
+use ic_tracing::ReloadHandles;
+use ic_tracing_jaeger_exporter::jaeger_exporter;
+use ic_tracing_logging_layer::logging_layer;
+use ic_types::{
+    consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
+    SubnetId,
+};
 use nix::unistd::{setpgid, Pid};
-use static_assertions::assert_eq_size;
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
+use tracing_subscriber::{filter::filter_fn, layer::SubscriberExt, Layer};
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
 
 // On mac jemalloc causes lmdb to segfault
 #[cfg(target_os = "linux")]
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 #[cfg(target_os = "linux")]
 #[global_allocator]
-#[cfg(target_os = "linux")]
 static ALLOC: Jemalloc = Jemalloc;
 
 #[cfg(feature = "profiler")]
@@ -55,14 +58,10 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
 
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
-    assert_eq_size!(usize, u64);
+    #[cfg(not(target_pointer_width = "64"))]
+    compile_error!("compilation is only allowed for 64-bit targets");
     // Ensure that the hardcoded constant matches the OS page size.
     assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
-
-    // Produce a thread dump and exit if this is a child process created for this
-    // purpose.
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    ic_backtrace::init();
 
     // At this point we need to setup a new process group. This is
     // done to ensure all our children processes belong to the same
@@ -229,6 +228,35 @@ fn main() -> io::Result<()> {
     context.subnet_id = format!("{}", subnet_id.get());
     let logger = logger.with_new_context(context);
 
+    // Setup the tracing subscriber
+    //   1. Log to stdout
+    //   2. Layers for generating flamegraphs
+    //   3. Jeager exporter if enabled
+
+    let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
+    // TARPC is way too verbose. Turn it off for now.
+    let logging = logging.with_filter(filter_fn(|metadata| metadata.target() != "tarpc::client"));
+
+    let mut tracing_layers = vec![logging.boxed()];
+
+    let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
+    let tracing_handle = ReloadHandles::new(reload_handle);
+    tracing_layers.push(reload_layer.boxed());
+
+    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
+    if let Some(jaeger_addr) = &config.tracing.jaeger_addr {
+        match jaeger_exporter(jaeger_addr, "replica", rt_main.handle()) {
+            Ok(layer) => tracing_layers.push(layer.boxed()),
+            Err(err) => info!(logger, "{:?}", err),
+        }
+    }
+
+    let subscriber = tracing_subscriber::registry().with(tracing_layers);
+
+    if let Err(err) = tracing::subscriber::set_global_default(subscriber) {
+        tracing::warn!("Failed to set global subscriber: {:#?}", err);
+    }
+
     info!(logger, "Replica Started");
     info!(logger, "Running in subnetwork {:?}", subnet_id);
     if let Ok((path, hash)) = get_replica_binary_hash() {
@@ -241,13 +269,11 @@ fn main() -> io::Result<()> {
         rt_http.handle().clone(),
         config.metrics.clone(),
         metrics_registry.clone(),
-        registry.clone(),
-        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
         &logger.inner_logger.root,
     );
 
     info!(logger, "Constructing IC stack");
-    let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
+    let (_, _, _, _p2p_thread_joiner, _xnet_endpoint) =
         ic_replica::setup_ic_stack::construct_ic_stack(
             &logger,
             &metrics_registry,
@@ -261,6 +287,7 @@ fn main() -> io::Result<()> {
             registry,
             crypto,
             cup_proto,
+            tracing_handle,
         )?;
 
     info!(logger, "Constructed IC stack");

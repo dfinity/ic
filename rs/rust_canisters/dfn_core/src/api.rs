@@ -84,6 +84,9 @@ pub mod ic0 {
         pub fn canister_version() -> u64;
         pub fn mint_cycles(amount: u64) -> u64;
         pub fn is_controller(src: u32, size: u32) -> u32;
+        pub fn in_replicated_execution() -> u32;
+        pub fn call_with_best_effort_response(timeout_seconds: u32);
+        pub fn msg_deadline() -> u64;
     }
 }
 
@@ -285,6 +288,18 @@ pub mod ic0 {
     }
     pub unsafe fn is_controller(_src: u32, _size: u32) -> u32 {
         wrong_arch("is_controller")
+    }
+
+    pub unsafe fn in_replicated_execution() -> u32 {
+        wrong_arch("in_replicated_execution")
+    }
+
+    pub unsafe fn call_with_best_effort_response(_timeout_seconds: u32) {
+        wrong_arch("call_with_best_effort_response")
+    }
+
+    pub unsafe fn msg_deadline() -> u64 {
+        wrong_arch("msg_deadline")
     }
 }
 
@@ -840,7 +855,7 @@ pub fn data_certificate() -> Option<Vec<u8>> {
     Some(buf)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub enum CanisterStatus {
     Running,
     Stopping,

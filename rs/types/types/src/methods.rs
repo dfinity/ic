@@ -1,8 +1,10 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
-use crate::{messages::CallContextId, Cycles};
-use ic_base_types::CanisterId;
+use crate::{messages::CallContextId, time::CoarseTime, Cycles};
+use ic_base_types::{CanisterId, PrincipalId};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
@@ -11,9 +13,11 @@ use std::{
     convert::{From, TryFrom},
     fmt,
 };
+use strum_macros::EnumIter;
 
 /// Represents the types of methods that a Wasm module can export.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmMethod {
     /// An exported update method along with its name.
     ///
@@ -98,16 +102,7 @@ impl From<&WasmMethod> for pb::WasmMethod {
                 wasm_method: Some(PbWasmMethod::CompositeQuery(value.clone())),
             },
             WasmMethod::System(value) => Self {
-                wasm_method: Some(PbWasmMethod::System(match value {
-                    SystemMethod::CanisterStart => PbSystemMethod::CanisterStart,
-                    SystemMethod::CanisterInit => PbSystemMethod::CanisterInit,
-                    SystemMethod::CanisterPreUpgrade => PbSystemMethod::CanisterPreUpgrade,
-                    SystemMethod::CanisterPostUpgrade => PbSystemMethod::CanisterPostUpgrade,
-                    SystemMethod::CanisterInspectMessage => PbSystemMethod::CanisterInspectMessage,
-                    SystemMethod::CanisterHeartbeat => PbSystemMethod::CanisterHeartbeat,
-                    SystemMethod::Empty => PbSystemMethod::Empty,
-                    SystemMethod::CanisterGlobalTimer => PbSystemMethod::CanisterGlobalTimer,
-                } as i32)),
+                wasm_method: Some(PbWasmMethod::System(PbSystemMethod::from(value).into())),
             },
         }
     }
@@ -127,51 +122,33 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
                 let method =
                     PbSystemMethod::try_from(system).unwrap_or(PbSystemMethod::Unspecified);
 
-                Ok(Self::System(match method {
-                    PbSystemMethod::Unspecified => {
-                        return Err(ProxyDecodeError::ValueOutOfRange {
-                            typ: "WasmMethod::System",
-                            err: system.to_string(),
-                        })
-                    }
-                    PbSystemMethod::CanisterStart => SystemMethod::CanisterStart,
-                    PbSystemMethod::CanisterInit => SystemMethod::CanisterInit,
-                    PbSystemMethod::CanisterPreUpgrade => SystemMethod::CanisterPreUpgrade,
-                    PbSystemMethod::CanisterPostUpgrade => SystemMethod::CanisterPostUpgrade,
-                    PbSystemMethod::CanisterInspectMessage => SystemMethod::CanisterInspectMessage,
-                    PbSystemMethod::CanisterHeartbeat => SystemMethod::CanisterHeartbeat,
-                    PbSystemMethod::Empty => SystemMethod::Empty,
-                    PbSystemMethod::CanisterGlobalTimer => SystemMethod::CanisterGlobalTimer,
-                }))
+                Ok(Self::System(SystemMethod::try_from(method)?))
             }
         }
     }
 }
 
 /// The various system methods available to canisters.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum SystemMethod {
     /// A system method for initializing a Wasm module.
-    CanisterStart,
+    CanisterStart = 1,
     /// A system method that is run when initializing a canister.
-    CanisterInit,
+    CanisterInit = 2,
     /// A system method that is run at the beginning of a canister upgrade.
-    CanisterPreUpgrade,
+    CanisterPreUpgrade = 3,
     /// A system method that is run at the end of a canister upgrade.
-    CanisterPostUpgrade,
+    CanisterPostUpgrade = 4,
     /// A system method that is run pre-consensus to ask the canister if it
     /// wants to accept an ingress message.
-    CanisterInspectMessage,
+    CanisterInspectMessage = 5,
     /// A system method that is run at regular intervals for cron support.
-    CanisterHeartbeat,
+    CanisterHeartbeat = 6,
     /// A system method that is run after a specified time.
-    CanisterGlobalTimer,
-    /// This is introduced as temporary scaffolding to aid in construction of
-    /// the initial ExecutionState. This isn't used to execute any actual wasm
-    /// but as a way to get to the wasm embedder from execution. Eventually, we
-    /// need to rethink some of the API between execution and wasm embedder so
-    /// that this is not needed.
-    Empty,
+    CanisterGlobalTimer = 7,
+    /// A system method that runs when the available Wasm memory is below threshold.
+    CanisterOnLowWasmMemory = 8,
 }
 
 impl TryFrom<&str> for SystemMethod {
@@ -186,7 +163,7 @@ impl TryFrom<&str> for SystemMethod {
             "canister_inspect_message" => Ok(SystemMethod::CanisterInspectMessage),
             "canister_heartbeat" => Ok(SystemMethod::CanisterHeartbeat),
             "canister_global_timer" => Ok(SystemMethod::CanisterGlobalTimer),
-            "empty" => Ok(SystemMethod::Empty),
+            "canister_on_low_wasm_memory" => Ok(SystemMethod::CanisterOnLowWasmMemory),
             _ => Err(format!("Cannot convert {} to SystemMethod.", value)),
         }
     }
@@ -201,46 +178,96 @@ impl fmt::Display for SystemMethod {
             Self::CanisterStart => write!(f, "canister_start"),
             Self::CanisterInspectMessage => write!(f, "canister_inspect_message"),
             Self::CanisterHeartbeat => write!(f, "canister_heartbeat"),
-            Self::Empty => write!(f, "empty"),
             Self::CanisterGlobalTimer => write!(f, "canister_global_timer"),
+            Self::CanisterOnLowWasmMemory => write!(f, "canister_on_low_wasm_memory"),
+        }
+    }
+}
+
+impl From<&SystemMethod> for pb::wasm_method::SystemMethod {
+    fn from(method: &SystemMethod) -> Self {
+        use pb::wasm_method::SystemMethod as PbSystemMethod;
+
+        match method {
+            SystemMethod::CanisterStart => PbSystemMethod::CanisterStart,
+            SystemMethod::CanisterInit => PbSystemMethod::CanisterInit,
+            SystemMethod::CanisterPreUpgrade => PbSystemMethod::CanisterPreUpgrade,
+            SystemMethod::CanisterPostUpgrade => PbSystemMethod::CanisterPostUpgrade,
+            SystemMethod::CanisterInspectMessage => PbSystemMethod::CanisterInspectMessage,
+            SystemMethod::CanisterHeartbeat => PbSystemMethod::CanisterHeartbeat,
+            SystemMethod::CanisterGlobalTimer => PbSystemMethod::CanisterGlobalTimer,
+            SystemMethod::CanisterOnLowWasmMemory => PbSystemMethod::CanisterOnLowWasmMemory,
+        }
+    }
+}
+
+impl TryFrom<pb::wasm_method::SystemMethod> for SystemMethod {
+    type Error = ProxyDecodeError;
+
+    fn try_from(method: pb::wasm_method::SystemMethod) -> Result<Self, Self::Error> {
+        use pb::wasm_method::SystemMethod as PbSystemMethod;
+
+        match method {
+            PbSystemMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "SystemMethod",
+                err: format!("Unknown value for system method {:?}", method),
+            }),
+            PbSystemMethod::CanisterStart => Ok(SystemMethod::CanisterStart),
+            PbSystemMethod::CanisterInit => Ok(SystemMethod::CanisterInit),
+            PbSystemMethod::CanisterPreUpgrade => Ok(SystemMethod::CanisterPreUpgrade),
+            PbSystemMethod::CanisterPostUpgrade => Ok(SystemMethod::CanisterPostUpgrade),
+            PbSystemMethod::CanisterInspectMessage => Ok(SystemMethod::CanisterInspectMessage),
+            PbSystemMethod::CanisterHeartbeat => Ok(SystemMethod::CanisterHeartbeat),
+            PbSystemMethod::CanisterGlobalTimer => Ok(SystemMethod::CanisterGlobalTimer),
+            PbSystemMethod::CanisterOnLowWasmMemory => Ok(SystemMethod::CanisterOnLowWasmMemory),
         }
     }
 }
 
 /// A Wasm closure pointing to the Wasm function table.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Wasm closures must be created and consumed either as 32- or 64-bit.
+/// If the canister migrates from `wasm32` to `wasm64` or back having some
+/// outstanding calls, we will try to convert the stored values into
+/// the required type and call the function.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmClosure {
     pub func_idx: u32,
-    pub env: u32,
+    pub env: u64,
 }
 
 impl WasmClosure {
-    pub fn new(func_idx: u32, env: u32) -> Self {
+    pub fn new(func_idx: u32, env: u64) -> Self {
         Self { func_idx, env }
     }
 }
 
+/// A placeholder `CanisterId` for the `Callback::originator` and
+/// `Callback::respondent` fields, if the callback was created before February
+/// 2022 (i.e. before originator and respondent were recorded).
+pub const UNKNOWN_CANISTER_ID: CanisterId =
+    CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
+
 /// Callback holds references to functions executed when a response is received.
 /// It also tracks information about the origin of the request.
 /// This information is used to validate the response when it is received.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
-    // (EXC-877) Once this is deployed in production,
-    // it's safe to make `respondent` and `originator` non-optional.
-    // Currently optional to ensure backwards compatibility.
-    /// The request's sender id.
-    pub originator: Option<CanisterId>,
-    /// The id of the principal that the request was addressed to.
-    pub respondent: Option<CanisterId>,
+    /// The request sender's ID.
+    pub originator: CanisterId,
+    /// The ID of the principal that the request was addressed to.
+    pub respondent: CanisterId,
     /// The number of cycles that were sent in the original request.
     pub cycles_sent: Cycles,
     /// Cycles prepaid by the caller for response execution.
-    /// The field is optional for backwards compatibility.
-    pub prepayment_for_response_execution: Option<Cycles>,
+    ///
+    /// `Cycles::zero()` if the `Callback` was created before February 2022.
+    pub prepayment_for_response_execution: Cycles,
     /// Cycles prepaid by the caller for response transimission.
-    /// The field is optional for backwards compatibility.
-    pub prepayment_for_response_transmission: Option<Cycles>,
+    ///
+    /// `Cycles::zero()` if the `Callback` was created before February 2022.
+    pub prepayment_for_response_transmission: Cycles,
     /// A closure to be executed if the call succeeded.
     pub on_reply: WasmClosure,
     /// A closure to be executed if the call was rejected.
@@ -248,19 +275,22 @@ pub struct Callback {
     /// An optional closure to be executed if the execution of `on_reply` or
     /// `on_reject` traps.
     pub on_cleanup: Option<WasmClosure>,
+    /// If non-zero, this is a best-effort call.
+    pub deadline: CoarseTime,
 }
 
 impl Callback {
     pub fn new(
         call_context_id: CallContextId,
-        originator: Option<CanisterId>,
-        respondent: Option<CanisterId>,
+        originator: CanisterId,
+        respondent: CanisterId,
         cycles_sent: Cycles,
-        prepayment_for_response_execution: Option<Cycles>,
-        prepayment_for_response_transmission: Option<Cycles>,
+        prepayment_for_response_execution: Cycles,
+        prepayment_for_response_transmission: Cycles,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
+        deadline: CoarseTime,
     ) -> Self {
         Self {
             call_context_id,
@@ -272,6 +302,7 @@ impl Callback {
             on_reply,
             on_reject,
             on_cleanup,
+            deadline,
         }
     }
 }
@@ -280,21 +311,13 @@ impl From<&Callback> for pb::Callback {
     fn from(item: &Callback) -> Self {
         Self {
             call_context_id: item.call_context_id.get(),
-            originator: item
-                .originator
-                .as_ref()
-                .map(|originator| pb_types::CanisterId::from(*originator)),
-            respondent: item
-                .respondent
-                .as_ref()
-                .map(|respondent| pb_types::CanisterId::from(*respondent)),
+            originator: Some(pb_types::CanisterId::from(item.originator)),
+            respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: item
-                .prepayment_for_response_execution
-                .map(|cycles| cycles.into()),
-            prepayment_for_response_transmission: item
-                .prepayment_for_response_transmission
-                .map(|cycles| cycles.into()),
+            prepayment_for_response_execution: Some(item.prepayment_for_response_execution.into()),
+            prepayment_for_response_transmission: Some(
+                item.prepayment_for_response_transmission.into(),
+            ),
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
                 env: item.on_reply.env,
@@ -307,6 +330,7 @@ impl From<&Callback> for pb::Callback {
                 func_idx: on_cleanup.func_idx,
                 env: on_cleanup.env,
             }),
+            deadline_seconds: item.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -322,20 +346,19 @@ impl TryFrom<pb::Callback> for Callback {
         let cycles_sent: PbCycles =
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
-        let prepayment_for_response_execution = value
-            .prepayment_for_response_execution
-            .map(|c| c.try_into())
-            .transpose()?;
-
-        let prepayment_for_response_transmission = value
-            .prepayment_for_response_transmission
-            .map(|c| c.try_into())
-            .transpose()?;
+        let prepayment_for_response_execution = try_from_option_field(
+            value.prepayment_for_response_execution,
+            "Callback::prepayment_for_response_execution",
+        )?;
+        let prepayment_for_response_transmission = try_from_option_field(
+            value.prepayment_for_response_transmission,
+            "Callback::prepayment_for_response_transmission",
+        )?;
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
-            originator: try_from_option_field(value.originator, "Callback::originator").ok(),
-            respondent: try_from_option_field(value.respondent, "Callback::respondent").ok(),
+            originator: try_from_option_field(value.originator, "Callback::originator")?,
+            respondent: try_from_option_field(value.respondent, "Callback::respondent")?,
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
@@ -351,12 +374,13 @@ impl TryFrom<pb::Callback> for Callback {
                 func_idx: on_cleanup.func_idx,
                 env: on_cleanup.env,
             }),
+            deadline: CoarseTime::from_secs_since_unix_epoch(value.deadline_seconds),
         })
     }
 }
 
 /// A reference to a callable function/method in a Wasm module, which can be:
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum FuncRef {
     /// A method that a canister can export.
     Method(WasmMethod),
@@ -367,4 +391,43 @@ pub enum FuncRef {
     UpdateClosure(WasmClosure),
 
     QueryClosure(WasmClosure),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exhaustive::ExhaustiveSet;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn system_method_proto_round_trip() {
+        for initial in SystemMethod::iter() {
+            let encoded = pb::wasm_method::SystemMethod::from(&initial);
+            let round_trip = SystemMethod::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_system_method() {
+        // If this fails, you are making a potentially incompatible change to `SystemMethod`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            SystemMethod::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2, 3, 4, 5, 6, 7, 8]
+        );
+    }
+
+    #[test]
+    fn wasm_method_proto_round_trip() {
+        for method in WasmMethod::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb::WasmMethod::from(&method);
+            let round_trip = WasmMethod::try_from(encoded).unwrap();
+
+            assert_eq!(method, round_trip);
+        }
+    }
 }

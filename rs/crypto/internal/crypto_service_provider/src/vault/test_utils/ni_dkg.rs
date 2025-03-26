@@ -1,6 +1,6 @@
 pub mod fixtures;
 
-use crate::key_id::KeyId;
+use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
@@ -88,7 +88,8 @@ fn threshold_signatures_should_work(
     };
     let public_coefficients = CspPublicCoefficients::Bls12_381(public_coefficients);
     let signatories: Vec<(Arc<dyn CspVault>, KeyId)> = {
-        let key_id = KeyId::from(&public_coefficients);
+        let key_id = KeyId::try_from(&public_coefficients)
+            .expect("computing key id from public coefficients should succeed");
         config
             .receivers
             .get()
@@ -163,7 +164,8 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         let node: &mut MockNode = get_one_node(&mut state);
 
         // Verify that the key is there:
-        let key_id = KeyId::from(&internal_public_coefficients);
+        let key_id = KeyId::try_from(&internal_public_coefficients)
+            .expect("computing key id from public coefficients should succeed");
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
@@ -173,10 +175,11 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
             .expect("The key should be there initially");
 
         // Call retain, keeping the threshold key:
-        let active_key_ids: BTreeSet<KeyId> = [internal_public_coefficients.clone()]
+        let active_key_ids = [internal_public_coefficients.clone()]
             .iter()
-            .map(KeyId::from)
-            .collect();
+            .map(KeyId::try_from)
+            .collect::<Result<BTreeSet<KeyId>, KeyIdInstantiationError>>()
+            .expect("computing key ids from public coefficients should succeed");
         node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
             .expect("Retaining threshold keys failed");
@@ -201,7 +204,10 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         );
         let active_key_ids = [different_public_coefficients]
             .iter()
-            .map(KeyId::from)
+            .map(|public_coefficients| {
+                KeyId::try_from(public_coefficients)
+                    .expect("computing key id from public coefficients should succeed")
+            })
             .collect();
         node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
@@ -229,7 +235,8 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         let node = get_one_node(&mut state);
 
         // Verify that the threshold key has been reloaded:
-        let key_id = KeyId::from(&internal_public_coefficients);
+        let key_id = KeyId::try_from(&internal_public_coefficients)
+            .expect("computing key id from public coefficients should succeed");
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,

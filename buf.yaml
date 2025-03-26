@@ -2,15 +2,16 @@ version: v1beta1
 build:
   roots:
     - rs/bitcoin/service/proto
-    - rs/canister_http/service/proto
     - rs/crypto/internal/crypto_service_provider/proto
+    - rs/https_outcalls/service/proto
+    - rs/monitoring/adapter_metrics_service/proto
     - rs/nervous_system/proto/proto
     - rs/nns/common/proto
     - rs/nns/gtc/proto Temporarily removed because a PR was reverted and then un-reverted
     - rs/nns/handlers/root/impl/proto
     - rs/nns/governance/proto
     - rs/protobuf/def
-    - rs/rosetta-api/icp_ledger/proto
+    - rs/ledger_suite/icp/proto
     - rs/sns/governance/proto
     - rs/sns/root/proto
     - rs/sns/swap/proto
@@ -20,8 +21,6 @@ lint:
     - DEFAULT
 breaking:
   ignore:
-    - ic_sns_swap/pb/v1/swap.proto
-    - ic_nns_governance/pb/v1/governance.proto
   use:
     - WIRE
   except:

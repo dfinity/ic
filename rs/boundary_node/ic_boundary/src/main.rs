@@ -1,46 +1,37 @@
 use anyhow::Error;
 use clap::Parser;
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 
 use crate::cli::Cli;
 
-mod acme;
+mod bouncer;
 mod cache;
 mod check;
 mod cli;
-mod configuration;
 mod core;
 mod dns;
 mod firewall;
+mod geoip;
 mod http;
-mod management;
+mod log;
 mod metrics;
-mod nns;
 mod persist;
 mod rate_limiting;
 mod retry;
 mod routes;
+mod salt_fetcher;
 mod snapshot;
+#[cfg(any(test, feature = "bench"))]
+pub mod test_utils;
 mod tls_verify;
-
-#[cfg(feature = "tls")]
-mod tls;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // This line has to be in `main` not in `core` because (to quote the docs):
-    // `Libraries should NOT call set_global_default()! That will cause conflicts when executables try to set them later.`
-
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::fmt()
-            .json()
-            .flatten_event(true)
-            .finish(),
-    )?;
-
     let cli = Cli::parse();
+
+    log::setup_logging(&cli)?;
     core::main(cli).await
 }

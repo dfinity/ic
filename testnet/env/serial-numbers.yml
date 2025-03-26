@@ -7,6 +7,8 @@ ch1-dll15.ch1.dfinity.network: ch1-dll15.ch1.dfinity.network
 ch1-dll16.ch1.dfinity.network: ch1-dll16.ch1.dfinity.network
 ch1-dll17.ch1.dfinity.network: ch1-dll17.ch1.dfinity.network
 ch1-dll18.ch1.dfinity.network: ch1-dll18.ch1.dfinity.network
+ch1-dll43.ch1.dfinity.network: ch1-dll43.ch1.dfinity.network
+ch1-dll44.ch1.dfinity.network: ch1-dll44.ch1.dfinity.network
 ch1-spm01.ch1.dfinity.network: ch1-spm01.ch1.dfinity.network
 ch1-spm02.ch1.dfinity.network: ch1-spm02.ch1.dfinity.network
 ch1-spm03.ch1.dfinity.network: ch1-spm03.ch1.dfinity.network
@@ -224,8 +226,6 @@ zh1-pyr10.zh1.dfinity.network: zh1-pyr10.zh1.dfinity.network
 zh1-spm01.zh1.dfinity.network: zh1-spm01.zh1.dfinity.network
 zh1-spm02.zh1.dfinity.network: zh1-spm02.zh1.dfinity.network
 zh1-spm03.zh1.dfinity.network: zh1-spm03.zh1.dfinity.network
-zh1-spm03.zh1.dfinity.network: zh1-spm03.zh1.dfinity.network
-zh1-spm04.zh1.dfinity.network: zh1-spm04.zh1.dfinity.network
 zh1-spm04.zh1.dfinity.network: zh1-spm04.zh1.dfinity.network
 zh1-spm05.zh1.dfinity.network: zh1-spm05.zh1.dfinity.network
 zh1-spm06.zh1.dfinity.network: zh1-spm06.zh1.dfinity.network
@@ -234,7 +234,6 @@ zh1-spm08.zh1.dfinity.network: zh1-spm08.zh1.dfinity.network
 zh1-spm09.zh1.dfinity.network: zh1-spm09.zh1.dfinity.network
 zh1-spm10.zh1.dfinity.network: zh1-spm10.zh1.dfinity.network
 zh1-spm11.zh1.dfinity.network: zh1-spm11.zh1.dfinity.network
-zh1-spm12.zh1.dfinity.network: zh1-spm12.zh1.dfinity.network
 zh1-spm12.zh1.dfinity.network: zh1-spm12.zh1.dfinity.network
 zh1-spm13.zh1.dfinity.network: zh1-spm13.zh1.dfinity.network
 zh1-spm14.zh1.dfinity.network: zh1-spm14.zh1.dfinity.network

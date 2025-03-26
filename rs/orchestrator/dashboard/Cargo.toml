@@ -1,12 +1,15 @@
 [package]
 name = "ic-dashboard"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.41" 
+async-trait = { workspace = true }
 tokio = { workspace = true }
 
 [lib]

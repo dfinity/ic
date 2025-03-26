@@ -4,23 +4,20 @@ use std::{
     time::Duration,
 };
 
+use axum::http::Request;
 use axum::{routing::any, Router};
 use bytes::Bytes;
 use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BatchSize, BenchmarkGroup, Criterion,
     Throughput,
 };
-use either::Either;
-use http::Request;
 use ic_base_types::NodeId;
-use ic_icos_sev::Sev;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     create_registry_handle, temp_crypto_component_with_tls_keys, RegistryConsensusHandle,
 };
-use ic_peer_manager::SubnetTopology;
-use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
+use ic_quic_transport::{create_udp_socket, QuicTransport, SubnetTopology, Transport};
 use ic_types_test_utils::ids::node_test_id;
 use tokio::{
     runtime::{Handle, Runtime},
@@ -49,7 +46,6 @@ fn spawn_transport(
     let node_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 8000 + id as u16).into();
     let node_id = node_test_id(id);
     let tls = temp_crypto_component_with_tls_keys(&registry_handle, node_id);
-    let sev = Arc::new(Sev::new(node_id, registry_handle.registry_client.clone()));
     registry_handle.registry_client.reload();
     registry_handle.registry_client.update_to_latest_version();
 
@@ -59,10 +55,9 @@ fn spawn_transport(
         &rt,
         tls,
         registry_handle.registry_client.clone(),
-        sev,
         node_id,
         watch_rx,
-        Either::<_, DummyUdpSocket>::Left(node_addr),
+        create_udp_socket(&rt, node_addr),
         Router::new().route("/", any(pong)),
     ));
     (transport, node_id, node_addr)
@@ -73,7 +68,7 @@ async fn all_peers_up(transport: Arc<dyn Transport>, peers: Vec<NodeId>) {
         let mut one_peer_down = false;
         for peer in &peers {
             if transport
-                .push(
+                .rpc(
                     peer,
                     Request::builder().uri("/").body(Bytes::new()).unwrap(),
                 )
@@ -118,7 +113,7 @@ fn bench_transport(criterion: &mut Criterion) {
         ))
         .unwrap();
 
-    let test_transport = transports.get(0).unwrap().0.clone();
+    let test_transport = transports.first().unwrap().0.clone();
     let peers: Vec<NodeId> = transports
         .iter()
         .skip(1)
@@ -229,7 +224,7 @@ fn bench_inner(
                         let t = transport_c.clone();
                         let p = *peer;
                         futs.push(async move {
-                            t.push(&p, Request::builder().uri("/").body(bytes).unwrap())
+                            t.rpc(&p, Request::builder().uri("/").body(bytes).unwrap())
                                 .await
                                 .unwrap();
                         });

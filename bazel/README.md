@@ -29,10 +29,10 @@ package with native package managers such as apt get, homebrew, etc..
 
 To build Rust and IC-OS code will require a minimal set of packages. On a Linux
 host the
-`[Dockerfile](https://github.com/dfinity/ic/blob/master/gitlab-ci/container/Dockerfile)`
+`[Dockerfile](https://github.com/dfinity/ic/blob/master/ci/container/Dockerfile)`
 serves as a reference for the minimal apt installation set. Developers may
 develop inside the build and development container with
-`./gitlab-ci/container/container-run.sh`.
+`./ci/container/container-run.sh`.
 
 ```bash
 bazel test //rs/crypto/sha2:all
@@ -40,7 +40,7 @@ bazel test //rs/crypto/sha2:all
 
 Most targets should build on the host machine. However, the IC-OS image only
 builds inside the canonical container (`ic-build-bazel:$TAG`). To enter this
-docker container run `./gitlab-ci/container/conatiner-run.sh`. This container
+docker container run `./ci/container/conatiner-run.sh`. This container
 is only available in x86-64 environments.
 
 # Building Blocks
@@ -178,7 +178,7 @@ rust_library(
     name = "sha",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_sha",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = ["//rs/crypto/internal/crypto_lib/sha2"],
 )
 
@@ -229,7 +229,7 @@ Note that if a module is defined with a package dependency, then the test does n
 
 Some good examples for writing bazel tests can be found in `scalability/BUILD.bazel`.
 
-To add python packages to the build container for use in a build or test target in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/gitlab-ci/src/docs/HowTo-Developer.adoc).
+To add python packages to the build container for use in a build or test target in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/ci/src/docs/HowTo-Developer.adoc).
 
 
 ## Target Labels
@@ -296,9 +296,11 @@ Mark the test as **flaky** to make Bazel will retry the test up to three times.
 rust_test(
 	name = "foo_test",
   # lines omitted
-	flaky = True",
+	flaky = True",  # flakiness rate of $f% over the last month on $date.
 )
 ```
+
+Where you can retrieve the flakiness rate $f from Superset.
 
 Instruct rust to only run one test in parallel - this can help when multiple
 concurrent test cases collide but may greatly increase the runtime of the tests.
@@ -351,13 +353,13 @@ nice if you updated this line in your BUILD.bazel files.
 
 ### How do I lint (i.e. run rustfmt, and clippy)?
 
-Add `—-config=lint` to your bazel command.
+Add `--config=lint` to your bazel command.
 
 By default, clippy violations are just warnings, but formatting issues do not
 generate warnings (just like what you’re probably used to from cargo).
 
-Alternatively, if you only want one or the other, do `—-config=fmt` or
-`—-config=clippy` instead (the latter maybe isn’t so useful, since you get
+Alternatively, if you only want one or the other, do `--config=fmt` or
+`--config=clippy` instead (the latter maybe isn’t so useful, since you get
 warnings by default anyway).
 
 E.g.
@@ -406,7 +408,7 @@ let rdr = Reader::from_path(
 Run `./bin/bazel-pin.sh` from the root of the repo to recalculate
 `Cargo.Bazel.*.lock` files (should take about a minute or three)
 
-You may run it inside of `./gitlab-ci/container/container-run.sh` if you don’t
+You may run it inside of `./ci/container/container-run.sh` if you don’t
 have `bazel` commands installed locally.
 
 ### rustfmt
@@ -415,9 +417,9 @@ have `bazel` commands installed locally.
 
 ### Clear Local Bazel Cache
 
-`bazel clean`
+`bazel/bazel_clean.sh`
 
-You might also want to consider adding `—expunge`.
+You might also want to consider adding `--expunge`.
 
 ### How do I make debug vs. release builds?
 
@@ -468,8 +470,7 @@ You need to have `genhtml` tool installed to see the report. The tool comes with
 the `lcov` package. You need to run `genhtml` in the repository root directory.
 
 ```bash
-genhtml --ignore-errors source --output genhtml "$(bazel info
-output_path)/_coverage/_coverage_report.dat"
+genhtml --ignore-errors source --output genhtml "$(bazel info output_path)/_coverage/_coverage_report.dat"
 ```
 
 Open the `genhtml/index.html` file in a browser and navigate to the file of

@@ -139,7 +139,7 @@ max_dissolve_delay_bonus_multiplier: 2.0
 #
 max_age_bonus_multiplier: 1.25
 #
-# If the decentralization sale fails, control of the dapp canister(s) is set to these
+# If the decentralization swap fails, control of the dapp canister(s) is set to these
 # principal IDs. In most use cases, this is set to the original set of controller(s) of the dapp.
 # This field has no default, a value must be provided by the user.
 #
@@ -182,12 +182,12 @@ wait_for_quiet_deadline_increase_seconds: 86400
 # the FractionalDeveloperVotingPower strategy. This strategy configures how SNS tokens and neurons
 # are distributed in four "buckets": developer tokens that are given to the original developers of
 # the dapp, airdrop tokens that can be given to any other principals that should have tokens at
-# genesis, treasury tokens that are owned by the SNS governance canister, and sale tokens which
-# are sold in an initial decentralization sale but parts of which can also be reserved for future
-# sales.
+# genesis, treasury tokens that are owned by the SNS governance canister, and swap tokens which
+# are sold in an initial decentralization swap but parts of which can also be reserved for future
+# swaps.
 # All developer and airdrop tokens are distributed to the defined principals at genesis in a basket
 # of neurons called the developer neurons and the airdrop neurons, respectively.
-# If only parts of the sale tokens are sold in the initial decentralization sale, the developer
+# If only parts of the swap tokens are sold in the initial decentralization swap, the developer
 # neurons are restricted by a voting power multiplier. This voting power multiplier is calculated as
 # `swap_distribution.initial_swap_amount_e8s / swap_distribution.total_e8s`.
 
@@ -196,7 +196,6 @@ wait_for_quiet_deadline_increase_seconds: 86400
 # The initial token distribution must satisfy the following preconditions to be valid:
 #    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
 #    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
-#    - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
 #    - swap_distribution.initial_swap_amount_e8s > 0
 #    - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
 #    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
@@ -211,15 +210,10 @@ wait_for_quiet_deadline_increase_seconds: 86400
 #    - total_e8s: The total amount of tokens in the treasury bucket.
 #
 # - swap_distribution has two fields:
-#    - total_e8s: The total amount of tokens in the sale bucket. initial_swap_amount_e8s will be
+#    - total_e8s: The total amount of tokens in the swap bucket. initial_swap_amount_e8s will be
 #      deducted from this total.
-#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the sale canister for
-#      the initial token sale.
-#
-# - airdrop_distribution has one field:
-#    - airdrop_neurons: A list of NeuronDistributions that specify the neuron's stake and
-#      controlling principal. These neurons will be available at genesis in PreInitializationSwap
-#      mode. No voting power multiplier is applied to these neurons.
+#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the Swap canister for
+#      the initial token swap.
 #
 # Example:
 # initial_token_distribution:
@@ -239,12 +233,6 @@ wait_for_quiet_deadline_increase_seconds: 86400
 #     swap_distribution:
 #       total_e8s: 6000000000
 #       initial_swap_amount_e8s: 3000000000
-#     airdrop_distribution:
-#       airdrop_neurons:
-#         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
-#           stake_e8s: 500000000
-#           memo: 0,
-#           dissolve_delay_seconds: 15780000 # 6 months
 #
 initial_token_distribution:
    FractionalDeveloperVotingPower:
@@ -259,5 +247,3 @@ initial_token_distribution:
      swap_distribution:
        total_e8s: 3000000000000
        initial_swap_amount_e8s: 3000000000000
-     airdrop_distribution:
-       airdrop_neurons: []

@@ -4,19 +4,16 @@
 # table description. The actual disk image is wrapped up into a tar file
 # because the raw image file is sparse.
 #
-# The input partition images are also expected to be given as tar files,
-# where each tar archive must contain a single file named "partition.img".
+# The input partition images are also expected to be given as tzst files,
 #
 # Call example:
-#   build_disk_image -p partitions.csv -o disk.img.tar part1.tar part2.tar ...
+#   build_disk_image -p partitions.csv -o disk.img.tar part1.tzst part2.tzst ...
 #
 import argparse
 import os
 import subprocess
 import sys
 import tarfile
-
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 
 def read_partition_description(data):
@@ -98,7 +95,15 @@ def _copyfile(source, target, size):
         size -= len(data)
 
 
-def write_partition_image_from_tar(gpt_entry, image_file, partition_tf):
+def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+
+    partition_tf = os.path.join(tmpdir, "partition.tar")
+    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+
+    partition_tf = tarfile.open(partition_tf, mode="r:")
     base = gpt_entry["start"] * 512
     with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
         for member in partition_tf:
@@ -139,6 +144,7 @@ def main():
         nargs="*",
         help="Partitions to write. These must match the CSV partition table entries.",
     )
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -150,9 +156,17 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
-    disk_image = os.path.join(tmpdir, "disk.img")
+    if args.dflate:
+        disk_image = os.path.join(tmpdir, "disk.img")
+    else:
+        # Disk optimization.  If no dflate program is specified, we can
+        # simply attack the target file (out_file) directly, saving gigabytes
+        # of writes to disk.
+        disk_image = out_file
     prepare_diskimage(gpt_entries, disk_image)
 
     for entry in gpt_entries:
@@ -171,7 +185,7 @@ def main():
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
-            write_partition_image_from_tar(entry, disk_image, tarfile.open(partition_file, mode="r:"))
+            write_partition_image_from_tzst(entry, disk_image, partition_file)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 
@@ -179,25 +193,20 @@ def main():
     if args.expanded_size:
         subprocess.run(["truncate", "--size", args.expanded_size, disk_image], check=True)
 
-    subprocess.run(
-        [
-            "tar",
-            "cf",
-            out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "disk.img",
-        ],
-        check=True,
-    )
-
-    print_artifact_info(out_file)
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    if args.dflate:
+        subprocess.run(
+            [
+                args.dflate,
+                "--input",
+                disk_image,
+                "--output",
+                out_file,
+            ],
+            check=True,
+        )
 
 
 if __name__ == "__main__":

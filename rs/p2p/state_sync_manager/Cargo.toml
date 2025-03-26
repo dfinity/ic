@@ -1,39 +1,40 @@
 [package]
 name = "ic-state-sync-manager"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.6.12"
-base64 = { workspace = true }
+axum = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-quic-transport = { path = "../quic_transport" }
-ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = "0.8.5"
-serde = { workspace = true }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
-strum = { workspace = true }
-strum_macros = { workspace = true }
+rand = { workspace = true }
+slog = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-metrics = "0.3.0"
-zstd = "0.12.4"
+tokio-metrics = { workspace = true }
+tokio-util = { workspace = true }
+zstd = { workspace = true }
 
 [dev-dependencies]
 ic-memory-transport = { path = "../memory_transport" }
 ic-p2p-test-utils = { path = "../test_utils" }
+ic-state-manager = { path = "../../state_manager" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-turmoil = "0.5"
+mockall = { workspace = true }
+turmoil = { workspace = true }

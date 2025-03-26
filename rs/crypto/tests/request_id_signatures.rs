@@ -1,8 +1,9 @@
-#![allow(clippy::unwrap_used)]
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
+use ic_crypto_internal_csp::vault::vault_from_config;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
     ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, user_public_key_from_bytes,
@@ -14,14 +15,12 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey};
 use ic_types::crypto::{SignableMock, DOMAIN_IC_REQUEST};
 use ic_types::messages::MessageId;
-use ic_types_test_utils::ids::node_test_id;
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
 use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils::ed25519_utils::ed25519_signature_and_public_key;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_interfaces::time_source::SysTimeSource;
 
 #[test]
 fn should_verify_request_id_ed25519_signature() {
@@ -356,7 +355,7 @@ fn new_secp256r1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
 }
 
 fn new_secp256k1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_secp256k1::PrivateKey::generate_using_rng(rng);
     sk.public_key().serialize_der()
 }
 
@@ -387,7 +386,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,
     rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_secp256k1::PrivateKey::generate_using_rng(rng);
 
     let signature: BasicSigOf<MessageId> = {
         let bytes_to_sign = {
@@ -396,7 +395,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
             buf.extend_from_slice(request_id.as_bytes());
             Sha256::hash(&buf)
         };
-        let signature_bytes = sk.sign_digest(&bytes_to_sign).expect("failed to sign");
+        let signature_bytes = sk.sign_digest_with_ecdsa(&bytes_to_sign);
         BasicSigOf::new(BasicSig(signature_bytes.to_vec()))
     };
 
@@ -408,12 +407,14 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
 
 fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     let dummy_registry = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+
+    let vault = vault_from_config(
         config,
         None,
-        Arc::new(dummy_registry),
-        node_test_id(42),
         no_op_logger(),
-        Arc::new(SysTimeSource::new()),
-    )
+        Arc::new(CryptoMetrics::none()),
+    );
+    ic_crypto_node_key_generation::generate_node_signing_keys(vault.as_ref());
+
+    CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)
 }

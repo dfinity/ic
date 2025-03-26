@@ -11,7 +11,7 @@ name = "sns-root-canister"
 path = "canister/canister.rs"
 
 [dependencies]
-async-trait = "0.1.53"
+async-trait = { workspace = true }
 
 build-info = { workspace = true }
 
@@ -23,11 +23,13 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-cdk-timers = { workspace = true }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-sns-swap = { path = "../swap" }
@@ -36,9 +38,11 @@ prost = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+maplit = "1.0.2"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [build-dependencies]

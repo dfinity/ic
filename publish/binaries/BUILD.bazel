@@ -1,92 +1,98 @@
 load("//bazel:defs.bzl", "gzip_compress")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
-LINUX_ONLY = [
-    "metrics-proxy",
-    "sevctl",
-    "snptool",
-    "vsock_guest",
-    "vsock_host",
-    "guestos_tool",
-    "hostos_tool",
-    "setupos_tool",
-]
+package(default_visibility = ["//rs:ic-os-pkg"])
 
-NO_STRIP = [
-    "canister_sandbox",
-    "ic-btc-adapter",
-    "ic-https-outcalls-adapter",
-    "replica",
-]
-
-BINARIES = {
+ALL_BINARIES = {
     "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
+    "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
-    "replica": "//rs/replica",
-    "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
-    "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
+    "replica": "//rs/replica:replica",
     "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
-    "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
-    "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
-    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
-    "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
-    "hostos_tool": "//rs/ic_os/hostos_tool:hostos_tool",
+    "rate-limiting-canister-client": "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
-    "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
+    "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
     "ic-starter": "//rs/starter:ic-starter",
-    "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
+    "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",
+    "ic-https-outcalls-adapter-https-only": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
     "ic-nns-init": "//rs/nns/init:ic-nns-init",
-    "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
-    "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
     "ic-prep": "//rs/prep:ic-prep",
     "ic-recovery": "//rs/recovery:ic-recovery",
     "ic-regedit": "//rs/registry/regedit:ic-regedit",
     "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
     "ic-replay": "//rs/replay:ic-replay",
-    "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
     "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
-    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
-    "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
-    "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
-    "log-vector-config-generator": "//rs/observability/log_vector_config_generator:log_vector_config_generator",
-    "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
     "nfplot": "//rs/nervous_system/neurons_fund/nfplot",
     "orchestrator": "//rs/orchestrator",
-    "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
-    "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
-    "setupos_tool": "//rs/ic_os/setupos_tool:setupos_tool",
-    "snptool": "//rs/ic_os/snptool:snptool",
+    "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
     "sns-audit": "//rs/sns/audit:sns-audit",
-    "sns-test-feature": "//rs/sns/cli:sns--test_feature",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
-    "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
-    "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
-    "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
     "drun": "//rs/drun:drun",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
+    "types-test": "//rs/types/types:types_test",
+    "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
 }
+
+# test binaries or binaries using test utils
+TESTONLY_BINARIES = [
+    "drun",
+    "e2e-test-driver",
+    "ic-admin",
+    "ic-boundary",
+    "ic-boundary-tls",
+    "ic-https-outcalls-adapter",
+    "ic-nns-init",
+    "ic-prep",
+    "ic-starter",
+    "ic-test-state-machine",
+    "pocket-ic",
+    "types-test",
+    "replicated-state-test",
+]
+
+# We don't strip the more complex binaries
+# in order to have some debug information available.
+NO_STRIP_BINARIES = [
+    "canister_sandbox",
+    "replica",
+]
+
+TEST_BINARIES = [
+    "types-test",
+]
 
 [release_nostrip_binary(
     name = name + "_bin",
-    binary = BINARIES[name],
-) for name in BINARIES if name in NO_STRIP]
+    binary = ALL_BINARIES[name],
+) for name in NO_STRIP_BINARIES]
 
 [release_strip_binary(
     name = name + "_bin",
-    binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP]
+    testonly = name in TESTONLY_BINARIES,
+    binary = ALL_BINARIES[name],
+) for name in ALL_BINARIES if name not in NO_STRIP_BINARIES and name not in TEST_BINARIES]
+
+[release_strip_binary_test(
+    name = name + "_bin",
+    testonly = True,
+    binary = ALL_BINARIES[name],
+) for name in TEST_BINARIES]
+
+# all targets below are tesonly because the targets violating the testonly flag
+# would error at this point
 
 [
     genrule(
         name = name + "_cleaned",
+        testonly = name in TESTONLY_BINARIES,
         srcs = [name + "_bin"],
         outs = [name],
         cmd = select({
@@ -94,15 +100,8 @@ BINARIES = {
             "@platforms//os:osx": "cp $< $@",
         }),
         executable = True,
-        visibility = [
-            "//ic-os/boundary-api-guestos/envs:__subpackages__",
-            "//ic-os/boundary-guestos/envs:__subpackages__",
-            "//ic-os/guestos/envs:__subpackages__",
-            "//ic-os/hostos/envs:__subpackages__",
-            "//ic-os/setupos/envs:__subpackages__",
-        ],
     )
-    for name in BINARIES
+    for name in ALL_BINARIES
 ]
 
 [
@@ -110,20 +109,22 @@ BINARIES = {
         name = name + ".gz",
         srcs = [name],
     )
-    for name in BINARIES
+    for name in ALL_BINARIES
 ]
 
 filegroup(
     name = "binaries",
-    srcs = select({
-        "@platforms//os:linux": [name + ".gz" for name in BINARIES],
-        "@platforms//os:osx": [name + ".gz" for name in BINARIES if name not in LINUX_ONLY],
-    }),
+    srcs = [name + ".gz" for name in ALL_BINARIES],
+)
+
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":binaries"],
 )
 
 upload_artifacts(
     name = "upload",
-    allow_openssl_static = True,
+    testonly = True,
     inputs = [":binaries"],
     remote_subdir = "binaries/" + select({
         "@platforms//cpu:x86_64": "x86_64",
@@ -141,8 +142,22 @@ upload_artifacts(
 # the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
 upload_artifacts(
     name = "legacy_upload",
+    testonly = True,
     inputs = [":binaries"],
     remote_subdir = "release",
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//testnet/tools:__pkg__"],
+)
+
+BINS_TO_TEST = [":" + name for name in ALL_BINARIES]
+
+sh_test(
+    name = "binary-libraries-test",
+    size = "small",
+    srcs = ["binary-libraries-test.sh"],
+    args = ["$(rootpath " + b + ")" for b in BINS_TO_TEST],
+    data = BINS_TO_TEST,
+    tags = [
+        "test_macos",
+    ],
 )

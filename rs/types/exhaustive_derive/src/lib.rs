@@ -210,7 +210,9 @@ fn parse_enum(ident: Ident, input: DataEnum, mut generics: Generics) -> TokenStr
     for variant in variants {
         match variant.fields {
             Fields::Unit => unit_variants.push(variant.ident),
-            Fields::Named(_) => unimplemented!("named enum variant fields not supported"),
+            Fields::Named(named) => {
+                variant_tokenstreams.push(enumerate_named_enum_fields(variant.ident, named));
+            }
             Fields::Unnamed(unnamed) => {
                 variant_tokenstreams.push(enumerate_unnamed_enum_fields(variant.ident, unnamed));
             }
@@ -241,43 +243,63 @@ fn parse_enum(ident: Ident, input: DataEnum, mut generics: Generics) -> TokenStr
     .into()
 }
 
+macro_rules! enumerate_enum_fields {
+    ($ident:ident, $names:ident, $types:ident) => {{
+        let vars: Vec<_> = (0..$types.len())
+            .map(|i| format_ident!("field_{}", i))
+            .collect();
+        let ident = $ident;
+        let names = $names;
+        let types = $types;
+        quote! {
+            #(let mut #vars = <#types as crate::exhaustive::ExhaustiveSet>::exhaustive_set(rng));*;
+
+            // compute maximum number of elements of all exhaustive sets
+            let mut max = 0;
+            #(if #vars.len() > max { max = #vars.len(); })*
+
+            // create cyclic iterators
+            #(let mut #vars = #vars.iter().cycle());*;
+
+            let mut inner_result = Vec::new();
+
+            for i in 0..max {
+                inner_result.push(Self::#ident {
+                    #(#names: #vars
+                        .next()
+                        .expect(
+                            format!("exhaustive set for type {} must be non-empty",
+                                stringify!(#types)).as_str()
+                        )
+                        .clone()
+                    ),*
+                });
+            }
+
+            inner_result
+
+        }
+    }};
+}
+
+fn enumerate_named_enum_fields(ident: Ident, input: FieldsNamed) -> TokenStream2 {
+    let (names, types): (Vec<_>, Vec<_>) = input
+        .named
+        .into_pairs()
+        .map(|p| {
+            let val = p.value().clone();
+            (val.ident.unwrap(), val.ty)
+        })
+        .unzip();
+    enumerate_enum_fields!(ident, names, types)
+}
+
 fn enumerate_unnamed_enum_fields(ident: Ident, input: FieldsUnnamed) -> TokenStream2 {
-    let (field_names, types): (Vec<_>, Vec<_>) = input
+    let (names, types): (Vec<_>, Vec<_>) = input
         .unnamed
         .into_pairs()
         .enumerate()
         .map(|(i, p)| (Index::from(i), p.value().clone().ty))
         .unzip();
-    let var_names: Vec<_> = (0..types.len())
-        .map(|i| format_ident!("field_{}", i))
-        .collect();
-
-    quote! {
-        #(let mut #var_names = <#types as crate::exhaustive::ExhaustiveSet>::exhaustive_set(rng));*;
-
-        // compute maximum number of elements of all exhaustive sets
-        let mut max = 0;
-        #(if #var_names.len() > max { max = #var_names.len(); })*
-
-        // create cyclic iterators
-        #(let mut #var_names = #var_names.iter().cycle());*;
-
-        let mut inner_result = Vec::new();
-
-        for i in 0..max {
-            inner_result.push(Self::#ident {
-                #(#field_names: #var_names
-                    .next()
-                    .expect(
-                        format!("exhaustive set for type {} must be non-empty",
-                            stringify!(#types)).as_str()
-                    )
-                    .clone()
-                ),*
-            });
-        }
-
-        inner_result
-
-    }
+    enumerate_enum_fields!(ident, names, types)
 }

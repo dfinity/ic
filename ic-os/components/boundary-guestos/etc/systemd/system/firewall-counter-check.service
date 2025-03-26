@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Firewall Rule Counters
+After=nftables.service
+Requires=nftables.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/firewall-counter-check.sh

@@ -5,15 +5,14 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
 };
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    ids::TEST_NEURON_1_ID,
-    itest_helpers::NnsCanisters,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;
@@ -24,7 +23,7 @@ use std::convert::TryFrom;
 
 #[test]
 fn add_nns_canister_via_governance_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()
@@ -37,9 +36,8 @@ fn add_nns_canister_via_governance_proposal() {
             name: name.clone(),
             wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
             arg: vec![],
-            query_allocation: Some(Nat::from(34)),
-            memory_allocation: Some(Nat::from(12345678)),
-            compute_allocation: Some(Nat::from(12)),
+            memory_allocation: Some(Nat::from(12345678_u32)),
+            compute_allocation: Some(Nat::from(12_u8)),
             initial_cycles: 1 << 45,
         };
 
@@ -60,8 +58,8 @@ fn add_nns_canister_via_governance_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.

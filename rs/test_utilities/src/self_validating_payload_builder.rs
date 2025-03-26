@@ -1,4 +1,4 @@
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_interfaces::self_validating_payload::{
     SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError,
 };
@@ -31,6 +31,7 @@ impl SelfValidatingPayloadBuilder for FakeSelfValidatingPayloadBuilder {
         _validation_context: &ValidationContext,
         _past_payloads: &[&SelfValidatingPayload],
         _byte_limit: NumBytes,
+        _priority: usize,
     ) -> (SelfValidatingPayload, NumBytes) {
         let size: usize = self.0.iter().map(|response| response.count_bytes()).sum();
 

@@ -3,33 +3,32 @@ use crate::metadata_state::subnet_call_context_manager::{
     InstallCodeCall, RawRandContext, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{EcdsaCurve, IC_00};
+use ic_limits::MAX_INGRESS_TTL;
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities::{
-    mock_time,
-    types::{
-        ids::{
-            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
-            SUBNET_0, SUBNET_1, SUBNET_2,
-        },
-        messages::{RequestBuilder, ResponseBuilder},
-        xnet::{StreamHeaderBuilder, StreamSliceBuilder},
+use ic_test_utilities_types::{
+    ids::{
+        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
+        SUBNET_1, SUBNET_2,
     },
+    messages::RequestBuilder,
+    xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
 use ic_types::{
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
-    messages::{CallbackId, CanisterCall, Payload},
-    ExecutionRound,
+    messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
+    time::CoarseTime,
+    Cycles, ExecutionRound,
 };
 use ic_types::{canister_http::Transform, time::current_time};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
-use std::{sync::Arc, time::Duration};
+use std::{ops::Range, sync::Arc, time::Duration};
+use strum::IntoEnumIterator;
 
 struct DummyMetrics;
 impl CheckpointLoadingMetrics for DummyMetrics {
@@ -58,13 +57,13 @@ fn can_prune_old_ingress_history_entries() {
     let message_id2 = MessageId::from([2_u8; 32]);
     let message_id3 = MessageId::from([3_u8; 32]);
 
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     ingress_history.insert(
         message_id1.clone(),
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -75,7 +74,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(2).get(),
             user_id: user_test_id(2),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -86,7 +85,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time + MAX_INGRESS_TTL / 2,
@@ -105,7 +104,7 @@ fn can_prune_old_ingress_history_entries() {
 #[test]
 fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
 
     for i in (0..10u64).rev() {
         ingress_history.insert(
@@ -129,126 +128,6 @@ fn entries_sorted_lexicographically() {
         .collect();
 
     assert_eq!(actual, expected);
-}
-
-#[test]
-fn streams_stats() {
-    // Two local canisters, `local_a` and `local_b`.
-    let local_a = canister_test_id(1);
-    let local_b = canister_test_id(2);
-    // Two remote canisters, `remote_1` on `SUBNET_1` and `remote_2` on `SUBNET_2`.
-    let remote_1 = canister_test_id(3);
-    let remote_2 = canister_test_id(4);
-
-    fn request(sender: CanisterId, receiver: CanisterId) -> RequestOrResponse {
-        RequestBuilder::default()
-            .sender(sender)
-            .receiver(receiver)
-            .build()
-            .into()
-    }
-    fn response(
-        respondent: CanisterId,
-        originator: CanisterId,
-        payload: &str,
-    ) -> (RequestOrResponse, usize) {
-        let rep: RequestOrResponse = ResponseBuilder::default()
-            .respondent(respondent)
-            .originator(originator)
-            .response_payload(Payload::Data(payload.as_bytes().to_vec()))
-            .build()
-            .into();
-        let req_bytes = rep.count_bytes();
-        (rep, req_bytes)
-    }
-
-    // A bunch of requests and responses from local canisters to remote ones.
-    let req_a1 = request(local_a, remote_1);
-    let (rep_a1, rep_a1_size) = response(local_a, remote_1, "a");
-    let (rep_b1, rep_b1_size) = response(local_b, remote_1, "bb");
-    let (rep_b2, rep_b2_size) = response(local_b, remote_2, "ccc");
-
-    let mut streams = Streams::new();
-    // Empty response size map.
-    let mut expected_responses_size = Default::default();
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-
-    streams.push(SUBNET_1, req_a1);
-    // Pushed a request, response size stats are unchanged.
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-
-    // Push response via `Streams::push()`.
-    streams.push(SUBNET_1, rep_a1);
-    // `rep_a1` is now accounted for against `local_a`.
-    expected_responses_size.insert(local_a, rep_a1_size);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-
-    // Push response via `StreamHandle::push()`.
-    streams.get_mut(&SUBNET_1).unwrap().push(rep_b1);
-    // `rep_b1` is accounted for against `local_b`.
-    expected_responses_size.insert(local_b, rep_b1_size);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-
-    // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
-    streams.get_mut_or_insert(SUBNET_2).push(rep_b2);
-    // `rep_b2` is accounted for against `local_b`.
-    *expected_responses_size.get_mut(&local_b).unwrap() += rep_b2_size;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-
-    // Discard `req_a1` and `rep_a1` from the stream for `SUBNET_1`.
-    streams
-        .get_mut(&SUBNET_1)
-        .unwrap()
-        .discard_messages_before(2.into(), &Default::default());
-    // No more responses from `local_a` in `streams`.
-    *expected_responses_size.get_mut(&local_a).unwrap() = 0;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-
-    streams.prune_zero_responses_size_bytes();
-    // Zero valued entry for `local_a` pruned.
-    expected_responses_size.remove(&local_a);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-
-    // Discard `rep_b2` from the stream for `SUBNET_2`.
-    streams
-        .get_mut(&SUBNET_2)
-        .unwrap()
-        .discard_messages_before(1.into(), &Default::default());
-    // `rep_b2` is gone.
-    *expected_responses_size.get_mut(&local_b).unwrap() -= rep_b2_size;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
-}
-
-#[test]
-fn streams_stats_after_deserialization() {
-    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
-    let streams = Arc::make_mut(&mut system_metadata.streams);
-
-    streams.push(
-        SUBNET_1,
-        ResponseBuilder::default()
-            .respondent(canister_test_id(1))
-            .originator(canister_test_id(2))
-            .build()
-            .into(),
-    );
-
-    let system_metadata_proto: ic_protobuf::state::system_metadata::v1::SystemMetadata =
-        (&system_metadata).into();
-    let deserialized_system_metadata = (
-        system_metadata_proto,
-        &DummyMetrics as &dyn CheckpointLoadingMetrics,
-    )
-        .try_into()
-        .unwrap();
-
-    // Ensure that the deserialized `SystemMetadata` is equal to the original.
-    assert_eq!(system_metadata, deserialized_system_metadata);
-    // Double-check that the stats match.
-    assert_eq!(
-        system_metadata.streams.responses_size_bytes(),
-        deserialized_system_metadata.streams.responses_size_bytes()
-    );
 }
 
 #[test]
@@ -407,7 +286,7 @@ fn generate_new_canister_id() {
 }
 
 #[test]
-fn roundtrip_encoding() {
+fn system_metadata_roundtrip_encoding() {
     use ic_protobuf::state::system_metadata::v1 as pb;
 
     fn range(start: u64, end: u64) -> CanisterIdRange {
@@ -449,13 +328,24 @@ fn roundtrip_encoding() {
     };
     system_metadata.network_topology = network_topology;
 
-    use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
-    let pk_der =
-        public_key_to_der(PublicKeyBytes::try_from(&valid_node_signing_public_key()).unwrap());
+    let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
+        .unwrap()
+        .serialize_rfc8410_der();
+
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
+    system_metadata.api_boundary_nodes = btreemap! {
+        node_test_id(1) => ApiBoundaryNodeEntry {
+            domain: "api-example.com".to_string(),
+            ipv4_address: Some("127.0.0.1".to_string()),
+            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+            pubkey: None,
+        },
+    };
+    system_metadata.bitcoin_get_successors_follow_up_responses =
+        btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
     // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
     let mut proto = pb::SystemMetadata::from(&system_metadata);
@@ -523,7 +413,7 @@ fn system_metadata_split() {
     // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
     // `IC_00`; and respectively `SUBNET_A`.
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     let receivers = [
         CANISTER_1.get(),
         CANISTER_2.get(),
@@ -553,10 +443,8 @@ fn system_metadata_split() {
     // Only ingress messages for `CANISTER_2` should be retained on `SUBNET_B`.
     let is_canister_on_subnet_b = |canister_id: CanisterId| canister_id == CANISTER_2;
 
-    let streams = Streams {
-        streams: btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) },
-        responses_size_bytes: btreemap! { CANISTER_1 => 169 },
-    };
+    let streams =
+        btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) };
 
     // Use uncommon `SubnetType::VerifiedApplication` to make it more likely to
     // detect a regression in the subnet type assigned to subnet B.
@@ -693,7 +581,7 @@ fn subnet_call_contexts_deserialization() {
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: Some(transform.clone()),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -707,7 +595,7 @@ fn subnet_call_contexts_deserialization() {
     let install_code_call = InstallCodeCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let call_id = subnet_call_context_manager.push_install_code_call(install_code_call.clone());
 
@@ -719,7 +607,7 @@ fn subnet_call_contexts_deserialization() {
     let stop_canister_call = StopCanisterCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let stop_canister_call_id =
         subnet_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
@@ -732,13 +620,13 @@ fn subnet_call_contexts_deserialization() {
     subnet_call_context_manager.push_raw_rand_request(
         raw_rand_request.clone(),
         ExecutionRound::new(5),
-        mock_time(),
+        UNIX_EPOCH,
     );
 
     // Encode and decode.
     let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
     let mut deserialized_subnet_call_context_manager: SubnetCallContextManager =
-        SubnetCallContextManager::try_from((mock_time(), subnet_call_context_manager_proto))
+        SubnetCallContextManager::try_from((UNIX_EPOCH, subnet_call_context_manager_proto))
             .unwrap();
 
     // Check HTTP request deserialization.
@@ -786,7 +674,7 @@ fn subnet_call_contexts_deserialization() {
         vec![RawRandContext {
             request: raw_rand_request,
             execution_round_id: ExecutionRound::new(5),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }]
     )
 }
@@ -802,27 +690,27 @@ fn empty_network_topology() {
     };
 
     assert_eq!(
-        network_topology.ecdsa_signing_subnets(&make_key_id()),
+        network_topology.chain_key_enabled_subnets(&MasterPublicKeyId::Ecdsa(make_key_id())),
         vec![]
     );
 }
 
 #[test]
 fn network_topology_ecdsa_subnets() {
-    let key = make_key_id();
+    let key = MasterPublicKeyId::Ecdsa(make_key_id());
     let network_topology = NetworkTopology {
         subnets: Default::default(),
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_signing_subnets: btreemap! {
+        chain_key_enabled_subnets: btreemap! {
             key.clone() => vec![subnet_test_id(1)],
         },
         ..Default::default()
     };
 
     assert_eq!(
-        network_topology.ecdsa_signing_subnets(&key),
+        network_topology.chain_key_enabled_subnets(&key),
         &[subnet_test_id(1)]
     );
 }
@@ -885,52 +773,26 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
         let (inserted_message_id, inserted_status) = insert_status(&mut ingress_history, i, 1);
 
         assert_eq!(ingress_history.statuses().count(), i as usize);
-        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-            assert_eq!(
-                ingress_history.get(&inserted_message_id).unwrap(),
-                &inserted_status
-            );
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                1
-            );
-        } else {
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                i as usize
-            );
-            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
-                status,
-                IngressStatus::Known {
-                    state: IngressState::Done,
-                    ..
-                }
-            )));
-        }
+        assert_eq!(
+            ingress_history.get(&inserted_message_id).unwrap(),
+            &inserted_status
+        );
+        assert_eq!(
+            ingress_history
+                .statuses()
+                .filter(|(_, status)| matches!(
+                    status,
+                    IngressStatus::Known {
+                        state: IngressState::Completed(_),
+                        ..
+                    } | IngressStatus::Known {
+                        state: IngressState::Failed(_),
+                        ..
+                    }
+                ))
+                .count(),
+            1
+        );
     }
 
     // Inserting without available space will directly transition inserted status
@@ -939,53 +801,27 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
         let (inserted_message_id, _) = insert_status(&mut ingress_history, i, 0);
 
         assert_eq!(ingress_history.statuses().count(), i as usize);
-        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-            assert_eq!(
-                ingress_history.get(&inserted_message_id).unwrap(),
-                &test_status_done(i),
-            );
+        assert_eq!(
+            ingress_history.get(&inserted_message_id).unwrap(),
+            &test_status_done(i),
+        );
 
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                0
-            );
-        } else {
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                i as usize
-            );
-            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
-                status,
-                IngressStatus::Known {
-                    state: IngressState::Done,
-                    ..
-                }
-            )));
-        }
+        assert_eq!(
+            ingress_history
+                .statuses()
+                .filter(|(_, status)| matches!(
+                    status,
+                    IngressStatus::Known {
+                        state: IngressState::Completed(_),
+                        ..
+                    } | IngressStatus::Known {
+                        state: IngressState::Failed(_),
+                        ..
+                    }
+                ))
+                .count(),
+            0
+        );
     }
 }
 
@@ -1036,12 +872,9 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
     // Forgetting terminal statuses when the ingress history only contains non-terminal
     // statuses should be a no-op.
     ingress_history_limit.forget_terminal_statuses(NumBytes::from(0));
-    // ... except that if current certification version >= 8, the next_terminal_time
-    // is updated to the first key in the pruning_times map
-    if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-        ingress_history_before.next_terminal_time =
-            *ingress_history_limit.pruning_times().next().unwrap().0;
-    }
+    // ... except the next_terminal_time is updated to the first key in the `pruning_times` map.
+    ingress_history_before.next_terminal_time =
+        *ingress_history_limit.pruning_times().next().unwrap().0;
 
     assert_eq!(ingress_history_before, ingress_history_limit);
 }
@@ -1093,13 +926,8 @@ fn ingress_history_respects_limits() {
                 })
                 .count();
 
-            if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-                assert_eq!(terminal_count, i.min(max_num_terminal) as usize);
-                assert_eq!(done_count, i.saturating_sub(max_num_terminal) as usize);
-            } else {
-                assert_eq!(terminal_count, i as usize);
-                assert_eq!(done_count, 0);
-            }
+            assert_eq!(terminal_count, i.min(max_num_terminal) as usize);
+            assert_eq!(done_count, i.saturating_sub(max_num_terminal) as usize);
 
             assert_eq!(
                 terminal_count + done_count,
@@ -1116,10 +944,6 @@ fn ingress_history_respects_limits() {
 
 #[test]
 fn ingress_history_insert_before_next_complete_time_resets_it() {
-    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-        return;
-    }
-
     let mut ingress_history = IngressHistoryState::new();
 
     // Fill the ingress history with 10 terminal entries...
@@ -1181,10 +1005,6 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
 
 #[test]
 fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
-    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-        return;
-    }
-
     let mut ingress_history = IngressHistoryState::new();
 
     // Fill the ingress history with 10 terminal entries...
@@ -1361,15 +1181,16 @@ struct MessageConfig {
 }
 
 fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> Stream {
-    let stream_header_builder = StreamHeaderBuilder::new()
+    let stream_header = StreamHeaderBuilder::new()
         .begin(StreamIndex::from(msg_config.begin))
         .end(StreamIndex::from(msg_config.begin + msg_config.count))
-        .signals_end(StreamIndex::from(signal_config.end));
+        .signals_end(StreamIndex::from(signal_config.end))
+        .build();
 
     let msg_begin = StreamIndex::from(msg_config.begin);
 
     let slice = StreamSliceBuilder::new()
-        .header(stream_header_builder.build())
+        .header(stream_header)
         .generate_messages(
             msg_begin,
             msg_config.count,
@@ -1383,12 +1204,12 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
             .messages()
             .cloned()
             .unwrap_or_else(|| StreamIndexedQueue::with_begin(msg_begin)),
-        slice.header().signals_end,
+        slice.header().signals_end(),
     )
 }
 
 #[test]
-fn stream_discard_messages_before() {
+fn stream_discard_messages_before_returns_no_rejected_messages() {
     let mut stream = generate_stream(
         MessageConfig {
             begin: 30,
@@ -1397,6 +1218,33 @@ fn stream_discard_messages_before() {
         SignalConfig { end: 43 },
     );
 
+    // Check that `discard_messages_before()` returns no messages for an empty `reject_signals`.
+    let slice_signals_end = 40.into();
+    let slice_reject_signals = VecDeque::new();
+
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+    assert!(rejected_messages.is_empty());
+}
+
+#[test]
+fn stream_discard_messages_before_returns_expected_messages() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 20,
+        },
+        SignalConfig { end: 43 },
+    );
+    let slice_signals_end = 40.into();
+    let slice_reject_signals: VecDeque<RejectSignal> = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 28.into()), // before the stream
+        RejectSignal::new(RejectReason::CanisterNotFound, 29.into()),  // before the stream
+        RejectSignal::new(RejectReason::QueueFull, 32.into()),
+        RejectSignal::new(RejectReason::Unknown, 35.into()),
+    ]
+    .into();
+
     let expected_stream = generate_stream(
         MessageConfig {
             begin: 40,
@@ -1404,15 +1252,16 @@ fn stream_discard_messages_before() {
         },
         SignalConfig { end: 43 },
     );
-
     let expected_rejected_messages = vec![
-        stream.messages().get(32.into()).unwrap().clone(),
-        stream.messages().get(35.into()).unwrap().clone(),
+        (
+            RejectReason::QueueFull,
+            stream.messages().get(32.into()).unwrap().clone(),
+        ),
+        (
+            RejectReason::Unknown,
+            stream.messages().get(35.into()).unwrap().clone(),
+        ),
     ];
-
-    let slice_signals_end = 40.into();
-    let slice_reject_signals: VecDeque<StreamIndex> =
-        vec![28.into(), 29.into(), 32.into(), 35.into()].into();
 
     // Note that the `generate_stream` testing fixture only generates requests
     // while in the normal case reject signals are not expected to be generated for requests.
@@ -1420,12 +1269,61 @@ fn stream_discard_messages_before() {
     let rejected_messages =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
 
-    assert_eq!(rejected_messages, expected_rejected_messages);
     assert_eq!(expected_stream, stream);
+    assert_eq!(rejected_messages, expected_rejected_messages);
 }
 
 #[test]
-fn stream_discard_signals_before() {
+fn stream_discard_messages_before_removes_no_messages() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 20,
+        },
+        SignalConfig { end: 43 },
+    );
+    let expected_stream = stream.clone();
+    let slice_reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterStopped, 28.into()), // before the stream
+        RejectSignal::new(RejectReason::OutOfMemory, 29.into()),     // before the stream
+    ]
+    .into();
+    let slice_signals_end = stream.messages_begin();
+
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    assert_eq!(expected_stream, stream);
+    assert!(rejected_messages.is_empty());
+}
+
+#[test]
+fn stream_discard_messages_before_removes_all_messages() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 20,
+        },
+        SignalConfig { end: 43 },
+    );
+    let slice_reject_signals = VecDeque::new();
+    let slice_signals_end = stream.messages_end();
+    let expected_stream = generate_stream(
+        MessageConfig {
+            begin: 50,
+            count: 0,
+        },
+        SignalConfig { end: 43 },
+    );
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    assert_eq!(expected_stream, stream);
+    assert!(rejected_messages.is_empty());
+}
+
+#[test]
+fn stream_discard_signals_before_drops_no_reject_signals() {
     let mut stream = generate_stream(
         MessageConfig {
             begin: 30,
@@ -1433,18 +1331,244 @@ fn stream_discard_signals_before() {
         },
         SignalConfig { end: 153 },
     );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+        RejectSignal::new(RejectReason::Unknown, 145.into()),
+    ]
+    .into();
 
-    stream.reject_signals = vec![138.into(), 139.into(), 142.into(), 145.into()].into();
+    // Check that `discard_signals_before()` drops no reject signals for
+    // `new_signals_begin` == first reject signal.
+    let new_signals_begin = stream.reject_signals().front().unwrap().index;
+    let expected_reject_signals = stream.reject_signals().clone();
+    stream.discard_signals_before(new_signals_begin);
+    assert_eq!(stream.reject_signals(), &expected_reject_signals);
+}
 
+#[test]
+fn stream_discard_signals_before_drops_expected_signals() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
+        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
+    ]
+    .into();
+
+    // Check that `discard_signals_before()` drops the expected reject signals
+    // for an in-between reject signals `new_signals_begin`.
     let new_signals_begin = 140.into();
+    let expected_reject_signals: VecDeque<RejectSignal> = [
+        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
+    ]
+    .into();
     stream.discard_signals_before(new_signals_begin);
-    let expected_reject_signals: VecDeque<StreamIndex> = vec![142.into(), 145.into()].into();
-    assert_eq!(stream.reject_signals, expected_reject_signals);
+    assert_eq!(stream.reject_signals(), &expected_reject_signals);
+}
 
+#[test]
+fn stream_discard_signals_before_drops_expected_signals_for_existing_reject_signal() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 139.into()),
+        RejectSignal::new(RejectReason::Unknown, 142.into()),
+        RejectSignal::new(RejectReason::OutOfMemory, 145.into()),
+    ]
+    .into();
+
+    // Check that `discard_signals_before()` drops the expected reject signals
+    // for an existing reject signal `new_signals_begin`.
     let new_signals_begin = 145.into();
+    let expected_reject_signals: VecDeque<RejectSignal> =
+        [RejectSignal::new(RejectReason::OutOfMemory, 145.into())].into();
+
     stream.discard_signals_before(new_signals_begin);
-    let expected_reject_signals: VecDeque<StreamIndex> = vec![145.into()].into();
-    assert_eq!(stream.reject_signals, expected_reject_signals);
+    assert_eq!(stream.reject_signals(), &expected_reject_signals);
+}
+
+#[test]
+fn stream_discard_signals_before_drops_all_signals() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
+        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
+    ]
+    .into();
+
+    // Check that `discard_signals_before()` drops all reject signals for a
+    // `new_signals_begin` past all the signals.
+    let new_signals_begin = 150.into();
+    stream.discard_signals_before(new_signals_begin);
+    assert_eq!(stream.reject_signals(), &VecDeque::new());
+}
+
+#[test]
+fn stream_pushing_signals_increments_signals_end() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 0,
+        },
+        SignalConfig { end: 30 },
+    );
+    assert!(stream.reject_signals().is_empty());
+
+    stream.push_accept_signal();
+    assert_eq!(StreamIndex::new(31), stream.signals_end());
+    stream.push_reject_signal(RejectReason::CanisterMigrating);
+    assert_eq!(
+        &VecDeque::from([RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            31.into()
+        )]),
+        stream.reject_signals()
+    );
+    assert_eq!(StreamIndex::new(32), stream.signals_end());
+}
+
+#[test]
+fn stream_roundtrip_encoding() {
+    let mut messages = StreamIndexedQueue::with_begin(30.into());
+    // Push a fully specified `Request`.
+    messages.push(
+        Request {
+            sender: *LOCAL_CANISTER,
+            receiver: *REMOTE_CANISTER,
+            sender_reply_callback: CallbackId::from(1),
+            payment: Cycles::from(123_456_789_u128),
+            method_name: "method_1".into(),
+            method_payload: [2_u8, 17_u8, 29_u8, 113_u8].into(),
+            metadata: RequestMetadata::new(17, Time::from_nanos_since_unix_epoch(123)),
+            deadline: CoarseTime::from_secs_since_unix_epoch(456),
+        }
+        .into(),
+    );
+
+    // Push a fully specified `Response`.
+    messages.push(
+        Response {
+            originator: *LOCAL_CANISTER,
+            respondent: *REMOTE_CANISTER,
+            originator_reply_callback: CallbackId::from(2),
+            refund: Cycles::from(234_567_u128),
+            response_payload: Payload::Data([13_u8, 44_u8, 1_u8].into()),
+            deadline: CoarseTime::from_secs_since_unix_epoch(7428),
+        }
+        .into(),
+    );
+
+    let mut stream = Stream::with_signals(
+        messages,
+        153.into(),
+        [RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            138.into(),
+        )]
+        .into(),
+    );
+    stream.set_reverse_stream_flags(StreamFlags {
+        deprecated_responses_only: true,
+    });
+
+    let proto_stream: pb_queues::Stream = (&stream).into();
+    let deserialized_stream: Stream = proto_stream.try_into().expect("bad conversion");
+    assert_eq!(stream, deserialized_stream);
+}
+
+#[test]
+fn deserializing_stream_fails_for_bad_reject_signals() {
+    let stream = pb_queues::Stream {
+        messages_begin: 0,
+        messages: Vec::new(),
+        signals_end: 153,
+        reject_signals: Vec::new(),
+        reverse_stream_flags: None,
+    };
+
+    // Deserializing a stream with duplicate reject signals (by index) should fail.
+    let bad_stream = pb_queues::Stream {
+        reject_signals: vec![
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 1,
+            },
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 1,
+            },
+        ],
+        ..stream.clone()
+    };
+    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+    assert_matches!(
+        deserialized_result,
+        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 1]"
+    );
+
+    // Deserializing a stream with descending reject signals (by index) should fail.
+    let bad_stream = pb_queues::Stream {
+        reject_signals: vec![
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 1,
+            },
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 0,
+            },
+        ],
+        ..stream
+    };
+    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+    assert_matches!(
+        deserialized_result,
+        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 0]"
+    );
+}
+
+#[test]
+fn reject_reason_proto_roundtrip() {
+    for initial in RejectReason::iter() {
+        let encoded = pb_queues::RejectReason::from(initial);
+        let round_trip = RejectReason::try_from(encoded).unwrap();
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_reject_reason() {
+    assert_eq!(
+        RejectReason::iter()
+            .map(|reason| reason as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2, 3, 4, 5, 6, 7]
+    );
 }
 
 #[test]
@@ -1484,13 +1608,13 @@ impl From<(u64, u64)> for BlockmakerStats {
 #[test]
 fn blockmaker_metrics_time_series_check_observe_works() {
     let mut metrics = BlockmakerMetricsTimeSeries::default();
-    let batch_time = Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(10 * 24 * 3600);
+    let mut batch_time = Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(10 * 24 * 3600);
 
     let test_id_1 = node_test_id(0);
     let test_id_2 = node_test_id(1);
     let test_id_3 = node_test_id(2);
 
-    // Observe metrics, then check the data was recorded.
+    // Observe metrics twice on the same day, then check no snapshot is available yet.
     metrics.observe(
         batch_time,
         &BlockmakerMetrics {
@@ -1498,80 +1622,59 @@ fn blockmaker_metrics_time_series_check_observe_works() {
             failed_blockmakers: vec![],
         },
     );
-    let snapshot_1 = BlockmakerStatsMap {
-        node_stats: btreemap! { test_id_1 => (1, 0).into() },
-        subnet_stats: (1, 0).into(),
-    };
-    assert_eq!(
-        metrics.metrics_since(batch_time).collect::<Vec<_>>(),
-        vec![(&batch_time, &snapshot_1)],
-    );
-
-    // Observe more metrics one hour later then check the data was aggregated.
-    let later_batch_time = batch_time + Duration::from_secs(3600);
+    batch_time += Duration::from_secs(3600);
     metrics.observe(
-        later_batch_time,
+        batch_time,
         &BlockmakerMetrics {
             blockmaker: test_id_1,
             failed_blockmakers: vec![test_id_2],
         },
     );
-    let snapshot_2 = BlockmakerStatsMap {
+    let snapshot = BlockmakerStatsMap {
         node_stats: btreemap! {
             test_id_1 => (2, 0).into(),
             test_id_2 => (0, 1).into(),
         },
         subnet_stats: (2, 1).into(),
     };
+    assert_eq!(metrics.running_stats(), Some((&batch_time, &snapshot)),);
     assert_eq!(
         metrics.metrics_since(batch_time).collect::<Vec<_>>(),
-        vec![(&later_batch_time, &snapshot_2)],
+        vec![],
     );
 
-    // Observe more metrics a day later, then check the old data is still available as a
-    // separate snapshot; along with a new snapshot including the latest observation.
-    let even_later_batch_time = later_batch_time + Duration::from_secs(3600 * 24);
+    // Observe more metrics a day later, then check the data of yesterday is available
+    // and aggregated as a snapshot.
+    let later_batch_time = batch_time + Duration::from_secs(3600 * 24);
     metrics.observe(
-        even_later_batch_time,
+        later_batch_time,
         &BlockmakerMetrics {
             blockmaker: test_id_2,
             failed_blockmakers: vec![test_id_3],
         },
     );
-    let snapshot_3 = BlockmakerStatsMap {
-        node_stats: btreemap! {
-            test_id_1 => (2, 0).into(),
-            test_id_2 => (1, 1).into(),
-            test_id_3 => (0, 1).into(),
-        },
-        subnet_stats: (3, 2).into(),
-    };
     assert_eq!(
         metrics.metrics_since(batch_time).collect::<Vec<_>>(),
-        vec![
-            (&later_batch_time, &snapshot_2),
-            (&even_later_batch_time, &snapshot_3)
-        ],
+        vec![(&batch_time, &snapshot)],
     );
+    // Check the running stats are still aggregating (i.e. are not reset after making a snapshot).
     assert_eq!(
-        metrics
-            .metrics_since(even_later_batch_time)
-            .collect::<Vec<_>>(),
-        vec![(&even_later_batch_time, &snapshot_3)],
-    );
-
-    // Check `metrics_since()` returns the whole map when used with the time of
-    // the first observation.
-    assert_eq!(
-        metrics.0,
-        metrics
-            .metrics_since(batch_time)
-            .map(|(time, stats)| (*time, stats.clone()))
-            .collect::<BTreeMap<_, _>>()
+        metrics.running_stats(),
+        Some((
+            &later_batch_time,
+            &BlockmakerStatsMap {
+                node_stats: btreemap! {
+                    test_id_1 => (2, 0).into(),
+                    test_id_2 => (1, 1).into(),
+                    test_id_3 => (0, 1).into(),
+                },
+                subnet_stats: (3, 2).into(),
+            },
+        )),
     );
 
     // Check `metrics_since()` returns the same (all) snapshots for a UNIX_EPOCH,
-    // compared to the exact time of the first observation.
+    // compared to the exact time included in the snapshot.
     assert_eq!(
         metrics.metrics_since(batch_time).collect::<Vec<_>>(),
         metrics
@@ -1580,9 +1683,8 @@ fn blockmaker_metrics_time_series_check_observe_works() {
     );
 
     // Check `metrics_since()` returns nothing for a time after the last observation.
-    let much_later_batch_time = even_later_batch_time + Duration::from_secs(365 * 24 * 3600);
     assert!(metrics
-        .metrics_since(much_later_batch_time)
+        .metrics_since(later_batch_time + Duration::from_secs(365 * 24 * 3600))
         .next()
         .is_none());
 
@@ -1607,6 +1709,8 @@ fn blockmaker_metrics_time_series_observe_prunes() {
     let test_id_2 = node_test_id(1);
     let test_id_3 = node_test_id(2);
 
+    let mut expected_snapshots = BTreeMap::new();
+
     // Observe `test_id_1` as blockmaker.
     metrics.observe(
         batch_time,
@@ -1614,6 +1718,21 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             blockmaker: test_id_1,
             failed_blockmakers: vec![],
         },
+    );
+    // There are no snapshots yet.
+    assert!(metrics.metrics_since(batch_time).next().is_none());
+    // Check `test_id_1` was observed in the running stats.
+    assert_eq!(
+        metrics.running_stats(),
+        Some((
+            &batch_time,
+            &BlockmakerStatsMap {
+                node_stats: btreemap! {
+                    test_id_1 => (1, 0).into(),
+                },
+                subnet_stats: (1, 0).into(),
+            }
+        )),
     );
 
     // Observe `test_id_2` as blockmaker 24 hours later.
@@ -1625,17 +1744,22 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             failed_blockmakers: vec![],
         },
     );
-
+    // A new snapshot is generated including only the first observation.
+    expected_snapshots.insert(
+        batch_time,
+        BlockmakerStatsMap {
+            node_stats: btreemap! { test_id_1 => (1, 0).into() },
+            subnet_stats: (1, 0).into(),
+        },
+    );
+    assert!(metrics
+        .metrics_since(batch_time)
+        .eq(expected_snapshots.iter()));
+    // Check `test_id_2` was observed in the running stats.
     assert_eq!(
-        metrics
-            .metrics_since(batch_time)
-            .map(|(_, stats)| stats)
-            .collect::<Vec<_>>(),
-        vec![
-            &BlockmakerStatsMap {
-                node_stats: btreemap! { test_id_1 => (1, 0).into() },
-                subnet_stats: (1, 0).into(),
-            },
+        metrics.running_stats(),
+        Some((
+            &later_batch_time_1,
             &BlockmakerStatsMap {
                 node_stats: btreemap! {
                     test_id_1 => (1, 0).into(),
@@ -1643,11 +1767,12 @@ fn blockmaker_metrics_time_series_observe_prunes() {
                 },
                 subnet_stats: (2, 0).into(),
             }
-        ]
+        )),
     );
 
     // There are now observations spanning more than 24 hours. If we observe `test_id_3`
-    // another 24 hourse later, `test_id_1` should get pruned.
+    // as blockmaker another 24 hours later, `test_id_1` should get pruned from the
+    // running stats.
     let later_batch_time_2 = later_batch_time_1 + Duration::from_secs(3600 * 24);
     metrics.observe(
         later_batch_time_2,
@@ -1656,21 +1781,23 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             failed_blockmakers: vec![],
         },
     );
-
+    // `test_id_1` is pruned just before a new snapshot is generated, so it should
+    // not include `test_id_1`.
+    expected_snapshots.insert(
+        later_batch_time_1,
+        BlockmakerStatsMap {
+            node_stats: btreemap! { test_id_2 => (1, 0).into() },
+            subnet_stats: (2, 0).into(),
+        },
+    );
+    assert!(metrics
+        .metrics_since(batch_time)
+        .eq(expected_snapshots.iter()));
+    // `test_id_1` should be pruned from the running stats.
     assert_eq!(
-        metrics
-            .metrics_since(batch_time)
-            .map(|(_, stats)| stats)
-            .collect::<Vec<_>>(),
-        vec![
-            &BlockmakerStatsMap {
-                node_stats: btreemap! { test_id_1 => (1, 0).into() },
-                subnet_stats: (1, 0).into(),
-            },
-            &BlockmakerStatsMap {
-                node_stats: btreemap! { test_id_2 => (1, 0).into() },
-                subnet_stats: (2, 0).into(),
-            },
+        metrics.running_stats(),
+        Some((
+            &later_batch_time_2,
             &BlockmakerStatsMap {
                 node_stats: btreemap! {
                     test_id_2 => (1, 0).into(),
@@ -1678,10 +1805,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
                 },
                 subnet_stats: (3, 0).into(),
             }
-        ]
+        )),
     );
 
-    // If we observe `test_id_1`, it should be reintroduced with its stats restarted.
+    // If we observe `test_id_1` again, it should be reintroduced in the running stats,
+    // but with its counters restarted.
     metrics.observe(
         later_batch_time_2,
         &BlockmakerMetrics {
@@ -1690,19 +1818,9 @@ fn blockmaker_metrics_time_series_observe_prunes() {
         },
     );
     assert_eq!(
-        metrics
-            .metrics_since(batch_time)
-            .map(|(_, stats)| stats)
-            .collect::<Vec<_>>(),
-        vec![
-            &BlockmakerStatsMap {
-                node_stats: btreemap! { test_id_1 => (1, 0).into() },
-                subnet_stats: (1, 0).into(),
-            },
-            &BlockmakerStatsMap {
-                node_stats: btreemap! { test_id_2 => (1, 0).into() },
-                subnet_stats: (2, 0).into(),
-            },
+        metrics.running_stats(),
+        Some((
+            &later_batch_time_2,
             &BlockmakerStatsMap {
                 node_stats: btreemap! {
                     test_id_1 => (1, 0).into(),
@@ -1710,12 +1828,12 @@ fn blockmaker_metrics_time_series_observe_prunes() {
                     test_id_3 => (1, 0).into(),
                 },
                 subnet_stats: (4, 0).into(),
-            }
-        ]
+            },
+        ))
     );
 
     // The presence of `test_id_1` before its pruning should not influence the restarted stats.
-    // So if we observe it another 24 hours later, it should still there with the new observations
+    // So if we observe it another 24 hours later, it should be still there with the new observations
     // aggregated.
     let later_batch_time_3 = later_batch_time_2 + Duration::from_secs(3600 * 24);
     metrics.observe(
@@ -1725,45 +1843,32 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             failed_blockmakers: vec![],
         },
     );
-    // The final check includes the timestamps.
+    // A new snapshot is pushed (Note: `test_id_2` gets pruned just before).
+    expected_snapshots.insert(
+        later_batch_time_2,
+        BlockmakerStatsMap {
+            node_stats: btreemap! {
+                test_id_1 => (1, 0).into(),
+                test_id_3 => (1, 0).into(),
+            },
+            subnet_stats: (4, 0).into(),
+        },
+    );
+    assert!(metrics
+        .metrics_since(batch_time)
+        .eq(expected_snapshots.iter()));
     assert_eq!(
-        metrics.metrics_since(batch_time).collect::<Vec<_>>(),
-        vec![
-            (
-                &batch_time,
-                &BlockmakerStatsMap {
-                    node_stats: btreemap! { test_id_1 => (1, 0).into() },
-                    subnet_stats: (1, 0).into(),
+        metrics.running_stats(),
+        Some((
+            &later_batch_time_3,
+            &BlockmakerStatsMap {
+                node_stats: btreemap! {
+                    test_id_1 => (2, 0).into(),
+                    test_id_3 => (1, 0).into(),
                 },
-            ),
-            (
-                &later_batch_time_1,
-                &BlockmakerStatsMap {
-                    node_stats: btreemap! { test_id_2 => (1, 0).into() },
-                    subnet_stats: (2, 0).into(),
-                },
-            ),
-            (
-                &later_batch_time_2,
-                &BlockmakerStatsMap {
-                    node_stats: btreemap! {
-                        test_id_1 => (1, 0).into(),
-                        test_id_3 => (1, 0).into(),
-                    },
-                    subnet_stats: (4, 0).into(),
-                },
-            ),
-            (
-                &later_batch_time_3,
-                &BlockmakerStatsMap {
-                    node_stats: btreemap! {
-                        test_id_1 => (2, 0).into(),
-                        test_id_3 => (1, 0).into(),
-                    },
-                    subnet_stats: (5, 0).into(),
-                },
-            )
-        ]
+                subnet_stats: (5, 0).into(),
+            },
+        ))
     );
 }
 
@@ -1903,70 +2008,99 @@ fn blockmaker_metrics_soft_invariant_size_limit_bumps_critical_error_counter() {
     do_roundtrip_and_check_error(&metrics, "exceeds limit");
 }
 
-// The compiler doesn't see the use of these constants inside the `proptest!` macro.
-#[allow(dead_code)]
-const MAX_NUM_DAYS: usize = BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 10;
-#[allow(dead_code)]
-const MAX_NUM_DAYS_NANOS: u64 = MAX_NUM_DAYS as u64 * 24 * 3600 * 1_000_000_000;
-#[allow(dead_code)]
-const MAX_NODE_ID: u64 = 20;
+#[test]
+fn canister_state_bits_cycles_use_case_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-proptest! {
-    /// Checks that `check_soft_invariants()` does not return an error when observing random
-    /// node IDs at random mostly sorted and slightly permuted timestamps.
-    /// Such invariants are checked indirectly at the bottom of `observe()` where
-    /// `check_soft_invariants()` is called. There is an additional call to
-    /// `check_soft_invariants()` at the end of the test to ensure the test doesn't
-    /// silently pass when the production code is changed.
-    #[test]
-    fn blockmaker_metrics_check_soft_invariants(
-        (mut time_u64, node_ids_u64) in (0..MAX_NUM_DAYS)
-        .prop_flat_map(|num_elements| {
-            (
-                proptest::collection::vec(0..MAX_NUM_DAYS_NANOS, num_elements),
-                proptest::collection::vec(0..MAX_NODE_ID, num_elements),
-            )
-        })
-    ) {
-        // Sort timestamps, then slightly permute them by inserting some
-        // duplicates and swapping elements in some places.
-        time_u64.sort();
-        if !time_u64.is_empty() {
-            for index in 0..(time_u64.len() - 1) {
-                if time_u64[index] % 23 == 0 {
-                    time_u64[index + 1] = time_u64[index];
-                }
-                if time_u64[index] % 27 == 0 {
-                    time_u64.swap(index, index + 1);
-                }
-            }
-        }
+    for initial in CyclesUseCase::iter() {
+        let encoded = pb::CyclesUseCase::from(initial);
+        let round_trip = CyclesUseCase::try_from(encoded).unwrap();
 
-        let mut metrics = BlockmakerMetricsTimeSeries::default();
-        // Observe a unique node ID first to ensure the pruning process
-        // is triggered once the metrics reach capacity.
-        metrics.observe(
-            Time::from_nanos_since_unix_epoch(0),
-            &BlockmakerMetrics {
-                blockmaker: node_test_id(MAX_NODE_ID + 10),
-                failed_blockmakers: vec![],
-            }
-        );
-        // Observe random node IDs at random increasing timestamps; `check_runtime_invariants()`
-        // will be triggered passively each time `observe()` is called.
-        for (batch_time_u64, node_id_u64) in time_u64
-            .into_iter()
-            .zip(node_ids_u64.into_iter())
-        {
-            metrics.observe(
-                Time::from_nanos_since_unix_epoch(batch_time_u64),
-                &BlockmakerMetrics {
-                    blockmaker: node_test_id(node_id_u64),
-                    failed_blockmakers: vec![node_test_id(node_id_u64 + 1)],
-                }
-            );
-        }
-
-        prop_assert!(metrics.check_soft_invariants().is_ok());
+        assert_eq!(initial, round_trip);
     }
+}
+
+#[test]
+fn compatibility_for_cycles_use_case() {
+    // If this fails, you are making a potentially incompatible change to `CyclesUseCase`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        CyclesUseCase::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    );
+}
+
+const MAX_NUM_DAYS: usize = BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 10;
+const MAX_NUM_DAYS_NANOS: u64 = MAX_NUM_DAYS as u64 * 24 * 3600 * 1_000_000_000;
+// The compiler doesn't see the use of these constants inside the `proptest!` macro.
+// The range for `batch_time` is chosen such that random u64 have about a 50% chance to lie
+// above or below it.
+#[allow(dead_code)]
+const BATCH_TIME_RANGE: Range<u64> = (u64::MAX / 2)..(u64::MAX / 2 + MAX_NUM_DAYS_NANOS);
+#[allow(dead_code)]
+const NODE_ID_RANGE: Range<u64> = 0..20;
+
+/// Checks that `check_soft_invariants()` does not return an error when observing random
+/// node IDs at random mostly sorted and slightly permuted timestamps.
+/// Such invariants are checked indirectly at the bottom of `observe()` where
+/// `check_soft_invariants()` is called. There is an additional call to
+/// `check_soft_invariants()` at the end of the test to ensure the test doesn't
+/// silently pass when the production code is changed.
+/// Querying `metrics_since()` is also checked using completely random time stamps to
+/// ensure there are no hidden panics.
+#[test_strategy::proptest]
+fn blockmaker_metrics_check_soft_invariants(
+    #[strategy(0..MAX_NUM_DAYS)] _num_elements: usize,
+    #[strategy(proptest::collection::vec(BATCH_TIME_RANGE, #_num_elements))] mut time_u64: Vec<u64>,
+    #[strategy(proptest::collection::vec(any::<u64>(), #_num_elements))] random_time_u64: Vec<u64>,
+    #[strategy(proptest::collection::vec(NODE_ID_RANGE, #_num_elements))] node_ids_u64: Vec<u64>,
+) {
+    // Sort timestamps, then slightly permute them by inserting some
+    // duplicates and swapping elements in some places.
+    time_u64.sort();
+    if !time_u64.is_empty() {
+        for index in 0..(time_u64.len() - 1) {
+            if time_u64[index] % 23 == 0 {
+                time_u64[index + 1] = time_u64[index];
+            }
+            if time_u64[index] % 27 == 0 {
+                time_u64.swap(index, index + 1);
+            }
+        }
+    }
+
+    let mut metrics = BlockmakerMetricsTimeSeries::default();
+    // Observe a unique node ID first to ensure the pruning process
+    // is triggered once the metrics reach capacity.
+    metrics.observe(
+        Time::from_nanos_since_unix_epoch(0),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(NODE_ID_RANGE.end + 10),
+            failed_blockmakers: vec![],
+        },
+    );
+    // Observe random node IDs at random increasing timestamps; `check_runtime_invariants()`
+    // will be triggered passively each time `observe()` is called.
+    // Additionally, query snapshots at random times and consume the iterator to ensure
+    // there are no hidden panics in `metrics_since()`.
+    for ((batch_time_u64, query_time_u64), node_id_u64) in time_u64
+        .into_iter()
+        .zip(random_time_u64.into_iter())
+        .zip(node_ids_u64.into_iter())
+    {
+        metrics.observe(
+            Time::from_nanos_since_unix_epoch(batch_time_u64),
+            &BlockmakerMetrics {
+                blockmaker: node_test_id(node_id_u64),
+                failed_blockmakers: vec![node_test_id(node_id_u64 + 1)],
+            },
+        );
+        metrics
+            .metrics_since(Time::from_nanos_since_unix_epoch(query_time_u64))
+            .count();
+    }
+
+    prop_assert!(metrics.check_soft_invariants().is_ok());
 }

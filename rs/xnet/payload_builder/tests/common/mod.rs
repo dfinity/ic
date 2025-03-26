@@ -10,13 +10,11 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, Stream};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::{
-    consensus::fake::{Fake, FakeVerifier},
-    types::ids::{SUBNET_1, SUBNET_42},
-};
+use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec, HistogramStats, MetricVec,
 };
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42};
 use ic_types::{
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
@@ -88,7 +86,7 @@ impl StateManagerFixture {
 
         height.inc_assign();
         self.state_manager
-            .commit_and_certify(state, height, CertificationScope::Metadata);
+            .commit_and_certify(state, height, CertificationScope::Metadata, None);
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 
@@ -220,11 +218,12 @@ pub fn assert_opt_slice_pairs_eq(
 }
 
 fn opt_slice_to_string(slice: Option<CertifiedStreamSlice>) -> String {
-    slice.map(slice_to_string).unwrap_or_else(|| "None".into())
+    slice.map_or_else(|| "None".into(), slice_to_string)
 }
 
 fn slice_to_string(slice: CertifiedStreamSlice) -> String {
-    UnpackedStreamSlice::try_from(slice.clone())
-        .map(|unpacked| format!("{:?}", unpacked))
-        .unwrap_or(format!("{:?}", slice))
+    UnpackedStreamSlice::try_from(slice.clone()).map_or_else(
+        |_| format!("{:?}", slice),
+        |unpacked| format!("{:?}", unpacked),
+    )
 }

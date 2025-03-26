@@ -484,7 +484,7 @@ pub fn first_sub_witness(witness: &Witness) -> Option<(&Label, &Witness)> {
 }
 
 /// An implementation of the [`WitnessGenerator`]-trait.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct WitnessGeneratorImpl {
     orig_tree: LabeledTree<Digest>,
     hash_tree: HashTree,
@@ -969,7 +969,7 @@ impl fmt::Debug for WitnessGeneratorImpl {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct TooLongPathError;
 
 /// Converts a list of `Path`s into a sparse `LabeledTree`.

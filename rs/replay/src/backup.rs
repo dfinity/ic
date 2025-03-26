@@ -1,20 +1,23 @@
+use crate::{
+    player::ReplayError,
+    validator::{InvalidArtifact, ReplayValidator},
+};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
-use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, ChangeSet, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction, Mutations, ValidatedConsensusArtifact},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    artifact_kind::ConsensusArtifact,
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, HasHeight,
-        Notarization, RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
+        HasHeight, Notarization, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId,
@@ -28,9 +31,6 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-
-use crate::player::ReplayError;
-use crate::validator::{InvalidArtifact, ReplayValidator};
 
 // A set of backup artifacts corresponding to a single height.
 pub(super) struct HeightArtifacts {
@@ -82,13 +82,13 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet = ChangeSet>,
+    pool: &mut dyn MutablePool<ConsensusMessage, Mutations = Mutations>,
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {
     let file = &cup_file_name(backup_dir, height);
     if let Some(cup) = read_cup_file(file) {
-        pool.apply_changes(
+        pool.apply(
             ChangeAction::AddToValidated(ValidatedConsensusArtifact {
                 msg: cup.into_message(),
                 timestamp: UNIX_EPOCH,
@@ -293,7 +293,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         let mut finalized_block_hash = None;
         // We should never insert more than one finalization, because it breaks a lot of
         // invariants of the pool.
-        if let Some(file_name) = &height_artifacts.finalizations.get(0) {
+        if let Some(file_name) = &height_artifacts.finalizations.first() {
             // Save the hash of the finalized block proposal.
             finalized_block_hash = file_name.split('_').nth(1);
             let file = path.join(file_name);
@@ -390,7 +390,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         artifacts.push(rt.into_message());
 
         // Insert the finalized notarization.
-        for file_name in &height_artifacts.notarizations.first() {
+        if let Some(file_name) = height_artifacts.notarizations.first() {
             let file = path.join(file_name);
             let not = read_artifact_if_correct_height::<Notarization, pb::Notarization>(
                 &file,

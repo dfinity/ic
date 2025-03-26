@@ -1,32 +1,28 @@
 use crate::{
     common::doubles::{LedgerExpect, MockLedger},
-    now_fn, NNS_GOVERNANCE_CANISTER_ID, OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID, START_TIMESTAMP_SECONDS,
-    SWAP_CANISTER_ID,
+    now_fn, NNS_GOVERNANCE_CANISTER_ID, SWAP_CANISTER_ID,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount_bytes, E8};
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount_bytes, DEFAULT_TRANSFER_FEE, E8, ONE_MONTH_SECONDS,
+};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-use ic_sns_governance::{
-    pb::v1::{
-        claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-        ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
-    },
-    types::{DEFAULT_TRANSFER_FEE, ONE_MONTH_SECONDS},
+use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
 };
 use ic_sns_swap::{
     memory,
     pb::v1::{
         error_refund_icp_response,
         set_mode_call_result::SetModeResult,
-        settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
-        CanisterCallError, CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest,
-        ErrorRefundIcpResponse, ListDirectParticipantsRequest, OpenRequest, Params, Participant,
-        RestoreDappControllersResponse, SetDappControllersCallResult, SetDappControllersResponse,
-        SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
-        SweepResult, TransferableAmount,
+        CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
+        ListDirectParticipantsRequest, Participant, SetDappControllersCallResult,
+        SetDappControllersResponse, SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult,
+        TransferableAmount,
     },
     swap::{
         principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START,
@@ -39,14 +35,6 @@ use std::{
 };
 
 pub mod doubles;
-
-/// Intermediate structure that helps calculate an investor's SNS NeuronId
-pub enum TestInvestor {
-    /// The CommunityFund Investor with the memo used to calculate it's SNS NeuronId
-    CommunityFund(u64),
-    /// The Individual Investor with the PrincipalId used to calculate its SNS NeuronId
-    Direct(PrincipalId),
-}
 
 /// Given a vector of NeuronRecipes, return all related NeuronRecipes for
 /// the given buyer_principal
@@ -100,7 +88,7 @@ pub fn i2principal_id_string(i: u64) -> String {
     Principal::from(PrincipalId::new_user_test_id(i)).to_text()
 }
 
-pub fn create_successful_swap_neuron_basket(
+pub fn create_successful_swap_neuron_basket_for_one_direct_participant(
     controller: PrincipalId,
     basket_count: u64,
 ) -> Vec<SwapNeuron> {
@@ -118,52 +106,31 @@ pub fn create_successful_swap_neuron_basket(
         .collect()
 }
 
+pub fn create_successful_swap_neuron_basket_for_neurons_fund(
+    nns_governance_principal_id: PrincipalId,
+    num_neurons_fund_participants: usize,
+    basket_count: u64,
+) -> Vec<SwapNeuron> {
+    (0..num_neurons_fund_participants)
+        .flat_map(|j| {
+            (0..basket_count).map(move |i| SwapNeuron {
+                id: Some(NeuronId {
+                    id: compute_neuron_staking_subaccount_bytes(
+                        nns_governance_principal_id,
+                        NEURON_BASKET_MEMO_RANGE_START + (j as u64) * basket_count + i,
+                    )
+                    .into(),
+                }),
+                status: ClaimedSwapNeuronStatus::Success as i32,
+            })
+        })
+        .collect()
+}
+
 pub fn mock_stub(mut expect: Vec<LedgerExpect>) -> MockLedger {
     expect.reverse();
     let e = Arc::new(Mutex::new(expect));
     MockLedger { expect: e }
-}
-
-pub fn extract_canister_call_error(
-    restore_dapp_controller_response: &RestoreDappControllersResponse,
-) -> &CanisterCallError {
-    use ic_sns_swap::pb::v1::restore_dapp_controllers_response::Possibility;
-
-    match restore_dapp_controller_response.possibility.as_ref() {
-        Some(Possibility::Ok(_)) | None => panic!(
-            "Extracting CanisterCallError failed. Possibility was {:?}",
-            restore_dapp_controller_response.possibility,
-        ),
-        Some(Possibility::Err(canister_call_error)) => canister_call_error,
-    }
-}
-
-pub fn extract_set_dapp_controller_response(
-    restore_dapp_controller_response: &RestoreDappControllersResponse,
-) -> &SetDappControllersResponse {
-    use ic_sns_swap::pb::v1::restore_dapp_controllers_response::Possibility;
-
-    match restore_dapp_controller_response.possibility.as_ref() {
-        Some(Possibility::Err(_)) | None => panic!(
-            "Extracting SetDappControllersResponse failed. Possibility was {:?}",
-            restore_dapp_controller_response.possibility,
-        ),
-        Some(Possibility::Ok(response)) => response,
-    }
-}
-
-/// Helper method for constructing a successful response in tests
-pub fn successful_settle_community_fund_participation_result(
-) -> SettleCommunityFundParticipationResult {
-    use ic_sns_swap::pb::v1::settle_community_fund_participation_result::Possibility;
-
-    SettleCommunityFundParticipationResult {
-        possibility: Some(Possibility::Ok(
-            settle_community_fund_participation_result::Response {
-                governance_error: None,
-            },
-        )),
-    }
 }
 
 /// Helper method for constructing a successful response in tests
@@ -273,9 +240,25 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
 
 pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
     (1..count + 1)
-        .map(|i| CfParticipant {
-            hotkey_principal: i2principal_id_string(i),
-            cf_neurons: vec![CfNeuron::try_new(i, E8).unwrap()],
+        .map(|i| {
+            let i = i * 3;
+            #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+            CfParticipant {
+                controller: Some(PrincipalId::new_user_test_id(i)),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
+                cf_neurons: vec![CfNeuron::try_new(
+                    i,
+                    E8,
+                    vec![
+                        PrincipalId::new_user_test_id(i + 1),
+                        PrincipalId::new_user_test_id(i + 2),
+                    ],
+                )
+                .unwrap()],
+            }
         })
         .collect()
 }
@@ -304,34 +287,12 @@ pub fn paginate_participants(swap: &Swap, limit: usize) -> Vec<Participant> {
 }
 
 pub fn get_snapshot_of_buyers_index_list() -> Vec<PrincipalId> {
-    memory::BUYERS_LIST_INDEX.with(|m| m.borrow().iter().collect())
-}
-
-pub async fn open_swap(swap: &mut Swap, params: &Params) {
-    let account = Account {
-        owner: SWAP_CANISTER_ID.get().into(),
-        subaccount: None,
-    };
-    // Open swap.
-    {
-        assert!(params.swap_due_timestamp_seconds > START_TIMESTAMP_SECONDS);
-        let r = swap
-            .open(
-                SWAP_CANISTER_ID,
-                &mock_stub(vec![LedgerExpect::AccountBalance(
-                    account,
-                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
-                )]),
-                START_TIMESTAMP_SECONDS,
-                OpenRequest {
-                    params: Some(params.clone()),
-                    cf_participants: vec![],
-                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
-                },
-            )
-            .await;
-        r.unwrap();
-    }
+    memory::BUYERS_LIST_INDEX.with(|m| {
+        m.borrow()
+            .iter()
+            .map(|principal| principal.into())
+            .collect()
+    })
 }
 
 pub async fn buy_token(swap: &mut Swap, user: &PrincipalId, amount: &u64, ledger: &MockLedger) {

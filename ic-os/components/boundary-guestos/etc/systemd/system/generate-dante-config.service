@@ -1,0 +1,13 @@
+[Unit]
+Description=Generate network config
+After=bootstrap-ic-node.service
+Before=danted.service
+
+[Install]
+WantedBy=danted.service
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/generate-dante-config.sh

@@ -65,7 +65,7 @@ impl StateSyncCache {
 
     /// Returns a reference to the cached entry if there is one available.
     pub fn get(&self) -> Option<Arc<StateSyncCacheEntry>> {
-        self.entry.as_ref().map(Arc::clone)
+        self.entry.clone()
     }
 
     /// Tell the cache that a successful state sync has completed for `height`
@@ -193,7 +193,7 @@ impl StateSyncCache {
                     self.push_inner(sync, manifest, fetch_chunks, state_sync_file_group);
                 }
             }
-            DownloadState::Complete(_) | DownloadState::Blank | DownloadState::Prep { .. } => {
+            DownloadState::Complete | DownloadState::Blank | DownloadState::Prep { .. } => {
                 // Nothing to cache
                 // Sanity check that the folder is gone (if completed, should have been moved to
                 // a permanent checkpoint, if blank or prep, should never have been created)

@@ -7,21 +7,24 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-askama = "0.11"
+askama = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.3"
+hex = { workspace = true }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
+candid_parser = { workspace = true }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-types = { path = "../../../types/types" }

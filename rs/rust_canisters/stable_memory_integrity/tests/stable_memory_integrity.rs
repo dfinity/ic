@@ -2,9 +2,10 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use proptest::prelude::*;
 
+use ic_base_types::CanisterId;
 use ic_stable_memory_integrity::StableOperationResult;
-use ic_state_machine_tests::{CanisterId, Cycles, StateMachine};
-use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_state_machine_tests::StateMachine;
+use ic_types::{ingress::WasmResult, Cycles, MAX_STABLE_MEMORY_IN_BYTES};
 
 const KB: u64 = 1024;
 const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * KB as usize;
@@ -69,34 +70,9 @@ impl StableState {
                     Err(())
                 }
             }
-            StableOperation::Read32 { start, length } => {
-                if self.is_valid_read_write(*start as u64, *length as u64, true) {
-                    let result = if *length == 0 {
-                        vec![]
-                    } else {
-                        self.contents[*start as usize..(start + length) as usize].to_vec()
-                    };
-                    Ok(StableOperationResult::Read32 {
-                        start: *start,
-                        result,
-                    })
-                } else {
-                    Err(())
-                }
-            }
             StableOperation::Write { start, contents } => {
                 if self.is_valid_read_write(*start, contents.len() as u64, false) {
                     Ok(StableOperationResult::Write {
-                        start: *start,
-                        contents: contents.clone(),
-                    })
-                } else {
-                    Err(())
-                }
-            }
-            StableOperation::Write32 { start, contents } => {
-                if self.is_valid_read_write(*start as u64, contents.len() as u64, true) {
-                    Ok(StableOperationResult::Write32 {
                         start: *start,
                         contents: contents.clone(),
                     })
@@ -109,9 +85,7 @@ impl StableState {
 
     fn apply_operation(&mut self, op: &StableOperation) {
         match op {
-            StableOperation::Size
-            | StableOperation::Read { .. }
-            | StableOperation::Read32 { .. } => {}
+            StableOperation::Size | StableOperation::Read { .. } => {}
             StableOperation::Grow(new_pages) => {
                 if new_pages
                     .saturating_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
@@ -122,12 +96,6 @@ impl StableState {
                 }
             }
             StableOperation::Write { start, contents } => {
-                if !contents.is_empty() {
-                    self.contents[*start as usize..*start as usize + contents.len()]
-                        .copy_from_slice(contents)
-                }
-            }
-            StableOperation::Write32 { start, contents } => {
                 if !contents.is_empty() {
                     self.contents[*start as usize..*start as usize + contents.len()]
                         .copy_from_slice(contents)
@@ -238,8 +206,6 @@ enum StableOperation {
     Grow(u64),
     Read { start: u64, length: u64 },
     Write { start: u64, contents: Vec<u8> },
-    Read32 { start: u32, length: u32 },
-    Write32 { start: u32, contents: Vec<u8> },
 }
 
 impl From<StableOperation> for StableOperationResult {
@@ -256,13 +222,6 @@ impl From<StableOperation> for StableOperationResult {
             },
             StableOperation::Write { start, contents } => {
                 StableOperationResult::Write { start, contents }
-            }
-            StableOperation::Read32 { start, length } => StableOperationResult::Read32 {
-                start,
-                result: vec![0; length as usize],
-            },
-            StableOperation::Write32 { start, contents } => {
-                StableOperationResult::Write32 { start, contents }
             }
         }
     }
@@ -281,14 +240,6 @@ impl From<&StableOperationResult> for StableOperation {
                 length: result.len() as u64,
             },
             StableOperationResult::Write { start, contents } => StableOperation::Write {
-                start: *start,
-                contents: contents.clone(),
-            },
-            StableOperationResult::Read32 { start, result } => StableOperation::Read32 {
-                start: *start,
-                length: result.len() as u32,
-            },
-            StableOperationResult::Write32 { start, contents } => StableOperation::Write32 {
                 start: *start,
                 contents: contents.clone(),
             },
@@ -321,7 +272,7 @@ impl proptest::strategy::ValueTree for OperationsTree {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct OperationsStrategy;
 
 impl proptest::strategy::Strategy for OperationsStrategy {
@@ -338,16 +289,9 @@ impl proptest::strategy::Strategy for OperationsStrategy {
 
         // Execute 20 messages.
         for _ in 0..20 {
-            let allow_32_bit = rng.gen_bool(0.5);
             let allow_invalid = rng.gen_bool(0.2);
             let concentrate_ops = rng.gen_bool(0.5);
-            let ops = generate_random_ops(
-                allow_32_bit,
-                allow_invalid,
-                concentrate_ops,
-                rng,
-                &mut state,
-            );
+            let ops = generate_random_ops(allow_invalid, concentrate_ops, rng, &mut state);
             all_operations.push(ops);
         }
         Ok(OperationsTree { all_operations })
@@ -355,7 +299,6 @@ impl proptest::strategy::Strategy for OperationsStrategy {
 }
 
 fn generate_random_ops(
-    allow_32_bit: bool,
     allow_invalid: bool,
     concentrate_ops: bool,
     rng: &mut impl Rng,
@@ -365,7 +308,7 @@ fn generate_random_ops(
     let mut result = Vec::with_capacity(count);
     let initial_state = state.clone();
     for _ in 0..count {
-        let op = generate_operation(allow_32_bit, allow_invalid, concentrate_ops, rng, state);
+        let op = generate_operation(allow_invalid, concentrate_ops, rng, state);
         let op_result = state.get_operation_result(&op);
         match op_result {
             Ok(op_result) => {
@@ -389,8 +332,6 @@ fn generate_random_ops(
 }
 
 fn generate_operation(
-    // Include 32-bit stable API operations.
-    allow_32_bit: bool,
     // Include out-of-bounds operations which will trap.
     allow_invalid: bool,
     // Don't grow and perform all operations within the last wasm page to get
@@ -416,7 +357,7 @@ fn generate_operation(
         0
     };
     if allow_invalid && rng.gen_bool(0.1) {
-        return generate_invalid_operation(rng, state, allow_32_bit, ty);
+        return generate_invalid_operation(rng, state, ty);
     }
     match ty {
         StableOperationType::Size => StableOperation::Size,
@@ -430,18 +371,10 @@ fn generate_operation(
             } else {
                 rng.gen_range(0..4 * KB)
             };
-            if allow_32_bit && state.contents.len() <= u32::MAX as usize && rng.gen_bool(0.5) {
-                let length = length as u32;
-                let start = rng.gen_range(
-                    range_start as u32..(state.contents.len() as u32).saturating_sub(length).max(1),
-                );
-                StableOperation::Read32 { start, length }
-            } else {
-                let start = rng.gen_range(
-                    range_start as u64..(state.contents.len() as u64).saturating_sub(length).max(1),
-                );
-                StableOperation::Read { start, length }
-            }
+            let start = rng.gen_range(
+                range_start as u64..(state.contents.len() as u64).saturating_sub(length).max(1),
+            );
+            StableOperation::Read { start, length }
         }
         StableOperationType::Write => {
             let write_size = if state.contents.is_empty() {
@@ -451,23 +384,13 @@ fn generate_operation(
             };
             let mut contents = vec![0; write_size as usize];
             rng.fill(&mut contents[..]);
-            if allow_32_bit && state.contents.len() <= u32::MAX as usize && rng.gen_bool(0.5) {
-                let start = rng.gen_range(
-                    range_start as u32
-                        ..(state.contents.len() as u32)
-                            .saturating_sub(write_size as u32)
-                            .max(1),
-                );
-                StableOperation::Write32 { start, contents }
-            } else {
-                let start = rng.gen_range(
-                    range_start as u64
-                        ..(state.contents.len() as u64)
-                            .saturating_sub(write_size)
-                            .max(1),
-                );
-                StableOperation::Write { start, contents }
-            }
+            let start = rng.gen_range(
+                range_start as u64
+                    ..(state.contents.len() as u64)
+                        .saturating_sub(write_size)
+                        .max(1),
+            );
+            StableOperation::Write { start, contents }
         }
     }
 }
@@ -475,7 +398,6 @@ fn generate_operation(
 fn generate_invalid_operation(
     rng: &mut impl Rng,
     state: &StableState,
-    allow_32_bit: bool,
     ty: StableOperationType,
 ) -> StableOperation {
     match ty {
@@ -487,33 +409,20 @@ fn generate_invalid_operation(
         }
         StableOperationType::Read => {
             let length = rng.gen_range(0..4 * KB);
-            if allow_32_bit && rng.gen_bool(0.5) {
-                let start = rng.gen::<u32>();
-                StableOperation::Read32 {
-                    start,
-                    length: length as u32,
-                }
-            } else {
-                let start = rng.gen_range(
-                    (state.contents.len() as u64).saturating_sub(length)
-                        ..(state.contents.len()) as u64 + 10,
-                );
-                StableOperation::Read { start, length }
-            }
+            let start = rng.gen_range(
+                (state.contents.len() as u64).saturating_sub(length)
+                    ..(state.contents.len()) as u64 + 10,
+            );
+            StableOperation::Read { start, length }
         }
         StableOperationType::Write => {
             let write_size = rng.gen_range(0..4 * KB);
             let contents = vec![0; write_size as usize];
-            if allow_32_bit && rng.gen_bool(0.5) {
-                let start = rng.gen::<u32>();
-                StableOperation::Write32 { start, contents }
-            } else {
-                let start = rng.gen_range(
-                    (state.contents.len() as u64).saturating_sub(write_size)
-                        ..(state.contents.len()) as u64 + 10,
-                );
-                StableOperation::Write { start, contents }
-            }
+            let start = rng.gen_range(
+                (state.contents.len() as u64).saturating_sub(write_size)
+                    ..(state.contents.len()) as u64 + 10,
+            );
+            StableOperation::Write { start, contents }
         }
     }
 }

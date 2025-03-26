@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/monitoring/logger",
     "//rs/protobuf",
@@ -21,7 +22,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_test_utilities_in_memory_logger",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

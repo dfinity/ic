@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use crate::LocalCspVault;
 
 mod key_id_computations {
@@ -907,7 +906,7 @@ mod validate_pks_and_sks {
     };
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::time::Time;
     use std::collections::HashSet;
     use std::sync::Arc;
@@ -999,7 +998,7 @@ mod validate_pks_and_sks {
                     ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(
-                    "Malformed certificate: TlsPublicKeyCertCreationError { internal_error: \"Error parsing DER: Parsing Error: InvalidDate\" }".to_string(),
+                    "Malformed certificate: TlsPublicKeyCertCreationError(\"Error parsing DER: Parsing Error: InvalidDate\"".to_string(),
                 )),
             },
             ParameterizedTest {
@@ -1294,7 +1293,7 @@ mod validate_pks_and_sks {
         // validating with time one second earlier than `not_before` doesn't
         // work
         let one_sec_too_early_validation_time = valid_time
-            .checked_sub_duration(Duration::from_secs(1))
+            .checked_sub(Duration::from_secs(1))
             .expect("failed to compute too early validation time");
         let result = test_impl(required_node_public_keys, one_sec_too_early_validation_time);
 
@@ -1477,22 +1476,20 @@ mod validate_pks_and_sks {
     }
 
     fn node_signing_secret_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &CspPublicKey::try_from(&valid_node_signing_public_key()).expect("invalid public key"),
         )
-        .expect("invalid public key")
     }
 
     fn committee_signing_secret_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &CspPublicKey::try_from(&valid_committee_signing_public_key())
                 .expect("invalid public key"),
         )
-        .expect("invalid public key")
     }
 
     fn tls_certificate_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &TlsPublicKeyCert::new_from_der(
                 valid_tls_certificate_and_validation_time()
                     .0
@@ -1500,15 +1497,13 @@ mod validate_pks_and_sks {
             )
             .expect("invalid certificate"),
         )
-        .expect("invalid certificate")
     }
 
     fn dkg_dealing_encryption_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &CspFsEncryptionPublicKey::try_from(&valid_dkg_dealing_encryption_public_key())
                 .expect("invalid public key"),
         )
-        .expect("invalid public key")
     }
 
     fn idkg_dealing_encryption_key_id() -> KeyId {
@@ -1576,7 +1571,7 @@ mod validate_pks_and_sks {
         dkg_dealing_encryption_key
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     struct LocalKeyIds {
         node_signing_key_id: Option<KeyId>,
         committee_signing_key_id: Option<KeyId>,

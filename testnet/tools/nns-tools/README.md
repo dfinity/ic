@@ -24,7 +24,91 @@ my_useful_function() {
 }
 ```
 
+## Upgrade Testing via Bazel
+
+```
+# Run from the usual place.
+ssh -A devenv
+cd src/ic
+./ci/container/container-run.sh
+
+# Within the container.
+bazel test \
+    --test_env=SSH_AUTH_SOCK \
+    --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
+    --test_output=streamed \
+    --test_arg=--nocapture \
+    //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
+```
+
+This takes about 5 min on my devenv.
+
+(This is a new way of doing upgrade/release testing (as of May 2024). The old way is still
+documented elsewhere in this README.)
+
+One special requirement for this to work is access to zh1-pyr07. This can be
+requested from the consensus team, e.g. Christian Müller.
+
+If your devenv is not in zh1, this test will run much slower, because it
+downloads a large file.
+
+Other than that, the only thing non-standard about the above command are the two
+`--test_env` flags. Let us explain:
+
+* `SSH_AUTH_SOCK`: This copies the value of the `SSH_AUTH_SOCK` environment
+  variable from the environment where you are running into bazel's sandbox where
+  it runs the test.
+
+* `NNS_CANISTER_UPGRADE_SEQUENCE=...`: Here, you need to supply either a comma
+  separated list of NNS canister names (e.g. `governance,root`), or `all` (as
+  shown in the example).
+
+The other `--test_*` flags are not strictly _required_, but rather, highly
+recommended. Together, their effect is that you can watch the progress of the
+test. Whereas, by default, you would have to wait until the end to see test
+output (if there is a failure). For tests that take a longer time to run (like
+this one), live results is better.
+
+### Upgrade arguments
+
+Sometimes we prepare a canister release that requires a special upgrade argument. These can be defined per-canister in `NnsCanisterUpgrade::new`. To illustarte, we have the following code:
+
+```
+let module_arg = if nns_canister_name == "cycles-minting" {
+    Encode!(
+        &(Some(CyclesCanisterInitPayload {
+            cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
+            ledger_canister_id: None,
+            governance_canister_id: None,
+            minting_account_id: None,
+            last_purged_notification: None,
+            exchange_rate_canister: None,
+        }))
+    )
+    .unwrap()
+} else {
+    Encode!(&()).unwrap()
+};
+```
+
+This special CMC upgrade argument was needed only once, but we keep it for illustration since it should be harmless.
+
+_Why we needed this arg in the first place: The CMC can mint cycles and transfer them directly to the cycles ledger. The cycles ledger was (re)installed recently in [this proposal](https://dashboard.internetcomputer.org/proposal/130327). Since it is now available and under NNS control, we needed to provide the canister ID to the CMC to enable the interaction with the cycles ledger._
+
+### Troubleshooting
+
+* `Cannot mkdir: No space`: try to clean up some space, e.g., by running the following command:
+
+  ```
+  ./bazel/bazel_clean.sh
+  ```
+
 ## Replicate mainnet state in a dynamic testnet
+
+*Warning*: There is now a [new (May, 2024)/better way to do release/upgrade
+testing][bazel-based-upgrade-testing].
+
+[bazel-based-upgrade-testing]: #upgrade-testing-via-bazel
 
 An overview of this procedure
 
@@ -51,10 +135,19 @@ PATH=$PATH:$HOME/bin
 
 ### How to deploy a `recovered_mainnet_nns` dynamic testnet?
 
-This takes approximately 10-15 minutes to run.
+This takes a bit over 20 minutes to run.
 
 ```bash
-ssh -A devenv
+# You might be able to use devenv instead, but I have had problems with that.
+#
+# `caffeinate` is not required, but highly recommended. This is because
+# without it, if you walk away from your computer for a while, your ssh
+# connection will be lost, and as a result, `recovered_mainnet_nns` will
+# not be kept alive.
+#
+# Note that, instead of zh1-spm22, you can also SSH to your devenv VM
+# but that will be a bit slower (~30 minutes).
+caffeinate ssh -A zh1-spm22.zh1.dfinity.network
 
 # Check out recent commit of the ic repo. It does not have to be the release candidate commit,
 # because pre-built WASMs are used (downloaded from S3).
@@ -65,15 +158,17 @@ git pull
 # Optional. This is recommended in case you lose your ssh connection.
 tmux -S release
 
-./gitlab-ci/container/container-run.sh
+./ci/container/container-run.sh
 
-rm -rf test_tmpdir; \
+TEST_TMPDIR="/tmp/$(whoami)/test_tmpdir"; \
+echo "TEST_TMPDIR=$TEST_TMPDIR"; \
+rm -rf "$TEST_TMPDIR"; \
     ict testnet create recovered_mainnet_nns \
-        --lifetime-mins 120 \
+        --lifetime-mins 1440 \
         --set-required-host-features=dc=zh1 \
         --verbose \
         -- \
-        --test_tmpdir=test_tmpdir
+        --test_tmpdir="$TEST_TMPDIR"
 ```
 
 Let us explain some of the arguments used above:
@@ -86,8 +181,8 @@ Let us explain some of the arguments used above:
   the backup pod hosted in `zh1` and upload it from the test driver, running in `zh1`, to the IC
   deployed in `zh1`.
 
-* `--test_tmpdir=test_tmpdir` makes sure all the artifacts produced by the test driver are
-  accessible on the filesystem in directory `test_tmpdir` which we need later on.
+* `--test_tmpdir=/tmp/$(whoami)/test_tmpdir` makes sure all the artifacts produced by the test driver are
+  accessible on the filesystem in directory `/tmp/$(whoami)/test_tmpdir` which we need later on.
 
 Once `ict` finishes setting things up, it stays running in the foreground. At that point, you should
 see (something like) this in green:
@@ -102,19 +197,13 @@ You can properly dispose of the testnet by killing the `ict` process.
 ### Interacting Afterwards
 
 To interact with the testnet using the shell scripts in this directory, you'll need to run
-`set_testnet_env_variables.sh` deep within `test_tmpdir`. This script can be sourced in your current
-shell. Just look for a log line similar to the following:
+`set_testnet_env_variables.sh` deep within `/tmp/$(whoami)/test_tmpdir`. There is a helper function to do this for you:
 
 ```
-...ic_mainnet_nns_recovery/src/lib.rs... source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
-```
-
-Then go into another container again and source that script:
-
-```
-./gitlab-ci/container/container-run.sh
-
-source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
+./ci/container/container-run.sh
+# you probably don't need this if you're just going to use the SNS and NNS upgrade testing scripts
+# as they call it for you. If that's your plan, just skip this step.
+. ./testnet/tools/nns-tools/cmd.sh set_testnet_env_variables
 ```
 
 Once you have those definitions, the following commands become possible:
@@ -250,7 +339,7 @@ For more information on what's going on here, see [this Slack thread][revert-nee
 [revert-needed-slack-thread]: https://dfinity.slack.com/archives/C039M7YS6F6/p1695970993659729?thread_ts=1695938621.025989&cid=C039M7YS6F6
 
 <a name="upgrade-testing"></a>
-## NNS Canister Upgrade Testing Process
+## NNS/SNS Canister Upgrade Testing Process
 
 This is usually done as one of the steps in the [NNS release process][1].
 
@@ -262,16 +351,22 @@ If you have a working testnet, start by [sourcing variables into your local shel
 
 Next, we test the upgrade
 ```bash
+# NNS:
 ./testnet/tools/nns-tools/test-canister-upgrade.sh <CANISTER_NAME> <TARGET_VERSION>
+
+# SNS:
+# Test upgrading the specified SNS canisters from mainnet version to the
+# specified version in every possible order
+./testnet/tools/nns-tools/test-sns-canister-upgrades.sh <TARGET_VERSION> <CANISTER_NAME> (<CANISTER_NAME>...)
+# Test deploying a new SNS with the specified canister versions
+./testnet/tools/nns-tools/test-sns-canister-deployment.sh <TARGET_VERSION> <CANISTER_NAME> (<CANISTER_NAME>...)
 ```
 
 * `<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
 * `<TARGET_VERSION>` is the git hash of the version that has canisters available
   on the build system. You can find a suitable value by looking at the
-  [commits page](https://gitlab.com/dfinity-lab/public/ic/-/commits/master?ref_type=heads)
-  in Gitlab. In one of the columns towards the right, you will see some red Xs
-  and green checkmarks. If you click on the clipboard icon next to a green checkmark,
-  you will copy a suitable value.
+  [commits page](https://github.com/dfinity/ic/commits/master/)
+  in GitHub. You can copy the commit revision that has green checkmark.
 
 For example:
 
@@ -284,7 +379,17 @@ WASM as well as the un-gzipped WASM, as they will report different hashes in the
 
 This is essential to ensuring that not only can we upgrade _to_ a particular version, but also _beyond_ that version.
 
-## NNS Canister Upgrade Proposal Process
+## Troubleshooting
+
+If you see:
+
+```
+NotAuthorized: Caller not authorized to propose
+```
+
+Your environment variables could be set from a previous run of recovered_mainnet_nns. In this case, exit and re-enter your shell to reset them. Rerunning `. ./testnet/tools/nns-tools/cmd.sh set_testnet_env_variables` will not help as that script tries not to overwrite variables you already have.
+
+## NNS/SNS Canister Upgrade Proposal Process
 
 This is usually done as one of the steps in the [NNS release process][1].
 
@@ -303,26 +408,46 @@ At a high level, there are two sub-step here:
 Generate a mostly pre-populated proposal text file:
 
 ```bash
-./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
-    <CANISTER_NAME> \
-    <TARGET_VERSION> \
-    > <OUTPUT_PROPOSAL_FILE>
+# Fill these in.
+RC=FAKE
+# In case you aren't familiar, this is bash array.
+NNS_CANISTERS=(
+)
+# Similar to NNS_CANISTERS
+SNS_CANISTERS=(
+)
+# Path to an empty dir where the proposal files will be saved.
+PROPOSALS_DIR=/tmp/release-$(date --iso)
+
+mkdir $PROPOSALS_DIR
+
+# NNS:
+for CANISTER in "${NNS_CANISTERS[@]}"
+do
+    ./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
+        $CANISTER \
+        $RC \
+        > $PROPOSALS_DIR/nns-$CANISTER.md
+done
+
+# SNS:
+for CANISTER in "${SNS_CANISTERS[@]}"
+do
+    ./testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh \
+        $CANISTER \
+        $RC \
+        $PROPOSALS_DIR/sns-$CANISTER.md # no `>`
+done
+
+ls $PROPOSALS_DIR
 ```
 
-For example:
+You may need to set the `PREVIOUS_COMMIT` environment variable. This is needed
+in the unlikely case where the git commit ID is not recorded in the currently
+running WASM.
 
-```bash
-./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
-    registry \
-    d2d9d63309cf568e3b2c2a0bc366b6850b044792 \
-    > /tmp/registry-upgrade-proposal-2023-09-29.md
-```
-
-You may need to set the `PREVIOUS_COMMIT` environment variable. This is needed in the unlikely case
-where the git commit ID is not recorded in the currently running WASM.
-
-Once the script has done its part, your job is then to fill in the TODO(s). Figuring out how to fill
-those out is a matter of looking at the list of commits generated in the proposal.
+It used to be that you had to fill in some TODOs, but we simplified somewhat
+recently, and that is no longer required.
 
 ### Submit the Proposal(s)
 
@@ -332,33 +457,46 @@ Optionally, you can test that your security hardware is ready by running
 
 ```bash
 pkcs11-tool --list-slots
+
+# If you want to practice entering your password:
+pkcs11-tool --login --test
 ```
 
 Finally, run
 
 ```bash
-./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
-    <PROPOSAL_FILE> \
-    <YOUR_NEURON_ID>
+# In addition to the following, we assume that you still have the environment
+# variables from the previous section...
+
+# e.g. for Daniel Wong, 51
+SUBMITTING_NEURON_ID=51
+
+# NNS:
+for CANISTER in "${NNS_CANISTERS[@]}"
+do
+    ./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
+        $PROPOSALS_DIR/nns-$CANISTER.md \
+        $SUBMITTING_NEURON_ID
+done
+
+# SNS:
+for CANISTER in "${SNS_CANISTERS[@]}"
+do
+    ./testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh \
+        $PROPOSALS_DIR/sns-$CANISTER.md \
+        $SUBMITTING_NEURON_ID
+done
 ```
 
 You can look up your neuron ID [here in Notion][neuron-id]. For example, Daniel Wong has neuron ID 51.
 
 [neuron-id]: https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682
 
-For example:
 
-```bash
-./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
-    /tmp/registry-upgrade-proposal-2023-09-29.md \
-    51
-```
+The submission scripts validate your proposal texts. Specifically, it enforces
+the following requirements:
 
-The script validates your proposal text. Specifically, it enforces the following requirements:
-
-1. The proposed canister ID is consistent with the human-readable canister name in the title.
-2. The hash in the proposal matches the hash of the WASM generated for that git version.
-3. There are no TODO items left in the proposal text.
+1. There are no TODO items left in the proposal text.
 
 If your proposal text checks out, the script then prompts you for your HSM pin.
 

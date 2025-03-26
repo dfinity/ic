@@ -2,7 +2,6 @@ use crate::import_mod;
 
 import_mod!("log", consensus_log_entry, v1, "consensus_log_entry.v1");
 import_mod!("log", crypto_log_entry, v1, "crypto_log_entry.v1");
-import_mod!("log", p2p_log_entry, v1, "p2p_log_entry.v1");
 import_mod!("log", messaging_log_entry, v1, "messaging_log_entry.v1");
 import_mod!(
     "log",
@@ -41,7 +40,6 @@ pub mod log_entry {
             ) -> slog::Result<()> {
                 crate::serialize_fallback_for!(self, ser, consensus);
                 crate::serialize_fallback_for!(self, ser, crypto);
-                crate::serialize_fallback_for!(self, ser, p2p);
                 crate::serialize_fallback_for!(self, ser, messaging);
                 crate::serialize_fallback_for!(self, ser, ingress_message);
                 crate::serialize_fallback_for!(self, ser, block);

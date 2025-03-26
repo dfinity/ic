@@ -1,0 +1,34 @@
+# These are additional Ubuntu packages installed on the "dev" images.
+
+# editor for convenience
+vim
+nano
+
+# packages requested by networking
+tcpdump
+iperf
+netcat-openbsd
+curl
+iputils-ping
+
+# may want to ssh into other hosts -- not sure if this is really advisable
+openssh-client
+
+# useful for first-order debugging
+gdb
+strace
+
+# useful for SELinux development
+setools
+
+# performance testing additions
+fio
+bpftrace
+linux-tools-common
+linux-tools-generic
+sysstat
+perf-tools-unstable
+# xz needed by bpftrace and others
+xz-utils
+# static busybox for various missing utilities and to have a static binary with less noise
+busybox-static

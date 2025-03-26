@@ -1,0 +1,39 @@
+[Unit]
+Description=Discard unused blocks on /var/lib/ic/crypto filesystem
+After=setup-fstrim-metrics.service
+Wants=setup-fstrim-metrics.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/fstrim_tool --target /var/lib/ic/crypto --datadir_target /var/lib/ic/data --metrics /run/node_exporter/collector_textfile/fstrim.prom
+DeviceAllow=/dev/vda
+IPAddressDeny=any
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+PrivateDevices=no
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateUsers=no
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/ic/crypto
+ReadWritePaths=/run/node_exporter/collector_textfile
+RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=~AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+UMask=022
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2

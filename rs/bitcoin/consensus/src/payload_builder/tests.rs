@@ -1,6 +1,6 @@
 use crate::{payload_builder::parse, BitcoinPayloadBuilder};
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
 };
@@ -17,16 +17,14 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_test_utilities::{
-    mock_time,
-    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state::ReplicatedStateBuilder,
-    types::ids::{node_test_id, subnet_test_id},
-};
+use ic_test_utilities::self_validating_payload_builder::FakeSelfValidatingPayloadBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_state::ReplicatedStateBuilder;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     batch::ValidationContext,
     crypto::{CryptoHash, CryptoHashOf},
+    time::UNIX_EPOCH,
     Height, NumBytes, RegistryVersion, SubnetId,
 };
 use mockall::mock;
@@ -102,7 +100,7 @@ fn bitcoin_payload_builder_test(
     run_test: impl FnOnce(ProposalContext, BitcoinPayloadBuilder),
 ) {
     with_test_replica_logger(|log| {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
 
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
@@ -185,6 +183,7 @@ fn can_successfully_create_bitcoin_payload() {
                     proposal_context.validation_context,
                     &[],
                     SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
+                    0,
                 )
                 .0;
             assert_eq!(payload, expected_payload);
@@ -347,7 +346,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             );
             let past_payloads = vec![PastPayload {
                 height: Height::from(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 block_hash: CryptoHashOf::from(CryptoHash(vec![])),
                 payload: &past_payload,
             }];
@@ -428,23 +427,40 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
         state_manager,
         registry_client,
         |proposal_context, bitcoin_payload_builder| {
-            let payload = bitcoin_payload_builder.build_payload(
-                Height::new(1),
-                MAX_BLOCK_PAYLOAD_SIZE,
-                &[],
+            let (payload, _) = bitcoin_payload_builder.get_self_validating_payload(
                 proposal_context.validation_context,
+                &[],
+                MAX_BLOCK_PAYLOAD_SIZE,
+                0,
             );
 
-            let validation_result = bitcoin_payload_builder.validate_payload(
-                Height::new(1),
-                &proposal_context,
+            let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
                 &payload,
+                proposal_context.validation_context,
                 &[],
             );
             assert!(
                 validation_result.is_ok(),
                 "validation did not pass {:?}",
                 validation_result
+            );
+            assert!(!payload.is_empty());
+
+            // Now test again, but priority is not zero. This should generate an empty payload
+            let (payload, _) = bitcoin_payload_builder.get_self_validating_payload(
+                proposal_context.validation_context,
+                &[],
+                MAX_BLOCK_PAYLOAD_SIZE,
+                1,
+            );
+            assert!(payload.is_empty());
+
+            // Test again, this time priority is not zero, but the byte limit is doubles, such that the block fits.
+            let (payload, _) = bitcoin_payload_builder.get_self_validating_payload(
+                proposal_context.validation_context,
+                &[],
+                NumBytes::new(2 * MAX_BLOCK_PAYLOAD_SIZE.get()),
+                1,
             );
             assert!(!payload.is_empty());
         },

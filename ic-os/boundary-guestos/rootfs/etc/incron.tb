@@ -1,2 +1,0 @@
-/var/www/cgi-bin/artifacts/certs IN_CLOSE_WRITE,IN_CREATE,IN_MOVED /opt/ic/bin/copy_certs.sh certs
-/var/www/cgi-bin/artifacts/bn_priv.key IN_CLOSE_WRITE,IN_CREATE,IN_MOVED /opt/ic/bin/copy_certs.sh key

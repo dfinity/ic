@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use std::time::Duration;
 
 use assert_matches::assert_matches;
@@ -77,10 +75,6 @@ fn should_generate_self_signed_certificate() {
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
 
-    // Verify with x509_parser's method, which uses the ring library underneath
-    assert_eq!(x509.verify_signature(None), Ok(()));
-
-    // Verify manually with our own internal library
     let public_key = Ed25519PublicKeyBytes::try_from(
         x509.tbs_certificate
             .subject_pki
@@ -341,7 +335,7 @@ fn should_generate_non_ca_cert() {
 fn should_create_cert_that_passes_node_key_validation() {
     let node_id = node_id(4242);
     let not_before = GENESIS
-        .saturating_sub_duration(Duration::from_secs(1000))
+        .saturating_sub(Duration::from_secs(1000))
         .as_secs_since_unix_epoch();
     let not_after = datetime!(9999-12-31 23:59:59 UTC).unix_timestamp() as u64;
     let current_time = GENESIS;

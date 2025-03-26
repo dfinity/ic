@@ -1,6 +1,5 @@
 use candid::Encode;
 use canister_test::Project;
-use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -17,7 +16,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 
 /// Create a `StateMachine` with NNS installed
-pub fn set_up_state_machine_with_nns(allowed_principals: Vec<PrincipalId>) -> StateMachine {
+pub fn set_up_state_machine_with_nns() -> StateMachine {
     // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
@@ -27,7 +26,6 @@ pub fn set_up_state_machine_with_nns(allowed_principals: Vec<PrincipalId>) -> St
         .with_test_neurons()
         .with_sns_dedicated_subnets(machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
-        .with_sns_wasm_allowed_principals(allowed_principals)
         .build();
 
     setup_nns_canisters(&machine, nns_init_payload);
@@ -53,7 +51,6 @@ pub fn get_deployed_sns_by_proposal_id(
         machine,
         SNS_WASM_CANISTER_ID,
         "get_deployed_sns_by_proposal_id",
-        candid_one,
         GetDeployedSnsByProposalIdRequest { proposal_id },
         PrincipalId::new_anonymous(),
     )

@@ -3,6 +3,8 @@ use crate::{
     invariants::common::{get_value_from_snapshot, InvariantCheckError, RegistrySnapshot},
 };
 
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;

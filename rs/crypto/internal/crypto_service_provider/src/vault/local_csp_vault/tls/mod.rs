@@ -64,7 +64,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let issuance_time: Time = self
             .time_source
             .get_relative_time()
-            .saturating_sub_duration(TWO_MINUTES);
+            .saturating_sub(TWO_MINUTES);
 
         let common_name = &node.get().to_string()[..];
 
@@ -83,10 +83,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             }
         })?;
 
-        let key_id =
-            KeyId::try_from(&x509_pk_cert).map_err(|error| CspTlsKeygenError::InternalError {
-                internal_error: format!("Cannot instantiate KeyId: {:?}", error),
-            })?;
+        let key_id = KeyId::from(&x509_pk_cert);
         let secret_key = CspSecretKey::TlsEd25519(secret_key);
         let cert_proto = x509_pk_cert.to_proto();
         let valid_cert = validate_tls_certificate(cert_proto, node, issuance_time)?;

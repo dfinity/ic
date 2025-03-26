@@ -11,7 +11,7 @@ use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
     mock_masked_transcript_type, mock_transcript, mock_unmasked_transcript_type,
     random_transcript_id,
 };
-use ic_crypto_test_utils_canister_threshold_sigs::{node_id, set_of_nodes};
+use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 #[test]
@@ -30,11 +30,11 @@ fn should_return_correct_dealer_index_for_random() {
     .expect("Should be able to create IDKG params");
 
     // For a random transcript the dealer index correspond to its position in the dealer set
-    assert_eq!(params.dealer_index(node_id(42)), Some(0));
-    assert_eq!(params.dealer_index(node_id(43)), Some(1));
-    assert_eq!(params.dealer_index(node_id(44)), None);
-    assert_eq!(params.dealer_index(node_id(45)), Some(2));
-    assert_eq!(params.dealer_index(node_id(46)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(42)), Some(0));
+    assert_eq!(params.dealer_index(ordered_node_id(43)), Some(1));
+    assert_eq!(params.dealer_index(ordered_node_id(44)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(45)), Some(2));
+    assert_eq!(params.dealer_index(ordered_node_id(46)), None);
 }
 
 #[test]
@@ -61,12 +61,12 @@ fn should_return_correct_dealer_index_for_reshare_masked() {
     .expect("Should be able to create IDKG params");
 
     // For resharing a masked transcript the dealer index correspond to its position in the `previous_receiver` set
-    assert_eq!(params.dealer_index(node_id(35)), Some(0));
-    assert_eq!(params.dealer_index(node_id(36)), Some(1));
+    assert_eq!(params.dealer_index(ordered_node_id(35)), Some(0));
+    assert_eq!(params.dealer_index(ordered_node_id(36)), Some(1));
     // Node 37 is not included in the dealer set, thus it does not have a dealer index.
-    assert_eq!(params.dealer_index(node_id(37)), None);
-    assert_eq!(params.dealer_index(node_id(38)), Some(3));
-    assert_eq!(params.dealer_index(node_id(39)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(37)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(38)), Some(3));
+    assert_eq!(params.dealer_index(ordered_node_id(39)), None);
 }
 
 #[test]
@@ -96,12 +96,12 @@ fn should_return_correct_dealer_index_for_reshare_unmasked() {
     .expect("Should be able to create IDKG params");
 
     // For resharing an unmasked transcript the dealer index correspond to its position in the `previous_receiver` set
-    assert_eq!(params.dealer_index(node_id(35)), Some(0));
-    assert_eq!(params.dealer_index(node_id(36)), Some(1));
+    assert_eq!(params.dealer_index(ordered_node_id(35)), Some(0));
+    assert_eq!(params.dealer_index(ordered_node_id(36)), Some(1));
     // Node 37 is not included in the dealer set, thus it does not have a dealer index.
-    assert_eq!(params.dealer_index(node_id(37)), None);
-    assert_eq!(params.dealer_index(node_id(38)), Some(3));
-    assert_eq!(params.dealer_index(node_id(39)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(37)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(38)), Some(3));
+    assert_eq!(params.dealer_index(ordered_node_id(39)), None);
 }
 
 #[test]
@@ -137,12 +137,12 @@ fn should_return_correct_dealer_index_for_unmasked_times_masked() {
     .expect("Should be able to create IDKG params");
 
     // For an unmasked times masked transcript the dealer index correspond to its position in the `previous_receiver` set
-    assert_eq!(params.dealer_index(node_id(35)), Some(0));
-    assert_eq!(params.dealer_index(node_id(36)), Some(1));
+    assert_eq!(params.dealer_index(ordered_node_id(35)), Some(0));
+    assert_eq!(params.dealer_index(ordered_node_id(36)), Some(1));
     // Node 37 is not included in the dealer set, thus it does not have a dealer index.
-    assert_eq!(params.dealer_index(node_id(37)), None);
-    assert_eq!(params.dealer_index(node_id(38)), Some(3));
-    assert_eq!(params.dealer_index(node_id(39)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(37)), None);
+    assert_eq!(params.dealer_index(ordered_node_id(38)), Some(3));
+    assert_eq!(params.dealer_index(ordered_node_id(39)), None);
 }
 
 #[test]
@@ -275,11 +275,11 @@ fn should_return_correct_receiver_index() {
     )
     .expect("Should be able to create IDKG params");
 
-    assert_eq!(params.receiver_index(node_id(42)), None);
-    assert_eq!(params.receiver_index(node_id(43)), Some(0));
-    assert_eq!(params.receiver_index(node_id(44)), None);
-    assert_eq!(params.receiver_index(node_id(45)), Some(1));
-    assert_eq!(params.receiver_index(node_id(46)), Some(2));
+    assert_eq!(params.receiver_index(ordered_node_id(42)), None);
+    assert_eq!(params.receiver_index(ordered_node_id(43)), Some(0));
+    assert_eq!(params.receiver_index(ordered_node_id(44)), None);
+    assert_eq!(params.receiver_index(ordered_node_id(45)), Some(1));
+    assert_eq!(params.receiver_index(ordered_node_id(46)), Some(2));
 }
 
 #[test]
@@ -296,7 +296,7 @@ fn should_not_create_with_empty_dealers() {
     let result = IDkgTranscriptParams::new(
         random_transcript_id(rng),
         empty_dealers,
-        btreeset! {node_id(1)},
+        btreeset! {ordered_node_id(1)},
         RegistryVersion::from(0),
         AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
         IDkgTranscriptOperation::Random,
@@ -312,7 +312,7 @@ fn should_not_create_with_empty_receivers() {
 
     let result = IDkgTranscriptParams::new(
         random_transcript_id(rng),
-        btreeset! {node_id(1)},
+        btreeset! {ordered_node_id(1)},
         empty_receivers,
         RegistryVersion::from(0),
         AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
@@ -411,7 +411,7 @@ fn should_not_create_unmasked_times_masked_with_too_few_dealers() {
 fn should_not_create_with_placeholder_algid() {
     let rng = &mut reproducible_rng();
     let mut nodes = BTreeSet::new();
-    nodes.insert(node_id(1));
+    nodes.insert(ordered_node_id(1));
 
     let result = IDkgTranscriptParams::new(
         random_transcript_id(rng),
