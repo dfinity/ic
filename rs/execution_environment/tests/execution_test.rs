@@ -3092,12 +3092,7 @@ fn test_canister_liquid_cycle_balance() {
                     callee,
                     "update",
                     call_args()
-                        .other_side(
-                            wasm()
-                                .accept_cycles(u128::MAX)
-                                .append_and_reply()
-                                .build(),
-                        )
+                        .other_side(wasm().accept_cycles(u128::MAX).append_and_reply().build())
                         .on_reject(wasm().reject_message().trap())
                         .on_reply(wasm().message_payload().append_and_reply()),
                 )
