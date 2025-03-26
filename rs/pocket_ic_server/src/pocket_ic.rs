@@ -659,6 +659,10 @@ impl PocketIcSubnets {
 
         let subnet_id = sm.get_subnet_id();
 
+        if self.nns_subnet.is_none() {
+            self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+        }
+
         for chain_key in subnet_chain_keys {
             self.chain_keys
                 .entry(chain_key)
@@ -685,9 +689,6 @@ impl PocketIcSubnets {
             self.routing_table.insert(alloc_range, subnet_id).unwrap();
         }
 
-        if self.nns_subnet.is_none() {
-            self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
-        }
         let subnet_list = self
             .subnets
             .get_all()
@@ -716,7 +717,7 @@ impl PocketIcSubnets {
         }
 
         for subnet in self.subnets.get_all() {
-            subnet.state_machine.set_certified_time(time);
+            subnet.state_machine.set_time(time);
             subnet.state_machine.execute_round();
         }
 

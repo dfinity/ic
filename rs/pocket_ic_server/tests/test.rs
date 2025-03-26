@@ -791,7 +791,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     deploy_counter_canister_to_id(&pic, spec_canister_id, 3);
 
     // Check the registry version.
-    // The registry version should be 7 as a new subnet has been created,
+    // The registry version should be 7 as a new subnet has been created and
     // every subnet creation bumps the registry version twice.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
