@@ -24,15 +24,16 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
+    canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
+    CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response, NO_DEADLINE,
+        CallContextId, CallbackId, Payload, Query, RejectContext, Request, RequestOrResponse,
+        Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
     CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, SubnetId, Time,
@@ -95,7 +96,8 @@ pub(super) struct QueryContext<'a> {
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
     data_certificate: (Vec<u8>, CanisterId),
-    max_canister_memory_size: NumBytes,
+    max_canister_memory_size_wasm32: NumBytes,
+    max_canister_memory_size_wasm64: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -130,7 +132,8 @@ impl<'a> QueryContext<'a> {
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
         canister_guaranteed_callback_quota: u64,
-        max_canister_memory_size: NumBytes,
+        max_canister_memory_size_wasm32: NumBytes,
+        max_canister_memory_size_wasm64: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
         max_query_call_graph_instructions: NumInstructions,
@@ -158,7 +161,8 @@ impl<'a> QueryContext<'a> {
             state,
             network_topology,
             data_certificate: (data_certificate, canister_id),
-            max_canister_memory_size,
+            max_canister_memory_size_wasm32,
+            max_canister_memory_size_wasm64,
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -198,10 +202,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = match query.source {
-            QuerySource::User { user_id, .. } => CallOrigin::Query(user_id),
-            QuerySource::Anonymous => CallOrigin::Query(query.source().into()),
-        };
+        let call_origin = CallOrigin::Query(query.source().into());
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
@@ -672,8 +673,6 @@ impl<'a> QueryContext<'a> {
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
-        let canister_current_memory_usage = canister.memory_usage();
-        let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
         execution_parameters
             .instruction_limits
@@ -693,17 +692,21 @@ impl<'a> QueryContext<'a> {
                         // No cleanup closure present. Return the callback error as-is.
                         (output.num_instructions_left, Err(callback_err))
                     }
-                    Some(cleanup_closure) => self.execute_cleanup(
-                        time,
-                        &mut canister,
-                        cleanup_closure,
-                        &call_origin,
-                        callback_err,
-                        canister_current_memory_usage,
-                        canister_current_message_memory_usage,
-                        execution_parameters,
-                        call_context.instructions_executed(),
-                    ),
+                    Some(cleanup_closure) => {
+                        let canister_current_memory_usage = canister.memory_usage();
+                        let canister_current_message_memory_usage = canister.message_memory_usage();
+                        self.execute_cleanup(
+                            time,
+                            &mut canister,
+                            cleanup_closure,
+                            &call_origin,
+                            callback_err,
+                            canister_current_memory_usage,
+                            canister_current_message_memory_usage,
+                            execution_parameters,
+                            call_context.instructions_executed(),
+                        )
+                    }
                 }
             }
         };
@@ -739,7 +742,7 @@ impl<'a> QueryContext<'a> {
         call_origin: &CallOrigin,
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
@@ -1037,7 +1040,7 @@ impl<'a> QueryContext<'a> {
     /// Returns true if the total number of instructions executed by queries and
     /// response callbacks exceeds the limit in `round_limits`.
     pub fn instruction_limit_reached(&self) -> bool {
-        self.round_limits.reached()
+        self.round_limits.instructions_reached()
     }
 
     /// Return whether the time limit for this query context has been reached.
@@ -1083,9 +1086,19 @@ impl<'a> QueryContext<'a> {
         canister: &CanisterState,
         instruction_limits: InstructionLimits,
     ) -> ExecutionParameters {
+        let wasm_execution_mode = canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
+
+        let max_canister_memory_size = match wasm_execution_mode {
+            WasmExecutionMode::Wasm32 => self.max_canister_memory_size_wasm32,
+            WasmExecutionMode::Wasm64 => self.max_canister_memory_size_wasm64,
+        };
+
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
+            canister_memory_limit: canister.memory_limit(max_canister_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,

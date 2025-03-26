@@ -14,7 +14,7 @@ func NewRootCmd() *cobra.Command {
 		Version: version,
 		Use:     "ict",
 		Long:    "ict " + version + "\nA simple CLI for running system_tests in Bazel.",
-		Example: "ict test //rs/tests/testing_verification:basic_health_test",
+		Example: "ict test //rs/tests/idx:basic_health_test",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Print help by default, i.e. if no args are provided.
 			if len(args) == 0 {

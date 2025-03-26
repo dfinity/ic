@@ -4,9 +4,9 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
+    "//packages/ic-secp256k1",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/ed25519",
-    "//rs/crypto/secp256k1",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/types/types",
     "@crate_index//:anyhow",
@@ -18,6 +18,8 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:tokio",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = [

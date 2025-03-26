@@ -40,8 +40,8 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "Registry")]
     pub registry: Registry,
 
-    #[command(flatten, next_help_heading = "Health Checking")]
-    pub health: HealthChecks,
+    #[command(flatten, next_help_heading = "Health")]
+    pub health: Health,
 
     #[command(flatten, next_help_heading = "Observability")]
     pub obs: Observability,
@@ -149,7 +149,7 @@ pub struct Network {
 }
 
 #[derive(Args)]
-pub struct HealthChecks {
+pub struct Health {
     /// How frequently to run health checks
     #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
     pub health_check_interval: Duration,
@@ -167,6 +167,14 @@ pub struct HealthChecks {
     /// Maximum block height lag for a replica to be included in the routing table
     #[clap(env, long, default_value = "50")]
     pub health_max_height_lag: u64,
+
+    /// Fraction of nodes that should be healthy in the subnet to consider the subnet healthy
+    #[clap(env, long, default_value = "0.6666")]
+    pub health_nodes_per_subnet_alive_threshold: f64,
+
+    /// Fraction of subnets that should be healthy to consider our node healthy
+    #[clap(env, long, default_value = "0.51")]
+    pub health_subnets_alive_threshold: f64,
 }
 
 #[derive(Args)]
@@ -241,6 +249,10 @@ pub struct Observability {
     /// Log Anonymization Canister ID
     #[clap(env, long)]
     pub obs_log_anonymization_canister_id: Option<Principal>,
+
+    /// Frequency to poll the canister for the anonymization salt
+    #[clap(env, long, default_value = "60s", value_parser = parse_duration)]
+    pub obs_log_anonymization_poll_interval: Duration,
 }
 
 #[derive(Args)]
@@ -279,6 +291,22 @@ pub struct RateLimiting {
     /// How frequently to poll for rules (from file or canister)
     #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
     pub rate_limit_generic_poll_interval: Duration,
+
+    /// Time-to-idle for rules that have the `ip_group_prefix`.
+    /// If no requests are coming for the given shard - it will be removed.
+    #[clap(env, long, default_value = "1h", value_parser = parse_duration)]
+    pub rate_limit_generic_tti: Duration,
+
+    /// Maximum number of shards that we store (per rule)
+    #[clap(env, long, default_value = "30000")]
+    pub rate_limit_generic_max_shards: u64,
+
+    /// Whether to use the number of API BNs from the registry to scale the rate limit rules.
+    /// E.g. if a ratelimit action is set to "500/1h" and the number of API BNs is 5 then the
+    /// rule would be adjusted to "100/1h" so that the total ratelimit of all API BNs would be "500/1h".
+    /// Important: if after the divison the numerator would be less than 1 then it would be rounded to 1.
+    #[clap(env, long)]
+    pub rate_limit_generic_autoscale: bool,
 }
 
 #[derive(Args)]
@@ -340,8 +368,8 @@ pub struct Bouncer {
     pub bouncer_ratelimit: u32,
 
     /// Number of requests in a burst allowed, must be higher than --bouncer-ratelimit
-    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
-    pub bouncer_burst_size: u64,
+    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u32).range(1..))]
+    pub bouncer_burst_size: u32,
 
     /// For how long to ban the IPs
     #[clap(env, long, default_value = "10m", value_parser = parse_duration)]

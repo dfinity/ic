@@ -1,12 +1,16 @@
+use candid::{CandidType, Principal};
+use serde::de::DeserializeOwned;
+use std::collections::BTreeSet;
+use std::fmt::Display;
+
 pub mod agent_impl;
+pub mod management_canister;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
 pub mod sns;
-
-use candid::{CandidType, Principal};
-use serde::de::DeserializeOwned;
-use std::fmt::Display;
+#[cfg(feature = "test")]
+pub mod state_machine_impl;
 
 // This is used to "seal" the CallCanisters trait so that it cannot be implemented outside of this crate.
 // This is useful because it means we can modify the trait in the future without worrying about
@@ -22,29 +26,28 @@ mod sealed {
 pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
-    fn payload(&self) -> Vec<u8>;
+    fn payload(&self) -> Result<Vec<u8>, candid::Error>;
     type Response: CandidType + DeserializeOwned;
 }
 
-impl<R: ic_nervous_system_clients::Request> Request for R {
-    fn method(&self) -> &'static str {
-        Self::METHOD
-    }
-    fn update(&self) -> bool {
-        Self::UPDATE
-    }
-    fn payload(&self) -> Vec<u8> {
-        candid::encode_one(self).unwrap()
-    }
-
-    type Response = <Self as ic_nervous_system_clients::Request>::Response;
+pub struct CanisterInfo {
+    pub module_hash: Option<Vec<u8>>,
+    pub controllers: BTreeSet<Principal>,
 }
 
 pub trait CallCanisters: sealed::Sealed {
     type Error: Display + Send + std::error::Error + 'static;
+
+    fn caller(&self) -> Result<Principal, Self::Error>;
+
     fn call<R: Request>(
         &self,
         canister_id: impl Into<Principal> + Send,
         request: R,
     ) -> impl std::future::Future<Output = Result<R::Response, Self::Error>> + Send;
+
+    fn canister_info(
+        &self,
+        canister_id: impl Into<Principal> + Send,
+    ) -> impl std::future::Future<Output = Result<CanisterInfo, Self::Error>> + Send;
 }

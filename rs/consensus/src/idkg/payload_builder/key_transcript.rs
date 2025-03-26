@@ -1,17 +1,17 @@
-use std::collections::BTreeSet;
-
-use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::idkg::{
+    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
+    utils::algorithm_for_key_id,
+};
 use ic_logger::{info, ReplicaLogger};
-use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
-        self, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
+        self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript,
+        TranscriptAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     Height, NodeId, RegistryVersion,
 };
-
-use super::IDkgPayloadError;
+use std::collections::BTreeSet;
 
 pub(super) fn get_created_key_transcript(
     key_transcript: &idkg::MasterKeyTranscript,
@@ -212,32 +212,29 @@ pub(super) fn update_next_key_transcript(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::idkg::{
+        test_utils::{
+            create_reshare_unmasked_transcript_param,
+            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+        },
+        utils::algorithm_for_key_id,
+    };
     use ic_crypto_test_utils_canister_threshold_sigs::{
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript, node::Nodes,
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+    use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
-    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::{
+        consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId},
         crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
         Height,
     };
     use std::str::FromStr;
-
-    use crate::idkg::{
-        test_utils::{
-            create_reshare_unmasked_transcript_param,
-            fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
-            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
-        },
-        utils::algorithm_for_key_id,
-    };
-
-    use super::*;
 
     #[test]
     fn get_created_key_transcript_returns_some_test() {
@@ -296,7 +293,7 @@ mod tests {
 
     #[test]
     fn test_update_next_key_transcript_single_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_update_next_key_transcript_single(key_id);
         }
@@ -484,7 +481,7 @@ mod tests {
 
     #[test]
     fn test_update_next_key_transcript_xnet_target_subnet_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_update_next_key_transcript_xnet_target_subnet_single(key_id);
         }

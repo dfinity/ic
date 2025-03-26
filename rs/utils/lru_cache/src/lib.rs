@@ -1,4 +1,4 @@
-use ic_types::{CountBytes, NumBytes};
+use ic_types::{MemoryDiskBytes, NumBytes};
 use std::hash::Hash;
 
 /// The upper bound on cache item size and cache capacity.
@@ -11,38 +11,48 @@ const MAX_SIZE: usize = usize::MAX / 2;
 /// sizes of the cached items does not exceed the pre-configured capacity.
 pub struct LruCache<K, V>
 where
-    K: CountBytes + Eq + Hash,
-    V: CountBytes,
+    K: MemoryDiskBytes + Eq + Hash,
+    V: MemoryDiskBytes,
 {
     cache: lru::LruCache<K, V>,
-    capacity: usize,
-    size: usize,
+    memory_capacity: usize,
+    disk_capacity: usize,
+    memory_size: usize,
+    disk_size: usize,
 }
 
-impl<K, V> CountBytes for LruCache<K, V>
+impl<K, V> MemoryDiskBytes for LruCache<K, V>
 where
-    K: CountBytes + Eq + Hash,
-    V: CountBytes,
+    K: MemoryDiskBytes + Eq + Hash,
+    V: MemoryDiskBytes,
 {
-    fn count_bytes(&self) -> usize {
-        self.size
+    fn memory_bytes(&self) -> usize {
+        self.memory_size
+    }
+
+    fn disk_bytes(&self) -> usize {
+        self.disk_size
     }
 }
 
 impl<K, V> LruCache<K, V>
 where
-    K: CountBytes + Eq + Hash,
-    V: CountBytes,
+    K: MemoryDiskBytes + Eq + Hash,
+    V: MemoryDiskBytes,
 {
-    /// Constructs a new LRU cache with the given capacity.
-    /// The capacity must not exceed `MAX_SIZE = (2^63 - 1)`.
-    pub fn new(capacity: NumBytes) -> Self {
-        let capacity = capacity.get() as usize;
-        assert!(capacity <= MAX_SIZE);
+    /// Constructs a new LRU cache with the given memory and disk capacity.  The
+    /// capacities must not exceed `MAX_SIZE = (2^63 - 1)`.
+    pub fn new(memory_capacity: NumBytes, disk_capacity: NumBytes) -> Self {
+        let memory_capacity = memory_capacity.get() as usize;
+        let disk_capacity = disk_capacity.get() as usize;
+        assert!(memory_capacity <= MAX_SIZE);
+        assert!(disk_capacity <= MAX_SIZE);
         let lru_cache = Self {
             cache: lru::LruCache::unbounded(),
-            capacity,
-            size: 0,
+            memory_capacity,
+            disk_capacity,
+            memory_size: 0,
+            disk_size: 0,
         };
         lru_cache.check_invariants();
         lru_cache
@@ -50,7 +60,10 @@ where
 
     /// Creates a new LRU Cache that never automatically evicts items.
     pub fn unbounded() -> Self {
-        Self::new(NumBytes::new(MAX_SIZE as u64))
+        Self::new(
+            NumBytes::new(MAX_SIZE as u64),
+            NumBytes::new(MAX_SIZE as u64),
+        )
     }
 
     /// Returns the value corresponding to the given key.
@@ -63,21 +76,21 @@ where
     /// the cache or other cache entries are evicted (due to the cache capacity),
     /// then it returns the old entry's key-value pairs. Otherwise, returns an empty vector.
     pub fn push(&mut self, key: K, value: V) -> Vec<(K, V)> {
-        let size = key.count_bytes() + value.count_bytes();
-        assert!(size <= MAX_SIZE);
+        let memory_size = key.memory_bytes() + value.memory_bytes();
+        assert!(memory_size <= MAX_SIZE);
+        let disk_size = key.disk_bytes() + value.disk_bytes();
+        assert!(disk_size <= MAX_SIZE);
 
         let removed_entry = self.cache.push(key, value);
         if let Some((removed_key, removed_value)) = &removed_entry {
-            let removed_size = removed_key.count_bytes() + removed_value.count_bytes();
-            debug_assert!(self.size >= removed_size);
-            // This cannot underflow because we know that `self.size` is
-            // the sum of sizes of all items in the cache.
-            self.size -= removed_size;
+            self.pop_inner(removed_key, removed_value);
         }
         // This cannot overflow because we know that
-        // `self.size <= self.capacity <= MAX_SIZE`
-        // and `size <= MAX_SIZE == usize::MAX / 2`.
-        self.size += size;
+        // `self.memory_size <= self.memory_capacity <= MAX_SIZE`
+        // and `memory_size <= MAX_SIZE == usize::MAX / 2`.
+        self.memory_size += memory_size;
+        // Similar as for `memory_size``.
+        self.disk_size += disk_size;
         let mut evicted_entries = self.evict();
         self.check_invariants();
 
@@ -89,11 +102,20 @@ where
     /// `None` if it does not exist.
     pub fn pop(&mut self, key: &K) -> Option<V> {
         if let Some((key, value)) = self.cache.pop_entry(key) {
-            let size = key.count_bytes() + value.count_bytes();
-            debug_assert!(self.size >= size);
-            self.size -= size;
+            self.pop_inner(&key, &value);
             self.check_invariants();
             Some(value)
+        } else {
+            None
+        }
+    }
+
+    /// Remove the least recently used entry from the cache.
+    pub fn pop_lru(&mut self) -> Option<(K, V)> {
+        if let Some((key, value)) = self.cache.pop_lru() {
+            self.pop_inner(&key, &value);
+            self.check_invariants();
+            Some((key, value))
         } else {
             None
         }
@@ -102,7 +124,8 @@ where
     /// Clears the cache by removing all items.
     pub fn clear(&mut self) {
         self.cache.clear();
-        self.size = 0;
+        self.memory_size = 0;
+        self.disk_size = 0;
         self.check_invariants();
     }
 
@@ -120,21 +143,31 @@ where
     /// Returns the vector of evicted key-value pairs.
     fn evict(&mut self) -> Vec<(K, V)> {
         let mut ret = vec![];
-        while self.size > self.capacity {
+        while self.memory_size > self.memory_capacity || self.disk_size > self.disk_capacity {
             match self.cache.pop_lru() {
                 Some((key, value)) => {
-                    let size = key.count_bytes() + value.count_bytes();
-                    debug_assert!(self.size >= size);
-                    // This cannot underflow because we know that `self.size` is
-                    // the sum of sizes of all items in the cache.
-                    self.size -= size;
-
+                    self.pop_inner(&key, &value);
                     ret.push((key, value));
                 }
                 None => break,
             }
         }
+        self.check_invariants();
         ret
+    }
+
+    fn pop_inner(&mut self, key: &K, value: &V) {
+        let memory_size = key.memory_bytes() + value.memory_bytes();
+        debug_assert!(self.memory_size >= memory_size);
+        // This cannot underflow because we know that `self.memory_size` is
+        // the sum of memory sizes of all items in the cache.
+        self.memory_size = self.memory_size.saturating_sub(memory_size);
+
+        let disk_size = key.disk_bytes() + value.disk_bytes();
+        debug_assert!(self.disk_size >= disk_size);
+        // This cannot underflow because we know that `self.disk_size` is
+        // the sum of disk sizes of all items in the cache.
+        self.disk_size = self.disk_size.saturating_sub(disk_size);
     }
 
     fn check_invariants(&self) {
@@ -143,14 +176,22 @@ where
         #[cfg(debug_assertions)]
         if self.len() < 1_000 {
             debug_assert_eq!(
-                self.size,
+                self.memory_size,
                 self.cache
                     .iter()
-                    .map(|(key, value)| key.count_bytes() + value.count_bytes())
+                    .map(|(key, value)| key.memory_bytes() + value.memory_bytes())
+                    .sum::<usize>()
+            );
+            debug_assert_eq!(
+                self.disk_size,
+                self.cache
+                    .iter()
+                    .map(|(key, value)| key.disk_bytes() + value.disk_bytes())
                     .sum::<usize>()
             );
         }
-        debug_assert!(self.size <= self.capacity);
+        debug_assert!(self.memory_size <= self.memory_capacity);
+        debug_assert!(self.disk_size <= self.disk_capacity);
     }
 }
 
@@ -161,24 +202,45 @@ mod tests {
     #[derive(Eq, PartialEq, Hash, Debug)]
     struct ValueSize(u32, usize);
 
-    impl CountBytes for ValueSize {
-        fn count_bytes(&self) -> usize {
+    impl MemoryDiskBytes for ValueSize {
+        fn memory_bytes(&self) -> usize {
             self.1
+        }
+
+        fn disk_bytes(&self) -> usize {
+            0
+        }
+    }
+
+    #[derive(Clone, Eq, PartialEq, Hash, Debug)]
+    struct MemoryDiskValue(u32, usize, usize);
+
+    impl MemoryDiskBytes for MemoryDiskValue {
+        fn memory_bytes(&self) -> usize {
+            self.1
+        }
+
+        fn disk_bytes(&self) -> usize {
+            self.2
         }
     }
 
     #[derive(Eq, PartialEq, Hash, Debug)]
     struct Key(u32);
 
-    impl CountBytes for Key {
-        fn count_bytes(&self) -> usize {
+    impl MemoryDiskBytes for Key {
+        fn memory_bytes(&self) -> usize {
+            0
+        }
+
+        fn disk_bytes(&self) -> usize {
             0
         }
     }
 
     #[test]
     fn lru_cache_single_entry() {
-        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
+        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10), NumBytes::new(0));
 
         assert!(lru.get(&Key(0)).is_none());
 
@@ -201,7 +263,7 @@ mod tests {
 
     #[test]
     fn lru_cache_multiple_entries() {
-        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
+        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10), NumBytes::new(0));
 
         for i in 0..20 {
             lru.push(Key(i), ValueSize(i, 1));
@@ -219,7 +281,7 @@ mod tests {
 
     #[test]
     fn lru_cache_value_eviction() {
-        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
+        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10), NumBytes::new(0));
 
         assert!(lru.get(&Key(0)).is_none());
 
@@ -269,7 +331,7 @@ mod tests {
 
     #[test]
     fn lru_cache_key_eviction() {
-        let mut lru = LruCache::<ValueSize, ValueSize>::new(NumBytes::new(10));
+        let mut lru = LruCache::<ValueSize, ValueSize>::new(NumBytes::new(10), NumBytes::new(0));
 
         assert!(lru.get(&ValueSize(0, 10)).is_none());
 
@@ -325,7 +387,7 @@ mod tests {
 
     #[test]
     fn lru_cache_key_and_value_eviction() {
-        let mut lru = LruCache::<ValueSize, ValueSize>::new(NumBytes::new(10));
+        let mut lru = LruCache::<ValueSize, ValueSize>::new(NumBytes::new(10), NumBytes::new(0));
 
         let evicted = lru.push(ValueSize(0, 5), ValueSize(42, 5));
         assert_eq!(*lru.get(&ValueSize(0, 5)).unwrap(), ValueSize(42, 5));
@@ -359,7 +421,7 @@ mod tests {
 
     #[test]
     fn lru_cache_clear() {
-        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
+        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10), NumBytes::new(0));
         lru.push(Key(0), ValueSize(0, 10));
         lru.clear();
         assert!(lru.get(&Key(0)).is_none());
@@ -367,7 +429,7 @@ mod tests {
 
     #[test]
     fn lru_cache_pop() {
-        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
+        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10), NumBytes::new(0));
         lru.push(Key(0), ValueSize(0, 5));
         lru.push(Key(1), ValueSize(1, 5));
         lru.pop(&Key(0));
@@ -379,25 +441,180 @@ mod tests {
 
     #[test]
     fn lru_cache_count_bytes_and_len() {
-        let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
-        assert_eq!(0, lru.count_bytes());
+        let mut lru = LruCache::<Key, MemoryDiskValue>::new(NumBytes::new(10), NumBytes::new(20));
+        assert_eq!(0, lru.memory_bytes());
+        assert_eq!(0, lru.disk_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
-        lru.push(Key(0), ValueSize(0, 4));
-        assert_eq!(4, lru.count_bytes());
+        lru.push(Key(0), MemoryDiskValue(0, 4, 10));
+        assert_eq!(4, lru.memory_bytes());
+        assert_eq!(10, lru.disk_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
-        lru.push(Key(1), ValueSize(1, 6));
-        assert_eq!(10, lru.count_bytes());
+        lru.push(Key(1), MemoryDiskValue(1, 6, 2));
+        assert_eq!(10, lru.memory_bytes());
+        assert_eq!(12, lru.disk_bytes());
         assert_eq!(2, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(0));
-        assert_eq!(6, lru.count_bytes());
+        assert_eq!(6, lru.memory_bytes());
+        assert_eq!(2, lru.disk_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(1));
-        assert_eq!(0, lru.count_bytes());
+        assert_eq!(0, lru.memory_bytes());
+        assert_eq!(0, lru.disk_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
+    }
+
+    #[test]
+    fn lru_cache_disk_and_memory_single_entry() {
+        let mut lru = LruCache::<Key, MemoryDiskValue>::new(NumBytes::new(10), NumBytes::new(20));
+
+        assert!(lru.get(&Key(0)).is_none());
+
+        // Can't insert a value if memory or disk is too large.
+        let evicted = lru.push(Key(0), MemoryDiskValue(42, 11, 0));
+        assert_eq!(lru.get(&Key(0)), None);
+        assert_eq!(evicted, vec![(Key(0), MemoryDiskValue(42, 11, 0))]);
+
+        let evicted = lru.push(Key(0), MemoryDiskValue(42, 0, 21));
+        assert_eq!(lru.get(&Key(0)), None);
+        assert_eq!(evicted, vec![(Key(0), MemoryDiskValue(42, 0, 21))]);
+
+        // Can insert if both sizes fit.
+        let evicted = lru.push(Key(0), MemoryDiskValue(42, 10, 20));
+        assert_eq!(*lru.get(&Key(0)).unwrap(), MemoryDiskValue(42, 10, 20));
+        assert_eq!(evicted, vec![]);
+
+        // Inserting a new value removes the old one if memory or disk is
+        // non-zero (since both are at capacity).
+        let evicted = lru.push(Key(1), MemoryDiskValue(42, 1, 0));
+        assert_eq!(*lru.get(&Key(1)).unwrap(), MemoryDiskValue(42, 1, 0));
+        assert_eq!(evicted, vec![(Key(0), MemoryDiskValue(42, 10, 20))]);
+
+        lru.clear();
+        let _ = lru.push(Key(0), MemoryDiskValue(42, 10, 20));
+        let evicted = lru.push(Key(1), MemoryDiskValue(42, 0, 1));
+        assert_eq!(*lru.get(&Key(1)).unwrap(), MemoryDiskValue(42, 0, 1));
+        assert_eq!(evicted, vec![(Key(0), MemoryDiskValue(42, 10, 20))]);
+    }
+
+    #[test]
+    fn lru_cache_key_and_value_eviction_mixing_memory_and_disk() {
+        let mut lru =
+            LruCache::<MemoryDiskValue, MemoryDiskValue>::new(NumBytes::new(10), NumBytes::new(10));
+
+        let evicted = lru.push(MemoryDiskValue(0, 5, 1), MemoryDiskValue(42, 5, 1));
+        assert_eq!(
+            *lru.get(&MemoryDiskValue(0, 5, 1)).unwrap(),
+            MemoryDiskValue(42, 5, 1)
+        );
+        assert_eq!(evicted, vec![]);
+
+        let evicted = lru.push(MemoryDiskValue(1, 0, 0), MemoryDiskValue(20, 0, 0));
+        assert_eq!(
+            *lru.get(&MemoryDiskValue(0, 5, 1)).unwrap(),
+            MemoryDiskValue(42, 5, 1)
+        );
+        assert_eq!(
+            *lru.get(&MemoryDiskValue(1, 0, 0)).unwrap(),
+            MemoryDiskValue(20, 0, 0)
+        );
+        assert_eq!(evicted, vec![]);
+
+        let evicted = lru.push(MemoryDiskValue(2, 5, 1), MemoryDiskValue(10, 5, 1));
+        assert!(lru.get(&MemoryDiskValue(0, 5, 1)).is_none());
+        assert_eq!(
+            *lru.get(&MemoryDiskValue(1, 0, 0)).unwrap(),
+            MemoryDiskValue(20, 0, 0)
+        );
+        assert_eq!(
+            *lru.get(&MemoryDiskValue(2, 5, 1)).unwrap(),
+            MemoryDiskValue(10, 5, 1)
+        );
+        // The least recently used is the first entry.
+        assert_eq!(
+            evicted,
+            vec![(MemoryDiskValue(0, 5, 1), MemoryDiskValue(42, 5, 1))]
+        );
+
+        let evicted = lru.push(MemoryDiskValue(3, 4, 9), MemoryDiskValue(30, 0, 1));
+        assert!(lru.get(&MemoryDiskValue(1, 0, 0)).is_none());
+        assert!(lru.get(&MemoryDiskValue(2, 5, 1)).is_none());
+        assert_eq!(
+            *lru.get(&MemoryDiskValue(3, 4, 9)).unwrap(),
+            MemoryDiskValue(30, 0, 1)
+        );
+        // Now the second and third entries are evicted.
+        assert_eq!(
+            evicted,
+            vec![
+                (MemoryDiskValue(1, 0, 0), MemoryDiskValue(20, 0, 0)),
+                (MemoryDiskValue(2, 5, 1), MemoryDiskValue(10, 5, 1))
+            ]
+        );
+    }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn arb_value() -> impl Strategy<Value = MemoryDiskValue> {
+            (0..100_u32, 0..50_usize, 0..50_usize).prop_map(|(a, b, c)| MemoryDiskValue(a, b, c))
+        }
+
+        #[derive(Clone, Debug)]
+        enum Action {
+            Push(MemoryDiskValue, MemoryDiskValue),
+            PopLru,
+        }
+
+        fn arb_action() -> impl Strategy<Value = Action> {
+            prop_oneof![
+                9 => (arb_value(), arb_value()).prop_map(|(a, b)| Action::Push(a, b)),
+                1 => Just(Action::PopLru),
+            ]
+        }
+
+        proptest! {
+            /// Proptest checking that the internal invariants are maintained
+            /// and that the total space of inserted entries equals the total
+            /// space of evicted entries plus the space of the cache itself.
+            #[test]
+            fn test_invariants(entries in prop::collection::vec(arb_action(), 100)) {
+                let mut lru = LruCache::<MemoryDiskValue, MemoryDiskValue>::new(NumBytes::new(100), NumBytes::new(100));
+                let mut total_memory = 0;
+                let mut total_disk = 0;
+                let mut evicted_memory = 0;
+                let mut evicted_disk = 0;
+
+                fn update(memory: &mut usize, disk: &mut usize, k: &MemoryDiskValue, v: &MemoryDiskValue) {
+                    *memory += k.memory_bytes();
+                    *memory += v.memory_bytes();
+                    *disk += k.disk_bytes();
+                    *disk += v.disk_bytes();
+                }
+
+                for action in entries {
+                    let evicted = match action {
+                        Action::Push(k,v) => {
+                            update(&mut total_memory, &mut total_disk, &k, &v);
+                            lru.push(k,v)
+                        }
+                        Action::PopLru => {
+                            lru.pop_lru().map_or(vec![], |e| vec![e])
+                        }
+                    };
+                    for (k,v) in evicted {
+                        update(&mut evicted_memory, &mut evicted_disk, &k, &v);
+                    }
+
+                    assert_eq!(total_memory, evicted_memory + lru.memory_bytes());
+                    assert_eq!(total_disk, evicted_disk + lru.disk_bytes());
+                }
+            }
+        }
     }
 }

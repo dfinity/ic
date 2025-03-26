@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize};
-use dfn_core::api::{call, now, CanisterId};
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_management_canister_types::CanisterInstallMode;
+use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
+use ic_cdk::call;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultFromManagementCanister,
@@ -10,7 +10,7 @@ use ic_nervous_system_root::{
     change_canister::{change_canister, ChangeCanisterRequest},
     LOG_PREFIX,
 };
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::registry::{
@@ -21,10 +21,11 @@ use ic_registry_keys::{
     make_node_record_key, make_routing_table_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::RoutingTable;
-use std::{cell::RefCell, collections::BTreeMap, convert::TryFrom, str::FromStr, time::SystemTime};
+use std::{cell::RefCell, collections::BTreeMap, convert::TryFrom, str::FromStr};
 
+use crate::now_seconds;
 #[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use ic_cdk::println;
 
 const MAX_TIME_FOR_GOVERNANCE_UPGRADE_ROOT_PROPOSAL: u64 = 60 * 60 * 24 * 7;
 
@@ -146,16 +147,16 @@ thread_local! {
 }
 
 async fn get_current_governance_canister_wasm() -> Vec<u8> {
-    let status: CanisterStatusResultFromManagementCanister = call(
-        CanisterId::ic_00(),
+    let status: (CanisterStatusResultFromManagementCanister,) = call(
+        CanisterId::ic_00().get().0,
         "canister_status",
-        dfn_candid::candid,
         (CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),),
     )
     .await
     .unwrap();
 
     status
+        .0
         .module_hash
         .expect("Governance canister must return a module hash")
 }
@@ -179,10 +180,7 @@ pub async fn submit_root_proposal_to_upgrade_governance_canister(
     expected_governance_wasm_sha: Vec<u8>,
     request: ChangeCanisterRequest,
 ) -> Result<(), String> {
-    let now = now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("Could not get the duration.")
-        .as_secs();
+    let now = now_seconds();
 
     // This is a new proposal and we're ready to prepare it.
     // Do some simple validation first:
@@ -340,10 +338,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             return Err(message);
         }
         let proposal = proposal.unwrap();
-        let now = now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Could not get the current time.")
-            .as_secs();
+        let now = now_seconds();
 
         // Check the submission time, if it has elapsed without a majority
         // we can delete it.
@@ -442,7 +437,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             println!("{}", message);
             return Err(message);
         }
-        let _ = change_canister::<DfnRuntime>(payload).await;
+        let _ = change_canister::<CdkRuntime>(payload).await;
         Ok(())
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));

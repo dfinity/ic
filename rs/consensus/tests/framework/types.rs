@@ -6,7 +6,7 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
     consensus::{ConsensusBouncer, ConsensusImpl},
-    dkg, idkg,
+    idkg,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
@@ -44,13 +44,15 @@ use ic_types::{
     NodeId, SubnetId,
 };
 use rand_chacha::ChaChaRng;
-use std::cell::{RefCell, RefMut};
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::fmt;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    cell::{RefCell, RefMut},
+    cmp::Ordering,
+    collections::BinaryHeap,
+    fmt,
+    rc::Rc,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 /// We use priority queues for input/output messages.
 pub type Queue<T> = Rc<RefCell<BinaryHeap<T>>>;
@@ -170,6 +172,7 @@ pub struct ConsensusDependencies {
     pub(crate) self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     pub(crate) canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    pub(crate) vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
@@ -228,6 +231,7 @@ impl ConsensusDependencies {
             self_validating_payload_builder: Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             canister_http_payload_builder: Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
+            vetkd_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
             metrics_registry,
             replica_config,
@@ -349,7 +353,7 @@ pub struct ConsensusDriver<'a> {
     pub(crate) consensus:
         Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>>,
     pub(crate) consensus_bouncer: ConsensusBouncer,
-    pub(crate) dkg: dkg::DkgImpl,
+    pub(crate) dkg: ic_consensus_dkg::DkgImpl,
     pub(crate) idkg:
         Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>>,
     pub(crate) certifier:

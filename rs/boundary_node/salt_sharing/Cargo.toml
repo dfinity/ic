@@ -1,0 +1,30 @@
+[package]
+name = "salt_sharing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-canister-log = { path = "../../rust_canisters/canister_log" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-stable-structures = { workspace = true }
+prometheus = { workspace = true }
+salt-sharing-api = { path = "./api" }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+
+[lib]
+crate-type = ["cdylib"]
+path = "canister/lib.rs"

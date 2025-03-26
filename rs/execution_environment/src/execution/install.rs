@@ -3,7 +3,7 @@
 //! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 
 use crate::as_round_instructions;
-use crate::canister_manager::{
+use crate::canister_manager::types::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
@@ -219,7 +219,7 @@ pub(crate) fn execute_install(
 
 #[allow(clippy::too_many_arguments)]
 fn install_stage_2a_process_start_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     output: WasmExecutionOutput,
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
@@ -334,7 +334,7 @@ fn install_stage_2b_continue_install_after_start(
 
 #[allow(clippy::too_many_arguments)]
 fn install_stage_3_process_init_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     clean_canister: CanisterState,
     mut helper: InstallCodeHelper,
     output: WasmExecutionOutput,

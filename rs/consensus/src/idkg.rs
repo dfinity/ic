@@ -180,17 +180,14 @@
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
-use crate::bouncer_metrics::BouncerMetrics;
-use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
-use crate::idkg::metrics::{
-    timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
+use crate::idkg::{
+    complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl},
+    metrics::{timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS},
+    pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
+    signer::{ThresholdSigner, ThresholdSignerImpl},
+    utils::IDkgBlockReaderImpl,
 };
-use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
-use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
-use crate::idkg::utils::IDkgBlockReaderImpl;
-
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::RoundRobin;
+use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, RoundRobin};
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
@@ -201,16 +198,18 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
-    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader, malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader,
+    crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 
-use std::cell::RefCell;
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    cell::RefCell,
+    collections::HashSet,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 pub(crate) mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
@@ -535,9 +534,12 @@ fn compute_bouncer(
                 BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageId::VetKdKeyShare(_, _) => {
-            // TODO(CON-1424): Accept VetKd shares
-            BouncerValue::Unwanted
+        IDkgMessageId::VetKdKeyShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
+            }
         }
         IDkgMessageId::Complaint(_, data) => {
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
@@ -562,12 +564,12 @@ mod tests {
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::{
-        complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
-        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData,
-    };
     use ic_types::{
-        consensus::idkg::{RequestId, SigShareIdData},
+        consensus::idkg::{
+            complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
+            opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, IDkgArtifactIdData,
+            RequestId, SigShareIdData,
+        },
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
@@ -713,6 +715,13 @@ mod tests {
                 BouncerValue::Wants,
             ),
             (
+                IDkgMessageId::VetKdKeyShare(
+                    vetkd_key_share_prefix(&request_id_fetch_1, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
+            ),
+            (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_fetch_2, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_2).into(),
@@ -727,6 +736,13 @@ mod tests {
                 BouncerValue::Wants,
             ),
             (
+                IDkgMessageId::VetKdKeyShare(
+                    vetkd_key_share_prefix(&request_id_fetch_2, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
+            ),
+            (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
@@ -736,6 +752,13 @@ mod tests {
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_stash, &NODE_1),
+                    get_fake_share_id_data(&request_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
+            ),
+            (
+                IDkgMessageId::VetKdKeyShare(
+                    vetkd_key_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
                 ),
                 BouncerValue::MaybeWantsLater,

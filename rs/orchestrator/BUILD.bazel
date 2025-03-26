@@ -22,6 +22,7 @@ rust_library(
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/consensus",
+        "//rs/consensus/dkg",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/tls_interfaces",
@@ -87,16 +88,17 @@ rust_binary(
 
 rust_test(
     name = "orchestrator_test",
-    crate = ":lib",
-    data = [
+    compile_data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
         "//ic-os/components:ic/generate-ic-config/ic.json5.template",
     ],
+    crate = ":lib",
     deps = [
         # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/ni-dkg",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",
         "//rs/registry/fake",

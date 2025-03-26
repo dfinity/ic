@@ -1,6 +1,8 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags},
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
@@ -11,11 +13,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{
-    canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
-    CallOrigin, Memory, NetworkTopology, SystemState,
+    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -28,11 +29,12 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    messages::{CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
+    messages::{
+        CallbackId, RejectContext, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    },
     methods::{Callback, WasmClosure},
-    time,
-    time::UNIX_EPOCH,
-    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
+    time::{self, UNIX_EPOCH},
+    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
     MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use maplit::btreemap;
@@ -171,7 +173,12 @@ fn update_api() -> ApiType {
 }
 
 fn replicated_query_api() -> ApiType {
-    ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get())
+    ApiType::replicated_query(
+        UNIX_EPOCH,
+        vec![],
+        user_test_id(1).get(),
+        call_context_test_id(1),
+    )
 }
 
 fn non_replicated_query_api() -> ApiType {
@@ -251,17 +258,18 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgReply => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
         SystemApiCallId::MsgReject => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
         SystemApiCallId::MsgDeadline => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
-        SystemApiCallId::MsgCyclesAvailable => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAvailable128 => vec!["U", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAvailable => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAvailable128 => vec!["U", "RQ",  "Rt", "Ry"],
         SystemApiCallId::MsgCyclesRefunded => vec!["Rt", "Ry"],
         SystemApiCallId::MsgCyclesRefunded128 => vec!["Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAccept => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::MsgCyclesAccept128 => vec!["U", "Rt", "Ry"],
-        SystemApiCallId::CyclesBurn128 => vec!["I", "G", "U", "Ry", "Rt", "C", "T"],
+        SystemApiCallId::MsgCyclesAccept => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::MsgCyclesAccept128 => vec!["U", "RQ", "Rt", "Ry"],
+        SystemApiCallId::CyclesBurn128 => vec!["I", "G", "U", "RQ", "Ry", "Rt", "C", "T"],
         SystemApiCallId::CanisterSelfSize => vec!["*"],
         SystemApiCallId::CanisterSelfCopy => vec!["*"],
         SystemApiCallId::CanisterCycleBalance => vec!["*"],
         SystemApiCallId::CanisterCycleBalance128 => vec!["*"],
+        SystemApiCallId::CanisterLiquidCycleBalance128 => vec!["*"],
         SystemApiCallId::CanisterStatus => vec!["*"],
         SystemApiCallId::CanisterVersion => vec!["*"],
         SystemApiCallId::MsgMethodNameSize => vec!["F"],
@@ -291,10 +299,18 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::PerformanceCounter => vec!["*", "s"],
         SystemApiCallId::IsController => vec!["*", "s"],
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
+        SystemApiCallId::CostCall => vec!["*", "s"],
+        SystemApiCallId::CostCreateCanister => vec!["*", "s"],
+        SystemApiCallId::CostSignWithEcdsa=> vec!["*", "s"],
+        SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
+        SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
+        SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
         SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
-        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"]
+        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::SubnetSelfSize => vec!["*"],
+        SystemApiCallId::SubnetSelfCopy => vec!["*"],
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -631,6 +647,16 @@ fn api_availability_test(
                 context,
             );
         }
+        SystemApiCallId::CanisterLiquidCycleBalance128 => {
+            assert_api_availability(
+                |mut api| api.ic0_canister_liquid_cycle_balance128(0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
         SystemApiCallId::MsgCyclesAvailable => {
             assert_api_availability(
                 |api| api.ic0_msg_cycles_available(),
@@ -781,6 +807,26 @@ fn api_availability_test(
                 context,
             );
         }
+        SystemApiCallId::SubnetSelfSize => {
+            assert_api_availability(
+                |api| api.ic0_subnet_self_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::SubnetSelfCopy => {
+            assert_api_availability(
+                |api| api.ic0_subnet_self_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
         // stable API is tested separately
         SystemApiCallId::StableGrow
         | SystemApiCallId::StableRead
@@ -793,6 +839,13 @@ fn api_availability_test(
         // OutOfInstructions and TryGrowWasmMemory are private
         SystemApiCallId::OutOfInstructions => {}
         SystemApiCallId::TryGrowWasmMemory => {}
+        // These are available in all contexts
+        SystemApiCallId::CostCall => {}
+        SystemApiCallId::CostCreateCanister => {}
+        SystemApiCallId::CostHttpRequest => {}
+        SystemApiCallId::CostSignWithEcdsa => {}
+        SystemApiCallId::CostSignWithSchnorr => {}
+        SystemApiCallId::CostVetkdDeriveKey => {}
     }
 }
 
@@ -1137,8 +1190,8 @@ fn certified_data_set() {
     // Copy the certified data into the system state.
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1310,8 +1363,8 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             res
         ),
     }
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1336,14 +1389,14 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
-    let execution_mode = api_type.execution_mode();
+    let execution_parameters = execution_parameters(api_type.execution_mode());
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters(execution_mode.clone()).compute_allocation,
-        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1353,13 +1406,9 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(execution_mode),
+        execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1368,7 +1417,10 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
 
     api.try_grow_wasm_memory(0, 1).unwrap();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
-    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        api.get_allocated_guaranteed_response_message_bytes().get() as i64,
+        0
+    );
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
@@ -1376,7 +1428,10 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
 
     api.try_grow_wasm_memory(0, 10).unwrap_err();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
-    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        api.get_allocated_guaranteed_response_message_bytes().get() as i64,
+        0
+    );
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
@@ -1401,7 +1456,7 @@ fn helper_test_on_low_wasm_memory(
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
         .wasm_memory_limit(wasm_memory_limit)
-        .on_low_wasm_memory_hook_status(start_status)
+        .empty_task_queue_with_on_low_wasm_memory_hook_status(start_status)
         .initial_cycles(Cycles::from(10_000_000_000_000_000u128));
 
     if let Some(memory_allocation) = memory_allocation {
@@ -1434,11 +1489,7 @@ fn helper_test_on_low_wasm_memory(
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1454,8 +1505,8 @@ fn helper_test_on_low_wasm_memory(
             .unwrap();
     }
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1635,14 +1686,14 @@ fn push_output_request_respects_memory_limits() {
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
-    let execution_mode = api_type.execution_mode();
+    let execution_parameters = execution_parameters(api_type.execution_mode());
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters(execution_mode.clone()).compute_allocation,
-        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1667,13 +1718,9 @@ fn push_output_request_respects_memory_limits() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(execution_mode),
+        execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1697,7 +1744,7 @@ fn push_output_request_respects_memory_limits() {
     assert_eq!(api.get_allocated_bytes().get(), 0);
     // `MAX_RESPONSE_COUNT_BYTES` are consumed for message memory.
     assert_eq!(
-        api.get_allocated_message_bytes().get(),
+        api.get_allocated_guaranteed_response_message_bytes().get(),
         MAX_RESPONSE_COUNT_BYTES as u64
     );
     assert_eq!(
@@ -1714,7 +1761,7 @@ fn push_output_request_respects_memory_limits() {
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
     assert_eq!(
-        api.get_allocated_message_bytes().get(),
+        api.get_allocated_guaranteed_response_message_bytes().get(),
         MAX_RESPONSE_COUNT_BYTES as u64
     );
     assert_eq!(
@@ -1723,8 +1770,8 @@ fn push_output_request_respects_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1749,14 +1796,14 @@ fn push_output_request_oversized_request_memory_limits() {
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
-    let execution_mode = api_type.execution_mode();
+    let execution_parameters = execution_parameters(api_type.execution_mode());
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters(execution_mode.clone()).compute_allocation,
-        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1781,13 +1828,9 @@ fn push_output_request_oversized_request_memory_limits() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(execution_mode),
+        execution_parameters,
         subnet_available_memory,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1810,7 +1853,10 @@ fn push_output_request_oversized_request_memory_limits() {
 
     // Memory usage unchanged.
     assert_eq!(0, api.get_allocated_bytes().get());
-    assert_eq!(0, api.get_allocated_message_bytes().get());
+    assert_eq!(
+        0,
+        api.get_allocated_guaranteed_response_message_bytes().get()
+    );
 
     // Slightly smaller, still oversized request.
     let req = RequestBuilder::default()
@@ -1831,7 +1877,7 @@ fn push_output_request_oversized_request_memory_limits() {
     assert_eq!(0, api.get_allocated_bytes().get());
     assert_eq!(
         req_size_bytes as u64,
-        api.get_allocated_message_bytes().get()
+        api.get_allocated_guaranteed_response_message_bytes().get()
     );
     assert_eq!(
         CANISTER_CURRENT_MEMORY_USAGE,
@@ -1839,8 +1885,8 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Ensure that exactly one output request was pushed.
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -1875,8 +1921,8 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
 
     // Propagate system state changes
     assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -2068,4 +2114,159 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     let log = api.canister_log();
     assert_eq!(log.records().len(), initial_records_number + 1);
     assert_le!(log.used_space(), MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+}
+
+#[test]
+fn in_replicated_execution_works_correctly() {
+    // The following should execute in replicated mode.
+    for api_type in &[
+        ApiTypeBuilder::build_update_api(),
+        ApiTypeBuilder::build_system_task_api(),
+        ApiTypeBuilder::build_start_api(),
+        ApiTypeBuilder::build_init_api(),
+        ApiTypeBuilder::build_pre_upgrade_api(),
+        ApiTypeBuilder::build_replicated_query_api(),
+        ApiTypeBuilder::build_reply_api(Cycles::new(0)),
+        ApiTypeBuilder::build_reject_api(RejectContext::new(RejectCode::CanisterReject, "error")),
+    ] {
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = SystemStateBuilder::default().build();
+        let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
+        assert_eq!(api.ic0_in_replicated_execution(), Ok(1));
+    }
+
+    // The following should execute in non-replicated mode.
+    for api_type in &[
+        ApiTypeBuilder::build_non_replicated_query_api(),
+        ApiTypeBuilder::build_composite_query_api(),
+        ApiTypeBuilder::build_composite_reply_api(Cycles::new(0)),
+        ApiTypeBuilder::build_composite_reject_api(RejectContext::new(
+            RejectCode::CanisterReject,
+            "error",
+        )),
+        ApiTypeBuilder::build_inspect_message_api(),
+    ] {
+        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+        let system_state = SystemStateBuilder::default().build();
+        let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
+        assert_eq!(api.ic0_in_replicated_execution(), Ok(0));
+    }
+}
+
+#[test]
+fn ic0_call_with_best_effort_response_feature_stages() {
+    use BestEffortResponsesFeature::*;
+
+    let own_subnet_id = subnet_test_id(0);
+    let other_subnet_id = subnet_test_id(1);
+    for best_effort_responses in [
+        SpecificSubnets(vec![]),
+        SpecificSubnets(vec![other_subnet_id]),
+        SpecificSubnets(vec![own_subnet_id, other_subnet_id]),
+        ApplicationSubnetsOnly,
+        Enabled,
+    ] {
+        for subnet_type in SubnetType::iter() {
+            let mut system_state = SystemStateBuilder::default().build();
+            let mut api = get_system_api_for_best_effort_response_feature_test(
+                own_subnet_id,
+                subnet_type,
+                &best_effort_responses,
+                &system_state,
+            );
+
+            // Make a call to something that isn't `IC_00`.
+            api.ic0_call_new(0, 1, 0, 1, 0, 0, 0, 0, &[42; 128])
+                .unwrap();
+            api.ic0_call_with_best_effort_response(13).unwrap();
+            api.ic0_call_perform().unwrap();
+
+            // Propagate system state changes
+            let system_state_modifications = api.take_system_state_modifications();
+            system_state_modifications
+                .apply_changes(
+                    UNIX_EPOCH,
+                    &mut system_state,
+                    &default_network_topology(),
+                    own_subnet_id,
+                    &no_op_logger(),
+                )
+                .unwrap();
+
+            let RequestOrResponse::Request(req) = system_state.output_into_iter().next().unwrap()
+            else {
+                unreachable!();
+            };
+            let callback = system_state
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .values()
+                .next()
+                .unwrap();
+
+            if best_effort_responses.is_enabled_on(&own_subnet_id, subnet_type) {
+                // An actual best-effort request.
+                assert_ne!(req.deadline, NO_DEADLINE);
+                assert_ne!(callback.deadline, NO_DEADLINE);
+            } else {
+                // Silently converted to a guaranteed response request.
+                assert_eq!(req.deadline, NO_DEADLINE);
+                assert_eq!(callback.deadline, NO_DEADLINE);
+            }
+        }
+    }
+}
+
+fn get_system_api_for_best_effort_response_feature_test(
+    subnet_id: SubnetId,
+    subnet_type: SubnetType,
+    best_effort_responses: &BestEffortResponsesFeature,
+    system_state: &SystemState,
+) -> SystemApiImpl {
+    const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+    let api_type = ApiTypeBuilder::build_update_api();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_id(subnet_id)
+        .with_subnet_type(subnet_type)
+        .build();
+    let mut execution_parameters = execution_parameters(api_type.execution_mode());
+    execution_parameters.subnet_type = subnet_type;
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+        system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
+        Default::default(),
+        api_type.caller(),
+        api_type.call_context_id(),
+    );
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            best_effort_responses: best_effort_responses.clone(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    SystemApiImpl::new(
+        api_type,
+        sandbox_safe_system_state,
+        CANISTER_CURRENT_MEMORY_USAGE,
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
+        execution_parameters,
+        SubnetAvailableMemory::new(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+        ),
+        &embedders_config,
+        Memory::new_for_testing(),
+        NumWasmPages::from(0),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
+        no_op_logger(),
+    )
 }

@@ -1,42 +1,54 @@
 benches:
   bench_icrc1_transfers:
     total:
-      instructions: 6398923208
-      heap_increase: 227
-      stable_memory_increase: 128
+      instructions: 53661544202
+      heap_increase: 263
+      stable_memory_increase: 256
     scopes:
-      before_upgrade:
-        instructions: 5790054103
-        heap_increase: 71
+      icrc1_transfer:
+        instructions: 12864180796
+        heap_increase: 32
+        stable_memory_increase: 0
+      icrc2_approve:
+        instructions: 19064695531
+        heap_increase: 28
+        stable_memory_increase: 128
+      icrc2_transfer_from:
+        instructions: 21030195744
+        heap_increase: 3
+        stable_memory_increase: 0
+      icrc3_get_blocks:
+        instructions: 8163460
+        heap_increase: 0
         stable_memory_increase: 0
       post_upgrade:
-        instructions: 424320009
-        heap_increase: 27
+        instructions: 353833726
+        heap_increase: 71
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 184546072
+        instructions: 149306057
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
-        instructions: 608867671
-        heap_increase: 156
+        instructions: 503141847
+        heap_increase: 200
         stable_memory_increase: 128
   bench_upgrade_baseline:
     total:
-      instructions: 8755062
+      instructions: 8683434
       heap_increase: 258
-      stable_memory_increase: 129
+      stable_memory_increase: 128
     scopes:
       post_upgrade:
-        instructions: 8627524
+        instructions: 8605802
         heap_increase: 129
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 125131
+        instructions: 75240
         heap_increase: 129
-        stable_memory_increase: 129
+        stable_memory_increase: 128
       upgrade:
-        instructions: 8754373
+        instructions: 8682745
         heap_increase: 258
-        stable_memory_increase: 129
-version: 0.1.7
+        stable_memory_increase: 128
+version: 0.1.9

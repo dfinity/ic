@@ -123,13 +123,13 @@ impl FetchesRules for CanisterFetcher {
                 let Some(raw) = x.rule_raw else {
                     return Err(anyhow!(
                         "rule with id {} ({:?}) is None",
-                        x.id,
+                        x.rule_id,
                         x.description
                     ));
                 };
 
                 let rule = RateLimitRule::from_bytes_yaml(&raw)
-                    .context(format!("unable to decode raw rule with id {}", x.id))?;
+                    .context(format!("unable to decode raw rule with id {}", x.rule_id))?;
 
                 Ok(rule)
             })
@@ -164,7 +164,7 @@ mod test {
                     is_redacted: false,
                     rules: vec![
                         OutputRule {
-                            id: "foobar".into(),
+                            rule_id: "foobar".into(),
                             incident_id: "barfoo".into(),
                             rule_raw: Some(indoc! {"
                                 canister_id: aaaaa-aa
@@ -175,7 +175,7 @@ mod test {
                             description: None
                         },
                         OutputRule {
-                            id: "foobaz".into(),
+                            rule_id: "foobaz".into(),
                             incident_id: "barfoo".into(),
                             rule_raw: Some(indoc! {"
                                 canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
@@ -186,7 +186,7 @@ mod test {
                             description: None
                         },
                         OutputRule {
-                            id: "deadbeef".into(),
+                            rule_id: "deadbeef".into(),
                             incident_id: "barfoo".into(),
                             rule_raw: Some(indoc! {"
                                 canister_id: aaaaa-aa
@@ -234,7 +234,7 @@ mod test {
                     schema_version: SCHEMA_VERSION,
                     is_redacted: false,
                     rules: vec![OutputRule {
-                        id: "foobar".into(),
+                        rule_id: "foobar".into(),
                         incident_id: "barfoo".into(),
                         rule_raw: None,
                         description: None,
@@ -270,6 +270,8 @@ mod test {
                     )),
                     methods_regex: Some(Regex::new("^foo|bar$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Block,
                 },
                 RateLimitRule {
@@ -279,6 +281,8 @@ mod test {
                     )),
                     methods_regex: Some(Regex::new("^baz|bax$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Limit(1, Duration::from_secs(10)),
                 },
                 RateLimitRule {
@@ -286,6 +290,8 @@ mod test {
                     subnet_id: None,
                     methods_regex: Some(Regex::new("^foo|bax$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Limit(10, Duration::from_secs(60)),
                 }
             ]

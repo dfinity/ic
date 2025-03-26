@@ -43,7 +43,6 @@ rust_test_suite(
         "//rs/canister_sandbox:sandbox_launcher",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
         "//rs/pocket_ic_server:pocket-ic-server",
-        "//rs/replica",
         "//rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp/test_utils/sender_canister:ic-sender-canister",
         "@mainnet_icp_ledger_canister//file",
@@ -52,19 +51,18 @@ rust_test_suite(
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-        "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_PATH": "$(rootpath //rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks)",
+        "RUST_TEST_THREADS": "4",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "IC_SENDER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp/test_utils/sender_canister:ic-sender-canister)",
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     },
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
-    flaky = True,
+    flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     proc_macro_deps = [
     ],
-    # The test runs replica binary that constantly uses more than 100% cpu core + rosetta server.
-    tags = ["cpu:3"],
+    tags = ["cpu:4"],
     deps = DEPENDENCIES + [
         ":rosetta-integration-tests-lib",
         "//rs/rosetta-api/icp/test_utils/sender_canister:ic_sender_canister_lib",

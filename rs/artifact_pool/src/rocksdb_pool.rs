@@ -568,7 +568,7 @@ fn deserialize_consensus_artifact(
 
 impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<ConsensusMessage> {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.lookup_key(msg_id).map_or(false, |key| {
+        self.lookup_key(msg_id).is_some_and(|key| {
             let info = info_for_msg_id(msg_id);
             let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
             check_ok_uw!(self.db.get_pinned_cf(cf_handle, &key)).is_some()

@@ -93,8 +93,8 @@ fn test_node_provider_rewards() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         let to_subaccount = Subaccount({
@@ -157,8 +157,8 @@ fn test_node_provider_rewards() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // The balance of the main account should now include the rewards.

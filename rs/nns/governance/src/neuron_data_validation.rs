@@ -1,5 +1,5 @@
 use crate::{
-    is_active_neurons_in_stable_memory_enabled,
+    allow_active_neurons_in_stable_memory,
     neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
@@ -225,7 +225,7 @@ impl ValidationInProgress {
             KnownNeuronIndexValidator,
         >::new()));
 
-        if !is_active_neurons_in_stable_memory_enabled() {
+        if !allow_active_neurons_in_stable_memory() {
             tasks.push_back(Box::new(StableNeuronStoreValidator::new(
                 INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
             )));
@@ -596,7 +596,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap = neuron_store
             .heap_neurons_iter()
-            .filter(|neuron| neuron.known_neuron_data.is_some())
+            .filter(|neuron| neuron.known_neuron_data().is_some())
             .count() as u64;
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store| {
             stable_neuron_store.lens().known_neuron_data
@@ -618,7 +618,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
         neuron: &Neuron,
     ) -> Option<ValidationIssue> {
         let neuron_id = neuron.id();
-        let known_neuron_name = match &neuron.known_neuron_data {
+        let known_neuron_name = match neuron.known_neuron_data() {
             // Most neurons aren't known neurons.
             None => return None,
             Some(known_neuron_data) => &known_neuron_data.name,
@@ -688,7 +688,7 @@ mod tests {
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::{neuron::Followees, KnownNeuronData},
         storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
-        temporarily_disable_active_neurons_in_stable_memory,
+        temporarily_disable_allow_active_neurons_in_stable_memory,
     };
 
     thread_local! {
@@ -996,7 +996,7 @@ mod tests {
 
     #[test]
     fn test_validator_invalid_issues_active_neuron_in_stable() {
-        let _t = temporarily_disable_active_neurons_in_stable_memory();
+        let _t = temporarily_disable_allow_active_neurons_in_stable_memory();
 
         // Step 1: Cause an issue with active neuron in stable storage.
         // Step 1.1 First create it as an inactive neuron so it can be added to stable storage.

@@ -5,73 +5,103 @@ inputs:
     required: true
     default: 'test'
   BAZEL_TARGETS:
-    required: false
-    default: '//...'
-  BAZEL_CI_CONFIG:
-    required: false
-    default: '--config=ci'
-  BAZEL_EXTRA_ARGS:
-    required: false
-    default: ''
-  BAZEL_STARTUP_ARGS:
-    required: false
-    default: '--output_base=/var/tmp/bazel-output/'
-  BUILDEVENT_APIKEY:
     required: true
-  SSH_PRIVATE_KEY:
+  CLOUD_CREDENTIALS_CONTENT:
     required: false
+  SSH_PRIVATE_KEY_BACKUP_POD:
+    required: false
+  GPG_PASSPHRASE:
+    required: false
+    description: "GPG key to encrypt build events. If the key is not set, events won't be uploaded."
 
 runs:
   using: "composite"
   steps:
-      - name: Run Bazel Test All
-        id: bazel-test-all
+      - name: Prepare worker cache
         shell: bash
         run: |
-          set +e # manual error handling to ensure we can run some post-build commands
-
-          # temporarily set permissions again until we can figure out issue
+          # freshly deployed k8s machines require ownership correctly set
           if [ -e /cache ]; then
-            sudo chown -RL 1001:1001 /cache
+            sudo find /cache \( -not -user 1001 -or -not -group 1001 \) -exec chown 1001:1001 {} +
           fi
 
-          if [ -n "$SSH_PRIVATE_KEY" ]; then
-            # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }
-            rm -rf ~/.ssh
-            mkdir -p ~/.ssh
-            chmod 0700 ~/.ssh
-            echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+      - name: Set up backup pod access
+        shell: bash
+        if: inputs.SSH_PRIVATE_KEY_BACKUP_POD != ''
+        run: |
+          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            eval "$(ssh-agent -s)"
+            ssh-add - <<< '${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}'
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           fi
 
-          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
-          BAZEL_EXIT_CODE="$?"
+          rm -rf ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 0700 ~/.ssh
+          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
 
-          if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
-              # avoid output unless an error occurs during bes export. This ensures
-              # only the (more relevant) output from the main bazel command is shown.
-              exportout=$(mktemp)
-              if ! bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
-                echo "bes export failed:"
-                cat "$exportout"
-              fi
-              rm "$exportout"
-          fi
+      - name: Write AWS credentials
+        shell: bash
+        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        run: |
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
 
-          # output node name to gihub step summary
-          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
+        with:
+          BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          run: |
 
-          exit "$BAZEL_EXIT_CODE"
-        env:
-          BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
-          BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
-          BAZEL_CI_CONFIG: ${{ inputs.BAZEL_CI_CONFIG }}
-          BAZEL_EXTRA_ARGS: ${{ inputs.BAZEL_EXTRA_ARGS }}
-          BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
-          CI_EVENT_NAME: ${{ github.event_name }}
-          CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}
+            # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
+            release_build="false"
+
+            # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
+            # the full build to occur (including versioning)
+            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+            for pattern in "${protected_branches[@]}"; do
+                if [[ "$BRANCH_NAME" =~ $pattern ]]; then
+                    IS_PROTECTED_BRANCH="true"
+                    break
+                fi
+            done
+
+            # if we are on a "protected" branch or targeting an rc branch we upload all artifacts and run a release build
+            # (with versioning)
+            if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
+                release_build="true"
+                RUN_ON_DIFF_ONLY="false"
+            fi
+
+            if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
+                RUN_ON_DIFF_ONLY="false"
+            fi
+
+            # Some environment variables needed by diff.sh
+            export BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
+            export BAZEL_COMMAND='${{ inputs.BAZEL_COMMAND }}'
+
+            if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+                # get bazel targets that changed within the MR
+                BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+            fi
+
+            # if bazel targets is empty we don't need to run any tests
+            if [ -z "${BAZEL_TARGETS:-}" ]; then
+                echo "No bazel targets to build"
+                exit 0
+            fi
+
+            bazel_args=( )
+
+            if [[ $release_build == "true" ]]; then
+              bazel_args+=( --config=release )
+            fi
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS "${bazel_args[@]}"

@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files(
     [
-        "upload.bash.template",
+        "upload.sh",
     ],
 )
 
@@ -16,12 +16,4 @@ string_flag(
 bool_flag(
     name = "s3_upload",
     build_setting_default = False,
-)
-
-package_group(
-    name = "uploaders",
-    packages = [
-        "//ic-os/...",
-        "//publish/...",
-    ],
 )

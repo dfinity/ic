@@ -4,7 +4,10 @@ use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
-use ic_management_canister_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
+use ic_management_canister_types_private::{
+    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
+    IC_00,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
@@ -13,6 +16,23 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
+
+/// The structure allows reconstructing a potentially large WASM from chunks needed to upgrade or
+/// reinstall some target canister.
+#[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize, Serialize)]
+pub struct ChunkedCanisterWasm {
+    /// Check sum of the overall WASM to be reassembled from chunks.
+    pub wasm_module_hash: Vec<u8>,
+
+    /// Indicates which canister stores the WASM chunks. The store canister must be on the same
+    /// subnet as the target canister (Root must be one of the controllers of both of them).
+    /// May be the same as the target canister ID.
+    pub store_canister_id: CanisterId,
+
+    /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain
+    /// at least one chunk.
+    pub chunk_hashes_list: Vec<Vec<u8>>,
+}
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
 #[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
@@ -44,6 +64,10 @@ pub struct ChangeCanisterRequest {
     #[serde(with = "serde_bytes")]
     pub wasm_module: Vec<u8>,
 
+    /// If the entire WASM does not fit into the 2 MiB ingress limit, then `wasm_module`
+    /// should be empty, and this field should be set instead.
+    pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
+
     /// The new canister args
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
@@ -68,6 +92,7 @@ impl ChangeCanisterRequest {
             .field("mode", &self.mode)
             .field("canister_id", &self.canister_id)
             .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
+            .field("chunked_canister_wasm", &self.chunked_canister_wasm)
             .field("arg_sha256", &format!("{:x?}", arg_sha))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
@@ -98,6 +123,7 @@ impl ChangeCanisterRequest {
             mode,
             canister_id,
             wasm_module: Vec::new(),
+            chunked_canister_wasm: None,
             arg: Encode!().unwrap(),
             compute_allocation: None,
             memory_allocation: None,
@@ -111,6 +137,20 @@ impl ChangeCanisterRequest {
 
     pub fn with_wasm(mut self, wasm_module: Vec<u8>) -> Self {
         self.wasm_module = wasm_module;
+        self
+    }
+
+    pub fn with_chunked_wasm(
+        mut self,
+        wasm_module_hash: Vec<u8>,
+        store_canister_id: CanisterId,
+        chunk_hashes_list: Vec<Vec<u8>>,
+    ) -> Self {
+        self.chunked_canister_wasm = Some(ChunkedCanisterWasm {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        });
         self
     }
 
@@ -218,6 +258,8 @@ where
         }
     }
 
+    let request_str = format!("{:?}", request);
+
     // Ship code to the canister.
     //
     // Note that there's no guarantee that the canister to install/reinstall/upgrade
@@ -225,7 +267,7 @@ where
     // because there could be a concurrent request to restart it. This could be
     // guaranteed with a "stopped precondition" in the management canister, or
     // with some locking here.
-    let res = install_code(request.clone()).await;
+    let res = install_code(request).await;
     // For once, we don't want to unwrap the result here. The reason is that, if the
     // installation failed (e.g., the wasm was rejected because it's invalid),
     // then we want to restart the canister. So we just keep the res to be
@@ -237,15 +279,21 @@ where
     }
 
     // Check the result of the install_code
-    res.map_err(|(rejection_code, message)| format!("Attempt to call install_code with request {request:?} failed with code {rejection_code:?}: {message}"))
+    res.map_err(|(rejection_code, message)| {
+        format!(
+            "Attempt to call install_code with request {request_str} failed with code \
+             {rejection_code:?}: {message}"
+        )
+    })
 }
 
-/// Calls the "install_code" method of the management canister.
+/// Calls a function of the management canister to install the requested code.
 async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::CallResult<()> {
     let ChangeCanisterRequest {
         mode,
         canister_id,
         wasm_module,
+        chunked_canister_wasm,
         arg,
         compute_allocation,
         memory_allocation,
@@ -256,24 +304,51 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
     let canister_id = canister_id.get();
     let sender_canister_version = Some(ic_cdk::api::canister_version());
 
-    let install_code_args = InstallCodeArgs {
-        mode,
-        canister_id,
-        wasm_module,
-        arg,
-        compute_allocation,
-        memory_allocation,
-        sender_canister_version,
-    };
-    // Warning: despite dfn_core::call returning a Result, it actually traps when
-    // the callee traps! Use the public cdk instead, which does not have this
-    // issue.
-    ic_cdk::api::call::call(
-        Principal::try_from(IC_00.get().as_slice()).unwrap(),
-        "install_code",
-        (&install_code_args,),
-    )
-    .await
+    if let Some(ChunkedCanisterWasm {
+        wasm_module_hash,
+        store_canister_id,
+        chunk_hashes_list,
+    }) = chunked_canister_wasm
+    {
+        let target_canister = canister_id;
+        let store_canister = Some(store_canister_id.get());
+        let chunk_hashes_list = chunk_hashes_list
+            .into_iter()
+            .map(|hash| ChunkHash { hash })
+            .collect();
+        let mode = CanisterInstallModeV2::from(mode);
+        let argument = InstallChunkedCodeArgs {
+            mode,
+            target_canister,
+            store_canister,
+            chunk_hashes_list,
+            wasm_module_hash,
+            arg,
+            sender_canister_version,
+        };
+        ic_cdk::api::call::call(
+            Principal::try_from(IC_00.get().as_slice()).unwrap(),
+            "install_chunked_code",
+            (&argument,),
+        )
+        .await
+    } else {
+        let argument = InstallCodeArgs {
+            mode,
+            canister_id,
+            wasm_module,
+            arg,
+            compute_allocation,
+            memory_allocation,
+            sender_canister_version,
+        };
+        ic_cdk::api::call::call(
+            Principal::try_from(IC_00.get().as_slice()).unwrap(),
+            "install_code",
+            (&argument,),
+        )
+        .await
+    }
 }
 
 pub async fn start_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>

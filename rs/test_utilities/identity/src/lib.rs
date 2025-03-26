@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 
-use ic_crypto_ed25519::{PrivateKey as SecretKey, PublicKey};
+use ic_ed25519::{PrivateKey as SecretKey, PublicKey};
 
 const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
 

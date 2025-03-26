@@ -21,7 +21,8 @@ use std::time::{Duration, Instant};
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
 use crate::protocol::sbxsvc::{CreateExecutionStateSerializedSuccessReply, OpenMemoryRequest};
 use crate::protocol::structs::{
-    MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
+    ExecutionStateModifications, MemoryModifications, SandboxExecInput, SandboxExecOutput,
+    StateModifications,
 };
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
@@ -30,12 +31,13 @@ use ic_embedders::{
     SerializedModuleBytes, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
+    ExecutionMode, HypervisorError, HypervisorResult, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     page_map::{PageAllocatorRegistry, PageMapSerialization},
-    EmbedderCache, Global, Memory, PageMap,
+    EmbedderCache, Memory, PageMap,
 };
 use ic_types::CanisterId;
 
@@ -131,13 +133,12 @@ impl Execution {
                 wasm_result,
                 num_instructions_left,
                 allocated_bytes,
-                allocated_message_bytes,
+                allocated_guaranteed_response_message_bytes,
                 instance_stats,
                 system_api_call_counters,
-                canister_log,
             },
             deltas,
-            instance_or_system_api,
+            mut instance_or_system_api,
         ) = ic_embedders::wasm_executor::process(
             exec_input.func_ref,
             exec_input.api_type,
@@ -156,39 +157,45 @@ impl Execution {
             Rc::new(out_of_instructions_handler),
         );
 
+        let system_api = match &mut instance_or_system_api {
+            // Here we use `store_data_mut` instead of
+            // `into_store_data` because the later will drop the
+            // wasmtime Instance which can be an expensive
+            // operation. Mutating the store instead allows us
+            // to delay the drop until after the execution
+            // completed message is sent back to the main
+            // process.
+            Ok(instance) => instance
+                .store_data_mut()
+                .system_api_mut()
+                .expect("System api not present in the wasmtime instance"),
+            Err(system_api) => system_api,
+        };
+
         match wasm_result {
             Ok(_) => {
-                let state_modifications = deltas.map(
-                    |WasmStateChanges {
-                         dirty_page_indices,
-                         globals,
-                     }| {
-                        let system_state_changes = match instance_or_system_api {
-                            // Here we use `store_data_mut` instead of
-                            // `into_store_data` because the later will drop the
-                            // wasmtime Instance which can be an expensive
-                            // operation. Mutating the store instead allows us
-                            // to delay the drop until after the execution
-                            // completed message is sent back to the main
-                            // process.
-                            Ok(mut instance) => instance
-                                .store_data_mut()
-                                .system_api_mut()
-                                .expect("System api not present in the wasmtime instance")
-                                .take_system_state_changes(),
-                            Err(system_api) => system_api.into_system_state_changes(),
-                        };
-                        StateModifications::new(
-                            globals,
-                            &wasm_memory,
-                            &stable_memory,
-                            &dirty_page_indices.wasm_memory_delta,
-                            &dirty_page_indices.stable_memory_delta,
-                            system_state_changes,
-                        )
-                    },
-                );
-                if state_modifications.is_some() {
+                let state_modifications = {
+                    let execution_state_modifications = deltas.map(
+                        |WasmStateChanges {
+                             dirty_page_indices,
+                             globals,
+                         }| {
+                            ExecutionStateModifications::new(
+                                globals,
+                                &wasm_memory,
+                                &stable_memory,
+                                &dirty_page_indices.wasm_memory_delta,
+                                &dirty_page_indices.stable_memory_delta,
+                            )
+                        },
+                    );
+
+                    StateModifications {
+                        execution_state_modifications,
+                        system_state_modifications: system_api.take_system_state_modifications(),
+                    }
+                };
+                if state_modifications.execution_state_modifications.is_some() {
                     self.sandbox_manager
                         .add_memory(exec_input.next_wasm_memory_id, wasm_memory);
                     self.sandbox_manager
@@ -197,11 +204,10 @@ impl Execution {
                 let wasm_output = WasmExecutionOutput {
                     wasm_result,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     num_instructions_left,
                     instance_stats,
                     system_api_call_counters,
-                    canister_log,
                 };
                 self.sandbox_manager.controller.execution_finished(
                     protocol::ctlsvc::ExecutionFinishedRequest {
@@ -221,14 +227,18 @@ impl Execution {
                 // was aborted and the controller removed `exec_id` on its side.
             }
             Err(err) => {
+                // Set the execution error in the system API to capture cases
+                // where the Wasm execution trapped outside of the system API.
+                // This is important to ensure that the proper state modifications
+                // are extracted from the system API.
+                system_api.set_execution_error(err.clone());
                 let wasm_output = WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left,
                     allocated_bytes,
-                    allocated_message_bytes,
+                    allocated_guaranteed_response_message_bytes,
                     instance_stats,
                     system_api_call_counters,
-                    canister_log,
                 };
 
                 self.sandbox_manager.controller.execution_finished(
@@ -237,7 +247,13 @@ impl Execution {
                         exec_output: SandboxExecOutput {
                             slice,
                             wasm: wasm_output,
-                            state: None,
+                            // If the execution resulted in an error, we only want to persist
+                            // the system state modifications.
+                            state: StateModifications {
+                                execution_state_modifications: None,
+                                system_state_modifications: system_api
+                                    .take_system_state_modifications(),
+                            },
                             execute_total_duration: total_timer.elapsed(),
                             execute_run_duration: run_timer.elapsed(),
                         },

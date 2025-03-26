@@ -1,8 +1,8 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_management_canister_types::CanisterSettings;
 use ic_nns_constants::ALL_NNS_CANISTER_IDS;
-use pocket_ic::management_canister::CanisterSettings;
-use pocket_ic::{PocketIc, WasmResult};
+use pocket_ic::PocketIc;
 use serde::Deserialize;
 
 pub mod index;
@@ -58,10 +58,7 @@ where
         Err(err) => {
             panic!("{canister_id}.{method} query failed with error {err} (caller: {caller})");
         }
-        Ok(WasmResult::Reject(err)) => {
-            panic!("{canister_id}.{method} query rejected with error {err} (caller: {caller})");
-        }
-        Ok(WasmResult::Reply(res)) => Decode!(&res, O)
+        Ok(res) => Decode!(&res, O)
             .unwrap_or_else(|_| panic!("error decoding response to {} query", method)),
     }
 }
@@ -83,10 +80,7 @@ where
         Err(err) => {
             panic!("{canister_id}.{method} failed with error {err} (caller: {caller})");
         }
-        Ok(WasmResult::Reject(err)) => {
-            panic!("{canister_id}.{method} rejected with error {err} (caller: {caller})");
-        }
-        Ok(WasmResult::Reply(res)) => Decode!(&res, O)
+        Ok(res) => Decode!(&res, O)
             .unwrap_or_else(|_| panic!("error decoding response to {} call", method)),
     }
 }

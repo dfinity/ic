@@ -28,7 +28,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     create_new_subnet_with_keys, empty_subnet_update, execute_update_subnet_proposal,
     get_master_public_key, make_key, run_chain_key_signature_test, KEY_ID1,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;

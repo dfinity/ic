@@ -40,6 +40,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-boundary-tls": "/opt/ic/bin/ic-boundary:0755",  # API boundary node binary, required by the IC protocol. The same GuestOS is used both for the replica and API boundary nodes.
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",  # May be used during recoveries to export/import consensus pool artifacts.
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",  # Required for performing subnet recoveries on the node directly.
+            "//publish/binaries:ic-admin": "/opt/ic/bin/ic-admin:0755",  # Required for issuing recovery proposals directly from the node (primarily used for system tests).
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",  # May be used for inspecting and recovering the registry.
             # Required by the GuestOS
@@ -54,7 +55,7 @@ def image_deps(mode, malicious = False):
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
 
-            # TODO(NODE-1519): delete config tool from guestos after switch to new icos config
+            # TODO(NODE-1518): delete config tool from guestos after switch to new icos config
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
         },
 
@@ -67,7 +68,7 @@ def image_deps(mode, malicious = False):
         "bootfs_size": "1G",
 
         # Add any custom partitions to the manifest
-        "custom_partitions": lambda: [Label("//ic-os/guestos:partition-config.tzst")],
+        "custom_partitions": lambda _: [Label("//ic-os/guestos:partition-config.tzst")],
 
         # We will install extra_boot_args onto the system, after substituting the
         # hash of the root filesystem into it. Track the template (before

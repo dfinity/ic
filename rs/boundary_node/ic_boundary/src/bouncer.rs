@@ -13,16 +13,15 @@ use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse}
 use dashmap::DashMap;
 use http::Request;
 use ic_bn_lib::http::ConnInfo;
-use moka::sync::{Cache, CacheBuilder};
 use prometheus::{
     register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram, IntGaugeVec,
     Registry,
 };
-use ratelimit::Ratelimiter;
 use tracing::{debug, error, info, warn};
 
 use crate::{
     cli,
+    rate_limiting::sharded::ShardedRatelimiter,
     routes::{ErrorCause, RateLimitCause},
 };
 
@@ -44,10 +43,6 @@ pub struct Decision {
     pub length: Duration,
 }
 
-struct Bucket {
-    limiter: Ratelimiter,
-}
-
 struct Metrics {
     decisions: IntGaugeVec,
     fw_latency: Histogram,
@@ -55,11 +50,9 @@ struct Metrics {
 
 pub struct Bouncer {
     firewall: Arc<dyn Firewall>,
-    buckets: Cache<IpAddr, Arc<Bucket>>,
+    shards: ShardedRatelimiter<IpAddr>,
     decisions: DashMap<IpAddr, Decision>,
     ban_time: Duration,
-    burst_size: u64,
-    refill_interval: Duration,
     // Generations are used to track changes to `decisions` and to apply firewall only when needed
     gen_current: AtomicU64,
     gen_applied: AtomicU64,
@@ -69,10 +62,10 @@ pub struct Bouncer {
 impl Bouncer {
     fn new(
         rate_per_second: u32,
-        burst_size: u64,
+        burst_size: u32,
         ban_time: Duration,
-        max_buckets: u64,
-        bucket_expiry: Duration,
+        max_shards: u64,
+        shard_tti: Duration,
         firewall: Arc<dyn Firewall>,
         registry: &Registry,
     ) -> Result<Self, Error> {
@@ -80,14 +73,9 @@ impl Bouncer {
             return Err(anyhow!("rate_per_second should be > 0"));
         }
 
-        if burst_size < rate_per_second as u64 {
+        if burst_size < rate_per_second {
             return Err(anyhow!("burst_size should be >= rate_per_second"));
         }
-
-        let buckets = CacheBuilder::new(max_buckets)
-            // Expire buckets when they're not queried for some time, this bounds memory usage
-            .time_to_idle(bucket_expiry)
-            .build();
 
         let metrics = Metrics {
             decisions: register_int_gauge_vec_with_registry!(
@@ -105,25 +93,19 @@ impl Bouncer {
         };
 
         Ok(Self {
-            burst_size,
             firewall,
-            buckets,
+            shards: ShardedRatelimiter::new(
+                rate_per_second,
+                burst_size,
+                Duration::from_secs(1),
+                shard_tti,
+                max_shards,
+            ),
             decisions: DashMap::new(),
             ban_time,
-            refill_interval: Duration::from_secs(1).checked_div(rate_per_second).unwrap(),
             gen_current: AtomicU64::new(0),
             gen_applied: AtomicU64::new(0),
             metrics,
-        })
-    }
-
-    fn new_bucket(&self) -> Arc<Bucket> {
-        Arc::new(Bucket {
-            limiter: Ratelimiter::builder(1, self.refill_interval)
-                .max_tokens(self.burst_size)
-                .initial_available(self.burst_size)
-                .build()
-                .unwrap(),
         })
     }
 
@@ -139,12 +121,7 @@ impl Bouncer {
             return false;
         }
 
-        // Get bucket or create a new one
-        // Moka guarantees that concurrent requests for the same key would lead to only a single one value created
-        let bucket = self.buckets.get_with(ip, || self.new_bucket());
-
-        // Try to acquire a token
-        if bucket.limiter.try_wait().is_ok() {
+        if self.shards.acquire(ip) {
             return true;
         }
 

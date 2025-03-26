@@ -1,5 +1,4 @@
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
-use crate::metrics::MetricsAssert;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -11,19 +10,18 @@ use ic_ledger_suite_orchestrator::candid::{
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
     Payload,
 };
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
-use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
 pub mod flow;
-pub mod metrics;
 pub mod universal_canister;
 
 const MAX_TICKS: usize = 10;
@@ -305,9 +303,8 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
-    pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+    pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn wait_for<T, E, F>(&self, f: F) -> T
@@ -349,6 +346,14 @@ impl LedgerSuiteOrchestrator {
     }
 }
 
+impl CanisterHttpQuery<UserError> for LedgerSuiteOrchestrator {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.as_ref()
+            .query(self.ledger_suite_orchestrator_id, "http_request", request)
+            .map(assert_reply)
+    }
+}
+
 pub fn default_init_arg() -> InitArg {
     InitArg {
         more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
@@ -365,51 +370,38 @@ pub fn new_state_machine() -> StateMachine {
 }
 
 pub fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
-    load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_suite_orchestrator",
-        &[],
-    )
+    let wasm_path = std::env::var("LEDGER_SUITE_ORCHESTRATOR_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
 }
 
 pub fn ledger_suite_orchestrator_get_blocks_disabled_wasm() -> Vec<u8> {
-    load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_suite_orchestrator_get_blocks_disabled",
-        &[],
-    )
+    let wasm_path =
+        std::env::var("LEDGER_SUITE_ORCHESTRATOR_GET_BLOCKS_DISABLED_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
 }
 
 pub fn ledger_wasm() -> LedgerWasm {
-    LedgerWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    LedgerWasm::from(wasm)
 }
 
 fn ledger_get_blocks_disabled_wasm() -> LedgerWasm {
-    LedgerWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_canister_get_blocks_disabled",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_CANISTER_GET_BLOCKS_DISABLED_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    LedgerWasm::from(wasm)
 }
 
 pub fn index_wasm() -> IndexWasm {
-    IndexWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "index_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("INDEX_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    IndexWasm::from(wasm)
 }
 
 fn archive_wasm() -> ArchiveWasm {
-    ArchiveWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_archive_node_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    ArchiveWasm::from(wasm)
 }
 
 fn is_gzipped_blob(blob: &[u8]) -> bool {

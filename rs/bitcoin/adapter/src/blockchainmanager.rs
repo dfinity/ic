@@ -5,11 +5,13 @@ use crate::{
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
-    network::{
+    block::Header as BlockHeader,
+    hashes::Hash as _,
+    p2p::{
         message::{NetworkMessage, MAX_INV_SIZE},
         message_blockdata::{GetHeadersMessage, Inventory},
     },
-    Block, BlockHash, BlockHeader,
+    Block, BlockHash,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
@@ -18,12 +20,12 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
 /// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
-const GETDATA_REQUEST_TIMEOUT_SECS: u64 = 30;
+const GETDATA_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
 const GETHEADERS_REQUEST_TIMEOUT_SECS: u64 = 30;
@@ -39,13 +41,6 @@ const MAX_UNSOLICITED_HEADERS: usize = 20;
 ///Max number of inventory in the "getdata" request that can be sent
 /// to a peer at a time.
 const INV_PER_GET_DATA_REQUEST: u32 = 8;
-
-const ONE_MB: usize = 1_024 * 1_024;
-
-/// The limit at which we should stop making additional requests for new blocks as the block cache
-/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
-/// not be created.
-const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
 
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
@@ -144,6 +139,8 @@ pub struct BlockchainManager {
 
     /// This field stores the map of which bitcoin nodes sent which "inv" messages.
     peer_info: HashMap<SocketAddr, PeerInfo>,
+    /// This field is used to keep track of the next peer to send a "getdata" request to.
+    round_robin_offset: usize,
 
     /// This HashMap stores the information related to each getdata request
     /// sent by the BlockChainManager. An entry is removed from this hashmap when
@@ -190,6 +187,7 @@ impl BlockchainManager {
         BlockchainManager {
             blockchain,
             peer_info,
+            round_robin_offset: 0,
             getdata_request_info,
             getheaders_requests: HashMap::new(),
             catchup_headers: HashSet::new(),
@@ -389,7 +387,7 @@ impl BlockchainManager {
                         if headers.len() < MAX_HEADERS_SIZE {
                             None
                         } else {
-                            Some((vec![last.header.block_hash()], BlockHash::default()))
+                            Some((vec![last.header.block_hash()], BlockHash::all_zeros()))
                         }
                     } else {
                         None
@@ -416,7 +414,6 @@ impl BlockchainManager {
         if !self.peer_info.contains_key(addr) {
             return Err(ReceivedBlockMessageError::UnknownPeer);
         }
-
         let block_hash = block.block_hash();
         //Remove the corresponding `getdata` request from peer_info and getdata_request_info.
         let request = match self.getdata_request_info.remove(&block_hash) {
@@ -472,7 +469,7 @@ impl BlockchainManager {
                 tip: initial_hash,
             },
         );
-        let locators = (locator_hashes, BlockHash::default());
+        let locators = (locator_hashes, BlockHash::all_zeros());
         self.send_getheaders(channel, addr, locators);
     }
 
@@ -523,7 +520,7 @@ impl BlockchainManager {
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
                 Some(sent_at) => {
-                    if sent_at.elapsed().as_secs() > GETDATA_REQUEST_TIMEOUT_SECS {
+                    if sent_at.elapsed() > GETDATA_REQUEST_TIMEOUT {
                         retry_queue.insert(*block_hash);
                     }
                 }
@@ -533,21 +530,23 @@ impl BlockchainManager {
             }
         }
 
+        // If a request timed out, there is no point in storing it in getdata_request_info
+        // Not removing it can actually lead to the adapter stalling, thinking all of its peers are busy.
+        for block_hash in &retry_queue {
+            self.getdata_request_info.remove(block_hash);
+        }
+
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
             return;
         }
 
-        let block_cache_size = self.blockchain.lock().unwrap().get_block_cache_size();
+        let is_cache_full = self.blockchain.lock().unwrap().is_block_cache_full();
 
-        if block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES {
-            debug!(
-                self.logger,
-                "Cache Size: {}, Max Size: {}", block_cache_size, BLOCK_CACHE_THRESHOLD_BYTES
-            );
+        if is_cache_full {
+            debug!(self.logger, "Cache full");
+            return;
         }
-
-        let is_cache_full = block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES;
 
         // Count the number of requests per peer.
         let mut requests_per_peer: HashMap<SocketAddr, u32> =
@@ -557,15 +556,17 @@ impl BlockchainManager {
             *counter = counter.saturating_add(1);
         }
 
-        let mut peer_info: Vec<_> = self.peer_info.values_mut().collect();
-        peer_info.sort_by(|a, b| {
-            let requests_sent_to_a = requests_per_peer.get(&a.socket).unwrap_or(&0);
-            let requests_sent_to_b = requests_per_peer.get(&b.socket).unwrap_or(&0);
-            requests_sent_to_a.cmp(requests_sent_to_b)
-        });
+        // Rotate the peer_info vector to ensure that we are not always sending requests to the same peer.
+        let mut peers: Vec<_> = self.peer_info.values().collect();
+        let len = peers.len();
+        if len == 0 {
+            return;
+        }
+        peers.rotate_left(self.round_robin_offset % len);
+        self.round_robin_offset = (self.round_robin_offset + 1) % len;
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
-        for peer in peer_info {
+        for peer in peers {
             // Calculate number of inventory that can be sent in 'getdata' request to the peer.
             let requests_sent_to_peer = requests_per_peer.get(&peer.socket).unwrap_or(&0);
             let num_requests_to_be_sent =
@@ -574,11 +575,7 @@ impl BlockchainManager {
             // Randomly sample some inventory to be requested from the peer.
             let mut selected_inventory = vec![];
             for _ in 0..num_requests_to_be_sent {
-                match get_next_block_hash_to_sync(
-                    is_cache_full,
-                    &mut retry_queue,
-                    &mut self.block_sync_queue,
-                ) {
+                match get_next_block_hash_to_sync(&mut retry_queue, &mut self.block_sync_queue) {
                     Some(hash) => {
                         selected_inventory.push(hash);
                     }
@@ -587,7 +584,7 @@ impl BlockchainManager {
             }
 
             if selected_inventory.is_empty() {
-                break;
+                continue;
             }
 
             trace!(
@@ -687,7 +684,7 @@ impl BlockchainManager {
             if !self.getheaders_requests.contains_key(&addr) && self.catchup_headers.contains(&addr)
             {
                 let locators = self.blockchain.lock().unwrap().locator_hashes();
-                self.send_getheaders(channel, &addr, (locators, BlockHash::default()));
+                self.send_getheaders(channel, &addr, (locators, BlockHash::all_zeros()));
                 self.catchup_headers.remove(&addr);
             }
         }
@@ -751,20 +748,14 @@ impl BlockchainManager {
     }
 }
 
+// Only returns a block if the cache is not full.
+// Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
+// blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
 fn get_next_block_hash_to_sync(
-    is_cache_full: bool,
     retry_queue: &mut LinkedHashSet<BlockHash>,
     sync_queue: &mut LinkedHashSet<BlockHash>,
 ) -> Option<BlockHash> {
-    if !retry_queue.is_empty() {
-        return retry_queue.pop_front();
-    }
-
-    if is_cache_full {
-        return None;
-    }
-
-    sync_queue.pop_front()
+    sync_queue.pop_front().or_else(|| retry_queue.pop_front())
 }
 
 #[cfg(test)]
@@ -777,9 +768,7 @@ pub mod test {
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
     use bitcoin::Network;
-    use bitcoin::{
-        network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
-    };
+    use bitcoin::{p2p::message::NetworkMessage, BlockHash};
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
         generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
@@ -815,7 +804,7 @@ pub mod test {
 
         assert_eq!(channel.command_count(), 1);
 
-        let locators = (vec![genesis_hash], BlockHash::default());
+        let locators = (vec![genesis_hash], BlockHash::all_zeros());
         blockchain_manager.send_getheaders(&mut channel, &addr, locators.clone());
         assert!(blockchain_manager.getheaders_requests.contains_key(&addr));
         let request = blockchain_manager.getheaders_requests.get(&addr).unwrap();
@@ -824,7 +813,7 @@ pub mod test {
         let command = channel.pop_front().expect("command not found");
         assert!(matches!(command.address, Some(address) if address == addr));
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::default())
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::all_zeros())
         );
         assert!(
             matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if *version == MINIMUM_VERSION_NUMBER)
@@ -894,7 +883,7 @@ pub mod test {
             _ => GetHeadersMessage {
                 version: 0,
                 locator_hashes: vec![],
-                stop_hash: BlockHash::default(),
+                stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
@@ -904,7 +893,7 @@ pub mod test {
         );
         assert_eq!(
             get_headers_message.stop_hash,
-            BlockHash::default(),
+            BlockHash::all_zeros(),
             "Didn't send the right stop hash for initial syncing"
         );
 
@@ -932,7 +921,7 @@ pub mod test {
             _ => GetHeadersMessage {
                 version: 0,
                 locator_hashes: vec![],
-                stop_hash: BlockHash::default(),
+                stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
@@ -941,7 +930,7 @@ pub mod test {
         );
         assert_eq!(
             get_headers_message.stop_hash,
-            BlockHash::default(),
+            BlockHash::all_zeros(),
             "Didn't send the right stop hash for initial syncing"
         );
     }
@@ -1187,12 +1176,7 @@ pub mod test {
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
         assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
+            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
         );
         let getdata_command = channel
             .pop_back()
@@ -1246,12 +1230,7 @@ pub mod test {
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
         assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
+            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
         );
         assert_eq!(request.socket, addr2);
         let getdata_command = channel
@@ -1271,10 +1250,8 @@ pub mod test {
         );
     }
 
-    /// This function tests to ensure that the BlockchainManager retries `getdata` requests
-    /// that have failed when calling `sync_blocks` with a full block cache.
     #[test]
-    fn test_ensure_getdata_requests_are_retried_with_a_full_cache() {
+    fn test_ensure_getdata_requests_are_not_retried_with_a_full_cache() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
@@ -1302,7 +1279,7 @@ pub mod test {
                 blockchain.add_block(block).expect("failed to add block");
             }
 
-            assert!(blockchain.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES);
+            assert!(blockchain.is_block_cache_full());
         }
 
         let block_1_hash = large_blockchain_headers
@@ -1321,35 +1298,16 @@ pub mod test {
 
         blockchain_manager.sync_blocks(&mut channel);
 
-        assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
+        // The `getdata_request_info` should be empty as the block cache is at the size threshold.
+        // Additionally, the previous entry in get_data_request_info was removed because it timed out.
+        assert_eq!(blockchain_manager.getdata_request_info.len(), 0);
         // The request is considered retried if its timeout is less than the the timeout seconds.
-        let request = blockchain_manager
-            .getdata_request_info
-            .get(&block_1_hash)
-            .expect("missing request info for block hash 1");
-        assert!(
-            request
-                .sent_at
-                .expect("should be some instant")
-                .elapsed()
-                .as_secs()
-                < GETDATA_REQUEST_TIMEOUT_SECS
-        );
-        let getdata_command = channel
-            .pop_back()
-            .expect("there should `getdata` request in the channel");
-        assert!(matches!(
-            getdata_command.message,
-            NetworkMessage::GetData(_)
-        ));
-        let hashes_sent = match getdata_command.message {
-            NetworkMessage::GetData(inv) => inv,
-            _ => vec![],
-        };
-        assert_eq!(hashes_sent.len(), 1);
-        assert!(
-            matches!(hashes_sent.first(), Some(Inventory::Block(hash)) if *hash == block_1_hash)
-        );
+        while let Some(command) = channel.pop_front() {
+            assert!(
+                !matches!(command.message, NetworkMessage::GetData(_)),
+                "Found a `GetData` command, but none was expected."
+            );
+        }
     }
 
     /// Tests the `BlockchainManager::idle(...)` function to ensure it clears the state from the
@@ -1599,7 +1557,7 @@ pub mod test {
 
     /// Test to check that the retry queue is always used to retrieve the next block hash.
     #[test]
-    fn test_get_next_block_hash_to_sync_always_retrieves_from_the_retry_queue() {
+    fn test_get_next_block_hash_to_sync_retrieves_from_sync_queue_first_only_if_cahce_not_full() {
         let genesis_block = genesis_block(Network::Regtest);
         let headers = generate_headers(
             genesis_block.block_hash(),
@@ -1607,9 +1565,11 @@ pub mod test {
             3,
             &[],
         );
-        let mut retry_queue: LinkedHashSet<BlockHash> =
+        // Sync queue starts with 2 times
+        let mut sync_queue: LinkedHashSet<BlockHash> =
             headers.iter().map(|h| h.block_hash()).take(2).collect();
-        let mut sync_queue: LinkedHashSet<BlockHash> = headers
+        // Retry queue starts with 1 item.
+        let mut retry_queue: LinkedHashSet<BlockHash> = headers
             .iter()
             .map(|h| h.block_hash())
             .skip(2)
@@ -1617,43 +1577,15 @@ pub mod test {
             .collect();
 
         // Try with `is_cache_full` set to false.
-        let first_hash = retry_queue
+        let first_hash = sync_queue
             .front()
             .copied()
-            .expect("Retry queue should have 2 items.");
-        let result = get_next_block_hash_to_sync(false, &mut retry_queue, &mut sync_queue);
+            .expect("Sync queue queue should have 2 items.");
+        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
+        // The result is part of sync queue, and now sync queue only has one item
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(retry_queue.len(), 1);
         assert_eq!(sync_queue.len(), 1);
-
-        // Try with `is_cache_full` set to true.
-        let first_hash = retry_queue
-            .front()
-            .copied()
-            .expect("Retry queue should have 1 item.");
-        let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
-        assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
-        assert_eq!(sync_queue.len(), 1);
-        assert_eq!(retry_queue.len(), 0);
-    }
-
-    /// Tests if the cache is full and the retry queue is empty, then no blocks are returned.
-    #[test]
-    fn test_get_next_block_hash_to_sync_full_cache_and_empty_retry_queue() {
-        let genesis_block = genesis_block(Network::Regtest);
-        let headers = generate_headers(
-            genesis_block.block_hash(),
-            genesis_block.header.time,
-            1,
-            &[],
-        );
-        let mut retry_queue = LinkedHashSet::new();
-        let mut sync_queue: LinkedHashSet<BlockHash> =
-            headers.iter().map(|h| h.block_hash()).collect();
-        let result = get_next_block_hash_to_sync(true, &mut retry_queue, &mut sync_queue);
-        assert!(result.is_none());
-        assert_eq!(sync_queue.len(), 1);
-        assert_eq!(retry_queue.len(), 0);
     }
 
     /// Tests that the sync queue is used last only if the cache is not full and the retry queue
@@ -1674,7 +1606,7 @@ pub mod test {
             .front()
             .copied()
             .expect("Sync queue should have 1 item.");
-        let result = get_next_block_hash_to_sync(false, &mut retry_queue, &mut sync_queue);
+        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(sync_queue.len(), 0);
         assert_eq!(retry_queue.len(), 0);

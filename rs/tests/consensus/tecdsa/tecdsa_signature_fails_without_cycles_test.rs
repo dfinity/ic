@@ -8,7 +8,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing, get_public_key_with_logger, get_signature_with_logger,
     make_key_ids_for_all_schemes, scale_cycles, setup,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -67,7 +67,7 @@ fn test(env: TestEnv) {
             let method_name = match key_id {
                 MasterPublicKeyId::Ecdsa(_) => "sign_with_ecdsa",
                 MasterPublicKeyId::Schnorr(_) => "sign_with_schnorr",
-                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+                MasterPublicKeyId::VetKd(_) => "vetkd_derive_key",
             };
             assert_eq!(
                 error,
@@ -79,7 +79,7 @@ fn test(env: TestEnv) {
                         scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
                         scale_cycles(ECDSA_SIGNATURE_FEE),
                     ),
-                    error_code: None
+                    error_code: Some("IC0406".to_string())
                 })
             )
         }

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+###############################################################################
+# Environment & Script Setup
+###############################################################################
+
 set -o nounset
 set -o pipefail
 
@@ -8,162 +12,177 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 source /opt/ic/bin/functions.sh
 
-GENERATION=
+HARDWARE_GENERATION=
 
-MINIMUM_CPU_SOCKETS=2
+###############################################################################
+# Hardware Requirements
+###############################################################################
 
 GEN1_CPU_MODEL="AMD EPYC 7302"
 GEN1_CPU_CAPABILITIES=("sev")
 GEN1_CPU_SOCKETS=2
 GEN1_CPU_THREADS=64
+# Gen1 Dell has 10 * 3.2TB drives and Gen1 SuperMicro has 5 * 6.4 TB drives = 32TB
+GEN1_MINIMUM_DISK_SIZE=3200000000000
+GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
 GEN2_CPU_MODEL="AMD EPYC 7..3"
 GEN2_CPU_CAPABILITIES=("sev_snp")
+GEN2_MINIMUM_CPU_SOCKETS=2
 GEN2_MINIMUM_CPU_THREADS=64
-
-# 510 GiB (Gibibyte)
-MINIMUM_MEMORY_SIZE=547608330240
-
 # Gen2 has 5 * 6.4 TB drives = 32TB
 GEN2_MINIMUM_DISK_SIZE=6400000000000
 GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
-# Dell 10 3.2TB and SuperMicro has 5 7.4 TB drives = 32TB
-GEN1_MINIMUM_DISK_SIZE=3200000000000
-GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
+# Memory requirement for all nodes: 510 GB (just under the 512 GB publicly-listed requirement)
+MINIMUM_MEMORY_SIZE=547608330240
 
-CONFIG_DIR="/var/ic/config"
+###############################################################################
+# Helper Functions
+###############################################################################
 
-function check_generation() {
-    echo "* Checking Generation..."
-
-    local cpu="$(lshw -quiet -class cpu -json)"
+function get_cpu_info_json() {
+    local cpu_json="$(lshw -quiet -class cpu -json)"
     log_and_halt_installation_on_error "${?}" "Unable to fetch CPU information."
-
-    for i in $(echo "${cpu}" | jq -r '.[].id'); do
-        if [[ ${i} =~ .*:.* ]]; then
-            unit=$(echo ${i} | awk -F ':' '{ print $2 }')
-        else
-            unit=${i}
-        fi
-        echo "* Checking CPU socket ${unit}..."
-
-        local model=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
-        if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
-            if [[ ${GENERATION} =~ ^(|1)$ ]]; then
-                GENERATION=1
-            else
-                log_and_halt_installation_on_error "1" "  CPU Socket Generations inconsistent."
-            fi
-        elif [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
-            if [[ ${GENERATION} =~ ^(|2)$ ]]; then
-                GENERATION=2
-            else
-                log_and_halt_installation_on_error "1" "  CPU Socket Generations inconsistent."
-            fi
-        else
-            log_and_halt_installation_on_error "2" "  CPU Model does NOT meet system requirements."
-        fi
-    done
-    echo "* Generation" ${GENERATION} "detected"
+    echo "${cpu_json}"
 }
 
+###############################################################################
+# Hardware Generation Detection
+###############################################################################
+
+function detect_hardware_generation() {
+    echo "* Detecting hardware generation..."
+
+    local cpu_json="$(get_cpu_info_json)"
+
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+        if [[ ${socket_id} =~ .*:.* ]]; then
+            unit=$(echo "${socket_id}" | awk -F ':' '{ print $2 }')
+        else
+            unit="${socket_id}"
+        fi
+
+        echo "* Checking CPU socket ${unit}..."
+        local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
+
+        if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
+            if [[ ${HARDWARE_GENERATION} =~ ^(|1)$ ]]; then
+                HARDWARE_GENERATION=1
+            else
+                log_and_halt_installation_on_error "1" "CPU Socket Hardware Generations inconsistent."
+            fi
+        elif [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
+            if [[ ${HARDWARE_GENERATION} =~ ^(|2)$ ]]; then
+                HARDWARE_GENERATION=2
+            else
+                log_and_halt_installation_on_error "1" "CPU Socket Hardware Generations inconsistent."
+            fi
+        else
+            log_and_halt_installation_on_error "1" "CPU Model does NOT meet system requirements."
+        fi
+    done
+
+    echo "* Hardware generation ${HARDWARE_GENERATION} detected"
+}
+
+###############################################################################
+# CPU Verification
+###############################################################################
+
 function check_num_cpus() {
-    local num_cpu_sockets=$(lscpu | grep "Socket(s)" | awk '{print $2}')
-    if [ ${num_cpu_sockets} -ne ${MINIMUM_CPU_SOCKETS} ]; then
-        log_and_halt_installation_on_error "1" "Number of CPU's (${num_cpu_sockets}) does NOT meet system requirements (${MINIMUM_CPU_SOCKETS})."
+    local cpu_json="$1"
+    local required_sockets="$2"
+
+    local num_cpu_sockets=$(echo "${cpu_json}" | jq -r '.[].id' | wc -l)
+    log_and_halt_installation_on_error "$?" "Unable to extract CPU sockets from CPU JSON."
+
+    if [ "${num_cpu_sockets}" -lt "${required_sockets}" ]; then
+        log_and_halt_installation_on_error "1" "Number of CPU sockets (${num_cpu_sockets}) does NOT meet system requirements (expected ${required_sockets})."
     fi
+}
+
+function verify_model_and_capabilities_for_all_sockets() {
+    local cpu_json="$1"
+    local required_model="$2"
+    shift 2
+    local required_capabilities=("$@")
+
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+        local unit=$(echo "${socket_id}" | awk -F ':' '{ print $2 }')
+
+        echo "* Verifying CPU socket ${unit}..."
+        local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
+        if [[ ${model} =~ .*${required_model}.* ]]; then
+            echo "Model meets system requirements."
+        else
+            log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
+        fi
+
+        echo "* Verifying CPU capabilities..."
+        for capability_name in "${required_capabilities[@]}"; do
+            local capability=$(echo "${cpu_json}" | jq -r \
+                --arg socket "${socket_id}" \
+                --arg capability "${capability_name}" \
+                '.[] | select(.id==$socket) | .capabilities[$capability]')
+            log_and_halt_installation_on_error "$?" "Failed to query CPU capabilities"
+
+            if [[ ${capability} =~ .*true.* ]]; then
+                echo "Capability '${capability_name}' meets system requirements."
+            else
+                log_and_halt_installation_on_error "$?" "Capability '${capability_name}' does NOT meet system requirements.."
+            fi
+        done
+    done
 }
 
 function verify_gen1_cpu() {
-    local cpu="$(lshw -quiet -class cpu -json)"
-    log_and_halt_installation_on_error "${?}" "Unable to fetch CPU information."
+    local cpu_json="$(get_cpu_info_json)"
 
-    local sockets=$(echo "${cpu}" | jq -r '.[].id' | wc -l)
-    log_and_halt_installation_on_error "${?}" "Unable to extract CPU sockets."
+    check_num_cpus "${cpu_json}" "${GEN1_CPU_SOCKETS}"
 
-    if [ ${sockets} -eq ${GEN1_CPU_SOCKETS} ]; then
-        echo "  Number of sockets (${sockets}/${GEN1_CPU_SOCKETS}) meets system requirements."
+    verify_model_and_capabilities_for_all_sockets \
+        "${cpu_json}" \
+        "${GEN1_CPU_MODEL}" \
+        "${GEN1_CPU_CAPABILITIES[@]}"
+
+    local num_threads=$(nproc)
+    if [ "${num_threads}" -eq "${GEN1_CPU_THREADS}" ]; then
+        echo "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
     else
-        log_and_halt_installation_on_error "1" "  Number of sockets (${sockets}/${GEN1_CPU_SOCKETS}) does NOT meet system requirements."
+        log_and_halt_installation_on_error "1" "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
     fi
-
-    for i in $(echo "${cpu}" | jq -r '.[].id'); do
-        unit=$(echo ${i} | awk -F ':' '{ print $2 }')
-        echo "* Verifying CPU socket ${unit}..."
-
-        local model=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
-        if [[ ${model} =~ .*${GEN1_CPU_MODEL}.* ]]; then
-            echo "  Model meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
-        fi
-
-        echo "* Verifying CPU capabilities..."
-        for c in "${GEN1_CPU_CAPABILITIES[@]}"; do
-            local capability=$(echo "${cpu}" | jq -r --arg socket "${i}" --arg capability "${c}" '.[] | select(.id==$socket) | .capabilities[$capability]')
-            log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-
-            if [[ ${capability} =~ .*true.* ]]; then
-                echo "  Capability '${c}' meets system requirements."
-            else
-                log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-            fi
-        done
-
-        local num_threads=$(nproc)
-        if [ ${num_threads} -eq ${GEN1_CPU_THREADS} ]; then
-            echo "  Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
-        fi
-    done
 }
 
 function verify_gen2_cpu() {
-    local cpu="$(lshw -quiet -class cpu -json)"
-    log_and_halt_installation_on_error "${?}" "Unable to fetch CPU information."
+    local cpu_json="$(get_cpu_info_json)"
 
-    check_num_cpus
+    check_num_cpus "${cpu_json}" "${GEN2_MINIMUM_CPU_SOCKETS}"
 
-    for i in $(echo "${cpu}" | jq -r '.[].id'); do
-        unit=$(echo ${i} | awk -F ':' '{ print $2 }')
-        echo "* Verifying CPU socket ${unit}..."
-
-        local model=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
-        if [[ ${model} =~ .*${GEN2_CPU_MODEL}.* ]]; then
-            echo "  Model meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Model does NOT meet system requirements.."
-        fi
-
-        echo "* Verifying CPU capabilities..."
-        for c in "${GEN2_CPU_CAPABILITIES[@]}"; do
-            local capability=$(echo "${cpu}" | jq -r --arg socket "${i}" --arg capability "${c}" '.[] | select(.id==$socket) | .capabilities[$capability]')
-            log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-
-            if [[ ${capability} =~ .*true.* ]]; then
-                echo "  Capability '${c}' meets system requirements."
-            else
-                log_and_halt_installation_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
-            fi
-        done
-    done
+    verify_model_and_capabilities_for_all_sockets \
+        "${cpu_json}" \
+        "${GEN2_CPU_MODEL}" \
+        "${GEN2_CPU_CAPABILITIES[@]}"
 
     local num_threads=$(nproc)
-    if [ ${num_threads} -lt ${GEN2_MINIMUM_CPU_THREADS} ]; then
-        log_and_halt_installation_on_error "1" "Number of threads (${num_threads}) does NOT meet system requirements (${GEN2_MINIMUM_CPU_THREADS})"
+    if [ "${num_threads}" -lt "${GEN2_MINIMUM_CPU_THREADS}" ]; then
+        log_and_halt_installation_on_error "1" "Number of threads (${num_threads}) does NOT meet system requirements (${GEN2_MINIMUM_CPU_THREADS})."
     fi
 }
 
 function verify_cpu() {
-    echo "* Verifying Generation" ${GENERATION} "CPU..."
-    if [[ ${GENERATION} == 1 ]]; then
+    echo "* Verifying hardware generation ${HARDWARE_GENERATION} CPU..."
+
+    if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
         verify_gen1_cpu
     else
         verify_gen2_cpu
     fi
 }
+
+###############################################################################
+# Memory Verification
+###############################################################################
 
 function verify_memory() {
     echo "* Verifying system memory..."
@@ -171,48 +190,27 @@ function verify_memory() {
     local memory="$(lshw -quiet -class memory -json)"
     log_and_halt_installation_on_error "${?}" "Unable to fetch memory information."
 
-    local size=$(echo ${memory} | jq -r '.[] | select(.id=="memory") | .size')
+    local size=$(echo "${memory}" | jq -r '.[] | select(.id=="memory") | .size')
     log_and_halt_installation_on_error "${?}" "Unable to extract memory size."
 
-    if [ "${size}" -gt "${MINIMUM_MEMORY_SIZE}" ]; then
-        echo "  Memory size (${size} bytes) meets system requirements."
+    if [ "${size}" -ge "${MINIMUM_MEMORY_SIZE}" ]; then
+        echo "Memory size (${size} bytes) meets system requirements."
     else
         log_and_halt_installation_on_error "1" "Memory size (${size} bytes/${MINIMUM_MEMORY_SIZE}) does NOT meet system requirements."
     fi
 }
 
-function verify_gen1_disks() {
-    aggregate_size=0
-    large_drives=($(get_large_drives))
-    for drive in $(echo "${large_drives[@]}"); do
-        test -b "/dev/${drive}"
-        log_and_halt_installation_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
+###############################################################################
+# Disk Verification
+###############################################################################
 
-        local disk="$(lsblk --bytes --json /dev/${drive})"
-        log_and_halt_installation_on_error "${?}" "Unable to fetch disk information."
+function verify_disks_helper() {
+    local min_disk_size="${1}"
+    local min_aggregate_disk_size="${2}"
+    local aggregate_size=0
+    local large_drives=($(get_large_drives))
 
-        local disk_size=$(echo ${disk} | jq -r --arg logicalname "${drive}" '.[][] | select(.name==$logicalname) | .size')
-        log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
-
-        if [ "${disk_size}" -gt "${GEN1_MINIMUM_DISK_SIZE}" ]; then
-            echo "  Disk size (${disk_size} bytes) meets system requirements."
-        else
-            log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${GEN1_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
-        fi
-        aggregate_size=$((aggregate_size + disk_size))
-    done
-    if [ "${aggregate_size}" -gt "${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
-        echo "  Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
-    else
-        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
-    fi
-}
-
-function verify_gen2_disks() {
-    aggregate_size=0
-    large_drives=($(get_large_drives))
-    for drive in $(echo "${large_drives[@]}"); do
-
+    for drive in "${large_drives[@]}"; do
         echo "* Verifying disk ${drive}"
 
         test -b "/dev/${drive}"
@@ -221,35 +219,74 @@ function verify_gen2_disks() {
         local disk="$(lsblk --bytes --json /dev/${drive})"
         log_and_halt_installation_on_error "${?}" "Unable to fetch disk information."
 
-        local disk_size=$(echo ${disk} | jq -r --arg logicalname "${drive}" '.[][] | select(.name==$logicalname) | .size')
+        local disk_size=$(echo "${disk}" | jq -r \
+            --arg logicalname "${drive}" \
+            '.[][] | select(.name==$logicalname) | .size')
         log_and_halt_installation_on_error "${?}" "Unable to extract disk size."
 
-        if [ "${disk_size}" -gt "${GEN2_MINIMUM_DISK_SIZE}" ]; then
-            echo "  Disk size (${disk_size} bytes) meets system requirements."
+        if [ "${disk_size}" -ge "${min_disk_size}" ]; then
+            echo "Disk size (${disk_size} bytes) meets system requirements."
         else
-            log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${GEN2_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
+            log_and_halt_installation_on_error "1" "Disk size (${disk_size} bytes/${min_disk_size}) does NOT meet system requirements."
         fi
+
         aggregate_size=$((aggregate_size + disk_size))
     done
-    if [ "${aggregate_size}" -gt "${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
-        echo "  Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
+
+    if [ "${aggregate_size}" -ge "${min_aggregate_disk_size}" ]; then
+        echo "Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
     else
-        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
+        log_and_halt_installation_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${min_aggregate_disk_size}) does NOT meet system requirements."
     fi
 }
 
 function verify_disks() {
     echo "* Verifying disks..."
-    if [[ ${GENERATION} == 1 ]]; then
-        verify_gen1_disks
+    if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
+        verify_disks_helper "${GEN1_MINIMUM_DISK_SIZE}" "${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}"
     else
-        verify_gen2_disks
+        verify_disks_helper "${GEN2_MINIMUM_DISK_SIZE}" "${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}"
     fi
 }
 
+###############################################################################
+# Drive Health Verification
+###############################################################################
+
+function verify_drive_health() {
+    echo "* Verifying drive health..."
+
+    local drives=($(get_large_drives))
+    local warning_triggered=0
+
+    for drive in "${drives[@]}"; do
+        echo "* Checking drive /dev/${drive} health..."
+        local smartctl_output
+        if ! smartctl_output=$(smartctl -H /dev/${drive} 2>&1); then
+            echo -e "\033[1;31mWARNING: Failed to run smartctl on /dev/${drive}.\033[0m"
+            warning_triggered=1
+        elif ! echo "${smartctl_output}" | grep -qi "PASSED"; then
+            echo -e "\033[1;31mWARNING: Drive /dev/${drive} did not pass the SMART health check.\033[0m"
+            warning_triggered=1
+        else
+            echo "Drive /dev/${drive} health is OK."
+        fi
+    done
+
+    if [ "${warning_triggered}" -eq 1 ]; then
+        echo "Pausing for 5 minutes before continuing installation..."
+        sleep 300
+    fi
+}
+
+###############################################################################
+# Deployment Path Verification
+###############################################################################
+
 function verify_deployment_path() {
     echo "* Verifying deployment path..."
-    if [[ ${GENERATION} == 2 ]] && [[ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]]; then
+
+    if [[ "${HARDWARE_GENERATION}" == "2" ]] && [[ ! -f "/config/node_operator_private_key.pem" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
         echo -e "\033[1;31mGen2 hardware should be deployed using the Gen2 Node Deployment method.\033[0m"
@@ -261,45 +298,21 @@ function verify_deployment_path() {
     fi
 }
 
-# TODO(NODE-1477): delete in configuration revamp integration
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
+###############################################################################
+# Main
+###############################################################################
 
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "node_reward_type") node_reward_type="${value}" ;;
-        esac
-    done <"${CONFIG}"
-}
-
-function validate_node_reward() {
-    read_variables
-    if [[ -z "$node_reward_type" ]]; then
-        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is not set"
-    fi
-
-    if [[ ! "$node_reward_type" =~ ^type[0-9]+(\.[0-9])?$ ]]; then
-        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is invalid: ${node_reward_type}"
-    fi
-
-    echo "Valid node reward type: ${node_reward_type}"
-}
-
-# Establish run order
 main() {
     log_start "$(basename $0)"
     if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
-        check_generation
+        detect_hardware_generation
         verify_cpu
         verify_memory
         verify_disks
+        verify_drive_health
         verify_deployment_path
-        validate_node_reward
     else
         echo "* Hardware checks skipped by request via kernel command line"
-        GENERATION=2
     fi
     log_end "$(basename $0)"
 }

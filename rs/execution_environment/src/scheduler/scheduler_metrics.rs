@@ -60,7 +60,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) queues_response_bytes: IntGauge,
     pub(super) queues_memory_reservations: IntGauge,
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
-    pub(super) streams_response_bytes: IntGauge,
+    pub(super) queues_best_effort_message_bytes: IntGauge,
     pub(super) canister_messages_where_cycles_were_charged: IntCounter,
     pub(super) current_heap_delta: IntGauge,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
@@ -111,6 +111,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) inducted_messages: IntCounterVec,
     pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
@@ -136,8 +137,8 @@ impl SchedulerMetrics {
             canister_age: metrics_registry.histogram(
                 "scheduler_canister_age_rounds",
                 "Number of rounds for which a canister was not scheduled.",
-                // 1, 2, 5, …, 100, 200, 500
-                decimal_buckets(0, 2),
+                // 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets(0, 3),
             ),
             canister_compute_allocation_violation: metrics_registry.int_counter(
                 "scheduler_compute_allocation_violations",
@@ -277,6 +278,12 @@ impl SchedulerMetrics {
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
                 &["key_id"],
             ),
+            in_flight_signature_request_contexts: metrics_registry.histogram_vec(
+                "execution_in_flight_signature_request_contexts",
+                "Number of in flight signature request contexts by key ID",
+                vec![1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 50.0],
+                &["key_id"],
+            ),
             completed_signature_request_contexts: metrics_registry.int_counter_vec(
                 "execution_completed_signature_request_contexts_total",
                 "Total number of completed signature request contexts by key ID",
@@ -304,9 +311,9 @@ impl SchedulerMetrics {
                 "execution_queues_oversized_requests_extra_bytes",
                 "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized local-subnet requests.",
             ),
-            streams_response_bytes: metrics_registry.int_gauge(
-                "execution_streams_response_size_bytes",
-                "Total byte size of all responses in subnet streams.",
+            queues_best_effort_message_bytes: metrics_registry.int_gauge(
+                "execution_queues_best_effort_message_bytes",
+                "Total byte size of all best-effort messages in canister queues.",
             ),
             canister_messages_where_cycles_were_charged: metrics_registry.int_counter(
                 "scheduler_canister_messages_where_cycles_were_charged",
@@ -774,7 +781,7 @@ impl SchedulerMetrics {
             .set(size_bytes as i64);
     }
 
-    pub(super) fn observe_streams_response_bytes(&self, size_bytes: usize) {
-        self.streams_response_bytes.set(size_bytes as i64);
+    pub(super) fn observe_queues_best_effort_message_bytes(&self, size_bytes: usize) {
+        self.queues_best_effort_message_bytes.set(size_bytes as i64);
     }
 }

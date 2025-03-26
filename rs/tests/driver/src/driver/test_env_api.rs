@@ -1128,14 +1128,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
@@ -1147,100 +1145,100 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     parse_elasticsearch_hosts(Some(hosts))
 }
 
-/// Helper function to figure out SHA256 from a CAS url
-pub fn get_sha256_from_cas_url(img_name: &str, url: &Url) -> Result<String> {
-    // Since this is a CAS url, we assume the last URL path part is the sha256.
-    let (_prefix, sha256) = url
-        .path()
-        .rsplit_once('/')
-        .ok_or(anyhow!("failed to extract sha256 from CAS url '{url}'"))?;
-    let sha256 = sha256.to_string();
-    bail_if_sha256_invalid(&sha256, img_name)?;
-    Ok(sha256.to_string())
-}
-
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_img_sha256", &get_ic_os_img_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_img_sha256", &get_malicious_ic_os_img_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_test_url()?)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url(
-        "ic_os_update_img_sha256",
-        &get_malicious_ic_os_update_img_url()?,
-    )
+    Ok(std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
+    )?)
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    get_sha256_from_cas_url(
-        "ic_os_boudndary_guestos_img_sha256",
-        &get_boundary_node_img_url()?,
-    )
+    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+}
+
+pub fn get_mainnet_nns_revision() -> String {
+    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet nns version from environment")
+}
+
+pub fn get_mainnet_application_subnet_revision() -> String {
+    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet application subnet version from environment")
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version: String = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    get_sha256_from_cas_url(
-        "hostos_update_img_sha256",
-        &get_hostos_update_img_test_url()?,
-    )
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
+}
+
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);

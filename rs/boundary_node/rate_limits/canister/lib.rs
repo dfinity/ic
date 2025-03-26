@@ -2,7 +2,7 @@
 mod access_control;
 #[allow(dead_code)]
 mod add_config;
-#[cfg(target_family = "wasm")]
+#[cfg(any(target_family = "wasm", test))]
 mod canister;
 #[allow(dead_code)]
 mod confidentiality_formatting;
@@ -10,6 +10,7 @@ mod confidentiality_formatting;
 mod disclose;
 #[allow(dead_code)]
 mod getter;
+mod logs;
 #[allow(dead_code)]
 mod metrics;
 mod random;

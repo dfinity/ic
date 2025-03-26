@@ -2,6 +2,7 @@
 pub mod cdiff;
 pub mod chash;
 pub mod convert_ids;
+pub mod copy;
 pub mod decode;
 pub mod import_state;
 pub mod list;

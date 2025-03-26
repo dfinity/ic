@@ -8,8 +8,9 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, idkg,
+    idkg,
 };
+use ic_consensus_dkg as dkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -969,6 +970,17 @@ impl Validator {
             .get_by_height_range(range)
         {
             // Handle integrity check and verification errors early
+            let verification_result = self.verify_artifact(pool_reader, &proposal);
+            if let Err(error) = verification_result {
+                if let Some(action) = self.compute_action_from_validation_error(
+                    pool_reader,
+                    error,
+                    proposal.into_message(),
+                ) {
+                    change_set.push(action);
+                }
+                continue;
+            }
             if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
                     proposal.clone().into_message(),
@@ -979,17 +991,6 @@ impl Validator {
                         proposal.as_ref().payload.as_ref()
                     ),
                 ));
-                continue;
-            }
-            let verification_result = self.verify_artifact(pool_reader, &proposal);
-            if let Err(error) = verification_result {
-                if let Some(action) = self.compute_action_from_validation_error(
-                    pool_reader,
-                    error,
-                    proposal.into_message(),
-                ) {
-                    change_set.push(action);
-                }
                 continue;
             }
 
@@ -1313,6 +1314,7 @@ impl Validator {
             self.state_manager.as_ref(),
             &proposal.context,
             &self.metrics.dkg_validator,
+            &self.log,
         )
         .map_err(|err| {
             err.map(
@@ -1340,13 +1342,13 @@ impl Validator {
             .random_beacon()
             .get_by_height(last_beacon.content.height().increment())
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                let verification = self.verify_artifact(pool_reader, &beacon);
+                if verification.is_ok() && last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
                         "The parent hash of the beacon is not correct".to_string(),
                     ))
                 } else {
-                    let verification = self.verify_artifact(pool_reader, &beacon);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
@@ -1376,14 +1378,14 @@ impl Validator {
             .random_beacon_share()
             .get_by_height(next_height)
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                self.metrics.validation_random_beacon_shares_count.add(1);
+                let verification = self.verify_artifact(pool_reader, &beacon);
+                if verification.is_ok() && last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
-                        "The parent hash of the beacon was not correct".to_string(),
+                        "The parent hash of the beacon share is not correct".to_string(),
                     ))
                 } else {
-                    self.metrics.validation_random_beacon_shares_count.add(1);
-                    let verification = self.verify_artifact(pool_reader, &beacon);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,

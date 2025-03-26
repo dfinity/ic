@@ -45,9 +45,9 @@ motoko_canister(
 rust_library(
     name = "lifeline",
     srcs = ["src/lib.rs"],
-    compile_data = [":lifeline_canister.wasm"],
+    compile_data = [":lifeline_canister"],
     rustc_env = {
-        "LIFELINE_CANISTER_WASM_PATH": "$(location :lifeline_canister.wasm)",
+        "LIFELINE_CANISTER_WASM_PATH": "$(location :lifeline_canister)",
     },
 )
 
@@ -59,7 +59,7 @@ rust_binary(
 
 rust_test(
     name = "lifeline_unit_test",
-    compile_data = [":lifeline_canister.wasm"],
+    compile_data = [":lifeline_canister.wasm.gz"],
     crate = ":lifeline",
     deps = [
         # Keep sorted.

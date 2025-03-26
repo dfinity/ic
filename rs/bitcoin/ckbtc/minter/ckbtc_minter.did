@@ -34,6 +34,7 @@ type DefiniteCanisterSettings = record {
 type LogVisibility = variant {
     controllers;
     public;
+    allowed_viewers : vec principal;
 };
 
 type RetrieveBtcArgs = record {
@@ -350,7 +351,12 @@ type SuspendedReason = variant {
     Quarantined;
 };
 
-type Event = variant {
+type Event = record {
+    timestamp : opt nat64;
+    payload : EventType;
+};
+
+type EventType = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
     received_utxos : record { to_account : Account; mint_txid : opt nat64; utxos : vec Utxo };
@@ -391,6 +397,10 @@ type Event = variant {
         kyt_provider : opt principal;
     };
     checked_utxo_v2 : record {
+        utxo : Utxo;
+        account : Account;
+    };
+    checked_utxo_mint_unknown : record {
         utxo : Utxo;
         account : Account;
     };

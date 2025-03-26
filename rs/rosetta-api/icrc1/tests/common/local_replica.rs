@@ -2,7 +2,7 @@
 use candid::{Encode, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
-use ic_agent::{agent::http_transport::reqwest_transport::ReqwestTransport, Identity};
+use ic_agent::Identity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
@@ -39,10 +39,10 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
 
     // Setup the agent
-    let transport = ReqwestTransport::create(replica_url.clone()).unwrap();
     let agent = Agent::builder()
+        .with_url(replica_url.clone())
         .with_identity(basic_identity)
-        .with_arc_transport(Arc::new(transport))
+        .with_http_client(reqwest::Client::new())
         .build()
         .unwrap();
 

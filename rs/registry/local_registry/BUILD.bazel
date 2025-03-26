@@ -37,7 +37,6 @@ rust_test(
     crate = ":local_registry",
     deps = [
         # Keep sorted.
-        "//rs/registry/local_store/artifacts",
-        "@crate_index//:tempfile",
+        "//rs/test_utilities/registry",
     ],
 )

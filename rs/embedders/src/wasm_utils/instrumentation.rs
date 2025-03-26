@@ -115,7 +115,6 @@ use super::validation::API_VERSION_IC0;
 use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::embedders::MeteringType;
 use ic_config::flag_status::FlagStatus;
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
 use ic_types::methods::WasmMethod;
@@ -430,10 +429,10 @@ pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
         Operator::Call { .. } => 5,
         Operator::CallIndirect { .. } => 10,
 
-        // ReturnCall instructions are on average approx. 1.5 times faster than Call
-        // instructions (shown by relative benchmarks).
+        // ReturnCall is on average approx. 1.5 times faster than Call
+        // instruction (shown by relative benchmarks).
         Operator::ReturnCall { .. } => 3,
-        Operator::ReturnCallIndirect { .. } => 6,
+        Operator::ReturnCallIndirect { .. } => 60,
 
         // Return, drop, unreachable and nop instructions are of cost 1.
         Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
@@ -946,7 +945,6 @@ pub(super) fn instrument(
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
     metering_type: MeteringType,
-    subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     max_wasm_memory_size: NumBytes,
     max_stable_memory_size: NumBytes,
@@ -1061,7 +1059,6 @@ pub(super) fn instrument(
         replace_system_api_functions(
             &mut module,
             special_indices,
-            subnet_type,
             dirty_page_overhead,
             main_memory_type,
             max_wasm_memory_size,
@@ -1146,7 +1143,6 @@ fn calculate_api_indexes(module: &Module<'_>) -> BTreeMap<SystemApiFunc, u32> {
 fn replace_system_api_functions(
     module: &mut Module<'_>,
     special_indices: SpecialIndices,
-    subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
@@ -1163,7 +1159,6 @@ fn replace_system_api_functions(
     let mut func_index_replacements = BTreeMap::new();
     for (api, (ty, body)) in replacement_functions(
         special_indices,
-        subnet_type,
         dirty_page_overhead,
         main_memory_type,
         max_wasm_memory_size,

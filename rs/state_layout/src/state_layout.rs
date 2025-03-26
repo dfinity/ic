@@ -1,7 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::LogVisibilityV2;
+use ic_management_canister_types_private::{Global, LogVisibilityV2};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -15,12 +14,11 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{
-            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase,
-            OnLowWasmMemoryHookStatus,
+            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase, TaskQueue,
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
-    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
+    CallContextManager, CanisterStatus, ExportedFunctions, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
@@ -112,14 +110,14 @@ impl AccessPolicy for WriteOnly {
 
 impl WritePolicy for WriteOnly {}
 
-impl<'a, T> AccessPolicy for RwPolicy<'a, T> {
+impl<T> AccessPolicy for RwPolicy<'_, T> {
     fn check_dir(p: &Path) -> Result<(), LayoutError> {
         WriteOnly::check_dir(p)
     }
 }
 
-impl<'a, T> ReadPolicy for RwPolicy<'a, T> {}
-impl<'a, T> WritePolicy for RwPolicy<'a, T> {}
+impl<T> ReadPolicy for RwPolicy<'_, T> {}
+impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
@@ -166,7 +164,6 @@ pub struct CanisterStateBits {
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
-    pub task_queue: Vec<ExecutionTask>,
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
@@ -179,7 +176,7 @@ pub struct CanisterStateBits {
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub task_queue: TaskQueue,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -214,8 +211,6 @@ pub struct CanisterSnapshotBits {
 struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
     state_layout_remove_checkpoint_duration: Histogram,
-    #[cfg(target_os = "linux")]
-    state_layout_syncfs_duration: Histogram,
 }
 
 impl StateLayoutMetrics {
@@ -230,12 +225,6 @@ impl StateLayoutMetrics {
                 "state_layout_remove_checkpoint_duration",
                 "Time elapsed in removing checkpoint.",
                 decimal_buckets(-3, 1),
-            ),
-            #[cfg(target_os = "linux")]
-            state_layout_syncfs_duration: metric_registry.histogram(
-                "state_layout_syncfs_duration_seconds",
-                "Time elapsed in syncfs.",
-                decimal_buckets(-2, 2),
             ),
         }
     }
@@ -337,7 +326,7 @@ struct CheckpointRefData {
 ///   1. Create state files directly in
 ///      "<state_root>/fs_tmp/state_sync_scratchpad_<height>".
 ///
-///   2. When all the writes are complete, call sync_and_mark_files_readonly()
+///   2. When all the writes are complete, call mark_files_readonly_and_sync()
 ///      on "<state_root>/fs_tmp/state_sync_scratchpad_<height>".  This function
 ///      syncs all the files and directories under the scratchpad directory,
 ///      including the scratchpad directory itself.
@@ -378,7 +367,6 @@ impl TipHandler {
         &mut self,
         state_layout: &StateLayout,
         cp: &CheckpointLayout<ReadOnly>,
-        lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let tip = self.tip_path();
@@ -397,21 +385,9 @@ impl TipHandler {
                 // Do not copy protobufs.
                 CopyInstruction::Skip
             } else if path == cp.unverified_checkpoint_marker() {
-                // With LSMT enabled, the unverified checkpoint marker should already be removed at this point.
-                debug_assert_eq!(lsmt_storage, FlagStatus::Disabled);
-                // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
-                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
-                // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
+                // The unverified checkpoint marker should already be removed at this point.
+                debug_assert!(false);
                 CopyInstruction::Skip
-            } else if path.extension() == Some(OsStr::new("bin"))
-                && lsmt_storage == FlagStatus::Disabled
-                && !path.starts_with(cp.raw_path().join(SNAPSHOTS_DIR))
-            {
-                // PageMap files need to be modified in the tip,
-                // but only with non-LSMT storage layer that modifies these files.
-                // With LSMT we always write additional overlay files instead.
-                // PageMap files that belong to snapshots are not modified even without LSMT.
-                CopyInstruction::ReadWrite
             } else {
                 // Everything else should be readonly.
                 CopyInstruction::ReadOnly
@@ -473,21 +449,36 @@ impl TipHandler {
 }
 
 impl StateLayout {
-    /// Needs to be pub for criterion performance regression tests.
+    /// Create a new StateLayout and initialize it by creating all necessary
+    /// directories if they do not exist already and clear all tmp directories
+    /// that are expected to be empty when the replica starts.
+    /// Needs to be pub for tests.
     pub fn try_new(
         log: ReplicaLogger,
         root: PathBuf,
         metrics_registry: &MetricsRegistry,
     ) -> Result<Self, LayoutError> {
-        let state_layout = Self {
+        let state_layout = Self::new_no_init(log, root, metrics_registry);
+        state_layout.init()?;
+        Ok(state_layout)
+    }
+
+    /// Create a new StateLayout without initializing it. Useful for tests and
+    /// tools that want to create a StateLayout without interferring with
+    /// replicas / state managers that are already running using the same state
+    /// directory.
+    pub fn new_no_init(
+        log: ReplicaLogger,
+        root: PathBuf,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
+        Self {
             root,
             log,
             metrics: StateLayoutMetrics::new(metrics_registry),
             tip_handler_captured: Arc::new(false.into()),
             checkpoint_ref_registry: Arc::new(Mutex::new(BTreeMap::new())),
-        };
-        state_layout.init()?;
-        Ok(state_layout)
+        }
     }
 
     fn init(&self) -> Result<(), LayoutError> {
@@ -529,13 +520,8 @@ impl StateLayout {
         thread_pool: &mut Option<scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
-            let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
-            sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
-                .map_err(|err| LayoutError::IoError {
-                    path,
-                    message: format!("Could not sync and mark readonly checkpoint {}", height),
-                    io_err: err,
-                })?;
+            let cp_layout = self.checkpoint_verified(height)?;
+            cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
         }
         Ok(())
     }
@@ -645,26 +631,31 @@ impl StateLayout {
         }
     }
 
-    pub fn scratchpad_to_checkpoint<T>(
+    /// Creates an unverified marker in the scratchpad and promotes it to a checkpoint.
+    ///
+    /// This function maintains the integrity of the checkpointing process by ensuring that
+    /// the scratchpad is properly marked as unverified before transitioning it into a checkpoint.
+    pub fn promote_scratchpad_to_unverified_checkpoint<T>(
+        &self,
+        scratchpad_layout: CheckpointLayout<RwPolicy<'_, T>>,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        scratchpad_layout.create_unverified_checkpoint_marker()?;
+        self.scratchpad_to_checkpoint(scratchpad_layout, height)
+    }
+
+    fn scratchpad_to_checkpoint<T>(
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
+        debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
-        sync_and_mark_files_readonly(&self.log, scratchpad, &self.metrics, thread_pool).map_err(
-            |err| LayoutError::IoError {
-                path: scratchpad.to_path_buf(),
-                message: format!(
-                    "Could not sync and mark readonly scratchpad for checkpoint {}",
-                    height
-                ),
-                io_err: err,
-            },
-        )?;
+
         std::fs::rename(scratchpad, cp_path).map_err(|err| {
             if is_already_exists_err(&err) {
                 LayoutError::AlreadyExists(height)
@@ -1171,7 +1162,7 @@ impl StateLayout {
     /// path into the specified dst path.
     ///
     /// If a thread-pool is provided then files are copied in parallel.
-    fn copy_and_sync_checkpoint(
+    pub fn copy_and_sync_checkpoint(
         &self,
         name: &str,
         src: &Path,
@@ -1552,6 +1543,53 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     pub fn is_checkpoint_verified(&self) -> bool {
         !self.unverified_checkpoint_marker().exists()
     }
+
+    /// Recursively set permissions to readonly for all files under the checkpoint
+    /// except for the unverified checkpoint marker file.
+    pub fn mark_files_readonly_and_sync(
+        &self,
+        mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        let checkpoint_path = self.raw_path();
+        let convert_io_err = |err: std::io::Error| -> LayoutError {
+            LayoutError::IoError {
+                path: checkpoint_path.to_path_buf(),
+                message: format!(
+                    "Could not mark files readonly and sync for checkpoint {}",
+                    self.height()
+                ),
+                io_err: err,
+            }
+        };
+
+        let mut paths = dir_list_recursive(checkpoint_path).map_err(convert_io_err)?;
+        // Remove the unverified checkpoint marker from the list of paths,
+        // since another thread might also be validating the checkpoint and may have already deleted the marker.
+        // Marking the unverified marker as read-only is unnecessary for this function's purpose and may cause an error.
+        paths.retain(|p| p != &self.unverified_checkpoint_marker());
+        let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
+            mark_readonly_if_file(p)?;
+            #[cfg(not(target_os = "linux"))]
+            sync_path(p)?;
+            Ok::<(), std::io::Error>(())
+        });
+
+        results
+            .into_iter()
+            .try_for_each(identity)
+            .map_err(convert_io_err)?;
+        #[cfg(target_os = "linux")]
+        {
+            let f = std::fs::File::open(checkpoint_path).map_err(convert_io_err)?;
+            use std::os::fd::AsRawFd;
+            unsafe {
+                if libc::syncfs(f.as_raw_fd()) == -1 {
+                    return Err(convert_io_err(std::io::Error::last_os_error()));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<P> CheckpointLayout<P>
@@ -1584,7 +1622,7 @@ impl CheckpointLayout<ReadOnly> {
     /// A readonly checkpoint typically prevents modification to the files in the checkpoint.
     /// However, the removal of the unverified checkpoint marker is allowed as
     /// the marker is not part the checkpoint conceptually.
-    pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+    fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if !marker.exists() {
             return Ok(());
@@ -1607,6 +1645,20 @@ impl CheckpointLayout<ReadOnly> {
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
             io_err: err,
         })
+    }
+
+    /// Finalizes the checkpoint by marking all files as read-only, ensuring
+    /// they are fully synchronized to disk, and then removing the unverified checkpoint marker.
+    ///
+    /// This function is necessary due to the asynchronous checkpoint writing.
+    /// Marking the files as read-only and performing a sync operation should be the last step
+    /// before removing the unverified checkpoint marker to prevent data inconsistencies.
+    pub fn finalize_and_remove_unverified_marker(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        self.mark_files_readonly_and_sync(thread_pool)?;
+        self.remove_unverified_checkpoint_marker()
     }
 }
 
@@ -1688,7 +1740,6 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
         log: &ReplicaLogger,
         src: &PageMapLayout<Permissions>,
         dst: &PageMapLayout<W>,
-        dst_permissions: FilePermissions,
     ) -> Result<(), LayoutError>
     where
         W: WritePolicy,
@@ -1696,8 +1747,8 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
         debug_assert_eq!(src.name_stem, dst.name_stem);
 
         if src.base().exists() {
-            copy_file_and_set_permissions(log, &src.base(), &dst.base(), dst_permissions).map_err(
-                |err| LayoutError::IoError {
+            copy_file_and_set_permissions(log, &src.base(), &dst.base()).map_err(|err| {
+                LayoutError::IoError {
                     path: dst.base(),
                     message: format!(
                         "Cannot copy or hardlink file {:?} to {:?}",
@@ -1705,21 +1756,21 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
                         dst.base()
                     ),
                     io_err: err,
-                },
-            )?;
+                }
+            })?;
         }
         for overlay in src.existing_overlays()? {
             let dst_path = dst.root.join(overlay.file_name().unwrap());
-            copy_file_and_set_permissions(log, &overlay, &dst_path, dst_permissions).map_err(
-                |err| LayoutError::IoError {
+            copy_file_and_set_permissions(log, &overlay, &dst_path).map_err(|err| {
+                LayoutError::IoError {
                     path: dst.base(),
                     message: format!(
                         "Cannot copy or hardlink file {:?} to {:?}",
                         overlay, dst_path
                     ),
                     io_err: err,
-                },
-            )?;
+                }
+            })?;
         }
 
         Ok(())
@@ -2334,7 +2385,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
-            task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
             consumed_cycles_by_use_cases: item
@@ -2362,12 +2412,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
-            on_low_wasm_memory_hook_status: Some(
-                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
-                    &item.on_low_wasm_memory_hook_status,
-                )
-                .into(),
-            ),
+            tasks: Some((&item.task_queue).into()),
         }
     }
 }
@@ -2407,18 +2452,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
-        let task_queue: Vec<_> = value
-            .task_queue
-            .into_iter()
-            .map(|v| v.try_into())
-            .collect::<Result<_, _>>()?;
-        if task_queue.len() > 1 {
-            return Err(ProxyDecodeError::Other(format!(
-                "Expecting at most one task queue entry. Found {:?}",
-                task_queue
-            )));
-        }
-
         let mut consumed_cycles_by_use_cases = BTreeMap::new();
         for x in value.consumed_cycles_by_use_cases.into_iter() {
             consumed_cycles_by_use_cases.insert(
@@ -2434,11 +2467,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
-        let on_low_wasm_memory_hook_status: Option<
-            pb_canister_state_bits::OnLowWasmMemoryHookStatus,
-        > = value.on_low_wasm_memory_hook_status.map(|v| {
-            pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(v).unwrap_or_default()
-        });
+        let tasks: pb_canister_state_bits::TaskQueue =
+            try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
+
+        let task_queue = TaskQueue::try_from(tasks)?;
 
         Ok(Self {
             controllers,
@@ -2486,7 +2518,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 value.time_of_last_allocation_charge_nanos,
                 "CanisterStateBits::time_of_last_allocation_charge_nanos",
             )?,
-            task_queue,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
             consumed_cycles_by_use_cases,
@@ -2522,11 +2553,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
-            on_low_wasm_memory_hook_status: try_from_option_field(
-                on_low_wasm_memory_hook_status,
-                "CanisterStateBits::on_low_wasm_memory_hook_status",
-            )
-            .unwrap_or_default(),
+            task_queue,
         })
     }
 }
@@ -2682,12 +2709,6 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum FilePermissions {
-    ReadOnly,
-    ReadWrite,
-}
-
 fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
     let metadata = path.metadata()?;
     if !metadata.is_dir() {
@@ -2725,42 +2746,6 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
     }
     add_content(path, &mut result)?;
     Ok(result)
-}
-
-/// Recursively set permissions to readonly for all files under the given
-/// `path`.
-fn sync_and_mark_files_readonly(
-    #[allow(unused)] log: &ReplicaLogger,
-    path: &Path,
-    #[allow(unused)] metrics: &StateLayoutMetrics,
-    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
-) -> std::io::Result<()> {
-    let paths = dir_list_recursive(path)?;
-    let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
-        mark_readonly_if_file(p)?;
-        #[cfg(not(target_os = "linux"))]
-        sync_path(p)?;
-        Ok::<(), std::io::Error>(())
-    });
-
-    results.into_iter().try_for_each(identity)?;
-    #[cfg(target_os = "linux")]
-    {
-        let f = std::fs::File::open(path)?;
-        use std::os::fd::AsRawFd;
-        let start = Instant::now();
-        unsafe {
-            if libc::syncfs(f.as_raw_fd()) == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-        }
-        let elapsed = start.elapsed();
-        metrics
-            .state_layout_syncfs_duration
-            .observe(elapsed.as_secs_f64());
-        info!(log, "syncfs took {:?}", elapsed);
-    }
-    Ok(())
 }
 
 #[derive(Copy, Clone)]
@@ -2820,7 +2805,7 @@ where
     let results = maybe_parallel_map(
         &mut thread_pool,
         copy_plan.copy_and_sync_file.iter(),
-        |op| copy_checkpoint_file(log, metrics, &op.src, &op.dst, op.dst_permissions, fsync),
+        |op| copy_checkpoint_file(log, metrics, &op.src, &op.dst, fsync),
     );
     results.into_iter().try_for_each(identity)?;
     if let FSync::Yes = fsync {
@@ -2844,7 +2829,6 @@ fn copy_checkpoint_file(
     metrics: &StateLayoutMetrics,
     src: &Path,
     dst: &Path,
-    dst_permissions: FilePermissions,
     fsync: FSync,
 ) -> std::io::Result<()> {
     // We don't expect to copy anything that isn't readonly, but just in case we handle it correctly below.
@@ -2857,7 +2841,7 @@ fn copy_checkpoint_file(
         debug_assert!(false);
     }
 
-    copy_file_and_set_permissions(log, src, dst, dst_permissions)?;
+    copy_file_and_set_permissions(log, src, dst)?;
 
     match fsync {
         FSync::Yes => sync_path(dst),
@@ -2867,13 +2851,8 @@ fn copy_checkpoint_file(
 
 /// Copies the given file and ensures that the `read/write` permission of the
 /// target file match the given permission.
-fn copy_file_and_set_permissions(
-    log: &ReplicaLogger,
-    src: &Path,
-    dst: &Path,
-    dst_permissions: FilePermissions,
-) -> Result<(), Error> {
-    if src.metadata()?.permissions().readonly() && dst_permissions == FilePermissions::ReadOnly {
+fn copy_file_and_set_permissions(log: &ReplicaLogger, src: &Path, dst: &Path) -> Result<(), Error> {
+    if src.metadata()?.permissions().readonly() {
         std::fs::hard_link(src, dst)?
     } else {
         do_copy(log, src, dst)?;
@@ -2885,20 +2864,7 @@ fn copy_file_and_set_permissions(
             debug_assert_eq!(dst_metadata.nlink(), 1);
         }
         let mut permissions = dst_metadata.permissions();
-        match dst_permissions {
-            FilePermissions::ReadOnly => permissions.set_readonly(true),
-            FilePermissions::ReadWrite => {
-                #[cfg(target_os = "linux")]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    permissions.set_mode(0o640); // Read/write for owner and read for group.
-                }
-
-                #[cfg(not(target_os = "linux"))]
-                #[allow(clippy::permissions_set_readonly_false)]
-                permissions.set_readonly(false)
-            }
-        }
+        permissions.set_readonly(true);
         std::fs::set_permissions(dst, permissions)?;
     }
     Ok(())
@@ -2924,14 +2890,12 @@ struct CreateAndSyncDir {
 struct CopyAndSyncFile {
     src: PathBuf,
     dst: PathBuf,
-    dst_permissions: FilePermissions,
 }
 
+#[derive(PartialEq, Eq)]
 enum CopyInstruction {
     /// The file doesn't need to be copied
     Skip,
-    /// The file needs to be copied and should be writeable at the destination
-    ReadWrite,
     /// The file needs to be copied and should be readonly at the destination
     ReadOnly,
 }
@@ -2964,17 +2928,12 @@ where
             build_copy_plan(&entry.path(), &dst_entry, file_copy_instruction, plan)?;
         }
     } else {
-        let dst_permissions = match file_copy_instruction(src) {
-            CopyInstruction::Skip => {
-                return Ok(());
-            }
-            CopyInstruction::ReadWrite => FilePermissions::ReadWrite,
-            CopyInstruction::ReadOnly => FilePermissions::ReadOnly,
-        };
+        if file_copy_instruction(src) == CopyInstruction::Skip {
+            return Ok(());
+        }
         plan.copy_and_sync_file.push(CopyAndSyncFile {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
-            dst_permissions,
         });
     }
     Ok(())
