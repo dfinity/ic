@@ -554,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    async fn test_hash_mismatch_returns_error() {
+    async fn test_invalid_file_can_be_overwritten() {
         let body = String::from("Success");
         let hash = hash(&body);
         let invalid_hash = format!("invalid_{}", hash);
