@@ -5251,10 +5251,23 @@ impl Governance {
         let conversion_result = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
             create_service_nervous_system.clone(),
         ));
-        if let Err(err) = conversion_result {
+
+        #[allow(unused_variables)]
+        let validated = match conversion_result {
+            Ok(validated) => validated,
+            Err(err) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid CreateServiceNervousSystem: {}", err),
+                ));
+            }
+        };
+
+        #[cfg(not(any(feature = "canbench-rs", feature = "test")))]
+        if validated.neurons_fund_participation.unwrap_or_default() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Invalid CreateServiceNervousSystem: {}", err),
+                "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed.",
             ));
         }
 
