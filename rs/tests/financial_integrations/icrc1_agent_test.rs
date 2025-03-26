@@ -303,11 +303,14 @@ pub fn test(env: TestEnv) {
 
         assert_eq!(
             hash_tree.lookup(&[b"last_block_index"]),
-            Found(&mleaf(&index_bytes))
+            Found(&mleaf(&index_bytes)),
+            "The last_block_index bytes do not match an LEB128-encoded value '1': {:?} vs {:?}",
+            hash_tree.lookup(&[b"last_block_index"]),
+            index_bytes
         );
 
         assert_eq!(
-            hash_tree.lookup(&[b"tip_hash"]),
+            hash_tree.lookup(&[b"last_block_hash"]),
             Found(&mleaf(archived_blocks.blocks[1].hash()))
         );
 
