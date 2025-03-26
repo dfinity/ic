@@ -232,6 +232,9 @@ def system_test(
       It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
 
+    # Convert env to a mutable dictionary
+    env = dict(env)
+
     if test_driver_target == None:
         bin_name = name + "_bin"
         original_srcs = kwargs.pop("srcs", [])
