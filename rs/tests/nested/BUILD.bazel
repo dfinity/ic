@@ -84,7 +84,7 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
@@ -114,7 +114,6 @@ system_test_nns(
 # *to* an arbitrary mainnet version ("latest_release" in mainnet-icos-revisions.json)
 system_test_nns(
     name = "hostos_upgrade_from_mainnet_to_mainnet",
-    data = ["//ic-os/setupos:config/node_operator_private_key.pem"],
     env = MAINNET_ENV | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
@@ -127,6 +126,6 @@ system_test_nns(
     uses_guestos_dev = True,
     uses_hostos_mainnet_update_img = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = RUNNER_DEPENDENCIES,
 )
