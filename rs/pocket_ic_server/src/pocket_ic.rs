@@ -446,9 +446,9 @@ impl Subnets for SubnetsImpl {
 
 struct PocketIcSubnets {
     subnets: Arc<SubnetsImpl>,
+    nns_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
-    nns_subnet_id: Option<SubnetId>,
     state_dir: Option<PathBuf>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
@@ -459,17 +459,6 @@ struct PocketIcSubnets {
 }
 
 impl PocketIcSubnets {
-    fn create_state_machine_state_dir(
-        state_dir: &Option<PathBuf>,
-        subnet_seed: &[u8; 32],
-    ) -> Box<dyn StateMachineStateDir> {
-        if let Some(ref state_dir) = state_dir {
-            Box::new(state_dir.join(hex::encode(subnet_seed)))
-        } else {
-            Box::new(TempDir::new().unwrap())
-        }
-    }
-
     fn state_machine_builder(
         state_machine_state_dir: Box<dyn StateMachineStateDir>,
         runtime: Arc<Runtime>,
@@ -546,9 +535,9 @@ impl PocketIcSubnets {
         let chain_keys = BTreeMap::new();
         Self {
             subnets: Arc::new(SubnetsImpl::new()),
+            nns_subnet: None,
             runtime,
             state_dir,
-            nns_subnet_id: None,
             registry_data_provider,
             routing_table,
             chain_keys,
@@ -570,49 +559,14 @@ impl PocketIcSubnets {
             .map(|subnet| subnet.state_machine.clone())
     }
 
-    fn clear(&self) {
-        self.subnets.clear()
+    fn clear(&mut self) {
+        self.subnets.clear();
+        self.nns_subnet.take();
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
         let subnet_id = self.routing_table.route(canister_id.get());
         subnet_id.map(|subnet_id| self.get(subnet_id).unwrap())
-    }
-
-    fn set_any_subnet_as_root(&self) {
-        // TODO: set the NNS subnet ID (derived from the seed) as part of add_global_registry_records
-        let root_subnet_id = self
-            .subnets
-            .get_all()
-            .first()
-            .unwrap()
-            .state_machine
-            .get_subnet_id();
-        let subnet_list = self
-            .subnets
-            .get_all()
-            .into_iter()
-            .map(|subnet| subnet.state_machine.get_subnet_id())
-            .collect();
-        update_global_registry_records(
-            Some(root_subnet_id),
-            self.routing_table.clone(),
-            subnet_list,
-            self.chain_keys.clone(),
-            self.registry_data_provider.clone(),
-        );
-        for subnet in self.subnets.get_all() {
-            // Reload registry on the state machines to make sure
-            // all the state machines have a consistent view of the registry.
-            subnet.state_machine.reload_registry();
-        }
-
-        // Update the registry file on disk.
-        if let Some(ref state_dir) = self.state_dir {
-            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
-            self.registry_data_provider
-                .write_to_file(registry_proto_path);
-        }
     }
 
     fn create_subnet(&mut self, subnet_config_info: SubnetConfigInfo) -> SubnetConfigInternal {
@@ -625,6 +579,7 @@ impl PocketIcSubnets {
             instruction_config,
             mut time,
         } = subnet_config_info;
+
         let current_time = self
             .subnets
             .get_all()
@@ -634,10 +589,15 @@ impl PocketIcSubnets {
         if current_time > time {
             time = current_time;
         }
+
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
-        let state_machine_state_dir =
-            Self::create_state_machine_state_dir(&self.state_dir, &subnet_seed);
+        let state_machine_state_dir: Box<dyn StateMachineStateDir> =
+            if let Some(ref state_dir) = self.state_dir {
+                Box::new(state_dir.join(hex::encode(subnet_seed)))
+            } else {
+                Box::new(TempDir::new().unwrap())
+            };
 
         if let Some(subnet_state_dir) = subnet_state_dir {
             copy_dir(subnet_state_dir, state_machine_state_dir.path())
@@ -722,10 +682,9 @@ impl PocketIcSubnets {
             self.routing_table.insert(alloc_range, subnet_id).unwrap();
         }
 
-        // Finalize registry with subnet IDs that are only available now that we created
-        // all the StateMachines.
-        let nns_subnet_id = if let SubnetKind::NNS = subnet_kind {
-            Some(sm.get_subnet_id())
+        let nns_subnet_id = if self.nns_subnet.is_none() {
+            self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+            Some(subnet_id)
         } else {
             None
         };
@@ -758,22 +717,11 @@ impl PocketIcSubnets {
 
         for subnet in self.subnets.get_all() {
             subnet.state_machine.set_certified_time(time);
-            // TODO: execute_round here
+            subnet.state_machine.execute_round();
         }
 
-        if let Some(nns_subnet_id) = nns_subnet_id {
-            assert!(self.nns_subnet_id.is_none());
-            self.nns_subnet_id = Some(nns_subnet_id);
-            // We distribute delegation from NNS.
-            for subnet in self.subnets.get_all() {
-                let subnet_id = subnet.state_machine.get_subnet_id();
-                if subnet_id != nns_subnet_id {
-                    if let Ok(delegation) = sm.get_delegation_for_subnet(subnet_id) {
-                        subnet.set_delegation_from_nns(delegation);
-                    }
-                }
-            }
-        } else if let Some(nns_subnet) = self.get_nns() {
+        let nns_subnet = self.get_nns().unwrap();
+        if nns_subnet.get_subnet_id() != subnet_id {
             if let Ok(delegation) = nns_subnet.get_delegation_for_subnet(subnet_id) {
                 let subnet = self.subnets.get_subnet(subnet_id).unwrap();
                 subnet.set_delegation_from_nns(delegation);
@@ -790,8 +738,9 @@ impl PocketIcSubnets {
     }
 
     fn get_nns(&self) -> Option<Arc<StateMachine>> {
-        self.nns_subnet_id
-            .and_then(|nns_subnet_id| self.subnets.get(nns_subnet_id))
+        self.nns_subnet
+            .as_ref()
+            .map(|subnet| subnet.state_machine.clone())
     }
 }
 
@@ -935,7 +884,7 @@ impl PocketIc {
 
         let mut range_gen = RangeGen::new();
 
-        let subnet_config_info: Vec<SubnetConfigInfo> = if let Some(topology) = topology {
+        let mut subnet_config_info: Vec<SubnetConfigInfo> = if let Some(topology) = topology {
             topology
                 .subnet_configs
                 .into_values()
@@ -1064,6 +1013,13 @@ impl PocketIc {
             subnet_config_info
         };
 
+        // NNS subnet must be sorted first
+        subnet_config_info.sort_by(|subnet_config_info1, subnet_config_info2| {
+            let non_nns1 = !matches!(subnet_config_info1.subnet_kind, SubnetKind::NNS);
+            let non_nns2 = !matches!(subnet_config_info2.subnet_kind, SubnetKind::NNS);
+            non_nns1.cmp(&non_nns2)
+        });
+
         // Create all StateMachines and subnet configs from the subnet config infos.
         let mut subnets = PocketIcSubnets::new(
             runtime.clone(),
@@ -1080,10 +1036,6 @@ impl PocketIc {
             );
             let subnet_config_internal = subnets.create_subnet(subnet_config_info);
             subnet_configs.insert(subnet_seed, subnet_config_internal);
-        }
-
-        if subnets.nns_subnet_id.is_none() {
-            subnets.set_any_subnet_as_root();
         }
 
         let default_effective_canister_id = subnet_configs
