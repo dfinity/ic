@@ -221,12 +221,9 @@ fn test_nf_is_not_permitted() {
 
     // Step 2.1: Make a proposal.  Should fail because it's using NF funding on non-test gov build.
     let response_1 = make_proposal(&state_machine, /* sns_number = */ 1, true);
-    match response_1.command {
-        Some(manage_neuron_response::Command::MakeProposal(response_3)) => {
-            panic!("Should not be able to submit a propsals with NF matched funding enabled.")
-        }
-        _ => {}
-    };
+    if let Some(manage_neuron_response::Command::MakeProposal(_)) = response_1.command {
+        panic!("Should not be able to submit a propsals with NF matched funding enabled.");
+    }
 
     // Opposite case (without NF) is covered in 'test_several_proposals' above.
 }
@@ -294,10 +291,9 @@ fn make_proposal(
     };
 
     let mut create_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
-    create_nervous_system
-        .swap_parameters
-        .as_mut()
-        .map(|p| p.neurons_fund_participation = Some(nf_enabled));
+    if let Some(p) = create_nervous_system.swap_parameters.as_mut() {
+        p.neurons_fund_participation = Some(nf_enabled);
+    }
 
     nns_governance_make_proposal(
         state_machine,
