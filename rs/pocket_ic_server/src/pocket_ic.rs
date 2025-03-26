@@ -573,6 +573,14 @@ impl PocketIcSubnets {
         subnet_id.map(|subnet_id| self.get(subnet_id).unwrap())
     }
 
+    fn time(&self) -> SystemTime {
+        self.subnets
+            .get_all()
+            .first()
+            .map(|subnet| subnet.state_machine.time())
+            .unwrap_or(GENESIS.into())
+    }
+
     fn create_subnet(&mut self, subnet_config_info: SubnetConfigInfo) -> SubnetConfigInternal {
         let SubnetConfigInfo {
             ranges,
@@ -584,14 +592,8 @@ impl PocketIcSubnets {
             mut time,
         } = subnet_config_info;
 
-        let current_time = self
-            .subnets
-            .get_all()
-            .first()
-            .map(|subnet| subnet.state_machine.time())
-            .unwrap_or(GENESIS.into());
-        if current_time > time {
-            time = current_time;
+        if self.time() > time {
+            time = self.time();
         }
 
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
@@ -1078,15 +1080,6 @@ impl PocketIc {
         self.subnets.route(canister_id)
     }
 
-    fn any_subnet(&self) -> Arc<StateMachine> {
-        self.subnets
-            .get_all()
-            .first()
-            .unwrap()
-            .state_machine
-            .clone()
-    }
-
     fn nns_subnet(&self) -> Option<Arc<StateMachine>> {
         self.subnets.get_nns()
     }
@@ -1281,7 +1274,7 @@ pub struct SetTime {
 
 fn set_time(pic: &mut PocketIc, time: Time, certified: bool) -> OpOut {
     // Time is kept in sync across subnets, so one can take any subnet.
-    let current_time: SystemTime = pic.any_subnet().time();
+    let current_time: SystemTime = pic.subnets.time();
     let set_time: SystemTime = time.into();
     match current_time.cmp(&set_time) {
         std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
@@ -1351,7 +1344,7 @@ pub struct GetTime;
 impl Operation for GetTime {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         // Time is kept in sync across subnets, so one can take any subnet.
-        let nanos = systemtime_to_unix_epoch_nanos(pic.any_subnet().time());
+        let nanos = systemtime_to_unix_epoch_nanos(pic.subnets.time());
         OpOut::Time(nanos)
     }
 
