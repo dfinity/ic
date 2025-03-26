@@ -108,8 +108,8 @@ def parse_args():
     parser.add_argument(
         "--download-source",
         choices=["systems", "network", "both"],
-        default="both",
-        help="Which source to download from: .systems, .network, or both (default: both).",
+        default="systems",
+        help="Which source to download from: .systems, .network, or both (default: systems).",
     )
 
     args = parser.parse_args()
