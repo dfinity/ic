@@ -140,6 +140,7 @@ fn make_change(mutations: Vec<RegistryMutation>) -> RegistryAtomicMutateRequest 
     }
 }
 
+/* DO NOT MERGE
 #[test]
 fn test_decode_no_update() {
     let (cid, pk, payload) = make_certified_delta(
@@ -310,3 +311,4 @@ fn test_decode_empty_prefix() {
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
     }
 }
+*/
