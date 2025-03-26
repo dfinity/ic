@@ -55,6 +55,7 @@ runs:
           BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
           run: |
+            set -x
 
             # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
             release_build="false"
@@ -103,5 +104,6 @@ runs:
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
+            echo $BAZEL_TARGETS
 
-            bazel ${{ inputs.BAZEL_COMMAND }} "$BAZEL_TARGETS" "${bazel_args[@]}"
+            bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS "${bazel_args[@]}"
