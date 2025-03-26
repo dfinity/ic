@@ -589,8 +589,9 @@ impl PocketIcSubnets {
             mut time,
         } = subnet_config_info;
 
-        if self.time() > time {
-            time = self.time();
+        let current_time = self.time();
+        if current_time > time {
+            time = current_time;
         }
 
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
@@ -715,6 +716,9 @@ impl PocketIcSubnets {
             self.registry_data_provider
                 .write_to_file(registry_proto_path);
         }
+
+        // Make sure time is strictly monotone.
+        time += Duration::from_nanos(1);
 
         for subnet in self.subnets.get_all() {
             subnet.state_machine.set_time(time);
@@ -930,7 +934,7 @@ impl PocketIc {
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
 
             for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
-                let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
+                let (ranges, alloc_range, subnet_id, time) = if let Some(ref subnet_state_dir) =
                     subnet_state_dir
                 {
                     // We create a temporary state manager used to read the given state metadata.
@@ -952,6 +956,7 @@ impl PocketIc {
                     drop(state_manager);
 
                     let subnet_id = metadata.own_subnet_id;
+                    let time = metadata.batch_time;
                     let ranges: Vec<_> = metadata
                         .network_topology
                         .routing_table
@@ -986,14 +991,14 @@ impl PocketIc {
                         }
                     }
 
-                    (ranges, None, Some(subnet_id))
+                    (ranges, None, Some(subnet_id), time)
                 } else {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
                     } = get_range_config(subnet_kind, &mut range_gen)?;
 
-                    (ranges, alloc_range, None)
+                    (ranges, alloc_range, None, GENESIS)
                 };
 
                 subnet_config_info.push(SubnetConfigInfo {
@@ -1003,7 +1008,7 @@ impl PocketIc {
                     subnet_state_dir,
                     subnet_kind,
                     instruction_config,
-                    time: GENESIS.into(),
+                    time: time.into(),
                 });
             }
 
