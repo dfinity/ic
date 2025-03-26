@@ -66,9 +66,8 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
+    runs-on: ubuntu-24-large
+    timeout-minutes: 180
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
@@ -76,6 +75,7 @@ jobs:
       RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - <<: *checkout
+
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
         id: bazel-extra-args
@@ -89,6 +89,8 @@ jobs:
               system_test_staging
               system_test_hotfix
               system_test_benchmark
+              system_test_colocation
+              system_test
               fuzz_test
               fi_tests_nightly
               nns_tests_nightly
@@ -114,14 +116,13 @@ jobs:
               BAZEL_EXTRA_ARGS+=( --keep_going )
           fi
           echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
+
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
+          BAZEL_COMMAND: --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload SHA256SUMS (cache)
         uses: ./.github/actions/bazel-upload-checksums/
@@ -164,6 +165,7 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     <<: *dind-large-setup
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers
@@ -172,11 +174,11 @@ jobs:
         with:
           BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     <<: *dind-large-setup
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers AFL
@@ -185,11 +187,11 @@ jobs:
         with:
           BAZEL_COMMAND: build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   python-ci-tests:
     name: Python CI Tests
     <<: *dind-small-setup
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - <<: *python-setup
@@ -212,14 +214,16 @@ jobs:
 
   build-ic:
     name: Build IC
-    <<: *dind-large-setup
-    # keep options from dind-large-setup but run on dind-small-setup
-    runs-on:
-      group: ch1
-      labels: dind-small
+    runs-on: ubuntu-24-large
+    container:
+      <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
+
       - name: Run Build IC
         id: build-ic
         run: ./ci/scripts/run-build-ic.sh
@@ -229,6 +233,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+
       - name: Upload SHA256SUMS (nocache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
@@ -282,8 +287,7 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -313,8 +317,7 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
+    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
