@@ -4,17 +4,29 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
-use ic_replicated_state::ReplicatedState;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::{
+        EcdsaArguments, ReshareChainKeyContext, SchnorrArguments, SignWithThresholdContext,
+        ThresholdArguments, VetKdArguments,
+    },
+    ReplicatedState,
+};
+use ic_test_utilities_state::ReplicatedStateBuilder;
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::RequestBuilder,
+};
 use ic_types::{
+    batch::ConsensusResponse,
     consensus::{
         certification::Certification,
         idkg::{
             common::{PreSignatureRef, ThresholdSigInputsRef},
             ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
             schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
-            IDkgMasterPublicKeyId, IDkgPayload, KeyTranscriptCreation, MaskedTranscript,
-            MasterKeyTranscript, PreSigId, RequestId, TranscriptRef, UnmaskedTranscript,
+            HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload, IDkgReshareRequest,
+            KeyTranscriptCreation, MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId,
+            TranscriptRef, UnmaskedTranscript,
         },
     },
     crypto::{
@@ -25,11 +37,14 @@ use ic_types::{
             },
             ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet},
+        threshold_sig::ni_dkg::{
+            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+        },
         vetkd::{VetKdArgs, VetKdDerivationContext},
         AlgorithmId, ExtendedDerivationPath,
     },
-    messages::CallbackId,
+    messages::{CallbackId, Payload},
+    time::UNIX_EPOCH,
     Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use std::{
@@ -43,6 +58,114 @@ pub fn request_id(id: u64, height: Height) -> RequestId {
     RequestId {
         callback_id: CallbackId::from(id),
         height,
+    }
+}
+
+pub fn dealings_context_from_reshare_request(
+    request: IDkgReshareRequest,
+) -> ReshareChainKeyContext {
+    ReshareChainKeyContext {
+        request: RequestBuilder::new().build(),
+        key_id: request.key_id().into(),
+        nodes: request.receiving_node_ids.into_iter().collect(),
+        registry_version: request.registry_version,
+        time: UNIX_EPOCH,
+        target_id: NiDkgTargetId::new([0; 32]),
+    }
+}
+
+pub fn empty_response() -> ConsensusResponse {
+    ConsensusResponse::new(CallbackId::from(0), Payload::Data(vec![]))
+}
+
+fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> ThresholdArguments {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
+            key_id,
+            message_hash: [0; 32],
+        }),
+        MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
+            key_id,
+            message: Arc::new(vec![1; 48]),
+            taproot_tree_root: None,
+        }),
+        MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
+            key_id: key_id.clone(),
+            input: Arc::new(vec![1; 32]),
+            transport_public_key: vec![1; 32],
+            ni_dkg_id: fake_dkg_id(key_id),
+            height,
+        }),
+    }
+}
+
+pub fn fake_signature_request_context(
+    key_id: MasterPublicKeyId,
+    pseudo_random_id: [u8; 32],
+) -> SignWithThresholdContext {
+    SignWithThresholdContext {
+        request: RequestBuilder::new().build(),
+        args: fake_signature_request_args(key_id, Height::from(0)),
+        derivation_path: Arc::new(vec![]),
+        batch_time: UNIX_EPOCH,
+        pseudo_random_id,
+        matched_pre_signature: None,
+        nonce: None,
+    }
+}
+
+pub fn fake_signature_request_context_with_pre_sig(
+    request_id: RequestId,
+    key_id: IDkgMasterPublicKeyId,
+    pre_signature: Option<PreSigId>,
+) -> (CallbackId, SignWithThresholdContext) {
+    let height = Height::from(1);
+    let context = SignWithThresholdContext {
+        request: RequestBuilder::new().build(),
+        args: fake_signature_request_args(key_id.into(), height),
+        derivation_path: Arc::new(vec![]),
+        batch_time: UNIX_EPOCH,
+        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
+        matched_pre_signature: pre_signature.map(|pid| (pid, height)),
+        nonce: None,
+    };
+    (request_id.callback_id, context)
+}
+
+pub fn fake_signature_request_context_from_id(
+    key_id: MasterPublicKeyId,
+    pre_sig_id: PreSigId,
+    request_id: RequestId,
+) -> (CallbackId, SignWithThresholdContext) {
+    let height = request_id.height;
+    let context = SignWithThresholdContext {
+        request: RequestBuilder::new().build(),
+        args: fake_signature_request_args(key_id, height),
+        derivation_path: Arc::new(vec![]),
+        batch_time: UNIX_EPOCH,
+        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
+        matched_pre_signature: Some((pre_sig_id, height)),
+        nonce: Some([0; 32]),
+    };
+    (request_id.callback_id, context)
+}
+
+pub fn fake_state_with_signature_requests<T>(
+    height: Height,
+    contexts: T,
+) -> FakeCertifiedStateSnapshot
+where
+    T: IntoIterator<Item = (CallbackId, SignWithThresholdContext)>,
+{
+    let mut state = ReplicatedStateBuilder::default().build();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_threshold_contexts = BTreeMap::from_iter(contexts);
+
+    FakeCertifiedStateSnapshot {
+        height,
+        state: Arc::new(state),
     }
 }
 
@@ -82,7 +205,7 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
     }
 }
 
-pub(crate) trait HasPreSignature {
+pub trait HasPreSignature {
     fn pre_signature(&self) -> Option<PreSignatureRef>;
 }
 

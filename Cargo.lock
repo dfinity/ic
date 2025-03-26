@@ -13760,6 +13760,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-protobuf",
  "ic-replicated-state",
+ "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
  "mockall",

@@ -186,8 +186,8 @@ mod tests {
     use crate::{
         payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
-            create_reshare_request, dealings_context_from_reshare_request, set_up_idkg_payload,
-            TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+            create_reshare_request, set_up_idkg_payload, TestIDkgBlockReader,
+            TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };

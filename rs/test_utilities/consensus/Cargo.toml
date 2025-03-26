@@ -15,6 +15,7 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-protobuf = { path = "../../protobuf" }
 ic-replicated-state = { path = "../../replicated_state" }
+ic-test-utilities-state = { path = "../state" }
 ic-test-utilities-types = { path = "../types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-types = { path = "../../types/types" }

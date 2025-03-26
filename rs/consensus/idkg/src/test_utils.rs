@@ -4,7 +4,6 @@ use crate::{
     signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
     utils::algorithm_for_key_id,
 };
-use core::convert::TryInto;
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_mocks::{dependencies, Dependencies};
@@ -17,36 +16,26 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types_private::{
-    EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
-};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, IDkgSignWithThresholdContext, ReshareChainKeyContext, SchnorrArguments,
-    SignWithThresholdContext, ThresholdArguments, VetKdArguments,
+    IDkgSignWithThresholdContext, SignWithThresholdContext,
 };
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::{fake::*, idkg::*, IDkgStatsNoOp};
-use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::{
-    ids::{node_test_id, NODE_1, NODE_2},
-    messages::RequestBuilder,
-};
+use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_types::{
     artifact::IDkgMessageId,
     consensus::idkg::{
         self,
-        common::{CombinedSignature, PreSignatureRef, ThresholdSigInputsRef},
-        ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
-        schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
-        EcdsaSigShare, HasIDkgMasterPublicKeyId, IDkgArtifactId, IDkgBlockReader,
-        IDkgComplaintContent, IDkgMasterPublicKeyId, IDkgMessage, IDkgOpeningContent, IDkgPayload,
-        IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
-        IDkgTranscriptParamsRef, MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId,
-        ReshareOfMaskedParams, SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
-        TranscriptAttributes, TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
-        VetKdKeyShare,
+        common::{CombinedSignature, PreSignatureRef},
+        EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent,
+        IDkgMasterPublicKeyId, IDkgMessage, IDkgOpeningContent, IDkgPayload, IDkgReshareRequest,
+        IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
+        MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
+        SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, TranscriptAttributes,
+        TranscriptLookupError, TranscriptRef, UnmaskedTranscript, VetKdKeyShare,
     },
     crypto::{
         canister_threshold_sig::{
@@ -54,23 +43,16 @@ use ic_types::{
                 IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin,
                 IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-                IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+                SignedIDkgDealing,
             },
-            ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare, ThresholdSchnorrSigInputs,
-            ThresholdSchnorrSigShare,
+            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         },
-        threshold_sig::ni_dkg::NiDkgTargetId,
-        vetkd::{
-            VetKdArgs, VetKdDerivationContext, VetKdEncryptedKeyShare,
-            VetKdEncryptedKeyShareContent,
-        },
-        AlgorithmId, ExtendedDerivationPath,
+        vetkd::{VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent},
+        AlgorithmId,
     },
     messages::CallbackId,
     signature::*,
-    time,
-    time::UNIX_EPOCH,
-    Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
 };
 use rand::{CryptoRng, Rng};
 use std::{
@@ -78,117 +60,6 @@ use std::{
     convert::TryFrom,
     sync::{Arc, Mutex},
 };
-
-pub(crate) fn dealings_context_from_reshare_request(
-    request: idkg::IDkgReshareRequest,
-) -> ReshareChainKeyContext {
-    ReshareChainKeyContext {
-        request: RequestBuilder::new().build(),
-        key_id: request.key_id().into(),
-        nodes: request.receiving_node_ids.into_iter().collect(),
-        registry_version: request.registry_version,
-        time: time::UNIX_EPOCH,
-        target_id: NiDkgTargetId::new([0; 32]),
-    }
-}
-
-pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
-    ic_types::batch::ConsensusResponse::new(
-        ic_types::messages::CallbackId::from(0),
-        ic_types::messages::Payload::Data(vec![]),
-    )
-}
-
-fn fake_signature_request_args(key_id: MasterPublicKeyId, height: Height) -> ThresholdArguments {
-    match key_id {
-        MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
-            key_id,
-            message_hash: [0; 32],
-        }),
-        MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
-            key_id,
-            message: Arc::new(vec![1; 48]),
-            taproot_tree_root: None,
-        }),
-        MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
-            key_id: key_id.clone(),
-            input: Arc::new(vec![1; 32]),
-            transport_public_key: vec![1; 32],
-            ni_dkg_id: fake_dkg_id(key_id),
-            height,
-        }),
-    }
-}
-
-pub fn fake_signature_request_context(
-    key_id: MasterPublicKeyId,
-    pseudo_random_id: [u8; 32],
-) -> SignWithThresholdContext {
-    SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, Height::from(0)),
-        derivation_path: Arc::new(vec![]),
-        batch_time: UNIX_EPOCH,
-        pseudo_random_id,
-        matched_pre_signature: None,
-        nonce: None,
-    }
-}
-
-pub fn fake_signature_request_context_with_pre_sig(
-    request_id: RequestId,
-    key_id: IDkgMasterPublicKeyId,
-    pre_signature: Option<PreSigId>,
-) -> (CallbackId, SignWithThresholdContext) {
-    let height = Height::from(1);
-    let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id.into(), height),
-        derivation_path: Arc::new(vec![]),
-        batch_time: UNIX_EPOCH,
-        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
-        matched_pre_signature: pre_signature.map(|pid| (pid, height)),
-        nonce: None,
-    };
-    (request_id.callback_id, context)
-}
-
-pub fn fake_signature_request_context_from_id(
-    key_id: MasterPublicKeyId,
-    pre_sig_id: PreSigId,
-    request_id: RequestId,
-) -> (CallbackId, SignWithThresholdContext) {
-    let height = request_id.height;
-    let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id, height),
-        derivation_path: Arc::new(vec![]),
-        batch_time: UNIX_EPOCH,
-        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
-        matched_pre_signature: Some((pre_sig_id, height)),
-        nonce: Some([0; 32]),
-    };
-    (request_id.callback_id, context)
-}
-
-pub fn fake_state_with_signature_requests<T>(
-    height: Height,
-    contexts: T,
-) -> FakeCertifiedStateSnapshot
-where
-    T: IntoIterator<Item = (CallbackId, SignWithThresholdContext)>,
-{
-    let mut state = ReplicatedStateBuilder::default().build();
-    state
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_threshold_contexts = BTreeMap::from_iter(contexts);
-
-    FakeCertifiedStateSnapshot {
-        height,
-        state: Arc::new(state),
-    }
-}
 
 pub fn into_idkg_contexts(
     contexts: &BTreeMap<CallbackId, SignWithThresholdContext>,

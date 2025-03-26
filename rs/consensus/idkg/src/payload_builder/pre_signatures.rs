@@ -533,11 +533,11 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::{test_utils::*, *};
+    use super::{algorithm_for_key_id, test_utils::*, *};
     use crate::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        fake_signature_request_context_with_pre_sig, into_idkg_contexts, request_id,
-        set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+        into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
+        TestIDkgTranscriptBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{

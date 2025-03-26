@@ -581,6 +581,7 @@ mod tests {
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
+    use ic_test_utilities_consensus::idkg::request_id;
     use ic_types::{
         consensus::idkg::{
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
@@ -590,7 +591,6 @@ mod tests {
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
-    use test_utils::request_id;
 
     #[test]
     fn test_idkg_priority_fn_args() {

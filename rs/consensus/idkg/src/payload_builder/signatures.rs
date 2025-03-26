@@ -162,9 +162,8 @@ pub(crate) fn update_signature_agreements(
 mod tests {
     use super::*;
     use crate::test_utils::{
-        create_available_pre_signature, empty_response, fake_signature_request_context,
-        fake_signature_request_context_from_id, fake_signature_request_context_with_pre_sig,
-        into_idkg_contexts, request_id, set_up_idkg_payload, TestThresholdSignatureBuilder,
+        create_available_pre_signature, into_idkg_contexts, set_up_idkg_payload,
+        TestThresholdSignatureBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
