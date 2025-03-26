@@ -44,13 +44,15 @@ use ic_types::{
     NodeId, SubnetId,
 };
 use rand_chacha::ChaChaRng;
-use std::cell::{RefCell, RefMut};
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::fmt;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    cell::{RefCell, RefMut},
+    cmp::Ordering,
+    collections::BinaryHeap,
+    fmt,
+    rc::Rc,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 /// We use priority queues for input/output messages.
 pub type Queue<T> = Rc<RefCell<BinaryHeap<T>>>;

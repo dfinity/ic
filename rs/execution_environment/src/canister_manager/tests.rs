@@ -4073,6 +4073,8 @@ fn cycles_correct_if_upgrade_succeeds() {
 
     let cycles_before = test.canister_state(id).system_state.balance();
     let execution_cost_before = test.canister_execution_cost(id);
+    // Clear `expected_compiled_wasms` so that the full execution cost is applied
+    test.state_mut().metadata.expected_compiled_wasms.clear();
     test.upgrade_canister(id, wasm.clone()).unwrap();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
