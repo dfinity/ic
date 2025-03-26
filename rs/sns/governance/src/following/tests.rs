@@ -194,6 +194,7 @@ fn test_get_inconsistent_aliases() {
             },
         ),
     ];
+
     for (label, followees, expected) in test_cases {
         let observed = get_inconsistent_aliases(&followees);
         assert_eq!(observed, expected, "{}", label);
@@ -497,6 +498,7 @@ fn test_validate_set_following() {
             SetFollowing {
                 topic_following: vec![
                     FolloweesForTopic {
+                        topic: Some(Topic::DappCanisterManagement as i32),
                         followees: vec![
                             Followee {
                                 neuron_id: Some(nid(40)),
@@ -511,9 +513,9 @@ fn test_validate_set_following() {
                                 alias: None,
                             },
                         ],
-                        topic: Some(Topic::DappCanisterManagement as i32),
                     },
                     FolloweesForTopic {
+                        topic: Some(Topic::CriticalDappOperations as i32),
                         followees: vec![
                             Followee {
                                 neuron_id: Some(nid(42)),
@@ -524,13 +526,13 @@ fn test_validate_set_following() {
                                 alias: Some("Bob".to_string()),
                             },
                         ],
-                        topic: Some(Topic::CriticalDappOperations as i32),
                     },
                 ],
             },
             Ok(ValidatedSetFollowing {
-                topic_following: vec![
-                    ValidatedFolloweesForTopic {
+                topic_following: btreemap! {
+                    Topic::DappCanisterManagement => ValidatedFolloweesForTopic {
+                        topic: Topic::DappCanisterManagement,
                         followees: btreeset! {
                             ValidatedFollowee {
                                 topic: Topic::DappCanisterManagement,
@@ -548,9 +550,9 @@ fn test_validate_set_following() {
                                 alias: None,
                             },
                         },
-                        topic: Topic::DappCanisterManagement,
                     },
-                    ValidatedFolloweesForTopic {
+                    Topic::CriticalDappOperations => ValidatedFolloweesForTopic {
+                        topic: Topic::CriticalDappOperations,
                         followees: btreeset! {
                             ValidatedFollowee {
                                 topic: Topic::CriticalDappOperations,
@@ -563,59 +565,60 @@ fn test_validate_set_following() {
                                 alias: Some("Bob".to_string()),
                             },
                         },
-                        topic: Topic::CriticalDappOperations,
                     },
-                ],
+                },
             }),
         ),
         (
-            "Happy case II: Maximum number of followees for a topic.",
+            "Happy case II: Can set following on all topics.",
             SetFollowing {
-                topic_following: (0..7)
-                    .into_iter()
-                    .map(|i| FolloweesForTopic {
+                topic_following: Topic::iter()
+                    .skip(1)
+                    .map(|topic| FolloweesForTopic {
+                        topic: Some(topic as i32),
                         followees: vec![Followee {
-                            neuron_id: Some(nid(i)),
+                            neuron_id: Some(nid(42)),
                             alias: None,
                         }],
-                        topic: Some(Topic::DappCanisterManagement as i32),
                     })
                     .collect(),
             },
             Ok(ValidatedSetFollowing {
-                topic_following: (0..7)
-                    .into_iter()
-                    .map(|i| {
+                topic_following: Topic::iter()
+                    .skip(1)
+                    .map(|topic| {
                         let followees_for_topic = ValidatedFolloweesForTopic {
+                            topic,
                             followees: btreeset! {
                                 ValidatedFollowee {
-                                    topic: Topic::DappCanisterManagement,
-                                    neuron_id: nid(i),
+                                    topic,
+                                    neuron_id: nid(42),
                                     alias: None,
                                 }
                             },
-                            topic: Topic::DappCanisterManagement,
                         };
-                        (Topic::DappCanisterManagement, followees_for_topic)
+                        (topic, followees_for_topic)
                     })
                     .collect(),
             }),
         ),
         (
-            "Problem I: Too many followees for a topic.",
+            "Problem I: Too many topic followees.",
             SetFollowing {
-                topic_following: (0..8)
-                    .into_iter()
-                    .map(|i| FolloweesForTopic {
+                topic_following: Topic::iter()
+                    .skip(1)
+                    .map(|topic| topic as i32)
+                    .chain(std::iter::once(1))
+                    .map(|topic| FolloweesForTopic {
+                        topic: Some(topic),
                         followees: vec![Followee {
-                            neuron_id: Some(nid(i)),
+                            neuron_id: Some(nid(42)),
                             alias: None,
                         }],
-                        topic: Some(Topic::DappCanisterManagement as i32),
                     })
                     .collect(),
             },
-            Err(SetFollowingValidationError::TooManyTopicFollows(8)),
+            Err(SetFollowingValidationError::TooManyTopicFollowees(8)),
         ),
         (
             "Problem II: No topic followings specified.",
@@ -629,12 +632,12 @@ fn test_validate_set_following() {
             SetFollowing {
                 topic_following: vec![
                     FolloweesForTopic {
-                        followees: vec![],
                         topic: None,
+                        followees: vec![],
                     },
                     FolloweesForTopic {
-                        followees: vec![],
                         topic: None,
+                        followees: vec![],
                     },
                 ],
             },
@@ -649,12 +652,12 @@ fn test_validate_set_following() {
             SetFollowing {
                 topic_following: vec![
                     FolloweesForTopic {
-                        followees: vec![],
                         topic: Some(Topic::DappCanisterManagement as i32),
+                        followees: vec![],
                     },
                     FolloweesForTopic {
-                        followees: vec![],
                         topic: Some(Topic::DappCanisterManagement as i32),
+                        followees: vec![],
                     },
                 ],
             },
@@ -667,6 +670,7 @@ fn test_validate_set_following() {
             SetFollowing {
                 topic_following: vec![
                     FolloweesForTopic {
+                        topic: Some(Topic::DappCanisterManagement as i32),
                         followees: vec![
                             Followee {
                                 neuron_id: Some(nid(41)),
@@ -677,26 +681,25 @@ fn test_validate_set_following() {
                                 alias: None,
                             },
                         ],
-                        topic: Some(Topic::DappCanisterManagement as i32),
                     },
                     FolloweesForTopic {
+                        topic: Some(Topic::CriticalDappOperations as i32),
                         followees: vec![
+                            Followee {
+                                neuron_id: Some(nid(40)),
+                                alias: Some("Alice".to_string()),
+                            },
                             Followee {
                                 neuron_id: Some(nid(41)),
                                 alias: Some("Bob".to_string()),
                             },
-                            Followee {
-                                neuron_id: Some(nid(42)),
-                                alias: Some("Bob".to_string()),
-                            },
                         ],
-                        topic: Some(Topic::CriticalDappOperations as i32),
                     },
                 ],
             },
             Err(SetFollowingValidationError::InconsistentFolloweeAliases(
                 btreemap! {
-                    nid(42) => btreeset! {
+                    nid(41) => btreeset! {
                         ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(41), alias: Some("Alice".to_string()) },
                         ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(41), alias: Some("Bob".to_string()) },
                     }
@@ -704,6 +707,7 @@ fn test_validate_set_following() {
             )),
         ),
     ];
+
     for (label, followees_for_topic, expected) in test_cases {
         let observed = ValidatedSetFollowing::try_from(followees_for_topic);
         assert_eq!(observed, expected, "{}", label);

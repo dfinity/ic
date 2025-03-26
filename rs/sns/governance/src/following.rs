@@ -2,9 +2,10 @@ use crate::pb::v1::{
     manage_neuron::SetFollowing, neuron::FolloweesForTopic, Followee, NeuronId, Topic,
 };
 use itertools::{Either, Itertools};
+use lazy_static::lazy_static;
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fmt,
 };
 use strum::IntoEnumIterator;
@@ -16,6 +17,11 @@ pub const MAX_NEURON_ALIAS_BYTES: usize = 128;
 /// Maximum number of followees that a neuron can have for a given topic.
 pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 
+lazy_static! {
+    /// Number of topics that are available for following.
+    // One enum value is reserved for the unspecified topic.
+    static ref NUM_TOPICS: usize = Topic::iter().count().saturating_sub(1);
+}
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct ValidatedSetFollowing {
@@ -219,19 +225,26 @@ pub(crate) fn get_inconsistent_aliases(
 ) -> FolloweeAliasGroups {
     followees
         .into_iter()
+        .sorted_by(|x, y| x.neuron_id.cmp(&y.neuron_id))
         .group_by(|followee| followee.neuron_id.clone())
         .into_iter()
         .filter_map(|(neuron_id, group)| {
-            let followees_with_this_neuron_id = group
+            // Since aliases are optional, filter out the ones that are not set (since they cannot
+            // cause inconsistencies).
+            let followees_with_aliases = group
                 .into_iter()
-                // Aliases are optional, and only the ones that are *present* may cause
-                // inconsistencies. Thus, we filter out the followees that do not have an alias.
                 .filter(|followee| followee.alias.is_some())
                 .cloned()
-                .collect::<BTreeSet<ValidatedFollowee>>();
+                .collect::<BTreeSet<_>>();
 
-            if followees_with_this_neuron_id.len() > 1 {
-                Some((neuron_id.clone(), followees_with_this_neuron_id))
+            let unique_aliases = followees_with_aliases
+                .iter()
+                .filter_map(|followee| followee.alias.clone())
+                .collect::<HashSet<_>>();
+
+            // If there's more than one unique alias, report inconsistency.
+            if unique_aliases.len() > 1 {
+                Some((neuron_id.clone(), followees_with_aliases))
             } else {
                 None
             }
@@ -364,8 +377,8 @@ pub(crate) enum SetFollowingValidationError {
     #[error("topic_following must contain at least one element")]
     NoTopicFollowingSpecified,
 
-    #[error("topic_followees cannot contain more than {} elements (got {})", Topic::iter().count(), .0)]
-    TooManyTopicFollows(usize),
+    #[error("topic_followees cannot contain more than {} elements (got {})", *NUM_TOPICS, .0)]
+    TooManyTopicFollowees(usize),
 
     #[error("some followees were not specified correctly: {:?}", .0)]
     FolloweesForTopicValidationError(BTreeSet<FolloweesForTopicValidationError>),
@@ -373,7 +386,7 @@ pub(crate) enum SetFollowingValidationError {
     #[error("topics must be unique, but the following topics had duplicates: {}", fmt_topics(.0))]
     DuplicateTopics(Vec<Topic>),
 
-    #[error("followees with the same alias must have the same neuron ID, got: {}", fmt_alias_groups(.0))]
+    #[error("followees are identified by ID and cannot have more than one alias, got: {}", fmt_alias_groups(.0))]
     InconsistentFolloweeAliases(FolloweeAliasGroups),
 }
 
@@ -387,8 +400,8 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
             return Err(Self::Error::NoTopicFollowingSpecified);
         }
 
-        if topic_following.len() > Topic::iter().count() {
-            return Err(Self::Error::TooManyTopicFollows(topic_following.len()));
+        if topic_following.len() > *NUM_TOPICS {
+            return Err(Self::Error::TooManyTopicFollowees(topic_following.len()));
         }
 
         let (topic_following, errors): (Vec<_>, BTreeSet<_>) =
@@ -422,12 +435,14 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
             return Err(Self::Error::DuplicateTopics(duplicate_topics));
         }
 
-        let inconsistent_aliases = get_inconsistent_aliases(
-            &topic_following
-                .iter()
-                .flat_map(|followees_for_topic| followees_for_topic.followees.iter().cloned())
-                .collect(),
-        );
+        let all_followees = topic_following
+            .iter()
+            .flat_map(|followees_for_topic| followees_for_topic.followees.iter().cloned())
+            .collect();
+
+        println!(">>> all_followees {:?}", all_followees);
+
+        let inconsistent_aliases = get_inconsistent_aliases(&all_followees);
 
         if !inconsistent_aliases.is_empty() {
             return Err(Self::Error::InconsistentFolloweeAliases(
