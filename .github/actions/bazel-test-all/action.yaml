@@ -104,4 +104,4 @@ runs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS "${bazel_args[@]}"
+            bazel ${{ inputs.BAZEL_COMMAND }} "$BAZEL_TARGETS" "${bazel_args[@]}"
