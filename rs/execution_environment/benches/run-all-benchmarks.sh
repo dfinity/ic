@@ -45,7 +45,6 @@ run() {
         set -e
         # Stop repeating the benchmark if there are no changes.
         if [ "${ret}" -eq 0 ]; then
-            echo "    Skipping further benchmark invocations due to no changes..."
             echo "${REPEAT}" >"${counter_file}"
         fi
     fi

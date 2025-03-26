@@ -11,7 +11,7 @@ use std::{
 };
 
 #[derive(Copy, Clone)]
-pub enum SetupAction {
+pub enum PostSetupAction {
     PerformCheckpoint,
     None,
 }
@@ -19,7 +19,7 @@ pub enum SetupAction {
 fn initialize_execution_test(
     wasm: &[u8],
     initialization_arg: &[u8],
-    setup_action: SetupAction,
+    post_setup_action: PostSetupAction,
     cell: &RefCell<Option<(ExecutionTest, CanisterId)>>,
 ) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
@@ -74,11 +74,11 @@ fn initialize_execution_test(
     if let WasmResult::Reject(s) = result {
         panic!("Installation rejected: {}", s)
     }
-    match setup_action {
-        SetupAction::PerformCheckpoint => {
+    match post_setup_action {
+        PostSetupAction::PerformCheckpoint => {
             test.checkpoint_canister_memories();
         }
-        SetupAction::None => {}
+        PostSetupAction::None => {}
     }
 
     // Execute a message to sync the new memory so that time isn't included in
@@ -97,7 +97,7 @@ pub fn update_bench(
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
-    setup_action: SetupAction,
+    post_setup_action: PostSetupAction,
 ) {
     let cell = RefCell::new(None);
 
@@ -106,7 +106,7 @@ pub fn update_bench(
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
+        initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
         bench.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
             for _ in 0..iters {
@@ -118,12 +118,7 @@ pub fn update_bench(
                     .unwrap();
                 total_duration += start.elapsed();
                 assert!(matches!(result, WasmResult::Reply(_)));
-                match setup_action {
-                    SetupAction::PerformCheckpoint => {
-                        test.checkpoint_canister_memories();
-                    }
-                    SetupAction::None => {}
-                }
+                test.checkpoint_canister_memories();
             }
             total_duration
         });
@@ -139,7 +134,7 @@ pub fn query_bench(
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
-    setup_action: SetupAction,
+    post_setup_action: PostSetupAction,
 ) {
     let cell = RefCell::new(None);
 
@@ -148,7 +143,7 @@ pub fn query_bench(
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
+        initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
         bench.iter(|| {
             let mut setup = cell.borrow_mut();
             let (test, canister_id) = setup.as_mut().unwrap();

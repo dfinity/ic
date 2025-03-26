@@ -1,7 +1,7 @@
 use candid::Encode;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
-use embedders_bench::SetupAction;
+use embedders_bench::PostSetupAction;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{compile, validate_and_instrument_for_testing},
@@ -261,7 +261,7 @@ fn execution(c: &mut Criterion) {
             "go",
             &Encode!(&()).unwrap(),
             None,
-            SetupAction::None,
+            PostSetupAction::None,
         );
     }
 }

@@ -1,6 +1,6 @@
 use candid::Encode;
 use criterion::{criterion_group, criterion_main, Criterion};
-use embedders_bench::SetupAction;
+use embedders_bench::PostSetupAction;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::PAGE_SIZE;
 
@@ -142,7 +142,7 @@ fn query_bench(
         method,
         payload,
         None,
-        SetupAction::PerformCheckpoint,
+        PostSetupAction::PerformCheckpoint,
     )
 }
 
@@ -163,7 +163,7 @@ fn update_bench(
         method,
         payload,
         None,
-        SetupAction::PerformCheckpoint,
+        PostSetupAction::PerformCheckpoint,
     )
 }
 
