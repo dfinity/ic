@@ -1934,12 +1934,7 @@ impl StateManagerImpl {
         }
 
         if !is_snapshot_present {
-            info!(
-                self.log,
-                "Completed StateSync for state {} that we already have a StateMetadata locally for",
-                height
-            );
-
+            // Normal case: we don't have the in-memory state yet.
             states.snapshots.push_back(Snapshot {
                 height,
                 state: Arc::new(state),
@@ -1956,6 +1951,13 @@ impl StateManagerImpl {
             states
                 .certifications_metadata
                 .insert(height, certification_metadata);
+        } else {
+            // Rare case: we already have the in-memory state.
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a in-memory state locally for",
+                height
+            );
         }
 
         let state_size_bytes: i64 = manifest
@@ -1965,12 +1967,7 @@ impl StateManagerImpl {
             .sum();
 
         if !is_state_metadata_present {
-            info!(
-                self.log,
-                "Completed StateSync for state {} that we already have a in-memory state locally for",
-                height
-            );
-
+            // Normal case: we don't have the state metadata yet.
             states.states_metadata.insert(
                 height,
                 StateMetadata {
@@ -1982,6 +1979,13 @@ impl StateManagerImpl {
                     }),
                     state_sync_file_group: None,
                 },
+            );
+        } else {
+            // Rare case: we already have the state metadata.
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a StateMetadata locally for",
+                height
             );
         }
 
