@@ -8,7 +8,8 @@ use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
     CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus,
-    Payload as Ic00Payload, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    Payload as Ic00Payload, ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    SnapshotSource, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1993,6 +1994,44 @@ fn snapshot_must_include_globals() {
         .non_replicated_query(canister_id, "read_global", vec![])
         .unwrap();
     assert_eq!(result, WasmResult::Reply(vec![1, 0, 0, 0]));
+}
+
+#[test]
+fn read_canister_snapshot_metadata_succeeds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    test.execute_subnet_message();
+    let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    // Create new canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            uni_canister_wasm.clone(),
+        )
+        .unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Get the metadata
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id.to_vec());
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    assert_eq!(metadata.source, SnapshotSource::TakenFromCanister);
+    assert_eq!(metadata.wasm_module_size, uni_canister_wasm.len() as u64);
 }
 
 /// Early warning system / stumbling block forcing the authors of changes adding
