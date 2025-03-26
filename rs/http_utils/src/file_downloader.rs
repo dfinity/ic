@@ -15,13 +15,18 @@ use std::time::Duration;
 use tar::Archive;
 use zstd::stream::read::Decoder as ZstdDecoder;
 
+const OVERALL_TIMEOUT_MULTIPLIER: f32 = 10.0;
+
 /// Streams HTTP response bodies to files
 pub struct FileDownloader {
     client: Client,
     logger: Option<ReplicaLogger>,
     /// This is a timeout that is applied to the downloading each chunk that is
     /// yielded, not to the entire downloading of the file.
-    timeout: Duration,
+    chunk_timeout: Duration,
+    /// This is a timeout that is applied to the whole operation of downloading
+    /// a specific resource.
+    overall_timeout: Duration,
 }
 
 impl FileDownloader {
@@ -29,11 +34,14 @@ impl FileDownloader {
         Self::new_with_timeout(logger, Duration::from_secs(15))
     }
 
+    /// Creates a new `FileDownloader` with a specified `chunk_timeout`. By default
+    /// `overall_timeout` will be set to `chunk_timeout * OVERALL_TIMEOUT_MULTIPLIER`
     pub fn new_with_timeout(logger: Option<ReplicaLogger>, timeout: Duration) -> Self {
         Self {
             client: Client::new(),
             logger,
-            timeout,
+            chunk_timeout: timeout,
+            overall_timeout: timeout.mul_f32(OVERALL_TIMEOUT_MULTIPLIER),
         }
     }
 
@@ -136,14 +144,6 @@ impl FileDownloader {
             0
         };
 
-        match offset {
-            0 => self.info(format!("Downloading file from: {}", url)),
-            _ => self.info(format!(
-                "Resuming downloading file from {} starting from byte {}",
-                url, offset
-            )),
-        };
-
         let maybe_response = self.resuming_http_get(url, offset).await?;
 
         // There are new bytes that should be written
@@ -198,6 +198,7 @@ impl FileDownloader {
             .client
             .get(url)
             .header("range", format!("bytes={}-", offset))
+            .timeout(self.overall_timeout)
             .send()
             .await?;
 
@@ -221,7 +222,7 @@ impl FileDownloader {
         mut file: fs::File,
         file_path: &Path,
     ) -> FileDownloadResult<()> {
-        while let Some(chunk) = tokio::time::timeout(self.timeout, response.chunk())
+        while let Some(chunk) = tokio::time::timeout(self.chunk_timeout, response.chunk())
             .await
             .map_err(|_| FileDownloadError::TimeoutError)??
         {
@@ -408,6 +409,7 @@ mod tests {
         pub data: Mock,
         pub redirect: Mock,
         pub data_out_of_range: Mock,
+        pub bad_request: Mock,
         pub temp: TempPath,
         pub logger: InMemoryReplicaLogger,
     }
@@ -461,6 +463,14 @@ mod tests {
                 .create_async()
                 .await;
 
+            let bad_request = server
+                .mock("GET", "/badrequest")
+                .match_header("range", mockito::Matcher::Regex(r"bytes=.*-".to_string()))
+                .with_status(400)
+                .with_body(vec![])
+                .create_async()
+                .await;
+
             let temp = NamedTempFile::new()
                 .expect("Failed to create tmp file")
                 .into_temp_path();
@@ -472,6 +482,7 @@ mod tests {
                 redirect,
                 temp,
                 data_out_of_range,
+                bad_request,
                 logger: InMemoryReplicaLogger::new(),
             }
         }
@@ -481,10 +492,12 @@ mod tests {
             data_hits: usize,
             redirect_hits: usize,
             data_out_of_range_hits: usize,
+            bad_request_hits: usize,
         ) -> Self {
             self.data = self.data.expect(data_hits);
             self.redirect = self.redirect.expect(redirect_hits);
             self.data_out_of_range = self.data_out_of_range.expect(data_out_of_range_hits);
+            self.bad_request = self.bad_request.expect(bad_request_hits);
             self
         }
 
@@ -496,6 +509,7 @@ mod tests {
             self.data.assert();
             self.redirect.assert();
             self.data_out_of_range.assert();
+            self.bad_request.assert();
         }
     }
 
@@ -511,7 +525,7 @@ mod tests {
     async fn test_file_downloader_handles_redirects() {
         let body = String::from("Success");
         let hash = hash(&body);
-        let setup = Setup::new(&body).await.expect_routes(1, 1, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 1, 0, 0);
 
         let downloader = FileDownloader::new(None);
         downloader
@@ -533,7 +547,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
         let invalid_hash = format!("invalid_{}", hash);
-        let setup = Setup::new(&body).await.expect_routes(1, 0, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0, 0, 0);
 
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
 
@@ -556,7 +570,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).await.expect_routes(1, 0, 0);
+        let setup = Setup::new(&body).await.expect_routes(1, 0, 0, 0);
 
         // Correct file already exists
         std::fs::write(&setup.temp, &body).unwrap();
@@ -605,7 +619,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).await.expect_routes(2, 0, 0);
+        let setup = Setup::new(&body).await.expect_routes(2, 0, 0, 0);
 
         // An unexpected file already exists
         std::fs::write(&setup.temp, "unexpected content").unwrap();
@@ -643,7 +657,7 @@ mod tests {
         let body = String::from("Success");
         let hash = hash(&body);
 
-        let setup = Setup::new(&body).await.expect_routes(1, 0, 1);
+        let setup = Setup::new(&body).await.expect_routes(1, 0, 1, 0);
 
         // An unexpected file with content lenght greater than `body`
         std::fs::write(&setup.temp, "unexpected longer content").unwrap();
@@ -662,18 +676,47 @@ mod tests {
 
         assert!(!setup.temp.exists());
 
-        downloader
-            .download_file(&setup.url(), &setup.temp, Some(hash))
-            .await
-            .expect("Failed to download");
-
-        assert!(setup.temp.exists());
-
         let logs = setup.logger.drain_logs();
         LogEntriesAssert::assert_that(logs)
             .has_only_one_message_containing(&Level::Warning, "Requesting resource '")
             .has_only_one_message_containing(&Level::Warning, "Hash check failed")
-            .has_exactly_n_messages_containing(2, &Level::Info, "Response read. Checking hash");
+            .has_only_one_message_containing(
+                &Level::Warning,
+                "Hash mismatch. Assuming incomplete file",
+            )
+            .has_exactly_n_messages_containing(1, &Level::Info, "Response read. Checking hash");
+    }
+
+    #[test]
+    async fn test_bad_request() {
+        let body = String::from("Success");
+
+        let setup = Setup::new(&body).await.expect_routes(0, 0, 0, 1);
+        let hash = hash(&body);
+
+        // An unexpected file with content lenght greater than `body`
+        std::fs::write(&setup.temp, "unexpected longer content").unwrap();
+
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
+        let url = format!("{}/badrequest", setup.url());
+        let mismatch = downloader
+            .download_file(&url, &setup.temp, Some(hash))
+            .await;
+
+        // No hash check is required and the server returned a 400, the file
+        // will should not be deleted
+        assert_matches!(mismatch, Err(FileDownloadError::NonSuccessResponse(_, _)));
+
+        let logs = setup.logger.drain_logs();
+        assert!(setup.temp.exists());
+
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Info, "File already exists. Checking hash.")
+            .has_only_one_message_containing(
+                &Level::Warning,
+                "Hash mismatch. Assuming incomplete file.",
+            )
+            .has_only_one_message_containing(&Level::Info, "Resuming downloading file");
     }
 
     fn create_tar<W: Write>(writer: W) -> io::Result<()> {
