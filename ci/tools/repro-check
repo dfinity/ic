@@ -72,20 +72,11 @@ def fail(msg):
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "This script builds and diffs the update image between CI and build-ic.\n\n"
-            "By default (with no arguments), it:\n"
+            "This script builds and verifies reproducibility by comparing the images built by the CI vs. built locally.\n\n"
+            "Default behavior:\n"
             " - uses the current directory's HEAD commit\n"
             " - checks all OS images (GuestOS, HostOS, SetupOS)\n"
-            " - verifies reproducibility, downloading artifacts from download.dfinity.systems and .network.\n\n"
-            "Options:\n"
-            " -h, --help                Show this help message.\n"
-            " --guestos                 Verify only GuestOS images.\n"
-            " --hostos                  Verify only HostOS images.\n"
-            " --setupos                 Verify only SetupOS images.\n"
-            " -p <proposal>             Proposal ID (for an Elect Replica or HostOS proposal).\n"
-            " -c <commit>               Git commit/branch/sha in the IC repo to verify.\n"
-            " --clean                   Clean up the download cache before running.\n"
-            " --download-source <which> 'systems', 'network', or 'both' (default: systems).\n"
+            " - compares hash sums against the artifacts from download.dfinity.systems and download.dfinity.network.\n\n"
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
