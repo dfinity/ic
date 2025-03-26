@@ -347,6 +347,7 @@ class ReproducibilityVerifier:
 
     @staticmethod
     def verify_sha256_against_sums(binary_path: Path, sums_file: Path, git_rev: str) -> str:
+        log_debug(f"Verifying {binary_path} against {sums_file}")
         lines = sums_file.read_text(encoding="utf-8").splitlines()
         binary_filename = binary_path.name
 
@@ -437,8 +438,9 @@ class ReproducibilityVerifier:
 
     def wait_for_downloads(self):
         """Block until all scheduled downloads are complete."""
-        log("Waiting for downloads to finish...")
         for f in self.download_futures:
+            if not f.done():
+                log("Waiting for background downloads to finish...")
             f.result()
         self.download_futures = []
 
@@ -580,10 +582,10 @@ class ReproducibilityVerifier:
         for idx, cdn_domain in enumerate(self.cdn_domains):
             subdir = self.cdn_out / cdn_domain / os_type
             local_sums_path = subdir / "SHA256SUMS"
-            local_tar_name = subdir / f"{artifact}.tar.zst"
+            binary_file_path = subdir / f"{artifact}.tar.zst"
 
             # Verify the artifact matches the sums in that subdir
-            h = self.verify_sha256_against_sums(local_sums_path, local_tar_name, self.git_hash)
+            h = self.verify_sha256_against_sums(binary_file_path, local_sums_path, self.git_hash)
             final_hashes.append(h)
 
         # Check that all sources matched the same hash
