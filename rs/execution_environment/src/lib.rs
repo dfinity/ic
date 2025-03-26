@@ -215,4 +215,23 @@ impl ExecutionServices {
             query_stats_payload_builder,
         }
     }
+
+    #[allow(clippy::type_complexity)]
+    pub fn into_parts(
+        self,
+    ) -> (
+        IngressFilterService,
+        Arc<IngressHistoryWriterImpl>,
+        Box<dyn IngressHistoryReader>,
+        QueryExecutionService,
+        Box<dyn Scheduler<State = ReplicatedState>>,
+    ) {
+        (
+            self.ingress_filter,
+            self.ingress_history_writer,
+            self.ingress_history_reader,
+            self.query_execution_service,
+            self.scheduler,
+        )
+    }
 }
