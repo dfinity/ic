@@ -8,8 +8,8 @@ use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils::{
     sns_wasm,
@@ -193,11 +193,11 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         sns_init_payload,
     );
 
-    let root = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let root = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
+    let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
+    let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
+    let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
+    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
     let error_message = response.error.clone().unwrap().message;
     let expected_error = format!(
         "Error installing Governance WASM: Failed to install WASM on canister \
@@ -235,12 +235,12 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         }
     );
 
-    // No canisters should exist above NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET because we deleted
+    // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET because we deleted
     // those canisters.
     for i in 1..=5 {
-        assert!(!machine.canister_exists(canister_test_id(
-            NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + i
-        )));
+        assert!(
+            !machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + i))
+        );
     }
 
     // 15_000_000_000_000 cycles are burned creating the canisters before the failure
@@ -275,11 +275,11 @@ fn test_deploy_adds_cycles_to_target_canisters() {
         sns_init_payload,
     );
 
-    let root = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let root = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
+    let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
+    let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
+    let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
+    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
 
     assert_eq!(
         response,
@@ -359,11 +359,11 @@ fn test_deploy_sns_and_transfer_dapps() {
         sns_init_payload,
     );
 
-    let root_canister_id = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 5);
-    let governance_canister_id = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 6);
-    let ledger_canister_id = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 7);
-    let swap_canister_id = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 8);
-    let index_canister_id = canister_test_id(NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 9);
+    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
+    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 7);
+    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 8);
+    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 9);
 
     assert_eq!(
         response,

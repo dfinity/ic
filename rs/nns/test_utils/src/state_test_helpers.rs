@@ -736,8 +736,6 @@ pub fn setup_nns_canisters_with_features(
     assert_eq!(nns_ui_canister_id, NNS_UI_CANISTER_ID);
 
     setup_nns_sns_wasms_with_correct_canister_id(machine, init_payloads.sns_wasms);
-
-    setup_nns_node_rewards_with_correct_canister_id(machine, init_payloads.node_rewards);
 }
 
 pub fn mint_icp(state_machine: &StateMachine, destination: AccountIdentifier, amount: Tokens) {

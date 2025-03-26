@@ -65,6 +65,8 @@ fn test_several_proposals() {
     // Note that this uses governance with cfg(features = "test") enabled.
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
+    /// TODO DO NOT MERGE - this is a very inefficient way of doing this, b/c it creates 1000 canisters
+    /// in between
     let dapp_canister = ensure_canister_id_exists_at_position(&state_machine, 1000, None);
     set_controllers(
         &state_machine,
