@@ -191,7 +191,7 @@ def main():
         limit_prefix = limit_prefix[1:]
 
     tmpdir = os.getenv("ICOS_TMPDIR")
-    tmpdir = force_tmpfs(tmpdir)
+    # tmpdir = force_tmpfs(tmpdir)
     if not tmpdir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
@@ -299,7 +299,7 @@ def main():
         check=True,
     )
 
-    cleanup_forced_tmpfs(tmpdir)
+    # cleanup_forced_tmpfs(tmpdir)
 
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ def main():
     args = parser.parse_args(sys.argv[1:])
 
     tmpdir = os.getenv("ICOS_TMPDIR")
-    tmpdir = force_tmpfs(tmpdir)
+    # tmpdir = force_tmpfs(tmpdir)
     if not tmpdir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
     partition = os.path.join(tmpdir, "partition.img")
@@ -126,7 +126,7 @@ def main():
         check=True,
     )
 
-    cleanup_forced_tmpfs(tmpdir)
+    # cleanup_forced_tmpfs(tmpdir)
 
 
 if __name__ == "__main__":
