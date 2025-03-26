@@ -22,8 +22,6 @@ function clone_from_usb() {
     rm -rf "${TMPDIR}"
 }
 
-
-
 # Establish run order
 main() {
     log_start "$(basename $0)"
