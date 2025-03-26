@@ -23,7 +23,6 @@
         <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
         <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
         <nvram>/var/lib/libvirt/qemu/nvram/guestos_upgrader_VARS.fd</nvram>
-        <boot dev='hd'/>
     </os>
     <features>
         <acpi/>
@@ -49,21 +48,27 @@
             <backingStore/>
             <target dev='vda' bus='virtio'/>
             <alias name='virtio-disk0'/>
+            <boot order='1'/>
+            <readonly/>
             <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
         </disk>
 <!--        <disk type='file' device='disk'>-->
-<!--            <source file='/run/ic-node/config.img'/>-->
-<!--            <target dev='sda' bus='usb' removable='on'/>-->
+<!--            <source file='/run/ic-node/config.img'>-->
+<!--                <seclabel type='none'/>-->
+<!--            </source>-->
+<!--            <target dev='sdb' bus='usb' removable='on'/>-->
 <!--        </disk>-->
+        <disk type='file' device='disk'>
+            <driver name='qemu' type='raw'/>
+            <source file='/tmp/guestos_type/upgrade.img'/>
+            <target dev='sda' bus='sata'/>
+            <boot order='2'/>
+        </disk>
 <!--        <filesystem type='mount' accessmode='passthrough'>-->
 <!--            <driver type='virtiofs'/>-->
 <!--            <source dir='/tmp/guestos_upgrade'/>-->
 <!--            <target dir='guestos_upgrade'/>-->
 <!--        </filesystem>-->
-        <disk type='file' device='disk'>
-            <source file='/tmp/guestos_upgrade.img'/>
-            <target dev='sdb' bus='usb' removable='on'/>
-        </disk>
         <controller type='usb' index='0' model='ich9-ehci1'>
             <alias name='usb'/>
             <address type='pci' domain='0x0000' bus='0x00' slot='0x1d' function='0x7'/>

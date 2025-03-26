@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package verification.attestation;
+
+message InternalError {
+  string message = 1;
+}
+
+message InvalidAttestationReport {}
+message InvalidNonce {}
+
+message AttestationError {
+  string message = 1;
+
+  oneof error {
+    InternalError internal = 2;
+    InvalidAttestationReport invalid_attestation_report = 3;
+    InvalidNonce invalid_nonce = 4;
+  }
+}
+
+message GenerateAttestationTokenChallenge {
+  bytes nonce = 1;
+}
+
+message InitiateGenerateAttestationTokenRequest {
+  bytes chip_id = 1;
+}
+
+message InitiateGenerateAttestationTokenResponse {
+  GenerateAttestationTokenChallenge challenge = 1;
+}
+
+message GenerateAttestationTokenRequest {
+  bytes tls_public_key = 1;
+  bytes nonce = 2;
+  bytes sev_attestation_report = 3;
+}
+
+message GenerateAttestationTokenResponse {
+
+}

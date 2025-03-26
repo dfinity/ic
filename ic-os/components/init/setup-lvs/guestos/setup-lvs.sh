@@ -31,6 +31,14 @@ function retry() {
     return 1
 }
 
+mkdir -p /mnt
+mount /dev/sda /mnt
+trap "umount /mnt" EXIT
+if [ -e /mnt/upgrade ]; then
+    echo "Upgrade VM, exiting."
+    exit 0
+fi
+
 pvs /dev/mapper/vda10-crypt >/dev/null 2>&1 || (
     echo "Volume group 'store' does not exist yet (first boot?), creating it."
     retry vgcreate --force store /dev/mapper/vda10-crypt

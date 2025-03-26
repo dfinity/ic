@@ -146,6 +146,7 @@ write_metric_attr "guestos_boot_action" \
 # containing the injected configuration files, and create the file.
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
+    exit 0
 fi
 
 mount -o remount,rw /boot/config

@@ -12,8 +12,8 @@ mod persist;
 mod rate_limiting;
 mod retry;
 mod routes;
-mod salt_fetcher;
 mod snapshot;
+mod test;
 #[cfg(any(test, feature = "bench"))]
 pub mod test_utils;
 mod tls_verify;

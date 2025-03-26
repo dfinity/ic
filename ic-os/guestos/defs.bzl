@@ -54,6 +54,8 @@ def image_deps(mode, malicious = False):
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
+            "//rs/ic_os/verification/upgrade:server": "/opt/ic/bin/upgrade_server:0755",
+            "//rs/ic_os/verification/upgrade:client": "/opt/ic/bin/upgrade_client:0755",
 
             # TODO(NODE-1518): delete config tool from guestos after switch to new icos config
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",

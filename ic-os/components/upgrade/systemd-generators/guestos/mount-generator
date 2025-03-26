@@ -49,7 +49,7 @@ function make_boot_mount() {
     echo "What=$DEVICE"
     echo "Where=/boot"
     echo "Type=ext4"
-    echo "Options=defaults"
+    echo "Options=ro"
 }
 
 function make_var_cryptsetup() {

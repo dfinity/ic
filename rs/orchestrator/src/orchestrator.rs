@@ -92,6 +92,7 @@ impl Orchestrator {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
+        dbg!(&config);
         let crypto_config = config.crypto.clone();
         let node_id = tokio::task::spawn_blocking(move || {
             generate_node_keys_once(&crypto_config, Some(tokio::runtime::Handle::current()))

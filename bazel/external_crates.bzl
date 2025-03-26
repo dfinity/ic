@@ -1356,6 +1356,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tonic": crate.spec(
                 version = "^0.12.3",
+                features = ["tls"],
             ),
             "tonic-build": crate.spec(
                 version = "^0.12.3",

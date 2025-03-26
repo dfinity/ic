@@ -1,5 +1,5 @@
 {
-  "checksum": "bdcbdf21b5cda7470290bfa053f648ac6bd22c5ca394d196b9d1c7029e9284f3",
+  "checksum": "a7c782ea4b825630ab1e67394a236270ad4438649698040cc9a0290fd8ca2ce3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -78084,6 +78084,7 @@
             "prost",
             "router",
             "server",
+            "tls",
             "transport"
           ],
           "selects": {}
@@ -78147,12 +78148,20 @@
               "target": "prost"
             },
             {
+              "id": "rustls-pemfile 2.2.0",
+              "target": "rustls_pemfile"
+            },
+            {
               "id": "socket2 0.5.7",
               "target": "socket2"
             },
             {
               "id": "tokio 1.42.0",
               "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.26.0",
+              "target": "tokio_rustls"
             },
             {
               "id": "tokio-stream 0.1.17",

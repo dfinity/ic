@@ -1,7 +1,7 @@
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use prost::Message;
 use rand::seq::SliceRandom;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use url::Url;
 
 use ic_canister_client::{Agent, Sender};
@@ -121,6 +121,7 @@ impl RegistryCanister {
         nns_public_key: &ThresholdSigPublicKey,
     ) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), Error> {
         let payload = serialize_get_changes_since_request(version).unwrap();
+        let time = Instant::now();
         let response = self
             .choose_random_agent()
             .execute_query(&self.canister_id, "get_certified_changes_since", payload)
@@ -137,6 +138,8 @@ impl RegistryCanister {
                     self.canister_id,
                 ))
             })?;
+
+        println!("SIZE: {}", response.len());
 
         crate::certification::decode_certified_deltas(
             version,

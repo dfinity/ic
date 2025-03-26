@@ -1,0 +1,72 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_bench")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:prost",
+    "@crate_index//:rand",
+    "@crate_index//:rustls",
+    "@crate_index//:tokio",
+    "@crate_index//:tonic",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tonic-build",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "server",
+    srcs = glob([
+        "src/server.rs",
+        "src/api.rs",
+    ]),
+    aliases = ALIASES,
+    crate_name = "verification_upgrade_server",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_binary(
+    name = "client",
+    srcs = glob([
+        "src/client.rs",
+        "src/api.rs",
+    ]),
+    aliases = ALIASES,
+    crate_name = "verification_upgrade_client",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "CARGO_MANIFEST_DIR": "rs/ic_os/verification/upgrade",
+        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
+    },
+    data = [
+        "proto/api.proto",
+        "@com_google_protobuf//:protoc",
+        "@rules_rust//rust/toolchain:current_rustfmt_files",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:prost-build",
+        "@crate_index//:tonic-build",
+    ],
+)

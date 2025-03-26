@@ -1,0 +1,23 @@
+[workspace]
+
+[package]
+name = "attestation"
+description = "Attestation."
+license = "Apache-2.0"
+edition = "2021"
+
+[dependencies]
+candid = "0.10.11"
+#ic-agent = "0.39.1"
+sev = { version = "6.0.0", features = ["openssl"] }
+#anyhow = "1.0.93"
+#sha2 = "0.11.0-pre.4"
+der = { version = "0.8.0-rc.1", features = ["alloc", "derive", "std"] }
+#mockall = "0.13.1"
+#tokio = { version = "1.42.0", features = ["macros"] }
+#ic-certified-map = "0.4"
+#serde_cbor = "0.11"
+serde = { version = "1.0.216", features = ["derive"] }
+thiserror = "2.0.11"
+rand = "0.9.0"
+ring = "0.17"

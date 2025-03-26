@@ -43,6 +43,7 @@ use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
 use metrics::RegistryreplicatorMetrics;
+use std::time::Instant;
 use std::{
     io::{Error, ErrorKind},
     net::SocketAddr,
@@ -234,6 +235,8 @@ impl RegistryReplicator {
 
         let registry_canister = RegistryCanister::new(nns_urls);
 
+        let time = Instant::now();
+
         // Fill the local registry store by polling the registry canister until we get no
         // more changes.
         loop {
@@ -262,6 +265,7 @@ impl RegistryReplicator {
 
                     let entries = changelog.len();
 
+                    let time = Instant::now();
                     changelog
                         .into_iter()
                         .enumerate()
@@ -270,6 +274,8 @@ impl RegistryReplicator {
                             self.local_store.store(v, cle)
                         })
                         .expect("Could not write to local store.");
+
+                    println!("Store took {:?}", time.elapsed());
 
                     registry_version += RegistryVersion::from(entries as u64);
                     timeout = 1;
@@ -295,7 +301,9 @@ impl RegistryReplicator {
 
         info!(
             self.logger,
-            "Finished local store initialization at registry version: {}", registry_version
+            "Finished local store initialization at registry version: {}, took: {:.2}s",
+            registry_version,
+            time.elapsed().as_secs_f32()
         );
     }
 

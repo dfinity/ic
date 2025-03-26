@@ -28,4 +28,6 @@ message ReplicaVersionRecord {
 message BlessedReplicaVersions {
   // A list of version information ids.
   repeated string blessed_version_ids = 1;
+
+  repeated string blessed_guest_launch_measurement_sha256_hexes = 2;
 }

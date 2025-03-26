@@ -1,0 +1,45 @@
+[workspace]
+
+[package]
+edition = "2021"
+license = "MIT"
+name = "ic-os-upgrade"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[dependencies]
+tokio = { version = "1.44", features = ["rt-multi-thread"] }
+prost = "0.13"
+tonic = { version = "0.12", features = ["tls"] }
+anyhow = "1.0.97"
+rcgen = "0.13"
+tokio-stream = "0.1.17"
+rustls = "0.23.23"
+rand = "0.8.5" # FIXME
+ic-registry-client = { path = "../../../registry/client" }
+ic-registry-local-registry = { path = "../../../registry/local_registry" }
+ic-registry-client-helpers = { path = "../../../registry/helpers" }
+ic-registry-canister-client = { path = "../../../registry/canister-client" }
+ic-registry-nns-data-provider-wrappers = { path = "../../../registry/nns_data_provider_wrappers" }
+ic-crypto-utils-threshold-sig-der = { path = "../../../crypto/utils/threshold_sig_der" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+clap = { version = "4.5.27", features = ["derive"] }
+url = "2.5.4"
+itertools = "0.14.0"
+tokio-rustls = "0.26"
+futures-util = "0.3.31"
+sev = "6.0.0"
+ring = "0.17"
+base64 = "0.22.1"
+ic-protobuf = { path = "../../../protobuf" }
+attestation = { path ="../attestation" }
+x509-parser = "0.17"
+
+[build-dependencies]
+tonic-build = { version = "0.12", features = ["prost"] }

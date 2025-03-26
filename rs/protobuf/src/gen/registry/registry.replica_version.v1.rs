@@ -22,4 +22,7 @@ pub struct BlessedReplicaVersions {
     /// A list of version information ids.
     #[prost(string, repeated, tag = "1")]
     pub blessed_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag = "2")]
+    pub blessed_guest_launch_measurement_sha256_hexes:
+        ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }

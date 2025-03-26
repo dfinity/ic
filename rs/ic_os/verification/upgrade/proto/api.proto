@@ -1,0 +1,30 @@
+package upgrade.api;
+
+message GetDiskEncryptionKeyRequest {
+  optional bytes sev_attestation_report = 1;
+}
+
+message GetDiskEncryptionKeyResponse {
+  optional bytes key = 1;
+  optional bytes sev_attestation_report = 2;
+}
+
+message InitializeGetDiskEncryptionKeyRequest {
+  optional bytes nonce = 1;
+}
+
+message InitializeGetDiskEncryptionKeyResponse {
+  optional bytes nonce = 1;
+}
+
+service UpgradeService {
+  rpc InitializeGetDiskEncryptionKey(InitializeGetDiskEncryptionKeyRequest)
+    returns (InitializeGetDiskEncryptionKeyResponse) {
+
+  }
+
+  rpc GetDiskEncryptionKey(GetDiskEncryptionKeyRequest)
+    returns (GetDiskEncryptionKeyResponse) {
+
+  }
+}
