@@ -58,8 +58,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --keep_going --test_tag_filters=system_test_nightly
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_nightly
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
@@ -72,8 +71,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --keep_going --test_tag_filters=system_test_staging
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_staging
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
@@ -87,8 +85,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --keep_going --test_tag_filters=system_test_hotfix
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=system_test_hotfix
           BAZEL_TARGETS: //rs/tests/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
@@ -156,7 +153,6 @@ jobs:
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: |
-            test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
+          BAZEL_COMMAND: test --config=ci --config=systest --keep_going --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
