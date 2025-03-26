@@ -308,10 +308,10 @@ class ReproducibilityVerifier:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "ReproducibilityVerifier/1.0"})
             with urllib.request.urlopen(req) as response, tmp_file.open("wb") as out_file:
-                chunk = response.read(64*1024)
+                chunk = response.read(64 * 1024)
                 while chunk:
                     out_file.write(chunk)
-                    chunk = response.read(64*1024)
+                    chunk = response.read(64 * 1024)
 
             # If we reach here, download succeeded—rename to final destination
             tmp_file.rename(dest_path)
@@ -468,9 +468,7 @@ class ReproducibilityVerifier:
 
         proposal_data = json.loads(proposal_json_path.read_text(encoding="utf-8"))
         self.proposal_package_urls = self.extract_field_json(proposal_data, ".payload.release_package_urls")
-        self.proposal_package_sha256_hex = self.extract_field_json(
-            proposal_data, ".payload.release_package_sha256_hex"
-        )
+        self.proposal_package_sha256_hex = self.extract_field_json(proposal_data, ".payload.release_package_sha256_hex")
 
         # Check if guestos or hostos proposal
         prop_str = json.dumps(proposal_data)
