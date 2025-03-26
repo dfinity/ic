@@ -50,13 +50,9 @@ def _run_system_test(ctx):
             fi
             unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP # clean up the env for the test
 
-            if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION:-}}" ]; then
+            if [ -n "RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST" ]; then
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
-            fi
-            if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_URL:-}}" ]; then
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL:-}}"
-            fi
-            if [ -z "${{ENV_DEPS__HOSTOS_UPDATE_IMG_SHA:-}}" ]; then
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
             fi
 
@@ -277,6 +273,8 @@ def system_test(
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
+    else:
+        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG"] = "1"
 
     if uses_setupos_mainnet:
         # Note: SetupOS is still passed directly by path, as it needs some local processing.
