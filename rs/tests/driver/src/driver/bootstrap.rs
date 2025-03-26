@@ -672,8 +672,6 @@ pub fn configure_setupos_image(
         .arg("testnet")
         .arg("--mgmt-mac")
         .arg(&mac)
-        .arg("--mgmt-mac-2")
-        .arg(&mac)
         .arg("--ipv6-prefix")
         .arg(&prefix)
         .arg("--ipv6-gateway")
