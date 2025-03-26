@@ -81,26 +81,22 @@ class CustomFormatter(logging.Formatter):
         # Use our custom formatter.
         formatter = logging.Formatter(fmt=log_fmt, datefmt=None)
 
-        # Insert the color, icon, reset into the record.
         record.color = color
         record.icon = icon
         record.reset = self.reset
 
-        # The “%(asctime)s” is handled by the above date format method.
         formatter.formatTime = self.formatTime
-
-        # Format the record
         output = formatter.format(record)
         return output
 
 
 def conventional_logging(one_line_logs: bool, verbose: bool) -> None:
-    """Set up logging."""
+    """Sets up logging for the script."""
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
     root_logger.setLevel(logging.DEBUG if verbose else logging.INFO)
 
-    # Mute overly chatty third-party loggers if verbose is off
+    # Mute overly chatty third-party loggers if not verbose
     if not verbose:
         for chatty in ["httpcore", "urllib3", "httpx"]:
             logging.getLogger(chatty).setLevel(logging.WARNING)
@@ -110,9 +106,12 @@ def conventional_logging(one_line_logs: bool, verbose: bool) -> None:
     ch.setFormatter(CustomFormatter(one_line_logs=one_line_logs))
     root_logger.addHandler(ch)
 
+
 logger = logging.getLogger(__name__)
 
-def fail(msg):
+
+def fail(msg: str):
+    """Logs the given message as critical and exits."""
     logger.critical(msg)
     sys.exit(1)
 
@@ -124,7 +123,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "This script builds and verifies reproducibility by comparing "
-            "the images built by the CI vs. built locally.\n\n"
+            "the images built by the CI vs. those built locally.\n\n"
             "Default behavior:\n"
             " - uses the current directory's HEAD commit\n"
             " - checks all OS images (GuestOS, HostOS, SetupOS)\n"
@@ -160,7 +159,7 @@ def parse_args():
     if args.debug:
         os.environ["DEBUG"] = "1"
 
-    # If user didn't specify any OS flags, we check all three
+    # If user didn't specify any OS flags, check all three
     if not args.guestos and not args.hostos and not args.setupos:
         args.guestos = True
         args.hostos = True
@@ -170,7 +169,7 @@ def parse_args():
 
 
 def get_download_sources(mode: str):
-    """Return the list of base CDN domains from which the images should be downloaded."""
+    """Returns the list of base CDN domains from which the images should be downloaded."""
     if mode == "systems":
         return ["download.dfinity.systems"]
     elif mode == "network":
@@ -232,9 +231,9 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     def check_architecture(self):
         if platform.machine() == "x86_64":
-            logger.info("x86_64 architecture detected")
+            logger.info("x86_64 architecture detected.")
         else:
-            fail("Please run this script on x86_64 architecture")
+            fail("Please run this script on x86_64 architecture.")
 
     def check_os_version(self):
         release_files = ["/etc/os-release", "/usr/lib/os-release"]
@@ -251,16 +250,16 @@ class ReproducibilityVerifier:
 
         os_name = os_info.get("NAME", "")
         if os_name == "Ubuntu":
-            logger.info("Ubuntu OS detected")
+            logger.info("Ubuntu OS detected.")
         else:
-            logger.warning("Please run this script on Ubuntu OS")
+            logger.warning("Please run this script on Ubuntu OS.")
 
         try:
             version_id = float(os_info.get("VERSION_ID", "0"))
             if version_id >= 22.04:
-                logger.info("Ubuntu version ≥22.04 detected")
+                logger.info("Ubuntu version ≥ 22.04 detected.")
             else:
-                logger.warning("Please run this script on Ubuntu version 22.04 or higher")
+                logger.warning("Please run this script on Ubuntu version 22.04 or higher.")
         except ValueError:
             pass
 
@@ -275,13 +274,13 @@ class ReproducibilityVerifier:
                             mem_kb = int(parts[1])
                             mem_gb = mem_kb // 1024 // 1024
                             if mem_gb < required_gb:
-                                logger.warning(f"You need at least {required_gb} GiB of RAM on this machine")
+                                logger.warning(f"You need at least {required_gb} GiB of RAM on this machine.")
                             else:
-                                logger.info(f"{required_gb} GiB or more RAM detected")
+                                logger.info(f"{required_gb} GiB or more RAM detected.")
                         return
-            logger.warning("Could not detect memory from /proc/meminfo")
+            logger.warning("Could not detect memory from /proc/meminfo.")
         except Exception:
-            logger.warning("Memory check failed. Could not parse /proc/meminfo")
+            logger.warning("Memory check failed. Could not parse /proc/meminfo.")
 
     def check_disk_at_least_gb(self, required_gb=100):
         try:
@@ -289,15 +288,15 @@ class ReproducibilityVerifier:
             free_bytes = st.f_bavail * st.f_frsize
             free_gb = free_bytes / (1024 * 1024 * 1024)
             if free_gb < required_gb:
-                logger.warning(f"You need at least {required_gb} GiB of free disk space on this machine")
+                logger.warning(f"You need at least {required_gb} GiB of free disk space on this machine.")
             else:
-                logger.info(f"{required_gb} GiB+ of free disk space detected")
+                logger.info(f"{required_gb} GiB+ of free disk space detected.")
         except Exception:
-            logger.warning("Disk check failed. Could not run statvfs on '.'")
+            logger.warning("Disk check failed. Could not run statvfs on '.'.")
 
     def check_and_install_dependencies(self):
         deps = ["git", "podman"]
-        logger.info("Check and install needed dependencies")
+        logger.info("Checking and installing needed dependencies.")
         for d in deps:
             if shutil.which(d) is None:
                 logger.info(f"Installing missing package: {d}")
@@ -306,29 +305,29 @@ class ReproducibilityVerifier:
                 except subprocess.CalledProcessError:
                     fail(f"Failed to install {d}. Exiting.")
             else:
-                logger.info(f"{d} is already installed")
+                logger.info(f"{d} is already installed.")
 
     def check_git_repo(self):
-        logger.debug("Check we are inside a Git repository")
+        logger.debug("Checking we are inside a Git repository.")
         try:
             cmd = ["git", "rev-parse", "--is-inside-work-tree"]
             inside = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
             if inside != "true":
-                fail("Please run this script inside of a git repository")
-            logger.debug("Inside git repository")
+                fail("Please run this script inside of a git repository.")
+            logger.debug("Inside git repository.")
         except subprocess.CalledProcessError:
-            fail("Please run this script inside of a git repository")
+            fail("Please run this script inside of a git repository.")
 
     def check_ic_repo(self):
-        logger.debug("Check the repository is an IC repository")
+        logger.debug("Checking the repository is the IC repository.")
         try:
             cmd = ["git", "config", "--get", "remote.origin.url"]
             git_remote = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
             if "/ic" not in git_remote:
-                fail("When not specifying any option please run this script inside an IC git repository")
-            logger.debug("Inside IC repository")
+                fail("When not specifying any option, please run this script inside an IC git repository.")
+            logger.debug("Inside IC repository.")
         except subprocess.CalledProcessError:
-            fail("When not specifying any option please run this script inside an IC git repository")
+            fail("When not specifying any option, please run this script inside an IC git repository.")
 
     def check_environment(self):
         self.check_architecture()
@@ -342,6 +341,7 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     @staticmethod
     def compute_sha256(file_path: Path) -> str:
+        """Computes the SHA-256 hash of a file."""
         sha = hashlib.sha256()
         with file_path.open("rb") as f:
             for chunk in iter(lambda: f.read(8192), b""):
@@ -350,6 +350,7 @@ class ReproducibilityVerifier:
 
     @staticmethod
     def fetch_url_to_file(url: str, dest_path: Path):
+        """Downloads a file from URL to the destination path."""
         logger.debug(f"Downloading {url} to {dest_path}")
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_file = dest_path.with_suffix(dest_path.suffix + ".part")
@@ -364,7 +365,6 @@ class ReproducibilityVerifier:
 
             tmp_file.rename(dest_path)
             logger.info(f"Downloaded {url} to {dest_path}")
-
         except Exception as e:
             if tmp_file.is_file():
                 tmp_file.unlink()
@@ -372,9 +372,13 @@ class ReproducibilityVerifier:
 
     @staticmethod
     def extract_field_json(data, field_spec: str) -> str:
+        """
+        Extracts a JSON field by simple dot/bracket path,
+        e.g. .payload.release_package_urls or .payload[0].some_field
+        """
         if not field_spec.startswith("."):
             fail(f"Invalid JSON path: {field_spec}")
-        path = field_spec[1:]  # remove leading dot
+        path = field_spec[1:]
 
         obj = data
         parts = path.split(".")
@@ -394,6 +398,7 @@ class ReproducibilityVerifier:
 
     @staticmethod
     def verify_sha256_against_sums(binary_path: Path, sums_file: Path, git_rev: str) -> str:
+        """Verifies a file's SHA-256 against a provided SHA256SUMS file."""
         logger.debug(f"Verifying {binary_path} against {sums_file}")
         lines = sums_file.read_text(encoding="utf-8").splitlines()
         binary_filename = binary_path.name
@@ -422,25 +427,30 @@ class ReproducibilityVerifier:
 
     @staticmethod
     def compare_hashes(local_hash_value: str, remote_hash_value: str, os_type: str):
+        """
+        Compares the local hash against the remote to verify reproducibility
+        for the specified OS type.
+        """
         if local_hash_value != remote_hash_value:
             logger.error(
                 f"Error! The sha256 sum from the remote does not match the one we just built for {os_type}.\n"
-                f"\tThe sha256 sum we just built:\t\t{local_hash_value}\n"
-                f"\tThe sha256 sum from remote:\t\t{remote_hash_value}."
+                f"Local:   {local_hash_value}\n"
+                f"Remote:  {remote_hash_value}"
             )
         else:
             logger.info(f"Verification successful for {os_type}!")
             logger.info(
-                f"The shasum for {os_type} from the artifact built locally and the one "
-                f"fetched from remote match:\n"
-                f"\t\tLocal = {local_hash_value}\n"
-                f"\t\tRemote = {remote_hash_value}\n"
+                f"The sha256 sum for {os_type} from the artifact built locally and "
+                f"the one fetched from remote match:\n"
+                f"\tLocal = {local_hash_value}\n"
+                f"\tRemote = {remote_hash_value}\n"
             )
 
     # --------------------------------------------------------------------------
     # Cache management + download scheduling
     # --------------------------------------------------------------------------
     def init_cache(self):
+        """Initializes the cache directory and cleans old caches if needed."""
         self.base_cache_dir.mkdir(parents=True, exist_ok=True)
         self.trim_old_caches(keep=2)
         self.cache_for_this_hash = self.base_cache_dir / self.git_hash
@@ -458,7 +468,7 @@ class ReproducibilityVerifier:
             shutil.rmtree(older, ignore_errors=True)
 
     def cached_download(self, url: str, target_file: Path, os_type: str):
-        """Download if not in cache."""
+        """Downloads a file if it’s not already in the cache."""
         dest_dir = self.cache_for_this_hash / urllib.parse.urlparse(url).netloc / os_type
         dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -489,6 +499,7 @@ class ReproducibilityVerifier:
     # Core logic restructured to start downloads early
     # --------------------------------------------------------------------------
     def process_proposal(self):
+        """If a proposal ID is provided, fetch the proposal data and set internal state."""
         if not self.proposal_id:
             return
         proposal_json_path = Path("proposal-body.json")
@@ -505,9 +516,7 @@ class ReproducibilityVerifier:
 
         proposal_data = json.loads(proposal_json_path.read_text(encoding="utf-8"))
         self.proposal_package_urls = self.extract_field_json(proposal_data, ".payload.release_package_urls")
-        self.proposal_package_sha256_hex = self.extract_field_json(
-            proposal_data, ".payload.release_package_sha256_hex"
-        )
+        self.proposal_package_sha256_hex = self.extract_field_json(proposal_data, ".payload.release_package_sha256_hex")
 
         prop_str = json.dumps(proposal_data)
         if "replica_version_to_elect" in prop_str:
@@ -520,6 +529,7 @@ class ReproducibilityVerifier:
             fail(f"Proposal #{self.proposal_id} is missing replica_version_to_elect or hostos_version_to_elect")
 
     def decide_git_hash(self):
+        """Determines which git hash to build and verify."""
         if self.proposal_id:
             return
         if self.git_commit:
@@ -529,6 +539,7 @@ class ReproducibilityVerifier:
             self.git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
     def start_cdn_downloads_for_os(self, os_type: str):
+        """Queues downloading of the OS artifact and sums file from the selected CDNs."""
         if os_type == "setup-os":
             artifact = "disk-img"
         else:
@@ -547,12 +558,14 @@ class ReproducibilityVerifier:
             self.start_download(sums_url, local_sums_path, os_type)
 
     def start_proposal_download_if_needed(self):
+        """If a proposal is set, download the package from the proposal-specified URLs."""
         if not self.proposal_id:
             return
         proposal_target = self.proposal_out / "update-img.tar.zst"
         self.start_download(self.proposal_package_urls, proposal_target, "proposal")
 
     def prepare_directories(self):
+        """Prepares temporary and output directories."""
         if os.getenv("DEBUG", ""):
             tmpdir_str = tempfile.mkdtemp(prefix="repro-check_")
             logger.debug("DEBUG mode => not automatically removing the tempdir.")
@@ -572,6 +585,7 @@ class ReproducibilityVerifier:
     # Verification steps
     # --------------------------------------------------------------------------
     def verify_proposal_artifacts(self):
+        """Verifies proposal artifact SHA-256 if a proposal is specified."""
         if not self.proposal_id:
             return
         self.wait_for_downloads()
@@ -579,13 +593,14 @@ class ReproducibilityVerifier:
         actual_hash = self.compute_sha256(proposal_target)
         if actual_hash != self.proposal_package_sha256_hex:
             fail(
-                "The proposal's artifacts hash does not match!\n"
+                "The proposal's artifact hash does not match!\n"
                 f"Expected: {self.proposal_package_sha256_hex}\n"
                 f"Actual:   {actual_hash}"
             )
-        logger.info("The proposal's artifacts and hash match")
+        logger.info("The proposal's artifact and hash match.")
 
     def compare_cdn_hash(self, os_type: str) -> str:
+        """Verifies the artifact hash from all specified CDNs for a given OS type."""
         if os_type == "setup-os":
             artifact = "disk-img"
         else:
@@ -602,10 +617,10 @@ class ReproducibilityVerifier:
 
         if len(set(final_hashes)) != 1:
             fail(f"The sources for {os_type} do not all match! {final_hashes}")
-
         return final_hashes[0]
 
     def compare_proposal_vs_cdn(self):
+        """Compares the proposal’s artifact hash against the CDN-stored hash if a proposal is specified."""
         if not self.proposal_id:
             return
         if self.guestos_proposal:
@@ -617,7 +632,7 @@ class ReproducibilityVerifier:
                     f"CDN sum:      {cdn_hash}"
                 )
             else:
-                logger.info("The guest-os shasum from the proposal and remote match")
+                logger.info("The GuestOS sha256sum from the proposal and remote match.")
         else:
             cdn_hash = self.compare_cdn_hash("host-os")
             if self.verify_hostos:
@@ -628,15 +643,16 @@ class ReproducibilityVerifier:
                         f"CDN sum:      {cdn_hash}"
                     )
                 else:
-                    logger.info("The hostos shasum from the proposal and remote match")
+                    logger.info("The HostOS sha256sum from the proposal and remote match.")
 
     def clone_and_checkout_repo(self, ic_clone_path: Path):
+        """Clones and checks out the IC repository at the desired commit."""
         ic_clone_path_cache = self.base_cache_dir / "repo"
         if os.getenv("CI") is not None:
-            logger.info(f"Copy IC repository from {Path.cwd()} to temporary directory")
+            logger.info(f"Copying IC repository from {Path.cwd()} to temporary directory.")
             subprocess.run(["git", "clone", str(Path.cwd()), str(ic_clone_path)], check=True)
         else:
-            logger.info("Clone IC repository from GitHub")
+            logger.info("Cloning IC repository from GitHub.")
             try:
                 subprocess.run(
                     ["git", "-C", str(ic_clone_path_cache), "fsck"],
@@ -645,7 +661,7 @@ class ReproducibilityVerifier:
                     stderr=subprocess.DEVNULL,
                 )
             except subprocess.CalledProcessError:
-                logger.debug(f"Git fsck failed in cache {ic_clone_path_cache}, removing IC repo git cache")
+                logger.debug(f"Git fsck failed in cache {ic_clone_path_cache}, removing IC repo git cache.")
                 shutil.rmtree(ic_clone_path_cache, ignore_errors=True)
             subprocess.run(
                 [
@@ -667,9 +683,9 @@ class ReproducibilityVerifier:
             try:
                 subprocess.run(["git", "cat-file", "-e", f"{self.git_commit}^{{commit}}"], check=True)
             except subprocess.CalledProcessError:
-                fail("When specifying -c, please provide a git hash on a branch of the IC repository.")
+                fail("When specifying -c, please provide a valid git hash on a branch of the IC repository.")
 
-        logger.info(f"Checkout {self.git_hash}")
+        logger.info(f"Checking out {self.git_hash}.")
         subprocess.run(["git", "fetch", "--quiet", "origin", self.git_hash], check=True)
         subprocess.run(["git", "checkout", "--quiet", self.git_hash], check=True)
 
@@ -677,12 +693,13 @@ class ReproducibilityVerifier:
         shutil.copytree(ic_clone_path, ic_clone_path_cache)
 
     def build_and_compare_locally(self):
+        """Builds the OS images locally, then compares their hashes to the remote (CDN) artifacts."""
         ic_clone_path = self.tmpdir / "ic"
         self.clone_and_checkout_repo(ic_clone_path)
 
-        logger.info("Build IC-OS (./ci/container/build-ic.sh --icos)")
+        logger.info("Building IC-OS (./ci/container/build-ic.sh --icos).")
         subprocess.run(["./ci/container/build-ic.sh", "--icos"], check=True)
-        logger.info("Built IC-OS successfully")
+        logger.info("IC-OS build complete.")
 
         artifacts_path = ic_clone_path / "artifacts" / "icos"
 
@@ -699,7 +716,7 @@ class ReproducibilityVerifier:
         if self.verify_setupos:
             move_artifact("setupos", "disk-img.tar.zst")
 
-        logger.info("Check if the hash of locally built artifact matches the remote's for each OS")
+        logger.info("Verifying locally built artifacts against remote CDN artifacts.")
         if self.verify_guestos:
             local_path = self.dev_out / "guestos" / "update-img.tar.zst"
             local_hash = self.compute_sha256(local_path)
@@ -722,6 +739,7 @@ class ReproducibilityVerifier:
     # MAIN RUN
     # --------------------------------------------------------------------------
     def run(self):
+        """Main entry point for reproducibility verification logic."""
         start_time = time.time()
         try:
             self.process_proposal()
@@ -738,10 +756,10 @@ class ReproducibilityVerifier:
             if self.verify_setupos:
                 self.start_cdn_downloads_for_os("setup-os")
 
-            # Meanwhile, check environment in parallel
+            # Environment checks can happen while downloads progress
             self.check_environment()
 
-            # Now do the logic once downloads are finishing
+            # Final verifications after downloads
             self.verify_proposal_artifacts()
             self.compare_proposal_vs_cdn()
             self.build_and_compare_locally()
@@ -750,7 +768,6 @@ class ReproducibilityVerifier:
             h, rem = divmod(elapsed, 3600)
             m, s = divmod(rem, 60)
             logger.info(f"Total time: {int(h)}h {int(m)}m {int(s)}s")
-
         finally:
             # Clean up if not in DEBUG mode
             if self._tmpdir_obj and not os.getenv("DEBUG", ""):
@@ -763,7 +780,6 @@ class ReproducibilityVerifier:
 # ------------------------------------------------------------------------------
 def main():
     args = parse_args()
-
     conventional_logging(one_line_logs=True, verbose=args.debug)
 
     verifier = ReproducibilityVerifier(
