@@ -252,9 +252,13 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
     match err {
         RequestValidationError::InvalidRequestExpiry(_)
         | RequestValidationError::InvalidSignature(_) => {
+            let request = format!("{:?}", request);
             info!(
                 log,
-                "msg_id: {}, err: {}, request: {:?}", message_id, err, request
+                "msg_id: {}, err: {}, request: {}",
+                message_id,
+                err,
+                request[..request.len().min(10_000)].to_string()
             )
         }
         _ => info!(log, "msg_id: {}, err: {}", message_id, err),
