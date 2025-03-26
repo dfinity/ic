@@ -356,7 +356,9 @@ fn test_start_and_stop_neuron_dissolve() {
         // The neuron should now be in DISSOLVING state
         assert_eq!(
             start_dissolving_response.operations.first().unwrap().status,
-            Some("COMPLETED".to_owned())
+            Some("COMPLETED".to_owned()),
+            "Expected the operation to be completed but got: {:?}",
+            start_dissolving_response
         );
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         match neuron.dissolve_state.unwrap() {
