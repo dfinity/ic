@@ -601,6 +601,7 @@ impl IcConfig {
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
             blessed_version_ids: vec![initial_replica_version],
+            blessed_guest_launch_measurement_sha256_hexes: vec![], // TODO
         };
 
         write_registry_entry(

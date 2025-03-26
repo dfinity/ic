@@ -117,7 +117,8 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     version_to_elect_and_unelect1.to_string(),
                     version_to_elect_and_unelect2.to_string(),
                     unassigned_nodes_version.to_string(),
-                ]
+                ],
+                blessed_guest_launch_measurement_sha256_hexes: vec![] //TODO
             }
         );
 
@@ -209,7 +210,8 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     default_version.to_string(),
                     unassigned_nodes_version.to_string(),
                     version_to_elect.to_string()
-                ]
+                ],
+                blessed_guest_launch_measurement_sha256_hexes: vec![] //TODO,
             }
         );
 

@@ -288,6 +288,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     };
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version_id.clone()],
+        blessed_guest_launch_measurement_sha256_hexes: vec![], // TODO
     };
 
     let subnet_list = SubnetListRecord {
@@ -549,6 +550,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     };
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version_id.clone()],
+        blessed_guest_launch_measurement_sha256_hexes: vec![], //TODO
     };
     let subnet_list = SubnetListRecord {
         subnets: vec![nns_subnet_id.get().to_vec()],

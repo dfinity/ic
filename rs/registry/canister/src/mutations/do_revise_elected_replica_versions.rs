@@ -89,6 +89,7 @@ impl Registry {
                 key: make_blessed_replica_versions_key().as_bytes().to_vec(),
                 value: BlessedReplicaVersions {
                     blessed_version_ids: versions,
+                    blessed_guest_launch_measurement_sha256_hexes: vec![], // TODO
                 }
                 .encode_to_vec(),
             },
