@@ -54,6 +54,11 @@ pub trait CallCanisters: sealed::Sealed {
         canister_id: impl Into<Principal> + Send,
     ) -> impl std::future::Future<Output = Result<CanisterInfo, Self::Error>> + Send;
 
+    // Functions that use 'call' need to be able
+    // to determine if a call to the canister failed due to the canister being stopped.
+    // Matching on a specific error outside of the trait implementation is not viable
+    // since the 'Error' type is different for each trait implementation and thus we can
+    // only match on specific implementations errors in the trait implementation directly.
     fn is_canister_stopped_error(&self, err: &Self::Error) -> bool;
 }
 
