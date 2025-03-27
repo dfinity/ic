@@ -52,6 +52,15 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_stress_test",
+    # additional_colocate_tags = [
+    #     "system_test_benchmark",
+    # ],
+    # colocated_test_driver_vm_required_host_features = ["performance"],
+    # colocated_test_driver_vm_resources = {
+    #     "vcpus": 64,
+    #     "memory_kibibytes": 512142680,
+    #     "boot_image_minimal_size_gibibytes": 500,
+    # },
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
@@ -67,8 +76,11 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
+        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/types/types",
         "@crate_index//:futures",

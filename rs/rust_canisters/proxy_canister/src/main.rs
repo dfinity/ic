@@ -29,13 +29,16 @@ thread_local! {
 async fn send_requests_in_parallel(
     request: RemoteHttpStressRequest,
 ) -> Result<RemoteHttpStressResponse, (RejectionCode, String)> {
-    let start = time();
     if request.count == 0 {
         return Err((
             RejectionCode::CanisterError,
             "Count cannot be 0".to_string(),
         ));
     }
+
+    // Send the first request to create the sessions in the adapter. 
+    send_request(request.request.clone()).await?;
+    let start = time();
 
     const MAX_CONCURRENCY: usize = 500;
 
