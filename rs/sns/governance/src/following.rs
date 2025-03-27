@@ -119,7 +119,7 @@ impl fmt::Debug for ValidatedFollowee {
 }
 
 /// Represents followees grouped by neuron ID.
-pub(crate) type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<ValidatedFollowee>>>;
+type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<ValidatedFollowee>>>;
 
 /// Helper function to aid checking the invariant: **Followees on a given topic must have
 /// unique neuron IDs.**
@@ -141,7 +141,7 @@ pub(crate) type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<Validate
 ///
 /// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
 /// ordered by topic and *then* neuron ID, which is enforced by the `PartialOrd` implementation.
-pub(crate) fn get_duplicate_followee_groups(
+fn get_duplicate_followee_groups(
     followees: &BTreeSet<ValidatedFollowee>,
 ) -> FolloweeGroups {
     followees
@@ -207,7 +207,7 @@ fn fmt_neuron_groups(followee_groups: &FolloweeGroups) -> String {
 /// and the topics are associated with each neuron ID for auditability, i.e., if followee aliases
 /// are inconsistent, it should be possible to report which exact topics are misconfigured (since
 /// the same followee can appear under multiple topics).
-pub(crate) type FolloweeAliasGroups = BTreeMap<NeuronId, BTreeSet<ValidatedFollowee>>;
+type FolloweeAliasGroups = BTreeMap<NeuronId, BTreeSet<ValidatedFollowee>>;
 
 /// Helper function to aid checking the invariant: **followees with the same alias must have
 /// the same neuron ID.**
@@ -227,7 +227,7 @@ pub(crate) type FolloweeAliasGroups = BTreeMap<NeuronId, BTreeSet<ValidatedFollo
 ///
 /// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
 /// ordered by neuron ID and *then* alias, which is enforced by the `PartialOrd` implementation.
-pub(crate) fn get_inconsistent_aliases(
+fn get_inconsistent_aliases(
     followees: &BTreeSet<ValidatedFollowee>,
 ) -> FolloweeAliasGroups {
     followees
