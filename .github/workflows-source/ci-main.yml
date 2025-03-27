@@ -151,9 +151,7 @@ jobs:
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --config=macos_ci
-            --test_tag_filters=test_macos
+          BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
       - name: Purge Bazel Output
@@ -172,8 +170,7 @@ jobs:
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
+          BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
@@ -218,7 +215,6 @@ jobs:
     <<: *dind-large-setup
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
-      group: ch1
       labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -285,8 +281,6 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -316,8 +310,6 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]

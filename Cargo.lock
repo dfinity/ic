@@ -12316,7 +12316,6 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "clap 4.5.27",
- "dfn_candid",
  "dfn_protobuf",
  "futures",
  "hex",
@@ -13105,6 +13104,7 @@ dependencies = [
 name = "ic-state-layout"
 version = "0.9.0"
 dependencies = [
+ "crossbeam-channel",
  "hex",
  "ic-base-types",
  "ic-config",
@@ -13121,6 +13121,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
+ "ic-utils-thread",
  "ic-wasm-types",
  "itertools 0.12.1",
  "libc",
