@@ -33,7 +33,7 @@ jobs:
         with:
           filters: |
             fuzzers:
-              - '.github/workflows/pr-only.yml'
+              - '.github/workflows/ci-pr-only.yml'
               - 'bin/build-all-fuzzers.sh'
               - 'bazel/fuzz_testing.bzl'
       - name: Run Bazel Build Fuzzers Archives
@@ -74,7 +74,7 @@ jobs:
         with:
           filters: |
             lock-generate:
-              - '.github/workflows/pr-only.yml'
+              - '.github/workflows/ci-pr-only.yml'
               - '.bazelrc'
               - '.bazelversion'
               - '**/*.bazel'
@@ -120,7 +120,7 @@ jobs:
         with:
           filters: |
             depcheck:
-              - '.github/workflows/pr-only.yml'
+              - '.github/workflows/ci-pr-only.yml'
               - 'bazel/external_crates.bzl'
               - '**/*.lock'
               - '**/*.toml'
