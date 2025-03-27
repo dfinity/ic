@@ -637,6 +637,7 @@ impl IDkgPreSignerImpl {
                 // will most likely fail again. This should be signaled up so that the bad
                 // transcript params can be acted on
                 warn!(
+                    every_n_seconds => 30,
                     self.log,
                     "Failed to create dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
