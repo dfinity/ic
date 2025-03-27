@@ -95,7 +95,7 @@ impl StrEllipsize for str {
 
         const ELLIPSIS: &str = "...";
         if max_len < ELLIPSIS.len() {
-            return "".to_string()
+            return "".to_string();
         }
 
         // Deduct the ellipsis length to get the available space for prefix and suffix combined.
