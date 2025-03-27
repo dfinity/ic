@@ -53,7 +53,7 @@ use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
-    are_disjoint, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
+    are_disjoint, is_subset_of, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -105,6 +105,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime},
 };
+use strum::IntoEnumIterator;
 use tempfile::{NamedTempFile, TempDir};
 use tokio::sync::OnceCell;
 use tokio::task::JoinHandle;
@@ -729,41 +730,65 @@ impl PocketIc {
             );
 
             for (subnet_kind, subnet_state_dir, instruction_config) in all_subnets {
-                let (ranges, alloc_range, subnet_id) =
-                    if let Some(ref subnet_state_dir) = subnet_state_dir {
-                        let state_manager = StateManagerImpl::new(
-                            Arc::new(FakeVerifier),
-                            SubnetId::new(PrincipalId::default()),
-                            conv_type(subnet_kind),
-                            no_op_logger(),
-                            &MetricsRegistry::new(),
-                            &ic_config::state_manager::Config::new(
-                                subnet_state_dir.path().to_path_buf(),
-                            ),
-                            None,
-                            MaliciousFlags::default(),
-                        );
-                        let metadata = state_manager.get_latest_state().take().metadata.clone();
-                        // Shut down the temporary state manager to avoid race conditions.
-                        state_manager.flush_tip_channel();
-                        drop(state_manager);
-                        let subnet_id = metadata.own_subnet_id;
-                        let ranges: Vec<_> = metadata
-                            .network_topology
-                            .routing_table
-                            .ranges(subnet_id)
-                            .iter()
-                            .cloned()
-                            .collect();
-                        range_gen.add_assigned(ranges.clone())?;
-                        (ranges, None, Some(subnet_id))
-                    } else {
-                        let RangeConfig {
-                            canister_id_ranges: ranges,
-                            canister_allocation_range: alloc_range,
-                        } = get_range_config(subnet_kind, &mut range_gen)?;
-                        (ranges, alloc_range, None)
-                    };
+                let (ranges, alloc_range, subnet_id) = if let Some(ref subnet_state_dir) =
+                    subnet_state_dir
+                {
+                    let state_manager = StateManagerImpl::new(
+                        Arc::new(FakeVerifier),
+                        SubnetId::new(PrincipalId::default()),
+                        conv_type(subnet_kind),
+                        no_op_logger(),
+                        &MetricsRegistry::new(),
+                        &ic_config::state_manager::Config::new(
+                            subnet_state_dir.path().to_path_buf(),
+                        ),
+                        None,
+                        MaliciousFlags::default(),
+                    );
+                    let metadata = state_manager.get_latest_state().take().metadata.clone();
+                    // Shut down the temporary state manager to avoid race conditions.
+                    state_manager.flush_tip_channel();
+                    drop(state_manager);
+                    let subnet_id = metadata.own_subnet_id;
+                    let ranges: Vec<_> = metadata
+                        .network_topology
+                        .routing_table
+                        .ranges(subnet_id)
+                        .iter()
+                        .cloned()
+                        .collect();
+                    let mut sorted_ranges = ranges.clone();
+                    sorted_ranges.sort();
+                    if let Some(mut subnet_kind_ranges) = subnet_kind_canister_range(subnet_kind) {
+                        subnet_kind_ranges.sort();
+                        if !is_subset_of(subnet_kind_ranges.iter(), sorted_ranges.iter()) {
+                            return Err(format!("The actual subnet canister ranges {:?} do not contain the canister ranges {:?} expected for the subnet kind {:?}.", sorted_ranges, subnet_kind_ranges, subnet_kind));
+                        }
+                    }
+                    for other_subnet_kind in SubnetKind::iter() {
+                        if subnet_kind != other_subnet_kind {
+                            if let Some(mut other_subnet_kind_ranges) =
+                                subnet_kind_canister_range(other_subnet_kind)
+                            {
+                                other_subnet_kind_ranges.sort();
+                                if !are_disjoint(
+                                    other_subnet_kind_ranges.iter(),
+                                    sorted_ranges.iter(),
+                                ) {
+                                    return Err(format!("The actual subnet canister ranges {:?} for the subnet kind {:?} are not disjoint from the canister ranges {:?} for a different subnet kind {:?}.", sorted_ranges, subnet_kind, other_subnet_kind_ranges, other_subnet_kind));
+                                }
+                            }
+                        }
+                    }
+                    range_gen.add_assigned(ranges.clone())?;
+                    (ranges, None, Some(subnet_id))
+                } else {
+                    let RangeConfig {
+                        canister_id_ranges: ranges,
+                        canister_allocation_range: alloc_range,
+                    } = get_range_config(subnet_kind, &mut range_gen)?;
+                    (ranges, alloc_range, None)
+                };
 
                 let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 

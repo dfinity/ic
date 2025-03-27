@@ -381,6 +381,10 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     )
     .unwrap();
 
+    // Trigger a checkpoint so that the full execution cost is
+    // applied to the subsequent call to `install_code`.
+    env.checkpointed_tick();
+
     let install_code_ingress_id = env.send_ingress(
         PrincipalId::new_anonymous(),
         IC_00,

@@ -1,11 +1,10 @@
-use dfn_candid::CandidOne;
+use candid::Encode;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::{
     messages::{Blob, HttpCanisterUpdate, MessageId},
     PrincipalId,
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
-use on_wire::IntoWire;
 use rand::Rng;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -386,7 +385,7 @@ fn handle_neuron_info(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "get_full_neuron_by_id_or_subaccount".to_string(),
-        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        arg: Blob(Encode!(&args).expect("Serialization failed")),
         nonce: None,
         sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
         ingress_expiry: 0,
@@ -442,7 +441,7 @@ fn handle_list_neurons(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "list_neurons".to_string(),
-        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        arg: Blob(Encode!(&args).expect("Serialization failed")),
         nonce: None,
         sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
         ingress_expiry: 0,
@@ -521,7 +520,7 @@ fn handle_stake(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "claim_or_refresh_neuron_from_account".to_string(),
-        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        arg: Blob(Encode!(&args).expect("Serialization failed")),
         // TODO work out whether Rosetta will accept us generating a nonce here
         // If we don't have a nonce it could cause one of those nasty bugs that
         // doesn't show it's face until you try to do two
@@ -532,9 +531,7 @@ fn handle_stake(
         // If we also need a real nonce, we'll concatenate it to the
         // neuron_index.
         nonce: Some(Blob(
-            CandidOne(neuron_index)
-                .into_bytes()
-                .expect("Serialization of neuron_index failed"),
+            Encode!(&neuron_index).expect("Serialization of neuron_index failed"),
         )),
         sender: Blob(
             principal_id_from_public_key(pk)
@@ -958,15 +955,9 @@ fn add_neuron_management_payload(
     let update = HttpCanisterUpdate {
         canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
         method_name: "manage_neuron".to_string(),
-        arg: Blob(
-            CandidOne(manage_neuron)
-                .into_bytes()
-                .expect("Serialization failed"),
-        ),
+        arg: Blob(Encode!(&manage_neuron).expect("Serialization failed")),
         nonce: Some(Blob(
-            CandidOne(neuron_index)
-                .into_bytes()
-                .expect("Serialization of neuron_index failed"),
+            Encode!(&neuron_index).expect("Serialization of neuron_index failed"),
         )),
         sender: Blob(
             principal_id_from_public_key(pk)

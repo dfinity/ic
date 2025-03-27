@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The functions `PocketIcBuilder::with_nns_subnet`, `PocketIcBuilder::with_sns_subnet`, `PocketIcBuilder::with_ii_subnet`, `PocketIcBuilder::with_fiduciary_subnet`, and `PocketIcBuilder::with_bitcoin_subnet` do not add a new empty subnet if a subnet of the corresponding kind has already been specified (e.g., with state loaded from a given state directory).
+- The function `PocketIc::make_live_with_params` takes an optional IP address to which the HTTP gateway should bind.
 
 
 
