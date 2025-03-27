@@ -21,7 +21,6 @@
         <initrd>/tmp/sev-boot-components/initrd.img</initrd>
         <cmdline>BOOT_IMAGE=/vmlinuz root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable security=selinux selinux=1 enforcing=1 root_hash=XXXTODOXXX</cmdline>
     -->
-    <boot dev='hd'/>
   </os>
   <launchSecurity type='sev-snp' kernelHashes='yes'>
       <cbitpos>51</cbitpos>
@@ -58,10 +57,17 @@
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>
       <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
+      <boot order='1'/>
+    </disk>
+    <disk type='file' device='disk'>
+        <driver name='qemu' type='raw'/>
+        <source file='/tmp/guestos_type/upgrade.img'/>
+        <target dev='sda' bus='sata'/>
+        <boot order='2'/>
     </disk>
     <disk type='file' device='disk'>
       <source file='/run/ic-node/config.img'/>
-      <target dev='sda' bus='usb' removable='on'/>
+      <target dev='sdb' bus='usb' removable='on'/>
     </disk>
     <controller type='usb' index='0' model='ich9-ehci1'>
       <alias name='usb'/>

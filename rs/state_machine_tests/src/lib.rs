@@ -252,6 +252,7 @@ pub fn finalize_registry(
     let replica_version = ReplicaVersion::default();
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version.clone().into()],
+        blessed_guest_launch_measurement_sha256_hexes: vec![], // TODO
     };
     registry_data_provider
         .add(

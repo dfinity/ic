@@ -34,7 +34,7 @@ url = "2.5.4"
 itertools = "0.14.0"
 tokio-rustls = "0.26"
 futures-util = "0.3.31"
-sev = "6.0.0"
+sev = { version = "6.0.0", features = ["crypto_nossl", "sev"] }
 ring = "0.17"
 base64 = "0.22.1"
 ic-protobuf = { path = "../../../protobuf" }
