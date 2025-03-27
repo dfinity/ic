@@ -7,8 +7,8 @@ DEPENDENCIES = [
     "//rs/universal_canister/impl:lib",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",
-    "@crate_index//:sha2",
     "@crate_index//:serde",
+    "@crate_index//:sha2",
 ]
 
 DEV_DEPENDENCIES = [
