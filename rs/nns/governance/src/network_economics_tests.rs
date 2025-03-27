@@ -1,5 +1,4 @@
 use super::*;
-use crate::governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
 use ic_nervous_system_proto::pb::v1::Decimal as ProtoDecimal;
 use pretty_assertions::assert_eq;
 
@@ -92,8 +91,8 @@ fn test_network_economics_with_default_values_is_valid() {
 #[test]
 fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
     // Define constants for better readability and maintainability
-    const LOWER_BOUND_SECONDS: u64 = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS / 2; // 3 months
-    const UPPER_BOUND_SECONDS: u64 = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS; // 6 months
+    const LOWER_BOUND_SECONDS: u64 = 3 * ONE_MONTH_SECONDS;
+    const UPPER_BOUND_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
     const DEFAULT_SECONDS: u64 = LOWER_BOUND_SECONDS; // Assuming default is the minimum
 
     // Test cases: (delay in seconds, expected result)

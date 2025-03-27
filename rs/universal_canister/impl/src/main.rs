@@ -474,13 +474,13 @@ fn eval(ops_bytes: OpsBytes) {
                     )),
                 }
             }
-            Ops::CostVetkdDeriveEncryptedKey => {
+            Ops::CostVetkdDeriveKey => {
                 let vetkd_curve = stack.pop_int();
                 let key_name = stack.pop_blob();
-                match api::cost_vetkd_derive_encrypted_key(&key_name, vetkd_curve) {
+                match api::cost_vetkd_derive_key(&key_name, vetkd_curve) {
                     Ok(bytes) => stack.push_blob(bytes),
                     Err(err_code) => api::trap_with(&format!(
-                        "ic0.cost_vetkd_derive_encrypted_key failed with error code {}",
+                        "ic0.cost_vetkd_derive_key failed with error code {}",
                         err_code
                     )),
                 }

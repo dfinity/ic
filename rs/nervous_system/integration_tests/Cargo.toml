@@ -36,6 +36,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
+pretty_assertions = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 prost = { workspace = true }
 rust_decimal = "1.36.0"

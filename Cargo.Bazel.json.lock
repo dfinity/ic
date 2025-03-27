@@ -1,5 +1,5 @@
 {
-  "checksum": "0992e818e749521eb571ded5003fed54d534948b932b3871563223ec7cd884ef",
+  "checksum": "20b0704a5807a13511ee3df0a87cca12700e295b4ee17f61396575ec2dfe27e9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15927,7 +15927,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -27743,14 +27749,8 @@
               }
             },
             {
-              "id": "ic-stable-structures 0.6.5",
-              "target": "ic_stable_structures",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/ic-stable-structures/0.6.5/download",
-                  "sha256": "03f3044466a69802de74e710dc0300b706a05696a0531c942ca856751a13b0db"
-                }
-              }
+              "id": "ic-stable-structures 0.6.8",
+              "target": "ic_stable_structures"
             },
             {
               "id": "ic-test-state-machine-client 3.0.1",
@@ -27823,14 +27823,8 @@
               }
             },
             {
-              "id": "ic_bls12_381 0.10.0",
-              "target": "ic_bls12_381",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/ic_bls12_381/0.10.0/download",
-                  "sha256": "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
-                }
-              }
+              "id": "ic_bls12_381 0.10.1",
+              "target": "ic_bls12_381"
             },
             {
               "id": "ic_principal 0.1.1",
@@ -28206,14 +28200,8 @@
               }
             },
             {
-              "id": "mockito 1.2.0",
-              "target": "mockito",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/mockito/1.2.0/download",
-                  "sha256": "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
-                }
-              }
+              "id": "mockito 1.7.0",
+              "target": "mockito"
             },
             {
               "id": "moka 0.12.8",
@@ -28322,17 +28310,6 @@
                 "Http": {
                   "url": "https://static.crates.io/crates/openssh-keys/0.5.0/download",
                   "sha256": "e7249a699cdeea261ac73f1bf9350777cb867324f44373aafb5a287365bf1771"
-                }
-              }
-            },
-            {
-              "id": "opentelemetry 0.20.0",
-              "target": "opentelemetry",
-              "alias": "opentelemetry_0_20_0",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/opentelemetry/0.20.0/download",
-                  "sha256": "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
                 }
               }
             },
@@ -42434,7 +42411,6 @@
           "common": [
             "client",
             "default",
-            "full",
             "h2",
             "http1",
             "http2",
@@ -48007,14 +47983,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-stable-structures 0.6.5": {
+    "ic-stable-structures 0.6.8": {
       "name": "ic-stable-structures",
-      "version": "0.6.5",
+      "version": "0.6.8",
       "package_url": "https://github.com/dfinity/stable-structures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.5/download",
-          "sha256": "03f3044466a69802de74e710dc0300b706a05696a0531c942ca856751a13b0db"
+          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.8/download",
+          "sha256": "f0f5684f577e0146738cd11afed789109c4f51ba963c75823c48c1501dc53278"
         }
       },
       "targets": [
@@ -48052,7 +48028,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.5"
+        "version": "0.6.8"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -48674,7 +48650,7 @@
               }
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381",
               "alias": "bls12_381",
               "source_annotation": {
@@ -48786,7 +48762,7 @@
               }
             },
             {
-              "id": "ic_bls12_381 0.10.0",
+              "id": "ic_bls12_381 0.10.1",
               "target": "ic_bls12_381",
               "alias": "bls12_381",
               "source_annotation": {
@@ -49210,14 +49186,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic_bls12_381 0.10.0": {
+    "ic_bls12_381 0.10.1": {
       "name": "ic_bls12_381",
-      "version": "0.10.0",
+      "version": "0.10.1",
       "package_url": "https://github.com/dfinity/bls12_381",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.0/download",
-          "sha256": "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
+          "url": "https://static.crates.io/crates/ic_bls12_381/0.10.1/download",
+          "sha256": "a1e828f9e804ccefe4b9b15b2195f474c60fd4f95ccd14fcb554eb6d7dfafde3"
         }
       },
       "targets": [
@@ -49335,7 +49311,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.0"
+        "version": "0.10.1"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -57981,9 +57957,12 @@
         "compile_data_glob": [
           "**"
         ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -58230,7 +58209,8 @@
         ],
         "crate_features": {
           "common": [
-            "libc"
+            "libc",
+            "static"
           ],
           "selects": {}
         },
@@ -62538,14 +62518,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "mockito 1.2.0": {
+    "mockito 1.7.0": {
       "name": "mockito",
-      "version": "1.2.0",
+      "version": "1.7.0",
       "package_url": "https://github.com/lipanski/mockito",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockito/1.2.0/download",
-          "sha256": "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+          "url": "https://static.crates.io/crates/mockito/1.7.0/download",
+          "sha256": "7760e0e418d9b7e5777c0374009ca4c93861b9066f18cb334a20ce50ab63aa48"
         }
       },
       "targets": [
@@ -62571,7 +62551,8 @@
           "common": [
             "color",
             "colored",
-            "default"
+            "default",
+            "parking_lot"
           ],
           "selects": {}
         },
@@ -62588,6 +62569,10 @@
               }
             },
             {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
               "id": "colored 2.0.4",
               "target": "colored",
               "source_annotation": {
@@ -62598,24 +62583,28 @@
               }
             },
             {
-              "id": "futures 0.3.31",
-              "target": "futures",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/futures/0.3.31/download",
-                  "sha256": "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
-                }
-              }
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
             },
             {
-              "id": "hyper 0.14.27",
-              "target": "hyper",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/hyper/0.14.27/download",
-                  "sha256": "ffb1cfd654a8219eaef89881fdb3bb3b1cdc5fa75ded05d6933b2b382e395468"
-                }
-              }
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.5.1",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.10",
+              "target": "hyper_util"
             },
             {
               "id": "log 0.4.20",
@@ -62628,14 +62617,8 @@
               }
             },
             {
-              "id": "rand 0.8.5",
-              "target": "rand",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/rand/0.8.5/download",
-                  "sha256": "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
-                }
-              }
+              "id": "rand 0.9.0",
+              "target": "rand"
             },
             {
               "id": "regex 1.11.1",
@@ -62691,7 +62674,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.2.0"
+        "version": "1.7.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -67146,9 +67129,12 @@
         "compile_data_glob": [
           "**"
         ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -67185,6 +67171,15 @@
               }
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+            "OPENSSL_NO_VENDOR": "1",
+            "OPENSSL_STATIC": "1"
+          },
           "selects": {}
         },
         "links": "openssl"
@@ -67257,77 +67252,6 @@
         },
         "edition": "2021",
         "version": "0.18.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "opentelemetry 0.20.0": {
-      "name": "opentelemetry",
-      "version": "0.20.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry/0.20.0/download",
-          "sha256": "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "metrics",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry_api 0.20.0",
-              "target": "opentelemetry_api",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/opentelemetry_api/0.20.0/download",
-                  "sha256": "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
-                }
-              }
-            },
-            {
-              "id": "opentelemetry_sdk 0.20.0",
-              "target": "opentelemetry_sdk",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/opentelemetry_sdk/0.20.0/download",
-                  "sha256": "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
-                }
-              }
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.20.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -68550,28 +68474,13 @@
         "crate_features": {
           "common": [
             "async-trait",
-            "crossbeam-channel",
-            "default",
             "metrics",
-            "percent-encoding",
-            "rand",
-            "regex",
-            "trace"
+            "regex"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
-            {
-              "id": "crossbeam-channel 0.5.13",
-              "target": "crossbeam_channel",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/crossbeam-channel/0.5.13/download",
-                  "sha256": "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
-                }
-              }
-            },
             {
               "id": "futures-channel 0.3.31",
               "target": "futures_channel",
@@ -68629,26 +68538,6 @@
                 "Http": {
                   "url": "https://static.crates.io/crates/ordered-float/3.9.2/download",
                   "sha256": "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
-                }
-              }
-            },
-            {
-              "id": "percent-encoding 2.3.1",
-              "target": "percent_encoding",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/percent-encoding/2.3.1/download",
-                  "sha256": "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
-                }
-              }
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/rand/0.8.5/download",
-                  "sha256": "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
                 }
               }
             },
@@ -76814,14 +76703,8 @@
               }
             },
             {
-              "id": "itertools 0.11.0",
-              "target": "itertools",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/itertools/0.11.0/download",
-                  "sha256": "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-                }
-              }
+              "id": "itertools 0.13.0",
+              "target": "itertools"
             },
             {
               "id": "log 0.4.20",
@@ -77070,14 +76953,8 @@
               }
             },
             {
-              "id": "itertools 0.11.0",
-              "target": "itertools",
-              "source_annotation": {
-                "Http": {
-                  "url": "https://static.crates.io/crates/itertools/0.11.0/download",
-                  "sha256": "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-                }
-              }
+              "id": "itertools 0.13.0",
+              "target": "itertools"
             },
             {
               "id": "proc-macro2 1.0.89",
@@ -119800,7 +119677,7 @@
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
-    "ic-stable-structures 0.6.5",
+    "ic-stable-structures 0.6.8",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.39.3",
     "ic-utils 0.39.0",
@@ -119808,7 +119685,7 @@
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
-    "ic_bls12_381 0.10.0",
+    "ic_bls12_381 0.10.1",
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
@@ -119847,7 +119724,7 @@
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
     "mockall 0.13.0",
-    "mockito 1.2.0",
+    "mockito 1.7.0",
     "moka 0.12.8",
     "more-asserts 0.3.1",
     "nftables 0.4.1",
@@ -119859,7 +119736,6 @@
     "num_cpus 1.16.0",
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
-    "opentelemetry 0.20.0",
     "opentelemetry 0.27.0",
     "opentelemetry-otlp 0.27.0",
     "opentelemetry-prometheus 0.13.0",

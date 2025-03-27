@@ -19,3 +19,4 @@ ic-registry-keys = { path = "../keys" }
 ic-registry-transport-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = { workspace = true }
+pretty_assertions = { workspace = true }

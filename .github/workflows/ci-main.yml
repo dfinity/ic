@@ -27,12 +27,11 @@ env:
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-test-all:
     name: Bazel Test All
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -93,27 +92,12 @@ jobs:
         with:
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload SHA256SUMS (cache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-cache
-          path: SHA256SUMS
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
+          artifact-name: shasums-cache
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
@@ -139,23 +123,9 @@ jobs:
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --config=macos_ci --test_tag_filters=test_macos
+          BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -167,7 +137,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -180,29 +150,15 @@ jobs:
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
+          BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -218,25 +174,12 @@ jobs:
           BAZEL_COMMAND: build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb.gpg
-            profile.json
   python-ci-tests:
     name: Python CI Tests
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -266,13 +209,12 @@ jobs:
   build-ic:
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
-      group: ch1
       labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -282,22 +224,7 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Build IC
         id: build-ic
-        shell: bash
-        run: |
-          set -euo pipefail
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-          mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
-          "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-
-          # List and aggregate all SHA256SUMS files (if bazel-out exists)
-          if [ -e bazel-out]; then
-            find -L bazel-out -name SHA256SUMS | xargs cat | sort | uniq > SHA256SUMS
-          else
-            touch SHA256SUMS
-          fi
+        run: ./ci/scripts/run-build-ic.sh
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
@@ -305,10 +232,9 @@ jobs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload SHA256SUMS (nocache)
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: shasums-nocache
-          path: SHA256SUMS
+          artifact-name: shasums-nocache
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
@@ -357,11 +283,11 @@ jobs:
           echo "Build Determinism Check Successful"
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
-    timeout-minutes: 30
     runs-on:
-      group: ch1
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -392,11 +318,11 @@ jobs:
           "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
   cargo-build-release-linux:
     name: Cargo Build Release Linux
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:1de2eef8662eb58cbb911b844bb0afcc19ba89009272f40803a49640211565e7
-    timeout-minutes: 30
     runs-on:
-      group: ch1
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
