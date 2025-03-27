@@ -42,12 +42,10 @@ fn test_get_duplicate_followee_groups() {
                 ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: None },
             },
             btreemap! {
-                Topic::DappCanisterManagement => btreemap! {
-                    nid(0) => vec![
-                        ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: None },
-                        ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
-                    ],
-                },
+                nid(0) => vec![
+                    ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: None },
+                    ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
+                ],
             },
         ),
         (
@@ -60,18 +58,14 @@ fn test_get_duplicate_followee_groups() {
                 ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: None },
             },
             btreemap! {
-                Topic::DappCanisterManagement => btreemap! {
-                    nid(0) => vec![
-                        ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: None },
-                        ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
-                    ],
-                },
-                Topic::CriticalDappOperations => btreemap! {
-                    nid(1) => vec![
-                        ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: None },
-                        ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: Some("Bob".to_string()) },
-                    ],
-                },
+                nid(0) => vec![
+                    ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: None },
+                    ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
+                ],
+                nid(1) => vec![
+                    ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: None },
+                    ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: Some("Bob".to_string()) },
+                ],
             },
         ),
         (
@@ -470,12 +464,10 @@ fn test_validate_followees_for_topic() {
             },
             Err(FolloweesForTopicValidationError::DuplicateFolloweeNeuronId(
                 btreemap! {
-                    Topic::DappCanisterManagement => btreemap! {
-                        nid(42) => vec![
-                            ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(42), alias: None },
-                            ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(42), alias: Some("Alice".to_string()) },
-                        ],
-                    }
+                    nid(42) => vec![
+                        ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(42), alias: None },
+                        ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(42), alias: Some("Alice".to_string()) },
+                    ],
                 },
             )),
         ),
