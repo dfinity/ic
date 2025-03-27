@@ -1,4 +1,3 @@
-use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use prost::Message;
 use rand::seq::SliceRandom;
 use std::time::Duration;
@@ -8,12 +7,10 @@ use ic_canister_client::{Agent, Sender};
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
     deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
-    deserialize_get_value_response, serialize_atomic_mutate_request,
-    serialize_get_changes_since_request, serialize_get_value_request,
-};
-use ic_registry_transport::{
-    pb::v1::{Precondition, RegistryDelta, RegistryMutation},
-    Error,
+    deserialize_get_value_response,
+    pb::v1::{Precondition, RegistryDelta, RegistryGetLatestVersionResponse, RegistryMutation},
+    serialize_atomic_mutate_request, serialize_get_changes_since_request,
+    serialize_get_value_request, Error,
 };
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
 
