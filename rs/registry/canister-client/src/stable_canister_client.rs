@@ -87,38 +87,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         Ok(result)
     }
 
-    fn get_key_family(
-        &self,
-        key_prefix: &str,
-        version: RegistryVersion,
-    ) -> Result<Vec<String>, RegistryClientError> {
-        if self.get_latest_version() < version {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
-
-        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
-
-        let mut effective_records = BTreeMap::new();
-        S::with_registry_map(|map| {
-            let version = version.get();
-            for (key, value) in map
-                .range(start_range..)
-                .filter(|(k, _)| k.version <= version)
-                .take_while(|(k, _)| k.key.starts_with(key_prefix))
-            {
-                // For each key, keep only the record values for the latest record versions. We rely upon
-                // the fact that for a fixed key, the records are sorted by version.
-                effective_records.insert(key.key, value.0);
-            }
-        });
-
-        let result = effective_records
-            .into_iter()
-            .filter_map(|(key, value)| value.is_some().then_some(key))
-            .collect();
-        Ok(result)
-    }
-
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
     }
@@ -186,6 +154,46 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             self.add_deltas(remote_deltas)?;
         }
         Ok(current_local_version)
+    }
+
+    fn get_effective_entries_between(
+        &self,
+        key_prefix: &str,
+        lower_bound: RegistryVersion,
+        upper_bound: RegistryVersion,
+    ) -> Result<BTreeMap<StorableRegistryKey, StorableRegistryValue>, RegistryClientError> {
+        // Lower bound has to be within accessible range
+        if self.get_latest_version() < lower_bound {
+            return Err(RegistryClientError::VersionNotAvailable {
+                version: lower_bound,
+            });
+        }
+
+        // Upper bound has to be within accessible range
+        if self.get_latest_version() < upper_bound {
+            return Err(RegistryClientError::VersionNotAvailable {
+                version: upper_bound,
+            });
+        }
+
+        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
+
+        let mut effective_records = BTreeMap::new();
+        S::with_registry_map(|map| {
+            let lower_bound = lower_bound.get();
+            let upper_bound = upper_bound.get();
+            for (key, value) in map
+                .range(start_range..)
+                .filter(|(k, _)| k.version <= upper_bound && lower_bound <= k.version)
+                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+            {
+                // For each key, keep only the record values for the latest record versions. We rely upon
+                // the fact that for a fixed key, the records are sorted by version.
+                effective_records.insert(key, value);
+            }
+        });
+
+        Ok(effective_records)
     }
 }
 

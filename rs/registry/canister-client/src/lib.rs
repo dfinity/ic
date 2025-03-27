@@ -1,6 +1,8 @@
 //! An implementation of RegistryClient intended to be used in canister
 //! where polling in the background is not required because handed over to a timer.
 //! The code is entirely copied from `ic-registry-client-fake` and more tests added.
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
 use ic_types::registry::RegistryClientError;
@@ -77,7 +79,20 @@ pub trait CanisterRegistryClient: Send + Sync {
         &self,
         key_prefix: &str,
         version: RegistryVersion,
-    ) -> Result<Vec<String>, RegistryClientError>;
+    ) -> Result<Vec<String>, RegistryClientError> {
+        let effective_records =
+            self.get_effective_entries_between(key_prefix, RegistryVersion::new(0), version)?;
+
+        let mut effective_key_value_records = BTreeMap::new();
+        for (key, value) in effective_records {
+            effective_key_value_records.insert(key.key, value.0);
+        }
+        let result = effective_key_value_records
+            .into_iter()
+            .filter_map(|(key, value)| value.is_some().then_some(key))
+            .collect();
+        Ok(result)
+    }
 
     /// Returns a particular value for a key at a given version.
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
@@ -93,4 +108,17 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
     /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
+
+    /// Returns all keys that start with `key_prefix` and exist in between
+    /// `lower_bound` and `upper_bound`. Both `lower_bound` and `upper_bound`
+    /// are included in the returned result.
+    ///
+    /// The returned list does not contain any duplicates. There are no
+    /// guarantees wrt. the order of the contained elements.
+    fn get_effective_entries_between(
+        &self,
+        key_prefix: &str,
+        lower_bound: RegistryVersion,
+        upper_bound: RegistryVersion,
+    ) -> Result<BTreeMap<StorableRegistryKey, StorableRegistryValue>, RegistryClientError>;
 }

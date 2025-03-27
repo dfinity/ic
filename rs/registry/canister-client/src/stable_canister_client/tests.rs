@@ -1,5 +1,6 @@
 use super::*;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
+use assert_matches::assert_matches;
 use futures::FutureExt;
 use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
@@ -7,6 +8,7 @@ use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::PrincipalId;
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -428,4 +430,142 @@ fn test_caching_behavior_of_get_latest_version() {
     // Cache is updated
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, RegistryVersion::new(4));
+}
+
+fn registry_value(version: u64, value: &[u8]) -> RegistryValue {
+    RegistryValue {
+        value: value.to_vec(),
+        version,
+        deletion_marker: value.is_empty(),
+    }
+}
+
+fn registry_delta(key: &str, values: &[RegistryValue]) -> RegistryDelta {
+    RegistryDelta {
+        key: key.as_bytes().to_vec(),
+        values: values.to_vec(),
+    }
+}
+
+#[test]
+fn test_get_values_between() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    // Add some deltas
+    client
+        .add_deltas(vec![
+            registry_delta(
+                "common_prefix_foo",
+                &[
+                    registry_value(0, &[1, 2, 3, 4]),
+                    registry_value(1, &[4, 5, 6, 7]),
+                    registry_value(10, &[4, 5, 6, 8]),
+                    registry_value(15, &[]),
+                ],
+            ),
+            registry_delta(
+                "common_prefix_bar",
+                &[
+                    registry_value(4, &[1, 2, 3, 4]),
+                    registry_value(6, &[2, 3, 4, 5]),
+                ],
+            ),
+            registry_delta(
+                "different_prefix_foo",
+                &[
+                    registry_value(3, &[1, 2, 3, 4]),
+                    registry_value(6, &[2, 3, 4, 5]),
+                ],
+            ),
+        ])
+        .expect("Couldn't add deltas");
+
+    let changes_between = client
+        .get_effective_entries_between(
+            "common_prefix",
+            RegistryVersion::new(1),
+            RegistryVersion::new(15),
+        )
+        .unwrap();
+
+    assert_eq!(changes_between.len(), 5);
+
+    let values_for_foo = changes_between
+        .into_iter()
+        .filter(|(key, _)| key.key == "common_prefix_foo")
+        .collect_vec();
+
+    assert_eq!(values_for_foo.len(), 3);
+
+    let last = values_for_foo.last().unwrap();
+
+    assert_eq!(last.0.version, 15);
+    assert_eq!(last.1 .0, None);
+}
+
+#[test]
+fn test_get_values_between_invalid_lower_bound() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    let err = client
+        .get_effective_entries_between(
+            "common_prefix",
+            RegistryVersion::new(10),
+            RegistryVersion::new(15),
+        )
+        .err()
+        .expect("Should have been an 'Invalid version' error");
+
+    assert_matches!(
+        err,
+        RegistryClientError::VersionNotAvailable { version } if version.get() == 10
+    )
+}
+
+#[test]
+fn test_get_values_between_invalid_upper_bound() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "common_prefix_foo",
+            &[registry_value(12, &[1, 2, 3, 4])],
+        )])
+        .unwrap();
+
+    let err = client
+        .get_effective_entries_between(
+            "common_prefix",
+            RegistryVersion::new(10),
+            RegistryVersion::new(15),
+        )
+        .err()
+        .expect("Should have been an 'Invalid version' error");
+
+    assert_matches!(
+        err,
+        RegistryClientError::VersionNotAvailable { version } if version.get() == 15
+    )
+}
+
+#[test]
+fn test_get_values_between_allow_invalid_range() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "common_prefix_foo",
+            &[registry_value(12, &[1, 2, 3, 4])],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_entries_between(
+            "common_prefix",
+            RegistryVersion::new(10),
+            RegistryVersion::new(5),
+        )
+        .unwrap();
+
+    assert!(range.is_empty())
 }

@@ -24,3 +24,4 @@ candid = { workspace = true }
 
 [dev-dependencies]
 ic-registry-keys = { path = "../keys" }
+assert_matches.workspace = true
