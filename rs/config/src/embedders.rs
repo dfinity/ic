@@ -46,8 +46,10 @@ const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
 
 /// Sandbox process eviction ensures that the number of sandbox processes is
-/// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 7_000;
+/// always below this threshold. Idle sandboxes should be using at most ~5MiB
+/// resident memory with the on-disk compilation cache, so 10,000 sandboxes
+/// shouldn't be more than 50 GiB.
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 10_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.

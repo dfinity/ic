@@ -169,10 +169,10 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
-                round_limits.instructions -= as_round_instructions(
-                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
-                );
-                (compilation_cost, Ok(execution_state))
+                let adjusted_compilation_cost =
+                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
+                round_limits.instructions -= as_round_instructions(adjusted_compilation_cost);
+                (adjusted_compilation_cost, Ok(execution_state))
             }
             Err(err) => {
                 round_limits.instructions -= as_round_instructions(compilation_cost);
