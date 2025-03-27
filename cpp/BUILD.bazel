@@ -9,7 +9,6 @@ cc_binary(
     ],
     copts = [
         "-std=c++17",
-        "-Wl,--strip-debug",
     ],
     target_compatible_with = [
         "@platforms//os:linux",
