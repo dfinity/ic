@@ -51,7 +51,7 @@ runs:
       # only upload on success or failure but _not_ on canceled jobs
       if: (success() || failure()) && inputs.GPG_PASSPHRASE != ''
       run: |
-        for bep in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'bazel-bep-*.pb'); do
+        for bep in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'bazel-bep.pb'); do
             gpg --symmetric --cipher-algo AES256 -o "$bep.gpg" \
                 --passphrase '${{ inputs.GPG_PASSPHRASE }}' --batch --yes "$bep"
             rm -f "$bep"
@@ -60,6 +60,7 @@ runs:
     - name: Upload bazel-bep
       # runs only if previous steps succeeded or failed;
       # we avoid collecting artifacts of jobs that were cancelled
+      # artifact name must end with `-bep` (expectation of github-stats service)
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
@@ -68,8 +69,8 @@ runs:
         if-no-files-found: ignore
         compression-level: 9
         path: |
-          ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
-          ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+          ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep.pb.gpg
+          ${{ steps.metrics-tmpdir.outputs.dir }}/profile.json
 
     - name: Cleanup
       shell: bash
