@@ -135,7 +135,6 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step
     // it can't be installed yet since we need to get the ckETH ledger canister ID first
-    let nns_agent = nns_node.build_default_agent();
     let nns_dapp_canister_id = NNS_UI_CANISTER_ID.get().0;
 
     // deploy the Subnet Rental Canister
