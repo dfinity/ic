@@ -35,9 +35,9 @@ pub(super) fn replacement_functions(
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
 ) -> Vec<(SystemApiFunc, (FuncType, Body<'static>))> {
-    let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
-    let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
-    let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix.unwrap();
+    let count_clean_pages_fn_index = special_indices.count_clean_pages_fn;
+    let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix;
+    let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix;
     let stable_memory_index = special_indices.stable_memory_index;
     let decr_instruction_counter_fn = special_indices.decr_instruction_counter_fn;
 

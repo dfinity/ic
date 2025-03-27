@@ -912,10 +912,10 @@ fn inject_helper_functions(mut module: Module, mem_type: WasmMemoryType) -> Modu
 #[derive(Default)]
 pub(super) struct SpecialIndices {
     pub instructions_counter_ix: u32,
-    pub dirty_pages_counter_ix: Option<u32>,
-    pub accessed_pages_counter_ix: Option<u32>,
+    pub dirty_pages_counter_ix: u32,
+    pub accessed_pages_counter_ix: u32,
     pub decr_instruction_counter_fn: u32,
-    pub count_clean_pages_fn: Option<u32>,
+    pub count_clean_pages_fn: u32,
     pub start_fn_ix: Option<u32>,
     pub stable_memory_index: u32,
 }
@@ -965,9 +965,9 @@ pub(super) fn instrument(
     let num_functions = (module.functions.len() + num_imported_functions) as u32;
     let num_globals = (module.globals.len() + num_imported_globals) as u32;
 
-    let dirty_pages_counter_ix = Some(num_globals + 1);
-    let accessed_pages_counter_ix = Some(num_globals + 2);
-    let count_clean_pages_fn = Some(num_functions + 1);
+    let dirty_pages_counter_ix = num_globals + 1;
+    let accessed_pages_counter_ix = num_globals + 2;
+    let count_clean_pages_fn = num_functions + 1;
 
     let special_indices = SpecialIndices {
         instructions_counter_ix: num_globals,
@@ -1305,25 +1305,21 @@ fn export_additional_symbols<'a>(
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&counter_export.name));
     module.exports.push(counter_export);
 
-    if let Some(index) = special_indices.dirty_pages_counter_ix {
-        let export = Export {
-            name: DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-            kind: ExternalKind::Global,
-            index,
-        };
-        debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
-        module.exports.push(export);
-    }
+    let export = Export {
+        name: DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        kind: ExternalKind::Global,
+        index: special_indices.dirty_pages_counter_ix,
+    };
+    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
+    module.exports.push(export);
 
-    if let Some(index) = special_indices.accessed_pages_counter_ix {
-        let export = Export {
-            name: ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
-            kind: ExternalKind::Global,
-            index,
-        };
-        debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
-        module.exports.push(export);
-    }
+    let export = Export {
+        name: ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        kind: ExternalKind::Global,
+        index: special_indices.accessed_pages_counter_ix,
+    };
+    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
+    module.exports.push(export);
 
     if let Some(index) = special_indices.start_fn_ix {
         // push canister_start

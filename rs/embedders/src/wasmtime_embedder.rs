@@ -153,12 +153,11 @@ fn get_exported_globals<T>(instance: &Instance, store: &mut Store<T>) -> Vec<was
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
     ];
-    let globals_to_ignore = TO_IGNORE;
 
     instance
         .exports(store)
         .filter_map(|e| {
-            if globals_to_ignore.contains(&e.name()) {
+            if TO_IGNORE.contains(&e.name()) {
                 None
             } else {
                 e.into_global()
@@ -509,14 +508,22 @@ impl WasmtimeEmbedder {
             }
         }
 
-        instance.get_global(&mut store, DIRTY_PAGES_COUNTER_GLOBAL_NAME)
-                .expect("Counter for dirty pages global should have been added with native stable memory enabled.")
-                .set(&mut store, Val::I64(current_dirty_page_limit.get() as i64))
-                .expect("Couldn't set dirty page counter global");
-        instance.get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
-                .expect("Counter for accessed pages global should have been added with native stable memory enabled.")
-                .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
-                .expect("Couldn't set dirty page counter global");
+        instance
+            .get_global(&mut store, DIRTY_PAGES_COUNTER_GLOBAL_NAME)
+            .expect(
+                "Counter for dirty pages global should have been added \
+                with native stable memory enabled.",
+            )
+            .set(&mut store, Val::I64(current_dirty_page_limit.get() as i64))
+            .expect("Couldn't set dirty page counter global");
+        instance
+            .get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
+            .expect(
+                "Counter for accessed pages global should have been added \
+                with native stable memory enabled.",
+            )
+            .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
+            .expect("Couldn't set dirty page counter global");
 
         let mut memories = HashMap::new();
         for mem_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory) {
