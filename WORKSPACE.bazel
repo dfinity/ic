@@ -112,8 +112,8 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-5r/V1RM4MrwTyaV9c+Zs9el3XGbjJOjni6Bg8XWWs/4=",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.59.0/rules_rust-0.59.0.tar.gz"],
+    integrity = "sha256-CeF7R8AVBGVjGqMZ8nQnYKQ+3tqy6cAS+R0K4u/wImg=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.59.2/rules_rust-0.59.2.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
@@ -128,12 +128,12 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.85.0",
+        "1.85.1",
         # Use the nightly version from the day before the branch.
         # -
         # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
         # only back-ported to stable, we use a more recent version.
-        "nightly/2024-11-21",
+        "nightly/2025-03-14",
     ],
 )
 
