@@ -735,12 +735,12 @@ impl ReplicatedState {
     /// Canister migrations require that a canister is stopped, and has no
     /// guaranteed responses in either the output queue or any outgoing stream.
     pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
-        let streams_flushed = || self.metadata.streams.iter().all(|(_, stream)| {
-            stream
-                .guaranteed_responses_counts()
-                .get(canister)
-                .is_none()
-        });
+        let streams_flushed = || {
+            self.metadata
+                .streams
+                .iter()
+                .all(|(_, stream)| stream.guaranteed_responses_counts().get(canister).is_none())
+        };
 
         let canister_state = match self.canister_state(canister) {
             Some(canister_state) => canister_state,
