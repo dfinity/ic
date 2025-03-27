@@ -143,7 +143,7 @@
 	)
 
 	(func (export "canister_query query_write_bwd_1gb_step_16kb")
-		(call $read (i32.const 1073725440) (i32.const -16384) (i32.const -16384))
+		(call $write (i32.const 1073725440) (i32.const -16384) (i32.const -16384))
 		(call $ic0_msg_reply)
 	)
 
@@ -181,7 +181,7 @@
 	)
 
 	(func (export "canister_update update_write_bwd_1gb_step_16kb")
-		(call $read (i32.const 1073725440) (i32.const -16384) (i32.const -16384))
+		(call $write (i32.const 1073725440) (i32.const -16384) (i32.const -16384))
 		(call $ic0_msg_reply)
 	)
 

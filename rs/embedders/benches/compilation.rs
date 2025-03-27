@@ -11,6 +11,11 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::io::Read;
 
+lazy_static::lazy_static! {
+    static ref GOVERNANCE_BENCH_CANISTER: Vec<u8> =
+        canister_test::Project::cargo_bin_maybe_from_env("governance-bench-canister", &[]).bytes();
+}
+
 /// Enable using the same number of rayon threads that we have in production.
 fn set_production_rayon_threads() {
     rayon::ThreadPoolBuilder::new()
@@ -19,6 +24,14 @@ fn set_production_rayon_threads() {
         .unwrap_or_else(|err| {
             eprintln!("error in ThreadPoolBuildError (it's fine if the threadpool has already been initialized): {}", err);
         });
+}
+
+/// Unzip a the bytes before converting to a binary encoded Wasm.
+fn unzip_wasm(bytes: &[u8]) -> BinaryEncodedWasm {
+    let mut decoder = libflate::gzip::Decoder::new(bytes).unwrap();
+    let mut buf = vec![];
+    decoder.read_to_end(&mut buf).unwrap();
+    BinaryEncodedWasm::new(buf)
 }
 
 /// Tuples of (benchmark_name, compilation_cost, wasm) to run compilation benchmarks on.
@@ -83,25 +96,14 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     // This benchmark uses the open chat user canister which is stored as a
     // binary file in this repo.  It is generated from
     // https://github.com/dfinity/open-chat/tree/abk/for-replica-benchmarking
-    let mut decoder =
-        libflate::gzip::Decoder::new(&include_bytes!("test-data/user.wasm.gz")[..]).unwrap();
-    let mut buf = vec![];
-    decoder.read_to_end(&mut buf).unwrap();
-    let open_chat_wasm = BinaryEncodedWasm::new(buf);
-
+    let open_chat_wasm = unzip_wasm(&include_bytes!("test-data/user.wasm.gz")[..]);
     result.push(("open_chat".to_string(), open_chat_wasm));
 
     // This benchmark uses the QR code generator canister which is stored as a
     // binary file in this repo.  It is generated from the directory
     // `rust/qrcode` in
     // https://github.com/dfinity/examples/tree/abk/for-replica-benchmarking
-    let mut decoder =
-        libflate::gzip::Decoder::new(&include_bytes!("test-data/qrcode_backend.wasm.gz")[..])
-            .unwrap();
-    let mut buf = vec![];
-    decoder.read_to_end(&mut buf).unwrap();
-    let qrcode_wasm = BinaryEncodedWasm::new(buf);
-
+    let qrcode_wasm = unzip_wasm(&include_bytes!("test-data/qrcode_backend.wasm.gz")[..]);
     result.push(("qrcode".to_string(), qrcode_wasm));
 
     // This benchmark uses a canister from the motoko playground which is stored
@@ -109,6 +111,9 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     // https://github.com/dfinity/motoko-playground/tree/abk/for-replica-benchmarking
     let motoko_wasm = BinaryEncodedWasm::new(include_bytes!("test-data/pool.wasm").to_vec());
     result.push(("motoko".to_string(), motoko_wasm));
+
+    let governance_wasm = unzip_wasm(&GOVERNANCE_BENCH_CANISTER[..]);
+    result.push(("governance".to_string(), governance_wasm));
 
     result
 }

@@ -1,6 +1,6 @@
 ---- MODULE Disburse_Neuron ----
 
-EXTENDS TLC, Integers, FiniteSets, Sequences, Variants
+EXTENDS TLC, Integers, FiniteSets, Sequences, Variants, Common
 
 CONSTANTS
     Governance_Account_Ids,
@@ -21,17 +21,7 @@ CONSTANT
     \* for TLC we want to limit this to some finite set
     POSSIBLE_DISBURSE_AMOUNTS(_, _)
 
-\* Initial value used for uninitialized accounts
-DUMMY_ACCOUNT == ""
-
-\* @type: (a -> b, Set(a)) => a -> b;
-Remove_Arguments(f, S) == [ x \in (DOMAIN f \ S) |-> f[x]]
 Max(x, y) == IF x < y THEN y ELSE x
-
-request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
-transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to, amount |-> amount, fee |-> fee])
-
-o_deduct(disb_amount) == disb_amount + TRANSACTION_FEE
 
 (* --algorithm Governance_Ledger_Disburse_Neuron {
 
@@ -141,12 +131,12 @@ process ( Disburse_Neuron \in Disburse_Neuron_Process_Ids )
 }
 *)
 \* BEGIN TRANSLATION (chksum(pcal) = "10c9c7f7" /\ chksum(tla) = "a1672e89")
-VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
-          ledger_to_governance, spawning_neurons, neuron_id, disburse_amount, 
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
+          ledger_to_governance, spawning_neurons, neuron_id, disburse_amount,
           to_account, fees_amount
 
-vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
-           ledger_to_governance, spawning_neurons, neuron_id, disburse_amount, 
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
+           ledger_to_governance, spawning_neurons, neuron_id, disburse_amount,
            to_account, fees_amount >>
 
 ProcSet == (Disburse_Neuron_Process_Ids)
@@ -185,8 +175,8 @@ DisburseNeuron1(self) == /\ pc[self] = "DisburseNeuron1"
                                                          ELSE /\ neuron' = [neuron EXCEPT ![neuron_id'[self]] = [@ EXCEPT !.cached_stake = 0, !.fees = 0]]
                                                    /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[neuron_id'[self]].account, to_account'[self], disburse_amount'[self], TRANSACTION_FEE))))
                                                    /\ pc' = [pc EXCEPT ![self] = "DisburseNeuron_Stake_WaitForTransfer"]
-                         /\ UNCHANGED << neuron_id_by_account, 
-                                         ledger_to_governance, 
+                         /\ UNCHANGED << neuron_id_by_account,
+                                         ledger_to_governance,
                                          spawning_neurons >>
 
 DisburseNeuron_Fee_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Fee_WaitForTransfer"
@@ -199,19 +189,19 @@ DisburseNeuron_Fee_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Fee_Wa
                                                             /\ to_account' = [to_account EXCEPT ![self] = DUMMY_ACCOUNT]
                                                             /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
                                                             /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                                            /\ UNCHANGED << neuron, 
+                                                            /\ UNCHANGED << neuron,
                                                                             governance_to_ledger >>
                                                        ELSE /\ IF neuron[neuron_id[self]].cached_stake > fees_amount[self]
                                                                   THEN /\ neuron' = [neuron EXCEPT ![neuron_id[self]] = [@ EXCEPT !.cached_stake = @ - fees_amount[self], !.fees = 0]]
                                                                   ELSE /\ neuron' = [neuron EXCEPT ![neuron_id[self]] = [@ EXCEPT !.cached_stake = 0, !.fees = 0]]
                                                             /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[neuron_id[self]].account, to_account[self], disburse_amount[self], TRANSACTION_FEE))))
                                                             /\ pc' = [pc EXCEPT ![self] = "DisburseNeuron_Stake_WaitForTransfer"]
-                                                            /\ UNCHANGED << locks, 
-                                                                            neuron_id, 
-                                                                            disburse_amount, 
-                                                                            to_account, 
+                                                            /\ UNCHANGED << locks,
+                                                                            neuron_id,
+                                                                            disburse_amount,
+                                                                            to_account,
                                                                             fees_amount >>
-                                            /\ UNCHANGED << neuron_id_by_account, 
+                                            /\ UNCHANGED << neuron_id_by_account,
                                                             spawning_neurons >>
 
 DisburseNeuron_Stake_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Stake_WaitForTransfer"
@@ -228,8 +218,8 @@ DisburseNeuron_Stake_WaitForTransfer(self) == /\ pc[self] = "DisburseNeuron_Stak
                                               /\ to_account' = [to_account EXCEPT ![self] = DUMMY_ACCOUNT]
                                               /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
                                               /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                              /\ UNCHANGED << neuron_id_by_account, 
-                                                              governance_to_ledger, 
+                                              /\ UNCHANGED << neuron_id_by_account,
+                                                              governance_to_ledger,
                                                               spawning_neurons >>
 
 Disburse_Neuron(self) == DisburseNeuron1(self)
