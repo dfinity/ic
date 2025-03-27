@@ -11707,6 +11707,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-base-types",
+ "ic-utils 0.9.0",
  "serde",
  "thiserror 2.0.11",
 ]
