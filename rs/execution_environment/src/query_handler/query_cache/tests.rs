@@ -88,9 +88,7 @@ fn query_cache_metrics(test: &ExecutionTest) -> &QueryCacheMetrics {
 /// Return `ExecutionTestBuilder` with query caching, composite queries
 /// and query stats enabled.
 fn builder_with_query_caching() -> ExecutionTestBuilder {
-    ExecutionTestBuilder::new()
-        .with_composite_queries()
-        .with_query_stats()
+    ExecutionTestBuilder::new().with_query_stats()
 }
 
 /// Return `ExecutionTestBuilder` with specified query cache `capacity`.
