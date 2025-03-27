@@ -626,6 +626,7 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
         .unwrap();
 }
 
+#[allow(dead_code)]
 fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine, init: InitArgs) {
     let canister_id = ensure_canister_id_exists_at_position(
         machine,
