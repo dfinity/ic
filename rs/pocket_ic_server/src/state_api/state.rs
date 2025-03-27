@@ -745,15 +745,15 @@ impl ApiState {
         Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
+    pub async fn add_instance<F>(&self, f: F) -> Result<(InstanceId, Topology), String>
     where
-        F: FnOnce(u64) -> PocketIc + std::marker::Send + 'static,
+        F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // create the instance using `spawn_blocking` before acquiring a lock
         let instance = tokio::task::spawn_blocking(move || f(seed))
             .await
-            .expect("Failed to create PocketIC instance");
+            .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
         let mut instances = self.instances.write().await;
         let instance_id = instances.len();
@@ -761,7 +761,7 @@ impl ApiState {
             progress_thread: None,
             state: InstanceState::Available(instance),
         }));
-        (instance_id, topology)
+        Ok((instance_id, topology))
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
@@ -1059,6 +1059,12 @@ impl ApiState {
         } else {
             Err("Auto progress mode has already been enabled.".to_string())
         }
+    }
+
+    pub async fn get_auto_progress(&self, instance_id: InstanceId) -> bool {
+        let instances = self.instances.read().await;
+        let instance = instances[instance_id].lock().await;
+        instance.progress_thread.is_some()
     }
 
     pub async fn stop_progress(&self, instance_id: InstanceId) {

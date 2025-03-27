@@ -73,6 +73,7 @@ use icrc_ledger_types::icrc1::{
 };
 use num_traits::ToPrimitive;
 use prost::Message;
+use registry_canister::pb::v1::GetChunkRequest;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
@@ -123,6 +124,34 @@ pub fn registry_get_changes_since(
     };
 
     RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
+}
+
+pub fn registry_get_chunk(
+    state_machine: &StateMachine,
+    chunk_content_sha256: &[u8],
+) -> Result<registry_canister::pb::v1::Chunk, String> {
+    let content_sha256 = Some(chunk_content_sha256.to_vec());
+    let request = GetChunkRequest { content_sha256 };
+
+    let result = state_machine
+        .execute_ingress(
+            REGISTRY_CANISTER_ID,
+            "get_chunk",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get chunk was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&result, Result<registry_canister::pb::v1::Chunk, String>).unwrap()
 }
 
 /// Creates a canister with a wasm, payload, and optionally settings on a StateMachine

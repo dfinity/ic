@@ -7,6 +7,7 @@ use ic_embedders::{
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_wasm_transform::Module;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -18,7 +19,6 @@ use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
-use ic_replicated_state::Global;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},

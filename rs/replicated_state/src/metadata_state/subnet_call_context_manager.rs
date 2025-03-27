@@ -292,8 +292,9 @@ impl SubnetCallContextManager {
                     .map(|context| {
                         info!(
                             logger,
-                            "Received the response for ComputeInitialIDkgDealings request with key_id {:?} from {:?}",
+                            "Received the response for ReshareChainKey request with key_id {:?} and callback id {:?} from {:?}",
                             context.key_id,
+                            context.request.sender_reply_callback,
                             context.request.sender
                         );
                         SubnetCallContext::ReshareChainKey(context)

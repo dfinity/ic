@@ -1,10 +1,7 @@
-use crate::{
-    certification::{CertificationCrypto, VerifierImpl},
-    consensus::MINIMUM_CHAIN_LENGTH,
-};
+use crate::{CertificationCrypto, VerifierImpl};
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, aggregate, bouncer_metrics::BouncerMetrics,
-    membership::Membership, registry_version_at_height,
+    membership::Membership, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
 };
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},

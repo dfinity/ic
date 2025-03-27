@@ -223,7 +223,7 @@ const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 200;
 
 /// The max number of open manage neuron proposals.
-pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 100000;
+pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 10_000;
 
 /// Max number of hot key for each neuron.
 pub const MAX_NUM_HOT_KEYS_PER_NEURON: usize = 10;
@@ -4874,9 +4874,59 @@ impl Governance {
         })?;
 
         // Early exit for deprecated commands.
-        if let Command::MergeMaturity(_) = manage_neuron.command.as_ref().unwrap() {
+        if let Command::MergeMaturity(_) = command {
             return Self::merge_maturity_removed_error();
         }
+
+        // Below we make sure the manage neuron proposal is not too large. Otherwise they can occupy
+        // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (100K).
+        //
+        // TODO: consolidate the validation logic with the `manage_neuron` implementation.
+        match command {
+            // We could implement more complicated logic to check its encoded size, or treat each
+            // type of proposal differently, but in the hotfix we simply disable it.
+            Command::MakeProposal(_) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot issue a make proposal command through a proposal",
+                ))
+            }
+            // DisburseMaturity contains a subaccount which can be unbounded without checking. This
+            // command is not implemented yet, and before we implement it we should also validate
+            // its subaccount.
+            Command::DisburseMaturity(_) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Disburse maturity is not supported yet",
+                ))
+            }
+            // Similar to DisburseMaturity, Disburse has a blob as the ICP account address. A
+            // successful conversion should indicate that the blob does not contain a large amount
+            // of data.
+            Command::Disburse(disburse) => {
+                if let Some(to_account) = &disburse.to_account {
+                    if AccountIdentifier::try_from(to_account).is_err() {
+                        return Err(GovernanceError::new_with_message(
+                            ErrorType::InvalidCommand,
+                            "The to_account field is invalid",
+                        ));
+                    }
+                }
+            }
+            Command::Follow(follow) => {
+                if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        format!(
+                            "Too many followees: {} (max: {})",
+                            follow.followees.len(),
+                            MAX_FOLLOWEES_PER_TOPIC
+                        ),
+                    ));
+                }
+            }
+            _ => {}
+        };
 
         let is_managed_neuron_not_for_profit = self
             .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
