@@ -1484,6 +1484,7 @@ pub struct DecomposedNeuron {
     pub hot_keys: Vec<PrincipalId>,
     pub recent_ballots: Vec<BallotInfo>,
     pub followees: HashMap</* topic ID */ i32, Followees>,
+    pub maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 
     // Singletons
     pub known_neuron_data: Option<KnownNeuronData>,
@@ -1518,8 +1519,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-            // TODO(NNS1-3609): define a stable structures section for this field.
-            maturity_disbursements_in_progress: _,
+            maturity_disbursements_in_progress,
         } = source;
 
         let account = subaccount.to_vec();
@@ -1570,6 +1570,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             // Singletons
             known_neuron_data,
@@ -1587,6 +1588,7 @@ impl From<DecomposedNeuron> for Neuron {
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             known_neuron_data,
             transfer,
@@ -1649,9 +1651,6 @@ impl From<DecomposedNeuron> for Neuron {
 
         let voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds
             .unwrap_or(DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS);
-
-        // TODO(NNS1-3609): define a stable structures section for this field.
-        let maturity_disbursements_in_progress = vec![];
 
         Neuron {
             id,
