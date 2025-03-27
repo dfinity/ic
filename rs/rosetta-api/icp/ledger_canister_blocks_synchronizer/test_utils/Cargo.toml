@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-canister-client-sender = { path = "../../../../canister_client/sender" }
+ic-ed25519 = { path = "../../../../../packages/ic-ed25519" }
 ic-ledger-canister-blocks-synchronizer = { path = "../" }
 ic-ledger-core = { path = "../../../../ledger_suite/common/ledger_core" }
 ic-types = { path = "../../../../types/types" }
