@@ -82,8 +82,7 @@ fn test_safe_truncate_right() {
 pub trait StrEllipsize {
     /// Ellipsize the string with a max length and prefix percentage `[0, 100]`.
     ///
-    /// Returns the original string if it's shorter or equal than the max length;
-    /// returns an empty string if the max length is shorter than the ellipsis.
+    /// Returns the original string if it's shorter or equal than the max length.
     fn ellipsize(&self, max_len: usize, prefix_percentage: usize) -> String;
 }
 
@@ -94,8 +93,8 @@ impl StrEllipsize for str {
         }
 
         const ELLIPSIS: &str = "...";
-        if max_len < ELLIPSIS.len() {
-            return "".to_string();
+        if max_len <= ELLIPSIS.len() {
+            return ".".repeat(max_len);
         }
 
         // Deduct the ellipsis length to get the available space for prefix and suffix combined.
@@ -116,6 +115,12 @@ impl StrEllipsize for str {
 
 #[test]
 fn test_ellipsize() {
+    assert_eq!("123454321".ellipsize(0, 0), "");
+    assert_eq!("123454321".ellipsize(1, 0), ".");
+    assert_eq!("123454321".ellipsize(2, 0), "..");
+    assert_eq!("123454321".ellipsize(2, 50), "..");
+    assert_eq!("123454321".ellipsize(2, 100), "..");
+
     assert_eq!("123454321".ellipsize(3, 0), "...");
     assert_eq!("123454321".ellipsize(3, 50), "...");
     assert_eq!("123454321".ellipsize(3, 100), "...");
@@ -142,10 +147,6 @@ fn test_ellipsize() {
     assert_eq!("123454321".ellipsize(8, 200), "12345...");
 
     assert_eq!("123454321".ellipsize(9, 50), "123454321");
-
-    assert_eq!("123454321".ellipsize(2, 0), "");
-    assert_eq!("123454321".ellipsize(2, 50), "");
-    assert_eq!("123454321".ellipsize(2, 100), "");
 
     // A string consisting characters with 3-byte UTF-8 encodings.
     assert_eq!("₿₿₿€€€".ellipsize(3, 2), "...");
