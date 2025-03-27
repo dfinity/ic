@@ -4232,6 +4232,26 @@ mod tests {
     }
 
     #[test]
+    fn compatibility_for_snapshot_source() {
+        // If this fails, you are making a potentially incompatible change to `SnapshotSource`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        let actual_variants: Vec<i32> = SnapshotSource::iter().map(|x| x as i32).collect();
+        let expected_variants = vec![1, 2];
+        assert_eq!(actual_variants, expected_variants);
+    }
+
+    #[test]
+    fn compatibility_for_on_low_wasm_memory_hook_status() {
+        // If this fails, you are making a potentially incompatible change to `OnLowWasmMemoryHookStatus`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        let actual_variants: Vec<i32> = OnLowWasmMemoryHookStatus::iter()
+            .map(|x| x as i32)
+            .collect();
+        let expected_variants = vec![1, 2, 3];
+        assert_eq!(actual_variants, expected_variants);
+    }
+
+    #[test]
     fn wasm_persistence_round_trip() {
         for persistence in WasmMemoryPersistence::iter() {
             let encoded: WasmMemoryPersistenceProto = persistence.into();
