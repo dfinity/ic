@@ -669,8 +669,7 @@ fn stable_write_and_read() {
                 )
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -713,8 +712,7 @@ fn stable64_write_and_read() {
                 (table funcref (elem $test))
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -787,7 +785,7 @@ fn stable_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -795,7 +793,6 @@ fn stable_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -882,7 +879,7 @@ fn stable64_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -890,7 +887,6 @@ fn stable64_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -953,8 +949,7 @@ fn multiple_stable_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -1001,8 +996,7 @@ fn multiple_stable64_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -1097,10 +1091,7 @@ fn stable_read_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1249,10 +1240,7 @@ fn stable64_read_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // Native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1397,10 +1385,7 @@ fn stable_write_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1549,9 +1534,7 @@ fn stable64_write_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -3229,7 +3212,6 @@ fn large_wasm64_stable_read_write_test() {
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     // Declare a large heap.
     config.max_wasm64_memory_size = NumBytes::from(10 * gb);
 

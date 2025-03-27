@@ -325,13 +325,7 @@ const NORMAL_INGRESS_COST: u128 = 1_224_000;
 const MAX_EXECUTION_COST: u128 = 6_000_000;
 
 fn actual_execution_cost() -> Cycles {
-    match EmbeddersConfig::new()
-        .feature_flags
-        .wasm_native_stable_memory
-    {
-        FlagStatus::Enabled => Cycles::new(5_985_224),
-        FlagStatus::Disabled => Cycles::new(5_685_230),
-    }
+    Cycles::new(5_985_224)
 }
 
 #[test]
