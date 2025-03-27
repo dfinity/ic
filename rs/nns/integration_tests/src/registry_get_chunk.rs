@@ -8,7 +8,7 @@ use ic_nns_test_utils::{
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use registry_canister::pb::v1::Chunk;
+use ic_registry_canister_api::Chunk;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
