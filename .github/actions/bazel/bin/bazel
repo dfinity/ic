@@ -59,14 +59,13 @@ fi
 
 # Add some options for build-like commands
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
+    command_timestamp=$(date +%s)
     bazel_args+=(
         --color=yes # Nice CI output
 
         # Write build events to the dedicated tempdir
-        # GitHub Stats service collects compressed artifacts and expects
-        # to find`bazel-bep.pb` and `profile.json`!
-        --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep.pb"
-        --profile="$BAZEL_ACTION_METRICS_OUT/profile.json"
+        --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$command_timestamp.pb"
+        --profile="$BAZEL_ACTION_METRICS_OUT/profile-$command_timestamp.json"
     )
 
     if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
