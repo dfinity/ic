@@ -20,7 +20,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/registry/keys",
-    "@crate_index//:assert_matches"
+    "@crate_index//:assert_matches",
 ]
 
 MACRO_DEPENDENCIES = [
