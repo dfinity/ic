@@ -3565,6 +3565,88 @@ impl Governance {
         Ok(proposal_id)
     }
 
+    fn cast_vote_and_cascade_topic_following(
+        ballots: &mut BTreeMap<String, Ballot>,
+        voting_neuron_id: &NeuronId,
+        topic: Topic,
+        followed_by: &BTreeMap<String /* neuron ID */, BTreeSet<NeuronId>>,
+        neurons: &BTreeMap<String, Neuron>,
+        now_seconds: u64,
+        proposal_id: &ProposalId,
+    ) {
+        let mut induction_votes = BTreeMap::new();
+        induction_votes.insert(voting_neuron_id.to_string(), vote_of_neuron);
+
+        while !induction_votes.is_empty() {
+            let mut follower_neuron_ids = BTreeSet::new();
+
+            for (current_neuron_id, current_new_vote) in &induction_votes {
+                let Some(current_ballot) = ballots.get_mut(current_neuron_id) else {
+                    // neuron_id has no (blank) ballot, which means they
+                    // were not eligible when the proposal was first
+                    // created. This is fairly unusual, but does not
+                    // indicate a bug (therefore, no log).
+                    continue;
+                };
+
+                // Only fill in "blank" ballots. I.e. those with vote ==
+                // Unspecified. This check could just as well be done before
+                // current_neuron_id is added to induction_votes.
+                if current_ballot.vote != (Vote::Unspecified as i32) {
+                    continue;
+                }
+
+                // Fill in current_ballot.
+                if *current_new_vote == Vote::Unspecified {
+                    log!(
+                        ERROR,
+                        "current_new_vote is unspecified while trying to record (and cascade) \
+                            a vote of neuron {} on proposal {:#?}.",
+                        current_neuron_id, proposal_id.id,
+                    );
+                    continue;
+                }
+                current_ballot.vote = *current_new_vote as i32;
+                current_ballot.cast_timestamp_seconds = now_seconds;
+
+                // Take note of the followers of current_neuron_id, and add them
+                // to the next "tier" in the BFS.
+                if let Some(new_follower_neuron_ids) = followed_by.get(current_neuron_id) {
+                    follower_neuron_ids.extend(new_follower_neuron_ids.iter());
+                }
+            }
+
+            induction_votes.clear();
+            for follower_neuron_id in follower_neuron_ids {
+                let Some(follower_neuron) = neurons.get(&follower_neuron_id.to_string()) else {
+                    // This is a highly suspicious, because currently, we do not
+                    // delete neurons, which means that we have an invalid NeuronId
+                    // floating around in the system, which indicates that we have a
+                    // bug. For now, we deal with that by logging, and pretending like
+                    // we did not see follower_neuron_id.
+                    log!(
+                        ERROR,
+                        "Missing neuron {} while trying to record (and cascade) \
+                            a vote on proposal {}.",
+                        follower_neuron_id, proposal_id.id,
+                    );
+                    continue;
+                };
+
+                let follower_vote = follower_neuron.would_topic_follow_ballots(topic, ballots);
+
+                if follower_vote != Vote::Unspecified {
+                    // follower_neuron would be swayed by its followees!
+                    //
+                    // This is the other (earlier) point at which we could
+                    // consider whether a neuron is already locked in, and that
+                    // no recursion is needed.
+                    induction_votes.insert(follower_neuron_id.to_string(), follower_vote);
+                }
+            }
+        }
+    }
+
     /// Registers the vote `vote_of_neuron` for the neuron `voting_neuron_id`
     /// and cascades voting according to the following relationship given in
     /// function_followee_index that (for each action) maps a followee to
