@@ -5263,6 +5263,7 @@ impl Governance {
             }
         };
 
+        // NF is disabled in release builds.
         #[cfg(not(any(feature = "canbench-rs", feature = "test")))]
         if validated.neurons_fund_participation.unwrap_or_default() {
             return Err(GovernanceError::new_with_message(
