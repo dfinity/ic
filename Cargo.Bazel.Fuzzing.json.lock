@@ -1,5 +1,5 @@
 {
-  "checksum": "47695d92b61eb83496bb7a917ae6d3dd7938821b587162b6b7166488f2081ab4",
+  "checksum": "bff29c17220de7fac8fd4a275c96c1b88ff7b1ecf5f0ef987bacf362e5044cff",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6830,10 +6830,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -7623,10 +7620,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -7743,10 +7737,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -7893,10 +7884,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -11424,10 +11412,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -11777,13 +11762,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:cc_rs.patch"
-          ]
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
         }
       },
       "targets": [
@@ -35041,10 +35020,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -42729,12 +42705,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "data": {
-          "common": [
-            "@openssl//:gen_dir"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -42918,8 +42888,7 @@
         ],
         "crate_features": {
           "common": [
-            "libc",
-            "static"
+            "libc"
           ],
           "selects": {}
         },
@@ -49942,12 +49911,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "data": {
-          "common": [
-            "@openssl//:gen_dir"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -49966,15 +49929,6 @@
               "target": "vcpkg"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
-            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
-            "OPENSSL_NO_VENDOR": "1",
-            "OPENSSL_STATIC": "1"
-          },
           "selects": {}
         },
         "links": "openssl"
@@ -87083,10 +87037,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
