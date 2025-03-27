@@ -752,7 +752,7 @@ impl LedgerClient {
                         let agent = &self.canister_access.as_ref().unwrap().agent;
                         let status = agent
                             .request_status_raw(
-                                &RequestId::new(request_id.as_bytes()),
+                                &RequestId::new(&request_id.as_bytes()),
                                 canister_id.get().0,
                             )
                             .await
