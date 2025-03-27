@@ -26,9 +26,9 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
-        ensure_canister_id_exists_at_position, list_deployed_snses, nns_governance_make_proposal,
-        nns_list_proposals, nns_wait_for_proposal_execution, set_controllers,
-        setup_nns_canisters_with_features, state_machine_builder_for_nns_tests,
+        list_deployed_snses, nns_governance_make_proposal, nns_list_proposals,
+        nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters_with_features,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
