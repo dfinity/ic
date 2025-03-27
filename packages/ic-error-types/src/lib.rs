@@ -467,7 +467,8 @@ mod str_traits {
     pub trait StrEllipsize {
         /// Ellipsize the string with a max length and prefix percentage `[0, 100]`.
         ///
-        /// Returns the original string if it's shorter or equal than the max length.
+        /// Returns the original string if it's shorter or equal than the max length;
+        /// returns an empty string if the max length is shorter than the ellipsis.
         fn ellipsize(&self, max_len: usize, prefix_percentage: usize) -> String;
     }
 
@@ -478,8 +479,8 @@ mod str_traits {
             }
 
             const ELLIPSIS: &str = "...";
-            if max_len <= ELLIPSIS.len() {
-                return ".".repeat(max_len);
+            if max_len < ELLIPSIS.len() {
+                return "".to_string();
             }
 
             // Deduct the ellipsis length to get the available space for prefix and suffix combined.
