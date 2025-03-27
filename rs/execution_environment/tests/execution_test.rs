@@ -3126,3 +3126,194 @@ fn test_canister_liquid_cycle_balance() {
     let receiver_balance = env.cycle_balance(callee);
     assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
 }
+
+fn wat2wasm(wat: &str) -> Result<Vec<u8>, wat::Error> {
+    wat::parse_str(wat).map(Vec::<u8>::into)
+}
+
+fn run_canister(wat: &str, n_iterations: u32) {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm_benchmark_binary = wat2wasm(wat).unwrap();
+
+    for _i in 0..n_iterations {
+        let initial_cycles = 10_000_000_000_000_u128;
+
+        // Update canister settings to allow a 4GB heap.
+        let canister_settings = CanisterSettingsArgsBuilder::new()
+            .with_wasm_memory_limit(4 * 1024 * 1024 * 1024)
+            .build();
+        let benchmark_canister_id =
+            env.create_canister_with_cycles(None, initial_cycles.into(), Some(canister_settings));
+
+        let _ = env.install_existing_canister(
+            benchmark_canister_id,
+            wasm_benchmark_binary.clone(),
+            vec![],
+        );
+
+        let t0 = std::time::Instant::now();
+
+        // call the write_mem method on the benchmark canister.
+        let payload = r#"null"#.as_bytes().to_vec();
+        let _result = env.execute_ingress(benchmark_canister_id, "test", payload.clone());
+
+        let t1 = std::time::Instant::now();
+        println!(
+            "canister execution time = {}",
+            t1.duration_since(t0).as_millis()
+        );
+    }
+}
+
+#[test]
+fn canister_sliced_write() {
+    // Declare the wat code.
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                (local $i i32)
+                (local $j i32)
+                (loop $my_loop
+                    ;; add one to $i
+                    local.get $i
+                    i32.const 1
+                    i32.add
+                    local.set $i
+                    ;; add one Linux page to $j
+                    local.get $j
+                    i32.const 4096
+                    i32.add
+                    local.set $j
+                    ;; store $i to heap[$j]
+                    (i32.store (local.get $j) (local.get $i))
+                    ;; loop if $i is less than number of OS pages within WASM heap
+                    local.get $i
+                    i32.const 550000
+                    i32.lt_s
+                    br_if $my_loop
+                )
+                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                (call $msg_reply)
+            )
+            (memory $memory 65535)
+        )
+        "#;
+
+    run_canister(wat, 3);
+}
+
+#[test]
+fn canister_sliced_read_only() {
+    // Declare the wat code.
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                (local $i i32)
+                (local $j i32)
+                (local $sum i32)
+                (loop $my_loop
+                    ;; load element from heap[$j]
+                    (i32.load (local.get $j))
+                    ;; add to sum
+                    local.get $sum
+                    i32.add
+                    local.set $sum
+
+                    ;; add one Linux page to $j
+                    local.get $j
+                    i32.const 4096
+                    i32.add
+                    local.set $j
+
+                    ;; increment $i
+                    local.get $i
+                    i32.const 1
+                    i32.add
+                    local.set $i
+
+                    ;; loop if $i is less than number of OS pages within WASM heap
+                    local.get $i
+                    i32.const 550000
+                    i32.lt_s
+                    br_if $my_loop
+                )
+                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                (call $msg_reply)
+            )
+            (memory $memory 65535)
+        )
+        "#;
+
+    run_canister(wat, 3);
+}
+
+#[test]
+fn canister_sliced_read_write() {
+    // Declare the wat code.
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+            (func (export "canister_update test")
+                (local $i i32)
+                (local $j i32)
+                (local $sum i32)
+                (loop $my_loop
+                  
+                    ;; if i is even, read from heap[$j] and save to sum
+                    local.get $i
+                    i32.const 2
+                    i32.rem_s
+                    i32.const 0
+                    i32.eq
+                    if
+                        (i32.load (local.get $j))
+                        local.get $sum
+                        i32.add
+                        local.set $sum
+                    end
+                    ;; if i is odd, write i to heap[$j]
+                    local.get $i
+                    i32.const 2
+                    i32.rem_s
+                    i32.const 1
+                    i32.eq
+                    if
+                        (i32.store (local.get $j) (local.get $i))
+                    end
+
+                    ;; add one Linux page to $j
+                    local.get $j
+                    i32.const 4096
+                    i32.add
+                    local.set $j
+
+                    ;; increment $i
+                    local.get $i
+                    i32.const 1
+                    i32.add
+                    local.set $i
+                    
+
+                    ;; loop if $i is less than number of OS pages within WASM heap
+                    local.get $i
+                    i32.const 550000
+                    i32.lt_s
+                    br_if $my_loop
+                )
+                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                (call $msg_reply)
+            )
+            (memory $memory 65535)
+        )
+        "#;
+
+    run_canister(wat, 3);
+}

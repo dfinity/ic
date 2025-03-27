@@ -1798,6 +1798,28 @@ impl SystemApiImpl {
         )
     }
 
+    pub fn is_replicated_message(&self) -> bool {
+        match &self.api_type {
+            // Replicated Messages.
+            ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Update { .. }
+            | ApiType::Start { .. }
+            | ApiType::SystemTask { .. } => true,
+            // Queries are non-replicated
+            ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => false,
+            // Callbacks and cleanup for composite queries (non-replicated execution) need to be treated as queries,
+            // whereas in replicated mode they are treated as regular messages.
+            ApiType::ReplyCallback { execution_mode, .. }
+            | ApiType::RejectCallback { execution_mode, .. }
+            | ApiType::Cleanup { execution_mode, .. } => {
+                *execution_mode != ExecutionMode::NonReplicated
+            }
+        }
+    }
+
     /// Based on the page limit object, returns the page limit for the current
     /// system API type. Can be called with the limit for dirty pages or accessed pages.
     pub fn get_page_limit(&self, page_limit: &StableMemoryPageLimit) -> NumOsPages {

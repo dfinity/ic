@@ -43,7 +43,7 @@ use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
     WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, PREV_RESIDENT_PAGES,
 };
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
@@ -448,6 +448,7 @@ impl WasmtimeEmbedder {
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
                 canister_backtrace: self.config.feature_flags.canister_backtrace,
+                num_prev_resident_pages: None,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -470,6 +471,10 @@ impl WasmtimeEmbedder {
 
         store.data_mut().num_instructions_global =
             instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
+
+        // Set the resident pages global.
+        store.data_mut().num_prev_resident_pages =
+            instance.get_global(&mut store, PREV_RESIDENT_PAGES);
 
         if let Some(exported_globals) = exported_globals {
             let instance_globals = get_exported_globals(
@@ -772,6 +777,7 @@ pub struct StoreData {
     pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
     pub canister_backtrace: FlagStatus,
+    pub num_prev_resident_pages: Option<wasmtime::Global>,
 }
 
 impl StoreData {
@@ -1276,6 +1282,19 @@ impl WasmtimeInstance {
                 }
             }
             None => panic!("couldn't find the instruction counter in the canister globals"),
+        }
+    }
+
+    /// Sets the accessed pages global.
+    pub fn set_accessed_pages(&mut self, accessed_pages: i64) {
+        match self.store.data().num_prev_resident_pages {
+            Some(num_prev_resident_pages) => {
+                match num_prev_resident_pages.set(&mut self.store, Val::I64(accessed_pages)) {
+                    Ok(_) => (),
+                    Err(e) => panic!("couldn't set the accessed pages global: {:?}", e),
+                }
+            }
+            None => panic!("couldn't find the accessed pages global in the canister globals"),
         }
     }
 

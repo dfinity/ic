@@ -32,6 +32,9 @@ use std::convert::TryFrom;
 /// from wasm sandbox to the replica execution environment.
 const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
 
+const DEBUG_FOR_MINCORE_OUTPUT: bool = false;
+const NUM_MAX_RESIDENT_PAGES: usize = 131_072;
+
 fn unexpected_err(s: String) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(s))
 }
@@ -78,6 +81,15 @@ fn get_num_instructions_global(caller: &Caller<'_, StoreData>) -> HypervisorResu
         .data()
         .num_instructions_global
         .ok_or_else(|| unexpected_err("DataStore instructions counter is None".into()))
+}
+
+/// Gets the global variable that stores the number of resident pages.
+#[inline(always)]
+fn get_num_resident_pages_global(caller: &Caller<'_, StoreData>) -> HypervisorResult<Global> {
+    caller
+        .data()
+        .num_prev_resident_pages
+        .ok_or_else(|| unexpected_err("DataStore resident pages counter is None".into()))
 }
 
 #[inline(always)]
@@ -1050,6 +1062,124 @@ pub fn syscalls<
                         .system_api_mut()?
                         .out_of_instructions(instruction_counter)?;
                     store_value(&global, instruction_counter, c)
+                })
+            }
+        })
+        .unwrap();
+
+    // Link a function called "check_accessed_pages" that checks how many accessed
+    // pages are there on the heap.
+    linker
+        .func_wrap("__", "check_accessed_pages", {
+            move |mut caller: Caller<'_, StoreData>| -> Result<(), _> {
+                with_error_handling(&mut caller, |mut c| {
+                    // Using the libc mincore() API, we can check how many pages are accessed.
+                    // we can give it the start address of the heap and the size of the heap.
+                    // The mincore() API will return a vector of bytes, where each bit represents
+                    // a page in the heap. If the bit is set, the page is in memory, if it is not set,
+                    // the page is not in memory.
+
+                    // If the API type is not replicated execution, return immediately.
+                    if !c.data().system_api().unwrap().is_replicated_message() {
+                        return Ok(());
+                    }
+
+                    // Get memory from caller c.
+                    let memory = c
+                        .get_export(WASM_HEAP_MEMORY_NAME)
+                        .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                            error: "WebAssembly module must define memory".to_string(),
+                        })
+                        .and_then(|ext| {
+                            ext.into_memory().ok_or_else(|| {
+                                HypervisorError::ToolchainContractViolation {
+                                    error: "export 'memory' is not a memory".to_string(),
+                                }
+                            })
+                        })
+                        .map(|mem| {
+                            // False positive clippy lint.
+                            // Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+                            // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+                            #[allow(clippy::needless_borrows_for_generic_args)]
+                            let (mem, _) = mem.data_and_store_mut(&mut c);
+                            mem
+                        })
+                        .unwrap();
+
+                    // memory is &mut [u8]. cast to *mut c_void.
+                    let heap_start = memory.as_mut_ptr();
+                    let heap_size = memory.len();
+                    let num_pages = heap_size / 4096;
+
+                    let time_now = std::time::Instant::now();
+
+                    let mut vec = vec![0u8; num_pages];
+                    let res = unsafe {
+                        libc::mincore(
+                            heap_start as *mut libc::c_void,
+                            heap_size as libc::size_t,
+                            vec.as_mut_ptr(),
+                        )
+                    };
+                    if res == 0 {
+                        // Count the number of accessed pages.
+                        let accessed_pages = vec.iter().filter(|&&x| x == 1).count();
+
+                        // Get old resident pages through the global.
+                        let global_res_pages = get_num_resident_pages_global(c)?;
+                        let old_resident_pages = load_value(&global_res_pages, c)? as usize;
+
+                        if accessed_pages - old_resident_pages >= NUM_MAX_RESIDENT_PAGES {
+                            // If the number of accessed pages is greater than 500MiB,
+                            // set instruction counter to 0 such that the canister would
+                            // slice and start another round.
+                            let global = get_num_instructions_global(c)?;
+                            store_value(&global, 0, c)?;
+                            store_value(&global_res_pages, accessed_pages as i64, c)?;
+                        }
+
+                        // Only run the following on debug mode.
+                        if DEBUG_FOR_MINCORE_OUTPUT {
+                            // Open /proc/self/smaps and check how many pages are locked.
+                            use std::io::Read;
+                            let mut file = std::fs::File::open("/proc/self/smaps").unwrap();
+                            let mut contents = String::new();
+                            file.read_to_string(&mut contents).unwrap();
+                            let mut locked_kbytes = 0;
+
+                            // Go through all the VMAs, check if on VmFlags: they have the "lo" flag set
+                            // and then if so, get the VMA size.
+                            let mut crnt_size = 0;
+                            let mut locked_flag = false;
+                            for line in contents.lines() {
+                                if line.starts_with("Size:") {
+                                    let size: u64 =
+                                        line.split_whitespace().nth(1).unwrap().parse().unwrap();
+                                    crnt_size = size;
+                                }
+                                if line.starts_with("VmFlags:") {
+                                    locked_flag = line.contains("lo");
+                                }
+
+                                if locked_flag {
+                                    // println!("locked size = {}", crnt_size);
+                                    locked_kbytes += crnt_size;
+                                    crnt_size = 0;
+                                    locked_flag = false;
+                                }
+                            }
+                            let locked_pages = locked_kbytes / 4;
+                            debug_assert!(locked_pages as usize >= accessed_pages);
+                            println!(
+                                "accessed pages = {}, locked pages = {}",
+                                accessed_pages, locked_pages
+                            );
+                        }
+                    }
+                    println!("mincore took  {:?}", time_now.elapsed());
+
+                    Ok(())
                 })
             }
         })

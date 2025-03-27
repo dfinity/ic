@@ -157,17 +157,18 @@ pub(crate) fn main_memory_type(module: &Module<'_>) -> WasmMemoryType {
 pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
     TryGrowWasmMemory = 1,
-    TryGrowStableMemory = 2,
-    InternalTrap = 3,
-    StableReadFirstAccess = 4,
+    WasmHeapAccessedPageCounter = 2,
+    TryGrowStableMemory = 3,
+    InternalTrap = 4,
+    StableReadFirstAccess = 5,
 }
 
 impl InjectedImports {
     fn count(wasm_native_stable_memory: FlagStatus) -> usize {
         if wasm_native_stable_memory == FlagStatus::Enabled {
-            5
+            6
         } else {
-            2
+            3
         }
     }
 }
@@ -716,6 +717,21 @@ const TRY_GROW_WASM_MEMORY_FUN_NAME: &str = "try_grow_wasm_memory";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const STABLE_READ_FIRST_ACCESS_NAME: &str = "stable_read_first_access";
+
+// This is a function that calls into the system to check how many
+// accessed pages have been produced so far during this message.
+// It should be called every 100M instructions.
+const CHECK_ACCESSED_PAGES_FUN_NAME: &str = "check_accessed_pages";
+
+// This is a global that is used to store the number of times the
+// instruction counter decrementation function has been called.
+pub(crate) const DECR_INSTR_COUNTER_ENTRIES: &str = "canister decr_instr_counter_entries";
+
+// This is a global that is used to store the previous amount of resident pages
+// as reported by libc::mincore(); Starts at 0 and will get updated after every
+// call to check_accessed_pages.
+pub(crate) const PREV_RESIDENT_PAGES: &str = "canister prev_resident_pages";
+
 const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
@@ -840,9 +856,11 @@ fn inject_helper_functions(
         WasmMemoryType::Wasm32 => FuncType::new([ValType::I32, ValType::I32], [ValType::I32]),
         WasmMemoryType::Wasm64 => FuncType::new([ValType::I64, ValType::I64], [ValType::I64]),
     };
+    let acc_page_type = FuncType::new([], []);
 
     let ooi_type_idx = add_func_type(&mut module, ooi_type);
     let tgwm_type_idx = add_func_type(&mut module, tgwm_type);
+    let acc_page_type_idx = add_func_type(&mut module, acc_page_type);
 
     // push_front imports
     let ooi_imp = Import {
@@ -857,11 +875,18 @@ fn inject_helper_functions(
         ty: TypeRef::Func(tgwm_type_idx),
     };
 
+    let acc_pages_func = Import {
+        module: INSTRUMENTED_FUN_MODULE,
+        name: CHECK_ACCESSED_PAGES_FUN_NAME,
+        ty: TypeRef::Func(acc_page_type_idx),
+    };
+
     let mut old_imports = module.imports;
     module.imports =
         Vec::with_capacity(old_imports.len() + InjectedImports::count(wasm_native_stable_memory));
     module.imports.push(ooi_imp);
     module.imports.push(tgwm_imp);
+    module.imports.push(acc_pages_func);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
         let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
@@ -904,6 +929,10 @@ fn inject_helper_functions(
     debug_assert!(
         module.imports[InjectedImports::TryGrowWasmMemory as usize].name == "try_grow_wasm_memory"
     );
+    debug_assert!(
+        module.imports[InjectedImports::WasmHeapAccessedPageCounter as usize].name
+            == "check_accessed_pages"
+    );
     if wasm_native_stable_memory == FlagStatus::Enabled {
         debug_assert!(
             module.imports[InjectedImports::TryGrowStableMemory as usize].name
@@ -932,6 +961,8 @@ pub(super) struct SpecialIndices {
     pub count_clean_pages_fn: Option<u32>,
     pub start_fn_ix: Option<u32>,
     pub stable_memory_index: u32,
+    pub decr_instr_counter_entries_ix: u32,
+    pub prev_resident_pages_ix: u32,
 }
 
 /// Takes a Wasm binary and inserts the instructions metering and memory grow
@@ -984,16 +1015,22 @@ pub(super) fn instrument(
     let dirty_pages_counter_ix;
     let accessed_pages_counter_ix;
     let count_clean_pages_fn;
+    let decr_instr_counter_entries_ix;
+    let prev_resident_pages_ix;
     match wasm_native_stable_memory {
         FlagStatus::Enabled => {
             dirty_pages_counter_ix = Some(num_globals + 1);
             accessed_pages_counter_ix = Some(num_globals + 2);
             count_clean_pages_fn = Some(num_functions + 1);
+            decr_instr_counter_entries_ix = num_globals + 3;
+            prev_resident_pages_ix = num_globals + 4;
         }
         FlagStatus::Disabled => {
             dirty_pages_counter_ix = None;
             accessed_pages_counter_ix = None;
             count_clean_pages_fn = None;
+            decr_instr_counter_entries_ix = num_globals + 1;
+            prev_resident_pages_ix = num_globals + 2;
         }
     };
 
@@ -1005,6 +1042,8 @@ pub(super) fn instrument(
         count_clean_pages_fn,
         start_fn_ix: module.start,
         stable_memory_index,
+        decr_instr_counter_entries_ix,
+        prev_resident_pages_ix,
     };
 
     if special_indices.start_fn_ix.is_some() {
@@ -1193,6 +1232,29 @@ fn export_additional_symbols<'a>(
     use Operator::*;
 
     let instructions = vec![
+        // Increment the decr_instr_counter_entries global
+        GlobalGet {
+            global_index: special_indices.decr_instr_counter_entries_ix,
+        },
+        I64Const { value: 1 },
+        I64Add,
+        GlobalSet {
+            global_index: special_indices.decr_instr_counter_entries_ix,
+        },
+        // If the entries number is multiple of 100_000, call check_accessed_pages().
+        GlobalGet {
+            global_index: special_indices.decr_instr_counter_entries_ix,
+        },
+        I64Const { value: 100_000 },
+        I64RemU,
+        I64Eqz,
+        If {
+            blockty: BlockType::Empty,
+        },
+        Call {
+            function_index: InjectedImports::WasmHeapAccessedPageCounter as u32,
+        },
+        End,
         // Subtract the parameter amount from the instruction counter
         GlobalGet {
             global_index: special_indices.instructions_counter_ix,
@@ -1372,6 +1434,24 @@ fn export_additional_symbols<'a>(
         module.exports.push(start_export);
     }
 
+    let decr_instr_counter_entries_export = Export {
+        name: DECR_INSTR_COUNTER_ENTRIES,
+        kind: ExternalKind::Global,
+        index: special_indices.decr_instr_counter_entries_ix,
+    };
+    debug_assert!(
+        super::validation::RESERVED_SYMBOLS.contains(&decr_instr_counter_entries_export.name)
+    );
+    module.exports.push(decr_instr_counter_entries_export);
+
+    let prev_resident_pages_export = Export {
+        name: PREV_RESIDENT_PAGES,
+        kind: ExternalKind::Global,
+        index: special_indices.prev_resident_pages_ix,
+    };
+    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&prev_resident_pages_export.name));
+    module.exports.push(prev_resident_pages_export);
+
     // push the instructions counter
     module.globals.push(Global {
         ty: GlobalType {
@@ -1402,6 +1482,26 @@ fn export_additional_symbols<'a>(
             init_expr: Operator::I64Const { value: 0 },
         });
     }
+
+    // push the decr_instruction_counter function entries
+    module.globals.push(Global {
+        ty: GlobalType {
+            content_type: ValType::I64,
+            mutable: true,
+            shared: false,
+        },
+        init_expr: Operator::I64Const { value: 0 },
+    });
+
+    // push the prev_resident_pages global
+    module.globals.push(Global {
+        ty: GlobalType {
+            content_type: ValType::I64,
+            mutable: true,
+            shared: false,
+        },
+        init_expr: Operator::I64Const { value: 0 },
+    });
 
     module
 }
@@ -1509,17 +1609,27 @@ fn inject_metering(
         match point.cost_detail {
             InjectionPointCostDetail::StaticCost { scope, cost } => {
                 elems.extend_from_slice(&[
-                    GlobalGet {
-                        global_index: export_data_module.instructions_counter_ix,
-                    },
+                    // GlobalGet {
+                    //     global_index: export_data_module.instructions_counter_ix,
+                    // },
+                    // I64Const { value: cost as i64 },
+                    // I64Sub,
+                    // GlobalSet {
+                    //     global_index: export_data_module.instructions_counter_ix,
+                    // },
+                    // push the cost onto the stack and call the decrement function
                     I64Const { value: cost as i64 },
-                    I64Sub,
-                    GlobalSet {
-                        global_index: export_data_module.instructions_counter_ix,
+                    Call {
+                        function_index: export_data_module.decr_instruction_counter_fn,
                     },
+                    // remove value from stack.
+                    Drop,
                 ]);
                 if scope == Scope::ReentrantBlockStart {
                     elems.extend_from_slice(&[
+                        // Call {
+                        //     function_index: InjectedImports::WasmHeapAccessedPageCounter as u32,
+                        // },
                         GlobalGet {
                             global_index: export_data_module.instructions_counter_ix,
                         },
