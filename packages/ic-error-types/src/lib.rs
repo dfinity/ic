@@ -478,7 +478,9 @@ mod str_traits {
             }
 
             const ELLIPSIS: &str = "...";
-            assert!(max_len >= ELLIPSIS.len());
+            if max_len <= ELLIPSIS.len() {
+                return ".".repeat(max_len);
+            }
 
             // Deduct the ellipsis length to get the available space for prefix and suffix combined.
             let budget = max_len.saturating_sub(ELLIPSIS.len());
