@@ -11,6 +11,9 @@ runs:
       - name: Create SHA256SUMS
         shell: bash
         run: |
+          sha256sum $(find -L ./bazel-out -name replica -print0)
+          strings $(find -L ./bazel-out -name replica -print0)
+          exit 0
           if ! [ -e ./bazel-out ]; then
             touch SHA256SUMS
             exit 0

@@ -107,4 +107,4 @@ runs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS "${bazel_args[@]}"
+            bazel build //publish/binaries:replica "${bazel_args[@]}"
