@@ -21,6 +21,7 @@ runs:
     - id: metrics-tmpdir
       shell: bash
       run: |
+        sudo chmod 1777 /tmp
         metrics_out=$(mktemp -d)
         echo "dir=$metrics_out" >> $GITHUB_OUTPUT
 
