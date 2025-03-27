@@ -123,23 +123,27 @@ fi
 
 export BINARIES_DIR=artifacts/release
 export CANISTERS_DIR=artifacts/canisters
+export CPP_DIR=artifacts/cpp
 export DISK_DIR=artifacts/icos
 export BINARIES_DIR_FULL="$ROOT_DIR/$BINARIES_DIR"
 export CANISTERS_DIR_FULL="$ROOT_DIR/$CANISTERS_DIR"
+export CPP_DIR_FULL="$ROOT_DIR/$CPP_DIR"
 export DISK_DIR_FULL="$ROOT_DIR/$DISK_DIR"
 
 echo_blue "Purging artifact directories"
 rm -rf "$BINARIES_DIR_FULL"
 rm -rf "$CANISTERS_DIR_FULL"
+rm -rf "$CPP_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
-if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
-if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi
-if "$BUILD_IMG"; then BAZEL_TARGETS+=(
-    "//ic-os/guestos/envs/prod:compute_checksums"
-    "//ic-os/hostos/envs/prod:compute_checksums"
-    "//ic-os/setupos/envs/prod:compute_checksums"
-); fi
+# if "$BUILD_BIN"; then BAZEL_TARGETS+=("//publish/binaries:compute_checksums"); fi
+# if "$BUILD_CAN"; then BAZEL_TARGETS+=("//publish/canisters:compute_checksums"); fi
+# if "$BUILD_IMG"; then BAZEL_TARGETS+=(
+#     "//ic-os/guestos/envs/prod:compute_checksums"
+#     "//ic-os/hostos/envs/prod:compute_checksums"
+#     "//ic-os/setupos/envs/prod:compute_checksums"
+# ); fi
+BAZEL_TARGETS+=("//publish/binaries:replica")
 
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
@@ -148,60 +152,65 @@ bazel build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
 query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 
 for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
-    target_dir=
-    case "$artifact" in
-        *guestos*)
-            target_dir="$DISK_DIR/guestos"
-            ;;
-        *hostos*)
-            target_dir="$DISK_DIR/hostos"
-            ;;
-        *setupos*)
-            target_dir="$DISK_DIR/setupos"
-            ;;
-        *binaries*)
-            target_dir="$BINARIES_DIR"
-            ;;
-        *canisters*)
-            target_dir="$CANISTERS_DIR"
-            ;;
-        *)
-            echo "don't know where to put artifact '$artifact'"
-            exit 1
-            ;;
-    esac
+    # target_dir=
+    target_dir="$CPP_DIR"
+    # case "$artifact" in
+    #     *guestos*)
+    #         target_dir="$DISK_DIR/guestos"
+    #         ;;
+    #     *hostos*)
+    #         target_dir="$DISK_DIR/hostos"
+    #         ;;
+    #     *setupos*)
+    #         target_dir="$DISK_DIR/setupos"
+    #         ;;
+    #     *binaries*)
+    #         target_dir="$BINARIES_DIR"
+    #         ;;
+    #     *canisters*)
+    #         target_dir="$CANISTERS_DIR"
+    #         ;;
+    #     *)
+    #         echo "don't know where to put artifact '$artifact'"
+    #         exit 1
+    #         ;;
+    # esac
 
     mkdir -p "$target_dir"
     cp "$artifact" "$target_dir"
 done
 
-if "$BUILD_BIN"; then
-    echo_green "##### Binaries SHA256SUMS #####"
-    pushd "$BINARIES_DIR_FULL" >/dev/null
-    cat SHA256SUMS
-    popd >/dev/null
-fi
+# if "$BUILD_BIN"; then
+#     echo_green "##### Binaries SHA256SUMS #####"
+#     pushd "$BINARIES_DIR_FULL" >/dev/null
+#     cat SHA256SUMS
+#     popd >/dev/null
+# fi
 
-if "$BUILD_CAN"; then
-    echo_green "##### Canisters SHA256SUMS #####"
-    pushd "$CANISTERS_DIR_FULL"
-    cat SHA256SUMS
-    popd
-fi
+# if "$BUILD_CAN"; then
+#     echo_green "##### Canisters SHA256SUMS #####"
+#     pushd "$CANISTERS_DIR_FULL"
+#     cat SHA256SUMS
+#     popd
+# fi
 
-if "$BUILD_IMG"; then
-    echo_green "##### GUESTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/guestos" >/dev/null
-    cat SHA256SUMS
-    popd >/dev/null
-    echo_green "##### HOSTOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/hostos" >/dev/null
-    cat SHA256SUMS
-    popd >/dev/null
-    echo_green "##### SETUPOS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL/setupos" >/dev/null
-    cat SHA256SUMS
-    popd >/dev/null
-fi
+# if "$BUILD_IMG"; then
+#     echo_green "##### GUESTOS SHA256SUMS #####"
+#     pushd "$DISK_DIR_FULL/guestos" >/dev/null
+#     cat SHA256SUMS
+#     popd >/dev/null
+#     echo_green "##### HOSTOS SHA256SUMS #####"
+#     pushd "$DISK_DIR_FULL/hostos" >/dev/null
+#     cat SHA256SUMS
+#     popd >/dev/null
+#     echo_green "##### SETUPOS SHA256SUMS #####"
+#     pushd "$DISK_DIR_FULL/setupos" >/dev/null
+#     cat SHA256SUMS
+#     popd >/dev/null
+# fi
+
+pushd "$CPP_DIR_FULL"
+sha256sum *
+strings *
 
 echo_green "Build complete for revision $VERSION"
