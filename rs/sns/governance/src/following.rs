@@ -4,7 +4,6 @@ use crate::pb::v1::{
 use itertools::{Either, Itertools};
 use lazy_static::lazy_static;
 use std::{
-    cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashSet},
     fmt,
 };
@@ -38,7 +37,7 @@ pub(crate) struct ValidatedFolloweesForTopic {
     pub topic: Topic,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct ValidatedFollowee {
     topic: Topic,
 
@@ -85,33 +84,6 @@ impl fmt::Display for ValidatedFollowee {
     }
 }
 
-/// Defines lexicographic ordering for `ValidatedFollowee` instances. This ordering is helpful for
-/// grouping followees by factors in the following lexicographic order:
-/// 1. topic
-/// 2. alias
-/// 3. neuron ID
-///
-/// This ordering is helpful for detecting inconsistencies across multiple followees.
-impl Ord for ValidatedFollowee {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.topic.cmp(&other.topic) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-        match self.neuron_id.cmp(&other.neuron_id) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-        self.alias.cmp(&other.alias)
-    }
-}
-
-impl PartialOrd for ValidatedFollowee {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 impl fmt::Debug for ValidatedFollowee {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", format_args!("{}", self))
@@ -141,16 +113,16 @@ type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<ValidatedFollowee>>
 ///
 /// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
 /// ordered by topic and *then* neuron ID, which is enforced by the `PartialOrd` implementation.
-fn get_duplicate_followee_groups(
-    followees: &BTreeSet<ValidatedFollowee>,
-) -> FolloweeGroups {
+fn get_duplicate_followee_groups(followees: &BTreeSet<ValidatedFollowee>) -> FolloweeGroups {
     followees
         .iter()
+        .sorted_by_key(|followee| followee.topic)
         .group_by(|followee| followee.topic)
         .into_iter()
         .filter_map(|(topic, group_for_this_topic)| {
             let duplicates_for_this_topic = group_for_this_topic
                 .into_iter()
+                .sorted_by_key(|followee| followee.neuron_id.clone())
                 .group_by(|followee| followee.neuron_id.clone())
                 .into_iter()
                 .filter_map(|(neuron_id, group)| {
@@ -227,12 +199,10 @@ type FolloweeAliasGroups = BTreeMap<NeuronId, BTreeSet<ValidatedFollowee>>;
 ///
 /// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
 /// ordered by neuron ID and *then* alias, which is enforced by the `PartialOrd` implementation.
-fn get_inconsistent_aliases(
-    followees: &BTreeSet<ValidatedFollowee>,
-) -> FolloweeAliasGroups {
+fn get_inconsistent_aliases(followees: &BTreeSet<ValidatedFollowee>) -> FolloweeAliasGroups {
     followees
         .iter()
-        .sorted_by(|x, y| x.neuron_id.cmp(&y.neuron_id))
+        .sorted_by_key(|followee| followee.neuron_id.clone())
         .group_by(|followee| followee.neuron_id.clone())
         .into_iter()
         .filter_map(|(neuron_id, group)| {
@@ -425,6 +395,7 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
 
         let duplicate_topics = topic_following
             .iter()
+            .sorted_by_key(|followee| followee.topic)
             .group_by(|topic_following| topic_following.topic)
             .into_iter()
             .filter_map(
