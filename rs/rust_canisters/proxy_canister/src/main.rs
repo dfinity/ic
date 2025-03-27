@@ -9,7 +9,7 @@ use candid::Principal;
 use futures::future::join_all;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::time;
-use ic_cdk::caller;
+use ic_cdk::{caller, spawn};
 use ic_cdk_macros::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
@@ -29,6 +29,7 @@ thread_local! {
 async fn send_requests_in_parallel(
     request: RemoteHttpStressRequest,
 ) -> Result<RemoteHttpStressResponse, (RejectionCode, String)> {
+    let start = time();
     if request.count == 0 {
         return Err((
             RejectionCode::CanisterError,
@@ -36,10 +37,7 @@ async fn send_requests_in_parallel(
         ));
     }
 
-    // Send the first request to create the sessions in the adapter. 
-    send_request(request.request.clone()).await?;
-    let start = time();
-
+    // This is the maximum size of the queue of canister messages. In our case, it's the highest number of requests we can send in parallel.
     const MAX_CONCURRENCY: usize = 500;
 
     let mut all_results: Vec<Result<RemoteHttpResponse, (RejectionCode, String)>> = Vec::new();
@@ -68,18 +66,49 @@ async fn send_requests_in_parallel(
     })
 }
 
-async fn send_request_with_retries(
+#[update]
+pub fn start_continuous_requests(
     request: RemoteHttpRequest,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
-    loop {
-        let response = send_request(request.clone()).await;
-        match response {
-            Ok(rsp) => return Ok(rsp),
-            Err(e) => { 
-                // sleep
+    spawn(async move {
+        run_continuous_request_loop(request).await;
+    });
+
+    Ok(RemoteHttpResponse::new(
+        200,
+        vec![],
+        "Started non-stop sending.".to_string(),
+    ))
+}
+
+// TODO: instead of sequentially awaiting on each batch, try to send the next requests anyway, with backoff.
+// This should improve the overall qps, as the canister message queue is the bottleneck, and it's not being saturated.
+async fn run_continuous_request_loop(request: RemoteHttpRequest) {
+    const BATCH_SIZE: usize = 500;
+    let futures_iter = (0..BATCH_SIZE).map(|_| send_request(request.clone()));
+    let results = join_all(futures_iter).await;
+
+    let mut successes = 0;
+    let mut errors = 0;
+    for result in results {
+        match result {
+            Ok(_resp) => {
+                successes += 1;
+            }
+            Err((rejection_code, msg)) => {
+                errors += 1;
+                println!("Request failed: {:?} - {}", rejection_code, msg);
             }
         }
     }
+    println!(
+        "Finished batch of {} requests => successes: {}, errors: {}",
+        BATCH_SIZE, successes, errors
+    );
+
+    spawn(async move {
+        run_continuous_request_loop(request).await;
+    });
 }
 
 #[update]

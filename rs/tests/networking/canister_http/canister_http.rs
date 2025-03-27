@@ -69,7 +69,7 @@ pub fn setup(env: TestEnv) {
                             http_requests: true,
                             ..SubnetFeatures::default()
                         })
-                        .add_nodes(4),
+                        .add_nodes(40),
                 )
                 .setup_and_start(&env)
                 .expect("failed to setup IC under test");
@@ -190,6 +190,13 @@ pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapsh
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("there is no application subnet")
         .nodes()
+}
+
+pub fn get_all_application_subnets(env: &TestEnv) -> Vec<SubnetSnapshot> {
+    env.topology_snapshot()
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::Application)
+        .collect()
 }
 
 pub fn get_system_subnet_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {

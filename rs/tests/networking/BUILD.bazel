@@ -52,23 +52,12 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_stress_test",
-    # additional_colocate_tags = [
-    #     "system_test_benchmark",
-    # ],
-    # colocated_test_driver_vm_required_host_features = ["performance"],
-    # colocated_test_driver_vm_resources = {
-    #     "vcpus": 64,
-    #     "memory_kibibytes": 512142680,
-    #     "boot_image_minimal_size_gibibytes": 500,
-    # },
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "dynamic_testnet",
-        # TODO(mihailjianu): figure out if we need k8s. what is this?
-        #"k8s",
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -84,6 +73,8 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/types/types",
         "@crate_index//:futures",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],
 )

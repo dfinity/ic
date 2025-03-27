@@ -38,8 +38,6 @@ use ic_system_test_driver::util::block_on;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
-use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
-use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
 
 const BN_NAME: &str = "socks-bn";
 
@@ -53,11 +51,7 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    println!("debuggg socks setup");
     let logger = env.logger();
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
 
     // Set up Universal VM with HTTP Bin testing service
 
@@ -89,7 +83,7 @@ pub fn setup(env: TestEnv) {
                     http_requests: true,
                     ..SubnetFeatures::default()
                 })
-                .add_nodes(1),
+                .add_nodes(4),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
@@ -97,7 +91,7 @@ pub fn setup(env: TestEnv) {
                     http_requests: true,
                     ..SubnetFeatures::default()
                 })
-                .add_nodes(40),
+                .add_nodes(4),
         )
         .with_api_boundary_nodes(1)
         .setup_and_start(&env)
@@ -111,8 +105,6 @@ pub fn setup(env: TestEnv) {
         .for_ic(&env, "")
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-
-    env.sync_with_prometheus_by_name("", env.get_playnet_url(BN_NAME));
 
     let boundary_node_vm = env
         .get_deployed_boundary_node(BN_NAME)
