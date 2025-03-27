@@ -21,7 +21,6 @@ runs:
     - id: metrics-tmpdir
       shell: bash
       run: |
-        sudo chmod 1777 /tmp
         metrics_out=$(mktemp -d)
         echo "dir=$metrics_out" >> $GITHUB_OUTPUT
 
@@ -43,6 +42,9 @@ runs:
         # Some exports used by the bazel wrapper
         export BUILDBUDDY_LINKS='${{ inputs.BUILDBUDDY_LINKS }}'
         export BAZEL_ACTION_METRICS_OUT='${{ steps.metrics-tmpdir.outputs.dir }}'
+
+        # Used to speedup IC-OS builds
+        sudo chmod 1777 /tmp/tmpfs
 
         ${{ inputs.run }}
 
