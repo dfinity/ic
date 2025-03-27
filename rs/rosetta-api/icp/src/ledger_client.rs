@@ -23,10 +23,7 @@ pub mod proposal_info_response;
 
 use candid::{Decode, Encode};
 use core::ops::Deref;
-use ic_agent::{
-    agent::{RejectCode, RejectResponse, RequestStatusResponse},
-    RequestId,
-};
+use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::{
     convert::TryFrom,
@@ -124,6 +121,7 @@ pub trait LedgerAccess {
 pub struct LedgerClient {
     ledger_blocks_synchronizer: LedgerBlocksSynchronizer<CanisterAccess>,
     canister_id: CanisterId,
+    root_key: Option<ThresholdSigPublicKey>,
     governance_canister_id: CanisterId,
     canister_access: Option<Arc<CanisterAccess>>,
     ic_url: Url,
@@ -200,6 +198,7 @@ impl LedgerClient {
         Ok(Self {
             ledger_blocks_synchronizer,
             canister_id,
+            root_key,
             token_symbol,
             governance_canister_id,
             canister_access,
@@ -749,38 +748,49 @@ impl LedgerClient {
                 }
                 Ok((body, status)) => {
                     if status.is_success() {
-                        let agent = &self.canister_access.as_ref().unwrap().agent;
-                        let status = agent
-                            .request_status_raw(
-                                &RequestId::new(&request_id.as_bytes()),
-                                canister_id.get().0,
-                            )
-                            .await
-                            .map_err(|err| {
-                                format!("While parsing the read state response: {}", err)
-                            })?
-                            .0;
+                        let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
+                            .map_err(|err| format!("While parsing the status body: {}", err))?;
+
+                        let status = ic_read_state_response_parser::parse_read_state_response(
+                            &request_id,
+                            &canister_id,
+                            self.root_key.as_ref(),
+                            cbor,
+                        )
+                        .map_err(|err| format!("While parsing the read state response: {}", err))?;
 
                         debug!("Read state response: {:?}", status);
 
-                        match status {
-                            RequestStatusResponse::Replied(reply_response) => {
-                                return self.handle_reply(&request_type, reply_response.arg);
-                            }
-                            RequestStatusResponse::Unknown
-                            | RequestStatusResponse::Received
-                            | RequestStatusResponse::Processing => {}
-                            RequestStatusResponse::Rejected(reject_response) => {
+                        match status.status.as_ref() {
+                            "replied" => match status.reply {
+                                Some(bytes) => {
+                                    return self.handle_reply(&request_type, bytes);
+                                }
+                                None => {
+                                    return Err("Send returned with no result.".to_owned());
+                                }
+                            },
+                            "unknown" | "received" | "processing" => {}
+                            "rejected" => {
                                 return Ok(Err(ApiError::TransactionRejected(
                                     false,
-                                    reject_response.reject_message.into(),
+                                    status
+                                        .reject_message
+                                        .unwrap_or_else(|| "(no message)".to_owned())
+                                        .into(),
                                 )));
                             }
-                            RequestStatusResponse::Done => {
+                            "done" => {
                                 return Err(
                                         "The call has completed but the reply/reject data has been pruned."
                                             .to_string(),
                                     );
+                            }
+                            _ => {
+                                return Err(format!(
+                                    "Send returned unexpected result: {:?} - {:?}",
+                                    status.status, status.reject_message
+                                ))
                             }
                         }
                     } else {
