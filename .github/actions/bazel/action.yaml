@@ -60,6 +60,7 @@ runs:
     - name: Upload bazel-bep
       # runs only if previous steps succeeded or failed;
       # we avoid collecting artifacts of jobs that were cancelled
+      # artifact name must end with `-bep` (expectation of github-stats service)
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
