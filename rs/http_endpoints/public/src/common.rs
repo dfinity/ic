@@ -258,7 +258,7 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
                 "msg_id: {}, err: {}, request: {}",
                 message_id,
                 err,
-                request[..request.len().min(1_024)].to_string()
+                request.chars().take(1024).collect::<String>()
             )
         }
         _ => info!(log, "msg_id: {}, err: {}", message_id, err),
