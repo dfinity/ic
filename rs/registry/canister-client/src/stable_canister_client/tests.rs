@@ -569,3 +569,156 @@ fn test_get_values_between_allow_invalid_range() {
 
     assert!(range.is_empty())
 }
+
+// This usecase tests the following scenario
+//            A    B
+//
+// +-----*----#----#-----+
+//
+//       x    y    z
+//
+// Since the period [A-B] perfectly
+// aligns with the versions `y` and
+// `z`, there are no effective versions
+// for [A-B] before `z`, meaning that
+// `x` shouldn't be in the scope
+#[test]
+fn test_get_effective_values_between_has_no_effective_versions_outside_requested_range() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_entries_between("foo", RegistryVersion::new(10), RegistryVersion::new(15))
+        .unwrap();
+
+    assert_eq!(range.len(), 2);
+
+    let mut range_iter = range.iter();
+    let first = range_iter.next().unwrap();
+    assert_eq!(first.0.version, 10);
+
+    let second = range_iter.next().unwrap();
+    assert_eq!(second.0.version, 15);
+}
+
+// This usecase tests the following scenario
+//         A       B
+//
+// +-----*-|--*----#-----+
+//
+//       x    y    z
+//
+// In the range [A, B] we have changes
+// `y` and `z` but since `y` happened
+// after `A` we have to account for the
+// version `x` which was effective from
+// A-y period
+#[test]
+fn test_get_effective_values_between_has_effective_versions_outside_requested_range() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_entries_between("foo", RegistryVersion::new(7), RegistryVersion::new(15))
+        .unwrap();
+
+    assert_eq!(range.len(), 3);
+
+    let mut range_iter = range.iter();
+    let first = range_iter.next().unwrap();
+    assert_eq!(first.0.version, 5);
+
+    let second = range_iter.next().unwrap();
+    assert_eq!(second.0.version, 10);
+
+    let third = range_iter.next().unwrap();
+    assert_eq!(third.0.version, 15)
+}
+
+// This usecase tests the following scenario
+//             A B
+//
+// +-----*----*|-|-*-----+
+//
+//       x    y    z
+// There are no changes to key "foo" in the
+// range [A, B] but so the effective version
+// comes from before, which is version `y`
+#[test]
+fn test_get_effective_values_between_no_effective_values_inside_range_only_before() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_entries_between("foo", RegistryVersion::new(11), RegistryVersion::new(13))
+        .unwrap();
+
+    assert_eq!(range.len(), 1);
+
+    let mut range_iter = range.iter();
+    let first = range_iter.next().unwrap();
+    assert_eq!(first.0.version, 10);
+}
+
+// This usecase tests the following scenario
+//   A  B
+//
+// +-|--|*----*----*-----+
+//
+//       x    y    z
+//
+// Since the first occurence of the key "foo" is
+// present on version higher than `upper_bound`
+// there are no effective versions of this
+// key.
+#[test]
+fn test_get_effective_values_between_values_after_upper_bound() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_entries_between("foo", RegistryVersion::new(1), RegistryVersion::new(4))
+        .unwrap();
+
+    assert!(range.is_empty());
+}

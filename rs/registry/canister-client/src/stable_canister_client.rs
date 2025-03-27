@@ -9,6 +9,7 @@ use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
+use itertools::Itertools;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
@@ -183,13 +184,86 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             let lower_bound = lower_bound.get();
             let upper_bound = upper_bound.get();
             for (key, value) in map
-                .range(start_range..)
+                .range(start_range.clone()..)
                 .filter(|(k, _)| k.version <= upper_bound && lower_bound <= k.version)
                 .take_while(|(k, _)| k.key.starts_with(key_prefix))
             {
                 // For each key, keep only the record values for the latest record versions. We rely upon
                 // the fact that for a fixed key, the records are sorted by version.
                 effective_records.insert(key, value);
+            }
+
+            // The first change before `lower_bound` A is also
+            // effective in the period [A, B].
+            //
+            //         A           B
+            //
+            // +----*--|--*--*--*--|----+
+            //
+            //      x     y  z  h
+            // Legend:
+            // - [x,y,z,h] - change (version when the change happened)
+            // - A - `lower_bound` requested to this function
+            // - B - `upper_bound` request to this function
+            //
+            // Effective versions in range [A-B] are:
+            // - x - valid from A up to y
+            // - y - valid from y up to z
+            // - z - valid from z up to h
+            // - h - valid from h to B (and after)
+            //
+            // If there was a change exactly on A then all of the
+            // versions before wouldn't be effective.
+            //
+            //         A           B
+            //
+            // +----*--#-----*--*--|----+
+            //
+            //      x  y     z  h
+            // Legend:
+            // - [x,y,z,h] - change (version when the change happened)
+            // - A - `lower_bound` requested to this function
+            // - B - `upper_bound` request to this function
+            //
+            // Effective versions in range [A-B] are:
+            // - y - valid from A to z
+            // - z - valid from z to h
+            // - h - valid from h to B (and after)
+
+            for (key, value) in map
+                .range(start_range..)
+                .filter(|(k, _)| k.version <= lower_bound)
+                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+                // First sort by key, grouping all of the pairs of the same record
+                // together. All `key.key` will be one after the other. Within
+                // each group of same `key.key` records, sort by version such
+                // that first come the ones with bigger version.
+                .sorted_by(|a, b| match a.0.key.cmp(&b.0.key) {
+                    Ordering::Equal => b.0.version.cmp(&a.0.version),
+                    o => o,
+                })
+                // Dedup by the same `key.key`, taking the first pair only
+                // which will have the largest `version` since its reverse sorted
+                .dedup_by(|a, b| a.0.key == b.0.key)
+            {
+                let first_with_same_key = effective_records
+                    .iter()
+                    .filter(|(k, _)| k.key == key.key)
+                    .sorted_by(|a, b| a.0.cmp(b.0))
+                    .next();
+
+                match first_with_same_key {
+                    // First entry (or one with the lowest version) directly matches the
+                    // `lower_bound` which means that the previous one
+                    Some((key_of_already_included_effective_record, _))
+                        if key_of_already_included_effective_record.version == lower_bound =>
+                    {
+                        continue;
+                    }
+                    // Key is either not present or it is present but has version
+                    // higher than `lower_bound`
+                    None | Some(_) => effective_records.insert(key, value),
+                };
             }
         });
 
