@@ -1658,9 +1658,14 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
                 let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
-                    let canister_id = args.get_canister_id();
-                    self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
-                        .map(|x| (x, Some(canister_id)))
+                    match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
+                                .map(|x| (x, Some(canister_id)))
+                        }
+                    }
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -1671,8 +1676,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
                 // TODO: EXC-1957
                 #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotDataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res =
+                    ReadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
+                        match self.config.canister_snapshot_download {
+                            FlagStatus::Disabled => Ok((vec![], None)),
+                            FlagStatus::Enabled => Ok((vec![], None)),
+                        }
+                    });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1682,8 +1692,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
                 // TODO: EXC-1959
                 #[allow(clippy::bind_instead_of_map)]
-                let res = UploadCanisterSnapshotMetadataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res =
+                    UploadCanisterSnapshotMetadataArgs::decode(payload).and_then(
+                        |_args| match self.config.canister_snapshot_upload {
+                            FlagStatus::Disabled => Ok((vec![], None)),
+                            FlagStatus::Enabled => Ok((vec![], None)),
+                        },
+                    );
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1693,8 +1708,12 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadCanisterSnapshotData) => {
                 // TODO: EXC-1960
                 #[allow(clippy::bind_instead_of_map)]
-                let res = UploadCanisterSnapshotDataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res = UploadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
+                    match self.config.canister_snapshot_upload {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => Ok((vec![], None)),
+                    }
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
