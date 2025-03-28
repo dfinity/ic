@@ -6,7 +6,7 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
-    CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, GlobalTimer,
     ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus,
     Payload as Ic00Payload, ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
     SnapshotSource, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
@@ -17,6 +17,7 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
         system_state::CyclesUseCase,
+        WASM_PAGE_SIZE_IN_BYTES,
     },
     CanisterState, ExecutionState, SchedulerState,
 };
@@ -2023,6 +2024,18 @@ fn read_canister_snapshot_metadata_succeeds() {
     };
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
+    // Grow the stable memory
+    let stable_pages = 13;
+    let payload = wasm().stable64_grow(stable_pages).reply().build();
+    let _res = test.ingress(canister_id, "update", payload).unwrap();
+    // Set some cert data
+    let cert_data = [42];
+    let payload = wasm().certified_data_set(&cert_data).reply().build();
+    let _res = test.ingress(canister_id, "update", payload).unwrap();
+    // Set a global timer
+    let timestamp = 43;
+    let payload = wasm().api_global_timer_set(timestamp).reply().build();
+    let _res = test.ingress(canister_id, "update", payload).unwrap();
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -2041,8 +2054,15 @@ fn read_canister_snapshot_metadata_succeeds() {
     };
     let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
     assert_eq!(metadata.source, SnapshotSource::TakenFromCanister);
+    assert_eq!(
+        metadata.stable_memory_size,
+        WASM_PAGE_SIZE_IN_BYTES as u64 * stable_pages
+    );
     assert_eq!(metadata.wasm_module_size, uni_canister_wasm.len() as u64);
     assert_eq!(metadata.wasm_chunk_store.len(), 1);
+    assert_eq!(metadata.certified_data, cert_data);
+    assert_eq!(metadata.global_timer, GlobalTimer::Active(timestamp));
+    assert_eq!(metadata.canister_version, 4);
 }
 
 #[test]
