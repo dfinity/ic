@@ -118,7 +118,7 @@ fn prefetch_for_read_checkpoint() {
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Read);
             if new_signal_handler_available() {
                 // There are no dirty pages so no prefetching
-                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
+                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(25));
             } else {
                 // The old signal handler does not have prefetching.
                 assert_eq!(tracker.num_accessed_pages(), 1);
@@ -139,7 +139,7 @@ fn prefetch_for_read_zeros() {
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Read);
             if new_signal_handler_available() {
                 // We prefetch to the end of the memory region at most
-                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
+                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(25));
             } else {
                 // The old signal handler does not have prefetching.
                 assert_eq!(tracker.num_accessed_pages(), 1);
@@ -175,7 +175,7 @@ fn prefetch_for_read_page_delta_different_pages() {
             sigsegv(&tracker, PageIndex::new(20), AccessKind::Read);
             if new_signal_handler_available() {
                 // Deltas start at 25, and we prefetch until we have MAX_MEMORY_INSTRUCTIONS deltas
-                assert_eq!(tracker.num_accessed_pages(), 5);
+                assert_eq!(tracker.num_accessed_pages(), 25);
             } else {
                 assert_eq!(tracker.num_accessed_pages(), 1);
             }
@@ -183,7 +183,7 @@ fn prefetch_for_read_page_delta_different_pages() {
             if new_signal_handler_available() {
                 // There are no accessed pages immediately before the faulting page, so we fetch until
                 // we have another MAX_MEMORY_INSTRUCTIONS deltas
-                assert_eq!(tracker.num_accessed_pages(), 6);
+                assert_eq!(tracker.num_accessed_pages(), 26);
             } else {
                 assert_eq!(tracker.num_accessed_pages(), 2);
             }
@@ -201,17 +201,17 @@ fn prefetch_for_read_page_delta_contiguous() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(25), AccessKind::Read);
-            assert_eq!(tracker.num_accessed_pages(), 1);
+            assert_eq!(tracker.num_accessed_pages(), 26);
             sigsegv(&tracker, PageIndex::new(26), AccessKind::Read);
             if new_signal_handler_available() {
-                assert_eq!(tracker.num_accessed_pages(), 2 + 1);
+                assert_eq!(tracker.num_accessed_pages(), 52);
             } else {
                 assert_eq!(tracker.num_accessed_pages(), 2);
             }
             sigsegv(&tracker, PageIndex::new(25 + 2 + 1), AccessKind::Read);
             if new_signal_handler_available() {
                 // Because the previous 2*MAX_MEMORY_INSTRUCTIONS + 1 pages have been accessed, we prefetch at least that much again, plus 1 for the actually acced page
-                assert_eq!(tracker.num_accessed_pages(), 2 * (2 + 1) + 1);
+                assert_eq!(tracker.num_accessed_pages(), 52);
             } else {
                 assert_eq!(tracker.num_accessed_pages(), 3);
             }
@@ -231,7 +231,7 @@ fn prefetch_for_write_checkpoint_ignore_dirty() {
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Write);
             if new_signal_handler_available() {
                 // Prefetch until we have MAX_MEMORY_INSTRUCTIONS deltas
-                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
+                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(25));
             } else {
                 // The old signal handler does not have prefetching.
                 assert_eq!(tracker.num_accessed_pages(), 1);
@@ -252,7 +252,7 @@ fn prefetch_for_write_zeros_ignore_dirty() {
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Write);
             if new_signal_handler_available() {
                 // There are no dirty pages so no prefetching to the end of the memory
-                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(20));
+                assert_eq!(tracker.num_accessed_pages(), MAX_PAGES_TO_MAP.min(25));
             } else {
                 // The old signal handler does not have prefetching.
                 assert_eq!(tracker.num_accessed_pages(), 1);
@@ -610,19 +610,19 @@ fn prefetch_for_write_after_read_unordered() {
             let next = PageIndex::new(25);
             sigsegv(&tracker, next, AccessKind::Read);
             sigsegv(&tracker, next, AccessKind::Write);
-            assert_eq!(tracker.num_accessed_pages(), 1);
+            assert_eq!(tracker.num_accessed_pages(), 26);
             let next = PageIndex::new(25 + 2);
             sigsegv(&tracker, next, AccessKind::Read);
             sigsegv(&tracker, next, AccessKind::Write);
-            assert_eq!(tracker.num_accessed_pages(), 2);
+            assert_eq!(tracker.num_accessed_pages(), 27);
             let next = PageIndex::new(25 + 2 * 2);
             sigsegv(&tracker, next, AccessKind::Read);
             sigsegv(&tracker, next, AccessKind::Write);
-            assert_eq!(tracker.num_accessed_pages(), 3);
+            assert_eq!(tracker.num_accessed_pages(), 28);
             let next = PageIndex::new(25 + 3 * 2);
             sigsegv(&tracker, next, AccessKind::Read);
             sigsegv(&tracker, next, AccessKind::Write);
-            assert_eq!(tracker.num_accessed_pages(), 4);
+            assert_eq!(tracker.num_accessed_pages(), 29);
             // We only ever use min_prefetch_range for marking writeable, so in this case
             // this only marks the actually written pages as writeable
             assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
@@ -640,27 +640,33 @@ fn page_bitmap_restrict_to_unaccessed() {
             start: PageIndex::new(0),
             end: PageIndex::new(5),
         },
-        bitmap.restrict_range_to_unmarked(bitmap.page_range()),
+        bitmap.restrict_range_to_unmarked(0.into(), bitmap.page_range()),
     );
     assert_eq!(
         Range {
             start: PageIndex::new(5),
             end: PageIndex::new(5),
         },
-        bitmap.restrict_range_to_unmarked(Range {
-            start: PageIndex::new(5),
-            end: PageIndex::new(15)
-        }),
+        bitmap.restrict_range_to_unmarked(
+            5.into(),
+            Range {
+                start: PageIndex::new(5),
+                end: PageIndex::new(15)
+            }
+        ),
     );
     assert_eq!(
         Range {
             start: PageIndex::new(6),
             end: PageIndex::new(10),
         },
-        bitmap.restrict_range_to_unmarked(Range {
-            start: PageIndex::new(6),
-            end: PageIndex::new(15)
-        }),
+        bitmap.restrict_range_to_unmarked(
+            6.into(),
+            Range {
+                start: PageIndex::new(6),
+                end: PageIndex::new(15)
+            }
+        ),
     );
 }
 
@@ -673,27 +679,33 @@ fn page_bitmap_restrict_to_predicted() {
             start: PageIndex::new(0),
             end: PageIndex::new(1),
         },
-        bitmap.restrict_range_to_predicted(bitmap.page_range()),
+        bitmap.restrict_range_to_predicted(0.into(), bitmap.page_range()),
     );
     assert_eq!(
         Range {
-            start: PageIndex::new(5),
+            start: PageIndex::new(4),
             end: PageIndex::new(6),
         },
-        bitmap.restrict_range_to_predicted(Range {
-            start: PageIndex::new(5),
-            end: PageIndex::new(15)
-        }),
+        bitmap.restrict_range_to_predicted(
+            5.into(),
+            Range {
+                start: PageIndex::new(5),
+                end: PageIndex::new(15)
+            }
+        ),
     );
     assert_eq!(
         Range {
             start: PageIndex::new(6),
             end: PageIndex::new(8),
         },
-        bitmap.restrict_range_to_predicted(Range {
-            start: PageIndex::new(6),
-            end: PageIndex::new(15)
-        }),
+        bitmap.restrict_range_to_predicted(
+            6.into(),
+            Range {
+                start: PageIndex::new(6),
+                end: PageIndex::new(15)
+            }
+        ),
     );
 }
 
@@ -711,10 +723,13 @@ fn page_bitmap_restrict_to_predicted_stops_at_end() {
             start: PageIndex::new(6),
             end: PageIndex::new(10),
         },
-        bitmap.restrict_range_to_predicted(Range {
-            start: PageIndex::new(6),
-            end: PageIndex::new(15)
-        }),
+        bitmap.restrict_range_to_predicted(
+            6.into(),
+            Range {
+                start: PageIndex::new(6),
+                end: PageIndex::new(15)
+            }
+        ),
     );
 }
 
@@ -729,10 +744,13 @@ fn page_bitmap_restrict_to_predicted_stops_at_start() {
             start: PageIndex::new(3),
             end: PageIndex::new(6),
         },
-        bitmap.restrict_range_to_predicted(Range {
-            start: PageIndex::new(3),
-            end: PageIndex::new(15)
-        }),
+        bitmap.restrict_range_to_predicted(
+            3.into(),
+            Range {
+                start: PageIndex::new(3),
+                end: PageIndex::new(15)
+            }
+        ),
     );
 }
 
