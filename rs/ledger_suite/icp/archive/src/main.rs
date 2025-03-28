@@ -1,12 +1,13 @@
 use candid::{candid_method, Decode};
-use dfn_core::stable;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::api::{
-    call::{arg_data_raw, reply, reply_raw},
-    caller, print,
+use ic_cdk::{
+    api::{
+        call::{arg_data_raw, reply, reply_raw},
+        caller, print,
+    },
+    post_upgrade, query,
 };
-use ic_cdk::query;
 use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -27,15 +28,6 @@ use icp_ledger::{
 };
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::RefCell};
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ArchiveNodeState {
-    pub max_memory_size_bytes: usize,
-    pub block_height_offset: u64,
-    pub blocks: Vec<EncodedBlock>,
-    pub total_block_size: usize,
-    pub ledger_canister_id: CanisterId,
-}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 struct ArchiveState {
@@ -382,63 +374,24 @@ fn get_blocks_candid_() {
     reply((get_blocks(args),));
 }
 
-#[export_name = "canister_post_upgrade"]
-fn post_upgrade() {
-    ic_cdk::setup();
-
+#[post_upgrade]
+fn post_upgrade(upgrade_arg: Option<ArchiveUpgradeArgument>) {
     set_last_upgrade_timestamp(ic_cdk::api::time());
 
-    let args = arg_data_raw();
-    let arg_max_memory_size_bytes = if args.is_empty() {
-        print("Upgrading archive without an upgrade argument.");
-        None
-    } else {
-        match Decode!(&args, ArchiveUpgradeArgument) {
-            Ok(args) => args.max_memory_size_bytes,
-            Err(e) => {
-                ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
-            }
-        }
+    let arg_max_memory_size_bytes = match upgrade_arg {
+        Some(upgrade_arg) => upgrade_arg.max_memory_size_bytes,
+        None => None,
     };
 
-    let bytes = stable::get();
-    let state: ArchiveNodeState = match ciborium::de::from_reader(std::io::Cursor::new(&bytes)) {
-        Ok(state) => state,
-        Err(_) => {
-            // Already migrated to stable structures
-            assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
-            if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
-                print(format!(
-                    "Changing the max_memory_size_bytes to {}",
-                    max_memory_size_bytes
-                ));
-                set_max_memory_size_bytes(max_memory_size_bytes);
-            }
-            print("Archive state already migrated to stable structures, exiting post_upgrade.");
-            return;
-        }
-    };
-
-    assert_eq!(stable_memory_version(), MEMORY_VERSION_NO_MEM_MGR);
-    set_stable_memory_version();
-
-    for block in &state.blocks {
-        append_block(block);
+    // We do not support migration from scratch stable memory anymore
+    assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
+    if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+        print(format!(
+            "Changing the max_memory_size_bytes to {}",
+            max_memory_size_bytes
+        ));
+        set_max_memory_size_bytes(max_memory_size_bytes);
     }
-
-    set_ledger_canister_id(state.ledger_canister_id);
-    set_block_height_offset(state.block_height_offset);
-    match arg_max_memory_size_bytes {
-        Some(max_memory_size_bytes) => {
-            print(format!(
-                "Changing the max_memory_size_bytes to {}",
-                max_memory_size_bytes
-            ));
-            set_max_memory_size_bytes(max_memory_size_bytes);
-        }
-        None => set_max_memory_size_bytes(state.max_memory_size_bytes as u64),
-    }
-    assert_eq!(state.total_block_size as u64, total_block_size());
 }
 
 fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
