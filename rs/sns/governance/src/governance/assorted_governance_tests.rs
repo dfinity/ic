@@ -4769,10 +4769,12 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
                 vote_of_neuron,
                 function_id,
                 &function_followee_index,
+                &btreemap! {},
                 &neurons,
                 now_seconds,
                 &mut ballots,
                 proposal_criticality,
+                None,
             );
 
             ballots

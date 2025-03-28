@@ -3706,10 +3706,12 @@ impl Governance {
             Vote::Yes,
             function_id,
             &self.function_followee_index,
+            &self.topic_following_index,
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
             proposal_criticality,
+            proposal_topic,
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3734,12 +3736,14 @@ impl Governance {
         vote_of_neuron: Vote,
         function_id: u64,
         function_followee_index: &BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
+        topic_followee_index: &BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>>,
         neurons: &BTreeMap<String, Neuron>,
         // As of Dec, 2023 (52eec5c), the next parameter is only used to populate Ballots. In
         // particular, this has no impact on how the implications of following are deduced.
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
         proposal_criticality: ProposalCriticality,
+        topic: Option<Topic>,
     ) {
         let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
         assert!(function_id != fallback_pseudo_function_id);
@@ -3750,7 +3754,7 @@ impl Governance {
         // By default, followers on the specific function_id are reconsidered,
         // as well as followers have have general "catch-all" following. As an
         // optimization, catch-all followers are not considered when the
-        // proposal is not Critical.
+        // proposal is Critical.
         //
         // E.g. if Alice follows Bob on "catch-all", and Bob votes on a
         // TransferSnsTreasuryFunds proposal, then Alice will not be considered
@@ -3773,6 +3777,8 @@ impl Governance {
             UnionMultiMap::new(members)
         };
 
+        let topic_followers = topic.and_then(|topic| topic_followee_index.get(&topic));
+
         // Traverse the follow graph using breadth first search (BFS).
 
         // Each "tier" in the BFS is listed here. Of course, the first tier just
@@ -3788,9 +3794,16 @@ impl Governance {
         // not (directly or indirectly) voted yet). That is, once a neuron is swayed,
         // its vote is "locked in". IOW, swaying is "monotonic".
         while !induction_votes.is_empty() {
+            #[derive(Eq, Ord, PartialEq, PartialOrd)]
+            enum FollowingType {
+                TopicBased,
+                FunctionBased,
+            }
+
             // This will be populated with the followers of neurons in the
             // current BFS tier, who might be swayed to indirectly vote, thus
             // forming the next tier in the BFS.
+            // Each element is a pair `(neuron_id, FollowingType)`.
             let mut follower_neuron_ids = BTreeSet::new();
 
             // Process the current tier in the BFS.
@@ -3820,11 +3833,22 @@ impl Governance {
 
                 // Take note of the followers of current_neuron_id, and add them
                 // to the next "tier" in the BFS.
+
+                if let Some(new_follower_neuron_ids) = topic_followers
+                    .and_then(|topic_followers| topic_followers.get(current_neuron_id))
+                {
+                    for follower_neuron_id in new_follower_neuron_ids {
+                        follower_neuron_ids
+                            .insert((follower_neuron_id.clone(), FollowingType::TopicBased));
+                    }
+                }
+
                 if let Some(new_follower_neuron_ids) =
                     neuron_id_to_follower_neuron_ids.get(current_neuron_id)
                 {
                     for follower_neuron_id in new_follower_neuron_ids {
-                        follower_neuron_ids.insert(follower_neuron_id.clone());
+                        follower_neuron_ids
+                            .insert((follower_neuron_id.clone(), FollowingType::FunctionBased));
                     }
                 }
             }
@@ -3832,31 +3856,54 @@ impl Governance {
             // Prepare for the next iteration of the (outer most) loop by
             // constructing the next BFS tier (from follower_neuron_ids).
             induction_votes.clear();
-            for follower_neuron_id in follower_neuron_ids {
-                let follower_neuron = match neurons.get(&follower_neuron_id.to_string()) {
-                    Some(n) => n,
-                    None => {
-                        // This is a highly suspicious, because currently, we do not
-                        // delete neurons, which means that we have an invalid NeuronId
-                        // floating around in the system, which indicates that we have a
-                        // bug. For now, we deal with that by logging, and pretending like
-                        // we did not see follower_neuron_id.
-                        log!(
-                            ERROR,
-                            "Missing neuron {} while trying to record (and cascade) \
-                             a vote on proposal {:#?}.",
-                            follower_neuron_id,
-                            proposal_id,
-                        );
-                        continue;
-                    }
+            for (follower_neuron_id, following_type) in follower_neuron_ids {
+                let Some(follower_neuron) = neurons.get(&follower_neuron_id.to_string()) else {
+                    // This is a highly suspicious, because currently, we do not
+                    // delete neurons, which means that we have an invalid NeuronId
+                    // floating around in the system, which indicates that we have a
+                    // bug. For now, we deal with that by logging, and pretending like
+                    // we did not see follower_neuron_id.
+                    log!(
+                        ERROR,
+                        "Missing neuron {} while trying to record (and cascade) \
+                            a vote on proposal {:#?}.",
+                        follower_neuron_id,
+                        proposal_id,
+                    );
+                    continue;
                 };
 
-                let follower_vote = follower_neuron.would_follow_ballots(
-                    function_id,
-                    ballots,
-                    proposal_criticality,
-                );
+                // Supporting topic-based following with legacy (function-based) as fallback.
+                // The that end, filter out legacy followers that already set topic-based following.
+                match (topic, &follower_neuron.topic_followees) {
+                    (Some(topic), Some(topic_followees)) => {
+                        if following_type == FollowingType::FunctionBased
+                            && topic_followees
+                                .topic_id_to_followees
+                                .contains_key(&i32::from(topic))
+                        {
+                            // This follower already has a topic-based followee for this topic, so
+                            // its legacy (function-based) following should be ignored.
+                            continue;
+                        }
+                    }
+                    _ => (),
+                }
+
+                let mut follower_vote = topic
+                    .map(|topic| {
+                        follower_neuron.would_topic_follow_ballots(topic, ballots, proposal_id)
+                    })
+                    .unwrap_or(Vote::Unspecified);
+
+                if follower_vote == Vote::Unspecified {
+                    // Fall back to function-based following.
+                    follower_vote = follower_neuron.would_follow_ballots(
+                        function_id,
+                        ballots,
+                        proposal_criticality,
+                    );
+                }
 
                 if follower_vote != Vote::Unspecified {
                     // follower_neuron would be swayed by its followees!
@@ -3958,16 +4005,23 @@ impl Governance {
 
         // Update ballots.
         let function_id = u64::from(action);
+        let proposal_topic = if proposal_topic == Topic::Unspecified {
+            None
+        } else {
+            Some(proposal_topic)
+        };
         Governance::cast_vote_and_cascade_follow(
             proposal_id,
             neuron_id,
             vote,
             function_id,
             &self.function_followee_index,
+            &self.topic_following_index,
             &self.proto.neurons,
             now_seconds,
             &mut proposal.ballots,
             proposal_criticality,
+            proposal_topic,
         );
 
         self.process_proposal(proposal_id.id);
