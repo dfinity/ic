@@ -133,10 +133,7 @@ rust_register_toolchains(
     versions = [
         "1.85.1",
         # Use the nightly version from the day before the branch.
-        # -
-        # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
-        # only back-ported to stable, we use a more recent version.
-        "nightly/2025-03-14",
+        "nightly/2025-03-08",
     ],
 )
 
