@@ -3875,19 +3875,18 @@ impl Governance {
 
                 // Supporting topic-based following with legacy (function-based) as fallback.
                 // The that end, filter out legacy followers that already set topic-based following.
-                match (topic, &follower_neuron.topic_followees) {
-                    (Some(topic), Some(topic_followees)) => {
-                        if following_type == FollowingType::FunctionBased
-                            && topic_followees
-                                .topic_id_to_followees
-                                .contains_key(&i32::from(topic))
-                        {
-                            // This follower already has a topic-based followee for this topic, so
-                            // its legacy (function-based) following should be ignored.
-                            continue;
-                        }
+                if let (Some(topic), Some(topic_followees)) =
+                    (topic, &follower_neuron.topic_followees)
+                {
+                    if following_type == FollowingType::FunctionBased
+                        && topic_followees
+                            .topic_id_to_followees
+                            .contains_key(&i32::from(topic))
+                    {
+                        // This follower already has a topic-based followee for this topic, so
+                        // its legacy (function-based) following should be ignored.
+                        continue;
                     }
-                    _ => (),
                 }
 
                 let mut follower_vote = topic
