@@ -140,6 +140,7 @@ fn heap_memory_body(mem: Mem, size: Size, src: Src) -> String {
 }
 
 type C = Criterion;
+
 fn bench(c: &mut C, mem: Mem, call: Call, op: Op, dir: Dir, size: Size, step: Step, src: Src) {
     let name = format!("wasm{mem}_{call}_{op}_{dir}_{size}_{step}_{src}");
     let throughput = throughput(size, step);
