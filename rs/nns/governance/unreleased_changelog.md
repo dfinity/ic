@@ -15,6 +15,7 @@ on the process that this file is part of, see
 ## Changed
 
 * Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
+* Increase the neurons limit to 500K now that neurons are stored in stable memory.
 
 ## Deprecated
 
