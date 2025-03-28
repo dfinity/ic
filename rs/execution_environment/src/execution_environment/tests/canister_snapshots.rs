@@ -2002,6 +2002,7 @@ fn read_canister_snapshot_metadata_succeeds() {
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -2049,6 +2050,7 @@ fn read_canister_snapshot_metadata_fails_canister_and_snapshot_must_match() {
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
@@ -2096,6 +2098,7 @@ fn read_canister_snapshot_metadata_fails_canister_and_snapshot_must_match() {
 fn read_canister_snapshot_metadata_fails_invalid_controller() {
     let own_subnet = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
         .build();
