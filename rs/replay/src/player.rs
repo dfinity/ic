@@ -1439,7 +1439,7 @@ fn get_state_hash<T>(
                 return None
             }
             Err(err) => {
-                panic!("State computation failed: {:?}", err)
+                panic!("State computation failed: {}", err)
             }
         }
         std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
