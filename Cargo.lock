@@ -8764,6 +8764,8 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
+ "strum",
+ "strum_macros",
  "tempfile",
  "wasm-encoder 0.224.0",
  "wasmparser 0.224.0",
