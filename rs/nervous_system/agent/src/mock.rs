@@ -37,6 +37,12 @@ impl MockCallCanisters {
     }
 }
 
+impl Default for MockCallCanisters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl crate::sealed::Sealed for MockCallCanisters {}
 
 impl Drop for MockCallCanisters {
