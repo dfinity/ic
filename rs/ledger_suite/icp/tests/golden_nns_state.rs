@@ -321,7 +321,7 @@ impl Setup {
         }
         self.check_ledger_metrics(expect_migration);
         let upgrade_args = BTreeMap::from([(
-            CanisterId::from_str("q3fc5-haaaa-aaaaa-aaahq-cai").unwrap(),
+            CanisterId::from_str("q4eej-kyaaa-aaaaa-aaaha-cai").unwrap(),
             2 * LARGE_ARCHIVE_CAPACITY,
         )]);
         self.upgrade_archive_canisters(&self.master_wasms.archive, true, upgrade_args);
