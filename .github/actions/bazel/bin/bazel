@@ -52,7 +52,9 @@ bazel_args=( "$@" )
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
 # Only for Linux builds since there `/cache` is mounted to host local storage.
-if [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]] && [[ "$(uname)" == "Linux" ]]; then
+# XXX: we test for Linux first, because some of our mac runners run bash 3 for which
+# bazel_args[*] might fail if the array is empty (treated as undefined)
+if [[ "$(uname)" == "Linux" ]] && [[ ! " ${bazel_args[*]} " =~ [[:space:]]--repository_cache[[:space:]] ]]; then
     log "setting default repository cache"
     bazel_args+=(--repository_cache=/cache/bazel)
 fi
