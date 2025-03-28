@@ -244,58 +244,6 @@ impl Neuron {
         std::cmp::min(vad_stake, u64::MAX as u128) as u64
     }
 
-    pub(crate) fn would_topic_follow_ballots(
-        &self,
-        topic: Topic,
-        ballots: &BTreeMap<String, Ballot>,
-    ) -> Vote {
-        // Step 1: Who are the relevant followees?
-
-        let followee_neuron_ids = self
-            .topic_followees
-            .and_then(|TopicFollowees { topic_id_to_followees }| {
-                topic_id_to_followees.get(&i32::from(topic))
-            })
-            .unwrap_or(&vec![]);
-
-        if followee_neuron_ids.is_empty() {
-            return Vote::Unspecified;
-        }
-
-        // Step 2: Count followee votes.
-
-        let mut yes: usize = 0;
-        let mut no: usize = 0;
-        for followee_neuron_id in followee_neuron_ids {
-            let Some(ballot) = ballots.get(&followee_neuron_id.to_string()) else {
-                // We are following someone who doesn't even have an empty
-                // ballot. Maybe this followee should be removed?
-                continue;
-            };
-
-            let followee_vote = Vote::from(ballot.vote);
-
-            if followee_vote == Vote::Yes {
-                yes += 1;
-            } else if followee_vote == Vote::No {
-                no += 1;
-            }
-        }
-
-        // Step 3: Use vote counts to decide which Vote option to return.
-
-        // If a majority of followees voted Yes, return Yes.
-        if yes.saturating_mul(2) > followee_neuron_ids.len() {
-            return Vote::Yes;
-        }
-        // If a majority for Yes can never be achieved, return No.
-        if no.saturating_mul(2) >= followee_neuron_ids.len() {
-            return Vote::No;
-        }
-        // Otherwise, we are still open to going either way.
-        Vote::Unspecified
-    }
-
     /// Given the specified `ballots` and `proposal_criticality`, determine how the neuron would
     /// vote on a proposal of `action` based on which neurons this neuron follows on this action
     /// (or on the default action if this neuron doesn't specify any followees for `action`).

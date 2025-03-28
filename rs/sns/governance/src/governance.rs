@@ -33,7 +33,7 @@ use crate::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees, TopicFollowees},
+            neuron::{DissolveState, Followees, FolloweesForTopic, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
@@ -42,7 +42,7 @@ use crate::{
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, Followee,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
@@ -53,7 +53,7 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
@@ -253,6 +253,141 @@ impl GovernanceProto {
             );
         }
         function_followee_index
+    }
+
+    /// This is analogous to the legacy `build_function_followee_index` function, but for topic
+    /// following.
+    pub fn build_following_index(
+        &self,
+        neurons: &BTreeMap<String, Neuron>,
+    ) -> BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>> {
+        let mut function_followee_index = BTreeMap::new();
+        for neuron in neurons.values() {
+            GovernanceProto::add_neuron_to_following_index(&mut function_followee_index, neuron);
+        }
+        function_followee_index
+    }
+
+    /// This is analogous to the legacy `add_neuron_to_function_followee_index` function, but for
+    /// topic following.
+    pub fn add_neuron_to_following_index(
+        index: &mut BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>>,
+        neuron: &Neuron,
+    ) {
+        let Some(follower_id) = &neuron.id else {
+            log!(ERROR, "Neuron {:?} does not have an ID!", neuron);
+            return;
+        };
+
+        let Some(topic_followees) = &neuron.topic_followees else {
+            return;
+        };
+
+        for (topic, FolloweesForTopic { followees, .. }) in &topic_followees.topic_id_to_followees {
+            let Ok(topic) = Topic::try_from(*topic) else {
+                log!(
+                    ERROR,
+                    "Neuron {} has followees for an invalid topic ID: {}",
+                    follower_id,
+                    topic
+                );
+                continue;
+            };
+            let topoc_index = index.entry(topic).or_default();
+
+            for Followee {
+                neuron_id: followee_id,
+                alias,
+            } in followees
+            {
+                let Some(followee_id) = followee_id else {
+                    let alias = alias
+                        .as_ref()
+                        .map(|alias| format!(" ({})", alias))
+                        .unwrap_or_default();
+                    log!(
+                        ERROR,
+                        "Neuron with ID {:?} has a followee{} with no ID!",
+                        follower_id,
+                        alias
+                    );
+                    continue;
+                };
+
+                let key = followee_id.to_string();
+                topoc_index
+                    .entry(key)
+                    .or_default()
+                    .insert(follower_id.clone());
+            }
+        }
+    }
+
+    /// This is analogous to the legacy `remove_neuron_from_function_followee_index` function, but for
+    /// topic following.
+    pub fn remove_neuron_from_following_index(
+        index: &mut BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>>,
+        neuron: &Neuron,
+    ) {
+        let Some(follower_id) = &neuron.id else {
+            log!(ERROR, "Neuron {:?} does not have an ID!", neuron);
+            return;
+        };
+
+        let Some(topic_followees) = &neuron.topic_followees else {
+            return;
+        };
+
+        for (topic, FolloweesForTopic { followees, .. }) in &topic_followees.topic_id_to_followees {
+            let Ok(topic) = Topic::try_from(*topic) else {
+                log!(
+                    ERROR,
+                    "Neuron {} has followees for an invalid topic ID: {}",
+                    follower_id,
+                    topic
+                );
+                continue;
+            };
+
+            if let Some(topoc_index) = index.get_mut(&topic) {
+                for Followee {
+                    neuron_id: followee_id,
+                    alias,
+                } in followees
+                {
+                    let Some(followee_id) = followee_id else {
+                        let alias = alias
+                            .as_ref()
+                            .map(|alias| format!(" ({})", alias))
+                            .unwrap_or_default();
+                        log!(
+                            ERROR,
+                            "Neuron with ID {:?} has a followee{} with no ID!",
+                            follower_id,
+                            alias
+                        );
+                        continue;
+                    };
+
+                    let key = followee_id.to_string();
+                    if let Some(followee_set) = topoc_index.get_mut(&key) {
+                        if !followee_set.remove(follower_id) {
+                            log!(
+                                ERROR,
+                                "Following index was missing an edge from followee with ID {:?} \
+                                 to follower with ID {:?} in topic {:?}.",
+                                followee_id,
+                                follower_id,
+                                topic,
+                            );
+                        };
+                        if followee_set.is_empty() {
+                            topoc_index.remove(&key);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Adds a neuron to the function_followee_index.
@@ -692,6 +827,16 @@ pub struct Governance {
     /// Function ID -> (followee's neuron ID) -> set of followers' neuron IDs.
     pub function_followee_index: BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
 
+    /// Cached data structure that (for each topic) maps a followee to
+    /// the set of its followers. It is the inverse of the mapping from follower
+    /// to followees that is stored in each (follower) neuron.
+    ///
+    /// This is a cached index and will be removed and recreated when the state
+    /// is saved and restored.
+    ///
+    /// Topic -> (followee's neuron ID) -> set of followers' neuron IDs.
+    pub topic_following_index: BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>>,
+
     /// Maps Principals to the Neuron IDs of all Neurons for which this principal
     /// has some permissions, i.e., all neurons that have this principal associated
     /// with a NeuronPermissionType for the Neuron.
@@ -795,6 +940,7 @@ impl Governance {
             nns_ledger,
             cmc,
             function_followee_index: BTreeMap::new(),
+            topic_following_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -1010,6 +1156,8 @@ impl Governance {
             &neuron,
         );
 
+        GovernanceProto::add_neuron_to_following_index(&mut self.topic_following_index, &neuron);
+
         self.proto.neurons.insert(neuron_id.to_string(), neuron);
 
         Ok(())
@@ -1042,6 +1190,11 @@ impl Governance {
 
         GovernanceProto::remove_neuron_from_function_followee_index(
             &mut self.function_followee_index,
+            &neuron,
+        );
+
+        GovernanceProto::remove_neuron_from_following_index(
+            &mut self.topic_following_index,
             &neuron,
         );
 
@@ -3563,88 +3716,6 @@ impl Governance {
         self.insert_proposal(proposal_num, proposal_data);
 
         Ok(proposal_id)
-    }
-
-    fn cast_vote_and_cascade_topic_following(
-        ballots: &mut BTreeMap<String, Ballot>,
-        voting_neuron_id: &NeuronId,
-        topic: Topic,
-        followed_by: &BTreeMap<String /* neuron ID */, BTreeSet<NeuronId>>,
-        neurons: &BTreeMap<String, Neuron>,
-        now_seconds: u64,
-        proposal_id: &ProposalId,
-    ) {
-        let mut induction_votes = BTreeMap::new();
-        induction_votes.insert(voting_neuron_id.to_string(), vote_of_neuron);
-
-        while !induction_votes.is_empty() {
-            let mut follower_neuron_ids = BTreeSet::new();
-
-            for (current_neuron_id, current_new_vote) in &induction_votes {
-                let Some(current_ballot) = ballots.get_mut(current_neuron_id) else {
-                    // neuron_id has no (blank) ballot, which means they
-                    // were not eligible when the proposal was first
-                    // created. This is fairly unusual, but does not
-                    // indicate a bug (therefore, no log).
-                    continue;
-                };
-
-                // Only fill in "blank" ballots. I.e. those with vote ==
-                // Unspecified. This check could just as well be done before
-                // current_neuron_id is added to induction_votes.
-                if current_ballot.vote != (Vote::Unspecified as i32) {
-                    continue;
-                }
-
-                // Fill in current_ballot.
-                if *current_new_vote == Vote::Unspecified {
-                    log!(
-                        ERROR,
-                        "current_new_vote is unspecified while trying to record (and cascade) \
-                            a vote of neuron {} on proposal {:#?}.",
-                        current_neuron_id, proposal_id.id,
-                    );
-                    continue;
-                }
-                current_ballot.vote = *current_new_vote as i32;
-                current_ballot.cast_timestamp_seconds = now_seconds;
-
-                // Take note of the followers of current_neuron_id, and add them
-                // to the next "tier" in the BFS.
-                if let Some(new_follower_neuron_ids) = followed_by.get(current_neuron_id) {
-                    follower_neuron_ids.extend(new_follower_neuron_ids.iter());
-                }
-            }
-
-            induction_votes.clear();
-            for follower_neuron_id in follower_neuron_ids {
-                let Some(follower_neuron) = neurons.get(&follower_neuron_id.to_string()) else {
-                    // This is a highly suspicious, because currently, we do not
-                    // delete neurons, which means that we have an invalid NeuronId
-                    // floating around in the system, which indicates that we have a
-                    // bug. For now, we deal with that by logging, and pretending like
-                    // we did not see follower_neuron_id.
-                    log!(
-                        ERROR,
-                        "Missing neuron {} while trying to record (and cascade) \
-                            a vote on proposal {}.",
-                        follower_neuron_id, proposal_id.id,
-                    );
-                    continue;
-                };
-
-                let follower_vote = follower_neuron.would_topic_follow_ballots(topic, ballots);
-
-                if follower_vote != Vote::Unspecified {
-                    // follower_neuron would be swayed by its followees!
-                    //
-                    // This is the other (earlier) point at which we could
-                    // consider whether a neuron is already locked in, and that
-                    // no recursion is needed.
-                    induction_votes.insert(follower_neuron_id.to_string(), follower_vote);
-                }
-            }
-        }
     }
 
     /// Registers the vote `vote_of_neuron` for the neuron `voting_neuron_id`
