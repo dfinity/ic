@@ -8,8 +8,8 @@ fn nid(n: u8) -> NeuronId {
 
 #[test]
 fn test_get_duplicate_followee_groups() {
-    // In the following test cases, the followee aliases do not actually matter, but we set them to
-    // some realistic values to make the test cases more readable.
+    // The function under test should ignore aliases and topics; vary them to check for
+    // unexpected behavior.
     let test_cases = [
         ("Trivial case.", btreeset! {}, btreemap! {}),
         (
@@ -33,7 +33,12 @@ fn test_get_duplicate_followee_groups() {
                 ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
                 ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(0), alias: None },
             },
-            btreemap! {},
+            btreemap! {
+                nid(0) => vec![
+                    ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
+                    ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(0), alias: None },
+                ]
+            },
         ),
         (
             "Duplicate neuron ID under the same topic.",
@@ -49,13 +54,13 @@ fn test_get_duplicate_followee_groups() {
             },
         ),
         (
-            "Multiple duplicates; function under test should be agnostic to the (shuffled) \
-             followee order.",
+            "Multiple duplicates with some unique followees.",
             btreeset! {
                 ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
-                ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: Some("Bob".to_string()) },
                 ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: None },
+                ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: Some("Bob".to_string()) },
                 ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: None },
+                ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(42), alias: None },
             },
             btreemap! {
                 nid(0) => vec![
@@ -67,17 +72,6 @@ fn test_get_duplicate_followee_groups() {
                     ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: Some("Bob".to_string()) },
                 ],
             },
-        ),
-        (
-            "Fixed the above configuration by making sure Alice's and Bob's neurons aren't \
-             duplicate for the same topic.",
-            btreeset! {
-                ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(0), alias: Some("Alice".to_string()) },
-                ValidatedFollowee { topic: Topic::DappCanisterManagement, neuron_id: nid(1), alias: Some("Bob".to_string()) },
-                ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(0), alias: None },
-                ValidatedFollowee { topic: Topic::CriticalDappOperations, neuron_id: nid(1), alias: None },
-            },
-            btreemap! {},
         ),
     ];
 
