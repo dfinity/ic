@@ -31,14 +31,20 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [
+    "//rs/crypto/sha2",
 ]
 
 MACRO_DEPENDENCIES = [
 ]
 
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = ["**/*tests.rs"],
+)
+
 rust_library(
     name = "agent",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = LIB_SRCS,
     crate_name = "ic_nervous_system_agent",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
@@ -48,7 +54,7 @@ rust_library(
 rust_library(
     name = "test_agent",
     testonly = True,
-    srcs = glob(["src/**/*.rs"]),
+    srcs = LIB_SRCS,
     crate_features = ["test"],
     crate_name = "ic_nervous_system_agent",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -60,6 +66,6 @@ rust_library(
 
 rust_test(
     name = "agent_test",
-    crate = ":agent",
+    srcs = glob(["src/**/*.rs"]),
     deps = DEV_DEPENDENCIES,
 )

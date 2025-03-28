@@ -34,5 +34,8 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
+[dev-dependencies]
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+
 [features]
 test = []

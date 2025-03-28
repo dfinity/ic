@@ -61,3 +61,6 @@ pub async fn get_monolithic_blob<C: CallCanisters>(
 
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests;
