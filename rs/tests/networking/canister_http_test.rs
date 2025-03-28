@@ -74,7 +74,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
             let context = "There is context to be appended in body";
             let res = proxy_canister
                 .update_(
-                    "send_request_in_paralel",
+                    "send_request",
                     candid_one::<
                         Result<RemoteHttpResponse, (RejectionCode, String)>,
                         RemoteHttpRequest,
