@@ -203,6 +203,21 @@ pub struct UpdateNodeIPv4ConfigDirectlyPayload {
     pub ipv4_config: Option<IPv4Config>,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct GetChunkRequest {
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub content_sha256: Option<Vec<u8>>,
+}
+
+/// When an entry is too large to fit into a "normal" response, the response
+/// references multiple chunks, which need to be fetched in follow-up get_chunk
+/// requests. (This is the main part of `get_chunk` responses.)
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct Chunk {
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub content: Option<Vec<u8>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
