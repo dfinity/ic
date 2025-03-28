@@ -19,11 +19,12 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method, StoredChunksReply,
-    UploadChunkReply,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash,
+    Method as Ic00Method, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkHash;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{
@@ -1979,6 +1980,68 @@ impl CanisterManager {
         match wasm_execution_mode {
             WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
             WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
+        }
+    }
+
+    pub(crate) fn read_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+        snapshot_id: SnapshotId,
+        kind: CanisterSnapshotDataKind,
+        state: &ReplicatedState,
+    ) -> Result<Vec<u8>, CanisterManagerError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
+            return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                canister_id: canister.canister_id(),
+                snapshot_id,
+            });
+        };
+        // Verify the provided `delete_snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister.canister_id() {
+            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                canister_id: canister.canister_id(),
+                snapshot_id,
+            });
+        }
+        match kind {
+            CanisterSnapshotDataKind::StableMemory { offset, size } => {
+                let stable_memory_page_map =
+                    snapshot.execution_snapshot().stable_memory.page_map.clone();
+                match CanisterSnapshot::get_memory_chunk(stable_memory_page_map, offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::MainMemory { offset, size } => {
+                let main_memory_page_map =
+                    snapshot.execution_snapshot().wasm_memory.page_map.clone();
+                match CanisterSnapshot::get_memory_chunk(main_memory_page_map, offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::WasmModule { offset, size } => {
+                match snapshot.get_wasm_module_chunk(offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::WasmChunk { hash } => {
+                let Ok(hash) = <WasmChunkHash>::try_from(hash.clone()) else {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!("Bytes {:02x?} are not a valid WasmChunkHash.", hash),
+                    });
+                };
+                let Some(chunk) = snapshot.chunk_store().get_chunk_complete(&hash) else {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!("WasmChunkHash {:02x?} not found.", hash),
+                    });
+                };
+                Ok(chunk)
+            }
         }
     }
 }

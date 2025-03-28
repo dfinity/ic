@@ -1,7 +1,7 @@
 use crate::{
-    canister_state::execution_state::Memory,
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
-    PageMap,
+    canister_state::{execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore},
+    page_map::Buffer,
+    CanisterState, NumWasmPages, PageMap,
 };
 use ic_management_canister_types_private::{Global, OnLowWasmMemoryHookStatus, SnapshotSource};
 use ic_sys::PAGE_SIZE;
@@ -455,6 +455,37 @@ impl CanisterSnapshot {
                 .num_delta_pages();
         NumBytes::from((delta_pages * PAGE_SIZE) as u64) + self.chunk_store.heap_delta()
     }
+
+    pub fn get_wasm_module_chunk(
+        &self,
+        offset: u64,
+        size: u64,
+    ) -> Result<Vec<u8>, CanisterSnapshotError> {
+        let module_bytes = self.execution_snapshot.wasm_binary.as_slice();
+        let end = u64::min(module_bytes.len() as u64, offset + size);
+        if end < offset {
+            return Err(CanisterSnapshotError::InvalidSubslice {
+                offset,
+                size,
+                actual_size: module_bytes.len() as u64,
+            });
+        }
+        Ok(module_bytes[(offset as usize)..(end as usize)].to_vec())
+    }
+
+    /// Get a user-defined chunk of the (stable/main) memory represented by `page_map`.
+    pub fn get_memory_chunk(
+        page_map: PageMap,
+        offset: u64,
+        size: u64,
+    ) -> Result<Vec<u8>, CanisterSnapshotError> {
+        let memory_buffer = Buffer::new(page_map);
+        let mut dst = vec![0; size as usize];
+        // TODO: what if the caller requests memory beyond what's valid?
+        // rn we'll return zeroes, but can we / should we truncate?
+        memory_buffer.read(&mut dst, offset as usize);
+        Ok(dst)
+    }
 }
 
 /// Errors that can occur when trying to create a `CanisterSnapshot` from a canister.
@@ -462,6 +493,12 @@ impl CanisterSnapshot {
 pub enum CanisterSnapshotError {
     ///  The canister is missing the execution state because it's empty (newly created or uninstalled).
     EmptyExecutionState(CanisterId),
+    /// The provided offset/size exceed the module's or memory's size.
+    InvalidSubslice {
+        offset: u64,
+        size: u64,
+        actual_size: u64,
+    },
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.
