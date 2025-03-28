@@ -3,6 +3,8 @@ use anyhow::{bail, Context, Result};
 use axum::{
     body::Body,
     extract::Request,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -22,6 +24,8 @@ use ic_icrc_rosetta::{
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
+use prometheus::{default_registry, Encoder, TextEncoder};
+use rosetta_core::metrics::RosettaMetrics;
 use rosetta_core::watchdog::WatchdogThread;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -520,6 +524,7 @@ async fn main() -> Result<()> {
         .route("/construction/hash", post(construction_hash))
         .route("/construction/payloads", post(construction_payloads))
         .route("/construction/parse", post(construction_parse))
+        .route("/metrics", get(metrics_handler))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())
@@ -527,6 +532,7 @@ async fn main() -> Result<()> {
         // request extensions. Note that it should be added after the
         // Trace layer.
         .layer(RequestIdLayer)
+        .layer(middleware::from_fn(metrics_middleware))
         .with_state(token_app_states.clone());
 
     let rosetta_url = format!("0.0.0.0:{}", args.get_port());
@@ -553,11 +559,13 @@ async fn main() -> Result<()> {
                     // so we skip it to avoid the watchdog thread to restart the sync thread
                     // during the initial synchronization.
                     let skip_first_hearbeat = true;
+                    let on_restart_callback: Option<Arc<dyn Fn() + Send + Sync>> =
+                        Some(Arc::new(|| {
+                            RosettaMetrics::inc_sync_thread_restarts();
+                        }));
                     let mut watchdog = WatchdogThread::new(
                         Duration::from_secs(MAX_BLOCK_SYNC_WAIT_SECS),
-                        Some(Arc::new(|| {
-                            info!("Watchdog triggered restart for a sync thread");
-                        })),
+                        on_restart_callback,
                         skip_first_hearbeat,
                         Some(span_watchdog.clone()),
                     );
@@ -606,4 +614,42 @@ async fn main() -> Result<()> {
     axum::serve(tcp_listener, app.into_make_service())
         .await
         .context("Unable to start the Rosetta server")
+}
+
+/// Middleware that times each request and records metrics.
+async fn metrics_middleware(req: Request<Body>, next: Next) -> Response {
+    // Use the request path as the endpoint label.
+    let endpoint = req.uri().path().to_owned();
+
+    // Start the timer. This returns a HistogramTimer that records the duration when dropped.
+    let timer = RosettaMetrics::start_request_duration_timer(&endpoint);
+
+    // Call the next service in the chain.
+    let response = next.run(req).await;
+
+    let status = response.status();
+
+    let status_code = status.as_str();
+    RosettaMetrics::inc_api_status_count(status_code);
+
+    // Dropping the timer here records the elapsed time.
+    drop(timer);
+    response
+}
+
+/// Handler that exposes metrics.
+async fn metrics_handler() -> impl IntoResponse {
+    let encoder = TextEncoder::new();
+    let metric_families = default_registry().gather();
+    let mut buffer = Vec::new();
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    (
+        axum::http::StatusCode::OK,
+        [(
+            axum::http::header::CONTENT_TYPE,
+            encoder.format_type().to_string(),
+        )],
+        buffer,
+    )
 }

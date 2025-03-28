@@ -9461,6 +9461,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pocket-ic",
+ "prometheus",
  "proptest 1.6.0",
  "rand 0.8.5",
  "reqwest 0.12.12",

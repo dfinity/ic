@@ -37,6 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
+    "@crate_index//:prometheus",
     "@crate_index//:proptest",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
