@@ -121,7 +121,7 @@ impl WasmChunkStore {
         if self.metadata.chunks.len() as u64 * CHUNK_SIZE >= max_size.get() {
             return Err(format!(
                 "Wasm chunk store has already reached maximum capacity of {} bytes or the maximum number of entries, {}",
-                max_size, max_size.get() / CHUNK_SIZE as u64
+                max_size, max_size.get() / CHUNK_SIZE
             ));
         }
         Ok(())
