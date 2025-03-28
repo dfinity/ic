@@ -1,5 +1,6 @@
 use super::*;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
+use assert_matches::assert_matches;
 use futures::FutureExt;
 use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
@@ -7,6 +8,7 @@ use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::PrincipalId;
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -428,4 +430,371 @@ fn test_caching_behavior_of_get_latest_version() {
     // Cache is updated
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, RegistryVersion::new(4));
+}
+
+fn registry_value(version: u64, value: &[u8]) -> RegistryValue {
+    RegistryValue {
+        value: value.to_vec(),
+        version,
+        deletion_marker: value.is_empty(),
+    }
+}
+
+fn registry_delta(key: &str, values: &[RegistryValue]) -> RegistryDelta {
+    RegistryDelta {
+        key: key.as_bytes().to_vec(),
+        values: values.to_vec(),
+    }
+}
+
+#[test]
+fn test_get_values_between() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    // Add some deltas
+    client
+        .add_deltas(vec![
+            registry_delta(
+                "common_prefix_foo",
+                &[
+                    registry_value(0, &[1, 2, 3, 4]),
+                    registry_value(1, &[4, 5, 6, 7]),
+                    registry_value(10, &[4, 5, 6, 8]),
+                    registry_value(15, &[]),
+                ],
+            ),
+            registry_delta(
+                "common_prefix_bar",
+                &[
+                    registry_value(4, &[1, 2, 3, 4]),
+                    registry_value(6, &[2, 3, 4, 5]),
+                ],
+            ),
+            registry_delta(
+                "different_prefix_foo",
+                &[
+                    registry_value(3, &[1, 2, 3, 4]),
+                    registry_value(6, &[2, 3, 4, 5]),
+                ],
+            ),
+        ])
+        .expect("Couldn't add deltas");
+
+    let changes_between = client
+        .get_effective_records_between(
+            "common_prefix",
+            RegistryVersion::new(1),
+            RegistryVersion::new(15),
+        )
+        .unwrap();
+
+    assert_eq!(changes_between.len(), 5);
+
+    let values_for_foo = changes_between
+        .into_iter()
+        .filter(|(key, _)| key.key == "common_prefix_foo")
+        .collect_vec();
+
+    assert_eq!(values_for_foo.len(), 3);
+
+    let last = values_for_foo.last().unwrap();
+
+    assert_eq!(last.0.version, 15);
+    assert_eq!(last.1 .0, None);
+}
+
+#[test]
+fn test_get_values_between_invalid_lower_bound() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    let err = client
+        .get_effective_records_between(
+            "common_prefix",
+            RegistryVersion::new(10),
+            RegistryVersion::new(15),
+        )
+        .err()
+        .expect("Should have been an 'Invalid version' error");
+
+    assert_matches!(
+        err,
+        RegistryClientError::VersionNotAvailable { version } if version.get() == 10
+    )
+}
+
+#[test]
+fn test_get_values_between_invalid_upper_bound() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "common_prefix_foo",
+            &[registry_value(12, &[1, 2, 3, 4])],
+        )])
+        .unwrap();
+
+    let err = client
+        .get_effective_records_between(
+            "common_prefix",
+            RegistryVersion::new(10),
+            RegistryVersion::new(15),
+        )
+        .err()
+        .expect("Should have been an 'Invalid version' error");
+
+    assert_matches!(
+        err,
+        RegistryClientError::VersionNotAvailable { version } if version.get() == 15
+    )
+}
+
+#[test]
+fn test_get_values_between_allow_invalid_range() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "common_prefix_foo",
+            &[registry_value(12, &[1, 2, 3, 4])],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_records_between(
+            "common_prefix",
+            RegistryVersion::new(10),
+            RegistryVersion::new(5),
+        )
+        .unwrap();
+
+    assert!(range.is_empty())
+}
+
+// This usecase tests the following scenario
+//            A    B
+//
+// +-----*----#----#-----+
+//
+//       x    y    z
+//
+// Since the period [A-B] perfectly
+// aligns with the versions `y` and
+// `z`, there are no effective versions
+// for [A-B] before `z`, meaning that
+// `x` shouldn't be in the scope
+#[test]
+fn test_get_effective_values_between_has_no_effective_versions_outside_requested_range() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_records_between("foo", RegistryVersion::new(10), RegistryVersion::new(15))
+        .unwrap();
+
+    assert_eq!(range.len(), 2);
+
+    let mut range_iter = range.iter();
+    let first = range_iter.next().unwrap();
+    assert_eq!(first.0.version, 10);
+
+    let second = range_iter.next().unwrap();
+    assert_eq!(second.0.version, 15);
+}
+
+// This usecase tests the following scenario
+//         A       B
+//
+// +-----*-|--*----#-----+
+//
+//       x    y    z
+//
+// In the range [A, B] we have changes
+// `y` and `z` but since `y` happened
+// after `A` we have to account for the
+// version `x` which was effective from
+// A-y period
+#[test]
+fn test_get_effective_values_between_has_effective_versions_outside_requested_range() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_records_between("foo", RegistryVersion::new(7), RegistryVersion::new(15))
+        .unwrap();
+
+    assert_eq!(range.len(), 3);
+
+    let mut range_iter = range.iter();
+    let first = range_iter.next().unwrap();
+    assert_eq!(first.0.version, 5);
+
+    let second = range_iter.next().unwrap();
+    assert_eq!(second.0.version, 10);
+
+    let third = range_iter.next().unwrap();
+    assert_eq!(third.0.version, 15)
+}
+
+// This usecase tests the following scenario
+//             A B
+//
+// +-----*----*|-|-*-----+
+//
+//       x    y    z
+// There are no changes to key "foo" in the
+// range [A, B] but so the effective version
+// comes from before, which is version `y`
+#[test]
+fn test_get_effective_values_between_no_effective_values_inside_range_only_before() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_records_between("foo", RegistryVersion::new(11), RegistryVersion::new(13))
+        .unwrap();
+
+    assert_eq!(range.len(), 1);
+
+    let mut range_iter = range.iter();
+    let first = range_iter.next().unwrap();
+    assert_eq!(first.0.version, 10);
+}
+
+// This usecase tests the following scenario
+//   A  B
+//
+// +-|--|*----*----*-----+
+//
+//       x    y    z
+//
+// Since the first occurence of the key "foo" is
+// present on version higher than `upper_bound`
+// there are no effective versions of this
+// key.
+#[test]
+fn test_get_effective_values_between_values_after_upper_bound() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![registry_delta(
+            "foo",
+            &[
+                registry_value(5, &[0, 1, 2, 3]),
+                registry_value(10, &[1, 2, 3, 4]),
+                registry_value(15, &[1, 2, 3, 4]),
+            ],
+        )])
+        .unwrap();
+
+    let range = client
+        .get_effective_records_between("foo", RegistryVersion::new(1), RegistryVersion::new(4))
+        .unwrap();
+
+    assert!(range.is_empty());
+}
+
+#[test]
+fn test_get_effective_values_between_multiple_keys() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![
+            registry_delta(
+                "common_prefix_foo",
+                &[
+                    registry_value(5, &[0, 1, 2, 3]),
+                    registry_value(10, &[1, 2, 3, 4]),
+                    registry_value(15, &[1, 2, 3, 4]),
+                ],
+            ),
+            registry_delta(
+                "common_prefix_bar",
+                &[
+                    registry_value(3, &[0, 1, 2, 3]),
+                    registry_value(8, &[1, 2, 3, 4]),
+                    registry_value(10, &[1, 2, 3, 4]),
+                    registry_value(18, &[1, 2, 3, 4]),
+                ],
+            ),
+            registry_delta(
+                "common_prefix_baz",
+                &[
+                    registry_value(14, &[0, 1, 2, 3]),
+                    registry_value(19, &[1, 2, 3, 4]),
+                    registry_value(22, &[1, 2, 3, 4]),
+                    registry_value(25, &[1, 2, 3, 4]),
+                ],
+            ),
+        ])
+        .unwrap();
+
+    let range = client
+        .get_effective_records_between(
+            "common_prefix",
+            RegistryVersion::new(8),
+            RegistryVersion::new(20),
+        )
+        .unwrap();
+
+    assert_eq!(range.len(), 8);
+
+    let all_foo = range
+        .iter()
+        .filter(|(key, _)| key.key == "common_prefix_foo")
+        .collect_vec();
+    assert_eq!(all_foo.len(), 3);
+    let foo_first = all_foo.first().unwrap();
+    assert_eq!(foo_first.0.version, 5);
+    let foo_last = all_foo.last().unwrap();
+    assert_eq!(foo_last.0.version, 15);
+
+    let all_bar = range
+        .iter()
+        .filter(|(key, _)| key.key == "common_prefix_bar")
+        .collect_vec();
+    assert_eq!(all_bar.len(), 3);
+    let first_bar = all_bar.first().unwrap();
+    assert_eq!(first_bar.0.version, 8);
+    let last_bar = all_bar.last().unwrap();
+    assert_eq!(last_bar.0.version, 18);
+
+    let all_baz = range
+        .iter()
+        .filter(|(key, _)| key.key == "common_prefix_baz")
+        .collect_vec();
+    assert_eq!(all_baz.len(), 2);
+    let first_baz = all_baz.first().unwrap();
+    assert_eq!(first_baz.0.version, 14);
+    let last_baz = all_baz.last().unwrap();
+    assert_eq!(last_baz.0.version, 19);
 }

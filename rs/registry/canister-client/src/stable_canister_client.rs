@@ -87,38 +87,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         Ok(result)
     }
 
-    fn get_key_family(
-        &self,
-        key_prefix: &str,
-        version: RegistryVersion,
-    ) -> Result<Vec<String>, RegistryClientError> {
-        if self.get_latest_version() < version {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
-
-        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
-
-        let mut effective_records = BTreeMap::new();
-        S::with_registry_map(|map| {
-            let version = version.get();
-            for (key, value) in map
-                .range(start_range..)
-                .filter(|(k, _)| k.version <= version)
-                .take_while(|(k, _)| k.key.starts_with(key_prefix))
-            {
-                // For each key, keep only the record values for the latest record versions. We rely upon
-                // the fact that for a fixed key, the records are sorted by version.
-                effective_records.insert(key.key, value.0);
-            }
-        });
-
-        let result = effective_records
-            .into_iter()
-            .filter_map(|(key, value)| value.is_some().then_some(key))
-            .collect();
-        Ok(result)
-    }
-
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
     }
@@ -186,6 +154,94 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             self.add_deltas(remote_deltas)?;
         }
         Ok(current_local_version)
+    }
+
+    fn get_effective_records_between(
+        &self,
+        key_prefix: &str,
+        lower_bound: RegistryVersion,
+        upper_bound: RegistryVersion,
+    ) -> Result<BTreeMap<StorableRegistryKey, StorableRegistryValue>, RegistryClientError> {
+        // Lower bound has to be within accessible range
+        if self.get_latest_version() < lower_bound {
+            return Err(RegistryClientError::VersionNotAvailable {
+                version: lower_bound,
+            });
+        }
+
+        // Upper bound has to be within accessible range
+        if self.get_latest_version() < upper_bound {
+            return Err(RegistryClientError::VersionNotAvailable {
+                version: upper_bound,
+            });
+        }
+
+        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
+        let lower_bound = lower_bound.get();
+        let upper_bound = upper_bound.get();
+
+        let mut first_effective_records = BTreeMap::new();
+
+        let mut effective_records = BTreeMap::new();
+        S::with_registry_map(|map| {
+            for (key, value) in map
+                .range(start_range.clone()..)
+                .filter(|(k, _)| k.version <= upper_bound)
+                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+            {
+                // The first change before `lower_bound` A is also
+                // effective in the period [A, B].
+                //
+                //         A           B
+                //
+                // +----*--|--*--*--*--|----+
+                //
+                //      x     y  z  h
+                // Legend:
+                // - [x,y,z,h] - change (version when the change happened)
+                // - A - `lower_bound` requested to this function
+                // - B - `upper_bound` request to this function
+                //
+                // Effective versions in range [A-B] are:
+                // - x - valid from A up to y
+                // - y - valid from y up to z
+                // - z - valid from z up to h
+                // - h - valid from h to B (and after)
+                //
+                // If there was a change exactly on A then all of the
+                // versions before wouldn't be effective.
+                //
+                //         A           B
+                //
+                // +----*--#-----*--*--|----+
+                //
+                //      x  y     z  h
+                // Legend:
+                // - [x,y,z,h] - change (version when the change happened)
+                // - A - `lower_bound` requested to this function
+                // - B - `upper_bound` request to this function
+                //
+                // Effective versions in range [A-B] are:
+                // - y - valid from A to z
+                // - z - valid from z to h
+                // - h - valid from h to B (and after)
+                if key.version <= lower_bound {
+                    // Here we keep updating the same key with the latest version.
+                    // We rely on the fact that for the same key, versions
+                    // will be sorted in an ascending order.
+                    first_effective_records.insert(key.key, (key.version, value));
+                } else {
+                    // For each key, keep only the record values for the latest record versions. We rely upon
+                    // the fact that for a fixed key, the records are sorted by version.
+                    effective_records.insert(key, value);
+                }
+            }
+            for (key, (version, value)) in first_effective_records {
+                effective_records.insert(StorableRegistryKey { key, version }, value);
+            }
+        });
+
+        Ok(effective_records)
     }
 }
 
