@@ -451,14 +451,18 @@ impl Setup {
         let (upgrade_arg, expect_large_capacity) =
             if let Some(upgrade_arg_max_capacity) = upgrade_arg_max_capacity {
                 (
-                    Encode!(&ArchiveUpgradeArgument {
+                    Encode!(&Some(ArchiveUpgradeArgument {
                         max_memory_size_bytes: Some(upgrade_arg_max_capacity)
-                    })
+                    }))
                     .expect("should encode archive upgrade args"),
                     archive_is_upgradable,
                 )
             } else {
-                (vec![], false)
+                (
+                    Encode!(&None::<ArchiveUpgradeArgument>)
+                        .expect("should encode empty archive upgrade args"),
+                    false,
+                )
             };
         let initial_capacity = self.get_remaining_capacity(archive_canister_id);
         match self
