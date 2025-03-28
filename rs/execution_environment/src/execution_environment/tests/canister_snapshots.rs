@@ -2014,6 +2014,15 @@ fn read_canister_snapshot_metadata_succeeds() {
         )
         .unwrap();
 
+    // Upload chunk.
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
@@ -2032,6 +2041,7 @@ fn read_canister_snapshot_metadata_succeeds() {
     let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
     assert_eq!(metadata.source, SnapshotSource::TakenFromCanister);
     assert_eq!(metadata.wasm_module_size, uni_canister_wasm.len() as u64);
+    assert_eq!(metadata.wasm_chunk_store.len(), 1);
 }
 
 #[test]
@@ -2111,56 +2121,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
-    println!("{:?}", error);
     assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
-}
-
-// TODO
-#[test]
-fn read_canister_snapshot_metadata_invalid_snapshot_id() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_manual_execution()
-        .with_caller(own_subnet, caller_canister)
-        .build();
-
-    // Create canister and update controllers.
-    let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
-        .unwrap();
-    let controllers = vec![caller_canister.get(), test.user_id().get()];
-    test.canister_update_controller(canister_id, controllers)
-        .unwrap();
-
-    // Create `TakeCanisterSnapshot` request with non-existent snapshot ID.
-    let snapshot_id = SnapshotId::from((canister_id, 6));
-    let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
-    // Inject a take_canister_snapshot request.
-    test.inject_call_to_ic00(
-        Method::TakeCanisterSnapshot,
-        args.encode(),
-        Cycles::new(1_000_000_000),
-    );
-    test.execute_subnet_message();
-
-    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
-    assert_matches!(response, RequestOrResponse::Response(_));
-    if let RequestOrResponse::Response(res) = response {
-        assert_eq!(res.originator, *receiver);
-        res.response_payload.assert_contains_reject(
-            RejectCode::DestinationInvalid,
-            &format!(
-                "Could not find the snapshot ID {} for canister {}.",
-                snapshot_id, canister_id
-            ),
-        );
-    }
-
-    // Verify the canister exists in the `ReplicatedState`.
-    assert!(test.state().canister_state(&canister_id).is_some());
 }
 
 /// Early warning system / stumbling block forcing the authors of changes adding
