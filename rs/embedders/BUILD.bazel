@@ -78,10 +78,12 @@ ALIASES = {}
 
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
+    "//rs/nns/governance:governance-bench-canister",
 ]
 
 ENV = {
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
+    "GOVERNANCE_BENCH_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-bench-canister)",
 }
 
 rust_library(

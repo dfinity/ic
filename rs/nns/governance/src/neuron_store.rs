@@ -1156,11 +1156,8 @@ impl NeuronStore {
         ballots: &HashMap<u64, Ballot>,
     ) -> Result<Vote, NeuronStoreError> {
         let needed_sections = NeuronSections {
-            hot_keys: false,
-            recent_ballots: false,
             followees: true,
-            known_neuron_data: false,
-            transfer: false,
+            ..NeuronSections::NONE
         };
         self.with_neuron_sections(&neuron_id, needed_sections, |neuron| {
             neuron.would_follow_ballots(topic, ballots)
