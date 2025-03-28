@@ -1,4 +1,4 @@
-load("@rules_haskell//haskell:defs.bzl", "haskell_binary", "haskell_library")
+load("defs.bzl", "haskell_binary", "haskell_library")
 
 STACK_DEPS = [
     # Keep sorted.

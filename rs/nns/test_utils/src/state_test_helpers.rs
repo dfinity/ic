@@ -50,6 +50,7 @@ use ic_nns_governance_api::pb::v1::{
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
@@ -123,6 +124,34 @@ pub fn registry_get_changes_since(
     };
 
     RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
+}
+
+pub fn registry_get_chunk(
+    state_machine: &StateMachine,
+    chunk_content_sha256: &[u8],
+) -> Result<ic_registry_canister_api::Chunk, String> {
+    let content_sha256 = Some(chunk_content_sha256.to_vec());
+    let request = GetChunkRequest { content_sha256 };
+
+    let result = state_machine
+        .execute_ingress(
+            REGISTRY_CANISTER_ID,
+            "get_chunk",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get chunk was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&result, Result<ic_registry_canister_api::Chunk, String>).unwrap()
 }
 
 /// Creates a canister with a wasm, payload, and optionally settings on a StateMachine

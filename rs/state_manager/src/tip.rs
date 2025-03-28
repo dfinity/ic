@@ -1028,6 +1028,11 @@ fn serialize_snapshot_to_tip(
             wasm_memory_size: canister_snapshot.wasm_memory().size,
             total_size: canister_snapshot.size(),
             exported_globals: canister_snapshot.exported_globals().clone(),
+            source: canister_snapshot.source(),
+            global_timer: canister_snapshot.execution_snapshot().global_timer,
+            on_low_wasm_memory_hook_status: canister_snapshot
+                .execution_snapshot()
+                .on_low_wasm_memory_hook_status,
         }
         .into(),
     )?;
