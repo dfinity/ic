@@ -45,24 +45,15 @@ fn query_metrics_are_reported() {
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
-    let output = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canister_a,
-            method_name: "composite_query".to_string(),
-            method_payload: wasm()
-                .inter_query(
-                    canister_b,
-                    call_args().other_side(wasm().reply_data(b"pong".as_ref())),
-                )
-                .build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
+    let output = test.non_replicated_query(
+        canister_a,
+        "composite_query",
+        wasm()
+            .inter_query(
+                canister_b,
+                call_args().other_side(wasm().reply_data(b"pong".as_ref())),
+            )
+            .build(),
     );
     assert_eq!(output, Ok(WasmResult::Reply(b"pong".to_vec())));
 
@@ -186,27 +177,18 @@ fn composite_query_call_with_side_effects() {
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
-    let output = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canister_a,
-            method_name: "composite_query".to_string(),
-            method_payload: wasm()
-                .stable_grow(10)
-                .inter_query(
-                    canister_b,
-                    call_args()
-                        .other_side(wasm().reply_data(b"ignore".as_ref()))
-                        .on_reply(wasm().stable_size().reply_int()),
-                )
-                .build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
+    let output = test.non_replicated_query(
+        canister_a,
+        "composite_query",
+        wasm()
+            .stable_grow(10)
+            .inter_query(
+                canister_b,
+                call_args()
+                    .other_side(wasm().reply_data(b"ignore".as_ref()))
+                    .on_reply(wasm().stable_size().reply_int()),
+            )
+            .build(),
     );
     assert_eq!(output, Ok(WasmResult::Reply(10_i32.to_le_bytes().to_vec())));
 }
@@ -222,27 +204,18 @@ fn query_methods_cannot_make_downstream_calls() {
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
-    let output = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canister_a,
-            method_name: "query".to_string(),
-            method_payload: wasm()
-                .stable_grow(10)
-                .inter_query(
-                    canister_b,
-                    call_args()
-                        .other_side(wasm().reply_data(b"ignore".as_ref()))
-                        .on_reply(wasm().stable_size().reply_int()),
-                )
-                .build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
+    let output = test.non_replicated_query(
+        canister_a,
+        "query",
+        wasm()
+            .stable_grow(10)
+            .inter_query(
+                canister_b,
+                call_args()
+                    .other_side(wasm().reply_data(b"ignore".as_ref()))
+                    .on_reply(wasm().stable_size().reply_int()),
+            )
+            .build(),
     );
     match output {
         Ok(_) => unreachable!("The query was expected to fail, but it succeeded."),
@@ -287,29 +260,20 @@ fn composite_query_callgraph_depth_is_enforced() {
     }
 
     fn test_query(
-        test: &ExecutionTest,
+        test: &mut ExecutionTest,
         canisters: &[ic_types::CanisterId],
         num_calls: usize,
     ) -> Result<WasmResult, UserError> {
-        test.query(
-            Query {
-                source: QuerySource::User {
-                    user_id: user_test_id(2),
-                    ingress_expiry: 0,
-                    nonce: None,
-                },
-                receiver: canisters[0],
-                method_name: "composite_query".to_string(),
-                method_payload: generate_composite_call_to(canisters, num_calls).build(),
-            },
-            Arc::new(test.state().clone()),
-            vec![],
+        test.non_replicated_query(
+            canisters[0],
+            "composite_query",
+            generate_composite_call_to(canisters, num_calls).build(),
         )
     }
 
     // Those should succeed
     for num_calls in 1..7 {
-        match &test_query(&test, &canisters, num_calls) {
+        match &test_query(&mut test, &canisters, num_calls) {
             Ok(_) => {}
             Err(err) => panic!(
                 "Query with depth {} failed, when it should have succeeded: {:?}",
@@ -320,7 +284,7 @@ fn composite_query_callgraph_depth_is_enforced() {
 
     // Those should fail
     for num_calls in 7..NUM_CANISTERS - 1 {
-        match test_query(&test, &canisters, num_calls) {
+        match test_query(&mut test, &canisters, num_calls) {
             Ok(_) => panic!(
                 "Call with depth {} should have failed with call graph being too large",
                 num_calls
@@ -363,19 +327,10 @@ fn composite_query_recursive_calls() {
         }
     }
 
-    test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canister,
-            method_name: "composite_query".to_string(),
-            method_payload: generate_composite_call_to(canister, NUM_CALLS).build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
+    test.non_replicated_query(
+        canister,
+        "composite_query",
+        generate_composite_call_to(canister, NUM_CALLS).build(),
     )
     .unwrap();
 }
@@ -422,19 +377,10 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
 
     // Those should succeed
     for num_calls in 1..NUM_SUCCESSFUL_QUERIES {
-        let test = test.query(
-            Query {
-                source: QuerySource::User {
-                    user_id: user_test_id(2),
-                    ingress_expiry: 0,
-                    nonce: None,
-                },
-                receiver: canisters[0],
-                method_name: "composite_query".to_string(),
-                method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-            },
-            Arc::new(test.state().clone()),
-            vec![],
+        let test = test.non_replicated_query(
+            canisters[0],
+            "composite_query",
+            generate_call_to(&canisters, num_calls as usize).build(),
         );
         match &test {
             Ok(_) => {}
@@ -445,19 +391,10 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
         }
     }
     for num_calls in NUM_SUCCESSFUL_QUERIES..NUM_CANISTERS {
-        let test = test.query(
-            Query {
-                source: QuerySource::User {
-                    user_id: user_test_id(2),
-                    ingress_expiry: 0,
-                    nonce: None,
-                },
-                receiver: canisters[0],
-                method_name: "composite_query".to_string(),
-                method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-            },
-            Arc::new(test.state().clone()),
-            vec![],
+        let test = test.non_replicated_query(
+            canisters[0],
+            "composite_query",
+            generate_call_to(&canisters, num_calls as usize).build(),
         );
         match &test {
             Ok(_) => panic!("Query with {} calls should have failed!", num_calls),
@@ -499,20 +436,7 @@ fn query_compiled_once() {
         .hypervisor
         .clear_compilation_cache_for_testing();
 
-    let result = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canister_id,
-            method_name: "query".to_string(),
-            method_payload: wasm().reply().build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    );
+    let result = test.non_replicated_query(canister_id, "query", wasm().reply().build());
     assert!(result.is_ok());
 
     let query_handler = downcast_query_handler(test.query_handler());
@@ -521,6 +445,10 @@ fn query_compiled_once() {
     // had to compile.
     assert_eq!(2, query_handler.hypervisor.compile_count());
 
+    // The more verbose approach has to be used since `test.non_replicated_query`
+    // requires a mutable reference to `test` but we take an immutable reference
+    // when assigning to `query_handler` above which needs to be used later for the
+    // last assertion of the test.
     let result = test.query(
         Query {
             source: QuerySource::User {
@@ -570,20 +498,7 @@ fn queries_to_frozen_canisters_are_rejected() {
         .unwrap();
 
     // Canister A is below its freezing threshold, so queries will be rejected.
-    let result = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(0),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canister_a,
-            method_name: "query".to_string(),
-            method_payload: wasm().reply().build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    );
+    let result = test.non_replicated_query(canister_a, "query", wasm().reply().build());
     assert_eq!(
         result,
         Err(UserError::new(
@@ -597,20 +512,7 @@ fn queries_to_frozen_canisters_are_rejected() {
 
     // Canister B has a high cycles balance that's above its freezing
     // threshold and so it can still process queries.
-    let result = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(1),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canister_b,
-            method_name: "query".to_string(),
-            method_payload: wasm().reply().build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    );
+    let result = test.non_replicated_query(canister_b, "query", wasm().reply().build());
     assert!(result.is_ok());
 }
 
@@ -991,20 +893,8 @@ fn composite_query_syscalls_from_reply_reject_callback() {
                     .on_reject(syscall.clone()),
             );
 
-            let output = test.query(
-                Query {
-                    source: QuerySource::User {
-                        user_id: user_test_id(2),
-                        ingress_expiry: 0,
-                        nonce: None,
-                    },
-                    receiver: canisters[0],
-                    method_name: "composite_query".to_string(),
-                    method_payload: canister_0.build(),
-                },
-                Arc::new(test.state().clone()),
-                vec![],
-            );
+            let output =
+                test.non_replicated_query(canisters[0], "composite_query", canister_0.build());
             match output {
                 Ok(_) => {
                     unreachable!(
@@ -1061,20 +951,7 @@ fn composite_query_state_preserved_across_sequential_calls() {
             .on_reply(generate_continuation(&canisters, 2)),
     );
 
-    let output = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canisters[0],
-            method_name: "composite_query".to_string(),
-            method_payload: payload.build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    );
+    let output = test.non_replicated_query(canisters[0], "composite_query", payload.build());
 
     // We use the global counter to count the number of composite queries we are executing (increment before each call).
     // Since we have NUM_CANISTER caniters in total, we expect to have one less calls (from the first canister to all others).
@@ -1131,20 +1008,7 @@ fn composite_query_state_preserved_across_parallel_calls() {
             ),
     );
 
-    let output = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canisters[0],
-            method_name: "composite_query".to_string(),
-            method_payload: payload.build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    );
+    let output = test.non_replicated_query(canisters[0], "composite_query", payload.build());
 
     // We use the global counter to count the number of composite queries we are executing (increment before each call).
     // Since we have NUM_CANISTER canisters in total, we expect to have one less calls (from the first canister to all others).
@@ -1202,20 +1066,7 @@ fn query_stats_are_collected() {
     );
 
     // Run query
-    let _ = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: canisters[0],
-            method_name: "composite_query".to_string(),
-            method_payload: payload.build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    );
+    let _ = test.non_replicated_query(canisters[0], "composite_query", payload.build());
 
     // The following numbers might change, e.g. if instruction costs are updated.
     // In that case, the easiest is probably to print the values and update the test.
@@ -1251,22 +1102,9 @@ fn query_stats_are_collected() {
 
 #[test]
 fn test_incorrect_query_name() {
-    let test = ExecutionTestBuilder::new().build();
-    let method = "unknown method".to_string();
-    let Err(err) = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(2),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            receiver: CanisterId::ic_00(),
-            method_name: method.clone(),
-            method_payload: vec![],
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    ) else {
+    let mut test = ExecutionTestBuilder::new().build();
+    let method = "unknown method";
+    let Err(err) = test.non_replicated_query(CanisterId::ic_00(), method, vec![]) else {
         panic!("Unexpected result.");
     };
     assert_eq!(err.code(), ErrorCode::CanisterMethodNotFound);
