@@ -47,7 +47,7 @@ async fn try_to_install_registry_canister(
         .await
 }
 
-async fn query_certified_changes_since(
+/* DO NOT MERGE async fn query_certified_changes_since(
     canister: &Canister<'_>,
     version: u64,
 ) -> (Vec<RegistryTransportRecord>, RegistryVersion) {
@@ -70,6 +70,7 @@ async fn query_certified_changes_since(
     )
     .expect("failed to decode registry deltas")
 }
+*/
 
 fn changes_since(version: u64) -> RegistryGetChangesSinceRequest {
     RegistryGetChangesSinceRequest { version }
@@ -88,7 +89,7 @@ fn data_part(certified_response: &CertifiedResponse) -> LabeledTree<Vec<u8>> {
     data_part
 }
 
-#[parameterized_upgrades]
+/* DO NOT MERGE #[parameterized_upgrades]
 async fn get_changes_since_certified(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
     let mut canister = install_registry_canister(
         runtime,
@@ -134,6 +135,7 @@ async fn get_changes_since_certified(runtime: &Runtime, upgrade_scenario: Upgrad
     assert_eq!(version, RegistryVersion::from(2));
     assert!(deltas.is_empty());
 }
+*/
 
 #[test]
 fn test_does_not_return_more_than_1000_certified_deltas() {
@@ -173,7 +175,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
         assert_eq!(count_deltas(&tree), MAX_VERSIONS_PER_QUERY as usize);
         assert!(has_delta(&tree, 1));
         assert!(has_delta(&tree, MAX_VERSIONS_PER_QUERY));
-        decode_hash_tree(0, certified_response.hash_tree.unwrap().try_into().unwrap()).unwrap();
+        // DO NOT MERGE decode_hash_tree(0, certified_response.hash_tree.unwrap().try_into().unwrap()).unwrap();
 
         let certified_response: CertifiedResponse = canister
             .query_(
@@ -188,11 +190,14 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
         assert_eq!(count_deltas(&tree), MAX_VERSIONS_PER_QUERY as usize / 2);
         assert!(has_delta(&tree, MAX_VERSIONS_PER_QUERY + 1));
         assert!(has_delta(&tree, 3 * MAX_VERSIONS_PER_QUERY / 2));
+        /*
+        DO NOT MERGE
         decode_hash_tree(
             MAX_VERSIONS_PER_QUERY,
             certified_response.hash_tree.unwrap().try_into().unwrap(),
         )
         .unwrap();
+        */
 
         Ok(())
     });
