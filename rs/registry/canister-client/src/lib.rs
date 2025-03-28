@@ -81,7 +81,7 @@ pub trait CanisterRegistryClient: Send + Sync {
         version: RegistryVersion,
     ) -> Result<Vec<String>, RegistryClientError> {
         let effective_records =
-            self.get_effective_entries_between(key_prefix, RegistryVersion::new(0), version)?;
+            self.get_effective_records_between(key_prefix, RegistryVersion::new(0), version)?;
 
         let mut effective_key_value_records = BTreeMap::new();
         for (key, value) in effective_records {
@@ -115,7 +115,7 @@ pub trait CanisterRegistryClient: Send + Sync {
     ///
     /// The returned list does not contain any duplicates. There are no
     /// guarantees wrt. the order of the contained elements.
-    fn get_effective_entries_between(
+    fn get_effective_records_between(
         &self,
         key_prefix: &str,
         lower_bound: RegistryVersion,

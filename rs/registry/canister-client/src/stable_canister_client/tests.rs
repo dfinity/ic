@@ -481,7 +481,7 @@ fn test_get_values_between() {
         .expect("Couldn't add deltas");
 
     let changes_between = client
-        .get_effective_entries_between(
+        .get_effective_records_between(
             "common_prefix",
             RegistryVersion::new(1),
             RegistryVersion::new(15),
@@ -508,7 +508,7 @@ fn test_get_values_between_invalid_lower_bound() {
     let client = client_for_tests(0, BTreeMap::new());
 
     let err = client
-        .get_effective_entries_between(
+        .get_effective_records_between(
             "common_prefix",
             RegistryVersion::new(10),
             RegistryVersion::new(15),
@@ -534,7 +534,7 @@ fn test_get_values_between_invalid_upper_bound() {
         .unwrap();
 
     let err = client
-        .get_effective_entries_between(
+        .get_effective_records_between(
             "common_prefix",
             RegistryVersion::new(10),
             RegistryVersion::new(15),
@@ -560,7 +560,7 @@ fn test_get_values_between_allow_invalid_range() {
         .unwrap();
 
     let range = client
-        .get_effective_entries_between(
+        .get_effective_records_between(
             "common_prefix",
             RegistryVersion::new(10),
             RegistryVersion::new(5),
@@ -598,7 +598,7 @@ fn test_get_effective_values_between_has_no_effective_versions_outside_requested
         .unwrap();
 
     let range = client
-        .get_effective_entries_between("foo", RegistryVersion::new(10), RegistryVersion::new(15))
+        .get_effective_records_between("foo", RegistryVersion::new(10), RegistryVersion::new(15))
         .unwrap();
 
     assert_eq!(range.len(), 2);
@@ -639,7 +639,7 @@ fn test_get_effective_values_between_has_effective_versions_outside_requested_ra
         .unwrap();
 
     let range = client
-        .get_effective_entries_between("foo", RegistryVersion::new(7), RegistryVersion::new(15))
+        .get_effective_records_between("foo", RegistryVersion::new(7), RegistryVersion::new(15))
         .unwrap();
 
     assert_eq!(range.len(), 3);
@@ -680,7 +680,7 @@ fn test_get_effective_values_between_no_effective_values_inside_range_only_befor
         .unwrap();
 
     let range = client
-        .get_effective_entries_between("foo", RegistryVersion::new(11), RegistryVersion::new(13))
+        .get_effective_records_between("foo", RegistryVersion::new(11), RegistryVersion::new(13))
         .unwrap();
 
     assert_eq!(range.len(), 1);
@@ -717,7 +717,7 @@ fn test_get_effective_values_between_values_after_upper_bound() {
         .unwrap();
 
     let range = client
-        .get_effective_entries_between("foo", RegistryVersion::new(1), RegistryVersion::new(4))
+        .get_effective_records_between("foo", RegistryVersion::new(1), RegistryVersion::new(4))
         .unwrap();
 
     assert!(range.is_empty());
@@ -759,7 +759,7 @@ fn test_get_effective_values_between_multiple_keys() {
         .unwrap();
 
     let range = client
-        .get_effective_entries_between(
+        .get_effective_records_between(
             "common_prefix",
             RegistryVersion::new(8),
             RegistryVersion::new(20),
