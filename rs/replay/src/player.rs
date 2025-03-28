@@ -112,7 +112,7 @@ pub type ReplayResult = Result<StateParams, ReplayError>;
 
 /// The main ic-replay component that sets up consensus and execution
 /// environment to replay past blocks.
-pub struct Player {
+pub(crate) struct Player {
     state_manager: Arc<StateManagerImpl>,
     message_routing: Arc<dyn MessageRouting>,
     consensus_pool: Option<ConsensusPoolImpl>,
