@@ -722,3 +722,79 @@ fn test_get_effective_values_between_values_after_upper_bound() {
 
     assert!(range.is_empty());
 }
+
+#[test]
+fn test_get_effective_values_between_multiple_keys() {
+    let client = client_for_tests(0, BTreeMap::new());
+
+    client
+        .add_deltas(vec![
+            registry_delta(
+                "common_prefix_foo",
+                &[
+                    registry_value(5, &[0, 1, 2, 3]),
+                    registry_value(10, &[1, 2, 3, 4]),
+                    registry_value(15, &[1, 2, 3, 4]),
+                ],
+            ),
+            registry_delta(
+                "common_prefix_bar",
+                &[
+                    registry_value(3, &[0, 1, 2, 3]),
+                    registry_value(8, &[1, 2, 3, 4]),
+                    registry_value(10, &[1, 2, 3, 4]),
+                    registry_value(18, &[1, 2, 3, 4]),
+                ],
+            ),
+            registry_delta(
+                "common_prefix_baz",
+                &[
+                    registry_value(14, &[0, 1, 2, 3]),
+                    registry_value(19, &[1, 2, 3, 4]),
+                    registry_value(22, &[1, 2, 3, 4]),
+                    registry_value(25, &[1, 2, 3, 4]),
+                ],
+            ),
+        ])
+        .unwrap();
+
+    let range = client
+        .get_effective_entries_between(
+            "common_prefix",
+            RegistryVersion::new(8),
+            RegistryVersion::new(20),
+        )
+        .unwrap();
+
+    assert_eq!(range.len(), 8);
+
+    let all_foo = range
+        .iter()
+        .filter(|(key, _)| key.key == "common_prefix_foo")
+        .collect_vec();
+    assert_eq!(all_foo.len(), 3);
+    let foo_first = all_foo.first().unwrap();
+    assert_eq!(foo_first.0.version, 5);
+    let foo_last = all_foo.last().unwrap();
+    assert_eq!(foo_last.0.version, 15);
+
+    let all_bar = range
+        .iter()
+        .filter(|(key, _)| key.key == "common_prefix_bar")
+        .collect_vec();
+    assert_eq!(all_bar.len(), 3);
+    let first_bar = all_bar.first().unwrap();
+    assert_eq!(first_bar.0.version, 8);
+    let last_bar = all_bar.last().unwrap();
+    assert_eq!(last_bar.0.version, 18);
+
+    let all_baz = range
+        .iter()
+        .filter(|(key, _)| key.key == "common_prefix_baz")
+        .collect_vec();
+    assert_eq!(all_baz.len(), 2);
+    let first_baz = all_baz.first().unwrap();
+    assert_eq!(first_baz.0.version, 14);
+    let last_baz = all_baz.last().unwrap();
+    assert_eq!(last_baz.0.version, 19);
+}
