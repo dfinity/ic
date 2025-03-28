@@ -89,7 +89,6 @@ system_test_nns(
         #"long_test",
         #"system_test_nightly",
         "manual",
-        "dynamic_testnet",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
