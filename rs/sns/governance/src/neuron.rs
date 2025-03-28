@@ -1,9 +1,16 @@
-use crate::pb::v1::{
-    governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action, Ballot,
-    Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-    NeuronPermissionType, Vote,
+use crate::{
+    logs::ERROR,
+    pb::v1::{
+        governance_error::ErrorType,
+        manage_neuron,
+        neuron::{DissolveState, FolloweesForTopic, TopicFollowees},
+        proposal::Action,
+        Ballot, Empty, Followee, GovernanceError, Neuron, NeuronId, NeuronPermission,
+        NeuronPermissionList, NeuronPermissionType, ProposalId, Topic, Vote,
+    },
 };
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use std::{
@@ -312,6 +319,90 @@ impl Neuron {
         }
         // If a majority for Yes can never be achieved, return No.
         if 2 * no >= followee_neuron_ids.len() {
+            return Vote::No;
+        }
+        // Otherwise, we are still open to going either way.
+        Vote::Unspecified
+    }
+
+    /// Analogous to `would_follow_ballots`, but for topic-based following.
+    pub(crate) fn would_topic_follow_ballots(
+        &self,
+        topic: Topic,
+        ballots: &BTreeMap<String, Ballot>,
+        proposal_id: &ProposalId,
+    ) -> Vote {
+        // Step 1: Who are the relevant followees?
+
+        let Some(TopicFollowees {
+            topic_id_to_followees,
+        }) = &self.topic_followees
+        else {
+            // This neuron does not follow any topics.
+            return Vote::Unspecified;
+        };
+
+        let Some(FolloweesForTopic { followees, .. }) =
+            topic_id_to_followees.get(&i32::from(topic))
+        else {
+            // This neuron does not follow on this topic.
+            return Vote::Unspecified;
+        };
+
+        if followees.is_empty() {
+            return Vote::Unspecified;
+        }
+
+        // Step 2: Count followee votes.
+
+        let mut yes: usize = 0;
+        let mut no: usize = 0;
+        for Followee { neuron_id, .. } in followees {
+            let Some(neuron_id) = neuron_id else {
+                log!(
+                    ERROR,
+                    "Followee for proposal {} does not have a neuron ID! Skipping ...",
+                    proposal_id.id,
+                );
+                continue;
+            };
+
+            let Some(ballot) = ballots.get(&neuron_id.to_string()) else {
+                log!(
+                    ERROR,
+                    "Skipping followee neuron {} without a ballot for proposal {}",
+                    neuron_id,
+                    proposal_id.id,
+                );
+                continue;
+            };
+
+            let Ok(followee_vote) = Vote::try_from(ballot.vote) else {
+                log!(
+                    ERROR,
+                    "Skipping followee neuron {} with an invalid vote {} for proposal {}",
+                    neuron_id,
+                    ballot.vote,
+                    proposal_id.id,
+                );
+                continue;
+            };
+
+            if followee_vote == Vote::Yes {
+                yes += 1;
+            } else if followee_vote == Vote::No {
+                no += 1;
+            }
+        }
+
+        // Step 3: Use vote counts to decide which Vote option to return.
+
+        // If a majority of followees voted Yes, return Yes.
+        if yes.saturating_mul(2) > followees.len() {
+            return Vote::Yes;
+        }
+        // If a majority for Yes can never be achieved, return No.
+        if no.saturating_mul(2) >= followees.len() {
             return Vote::No;
         }
         // Otherwise, we are still open to going either way.
