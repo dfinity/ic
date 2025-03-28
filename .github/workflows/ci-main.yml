@@ -103,8 +103,6 @@ jobs:
     timeout-minutes: 130
     runs-on:
       labels: macOS
-      options: >-
-        -e NODE_NAME -v /cache:/cache -v /var/tmp:/var/tmp
     # Run on protected branches, but only on public repo
     # Allow running if CI_MACOS_INTEL label is used
     if: |
