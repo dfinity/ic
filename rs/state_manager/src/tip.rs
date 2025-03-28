@@ -364,6 +364,21 @@ pub(crate) fn spawn_tip_thread(
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest");
+                            if let Some(manifest_delta) = &manifest_delta {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} incrementally from checkpoint @{}",
+                                    checkpoint_layout.height(),
+                                    manifest_delta.base_height
+                                );
+                            } else {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} from scratch",
+                                    checkpoint_layout.height()
+                                );
+                            }
+
                             tip_state.latest_checkpoint_state.has_manifest = true;
                             handle_compute_manifest_request(
                                 &mut thread_pool,
