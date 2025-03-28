@@ -46,8 +46,11 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance::canister_state::{governance_mut, set_governance_for_tests};
-use ic_nns_governance::governance::RandomnessGenerator;
+use ic_nns_governance::{
+    canister_state::{governance_mut, set_governance_for_tests},
+    pb::v1::{manage_neuron::DisburseMaturity, Account, Subaccount as GovernanceSubaccount},
+};
+use ic_nns_governance::{governance::RandomnessGenerator, pb::v1::manage_neuron::Follow};
 use ic_nns_governance::{
     governance::{
         get_node_provider_reward,
@@ -123,7 +126,10 @@ use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, ListDeployedSnsesRequest,
     ListDeployedSnsesResponse, SnsWasmError,
 };
-use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
+use icp_ledger::{
+    protobuf::AccountIdentifier as AccountIdentifierProto, AccountIdentifier, Memo, Subaccount,
+    Tokens,
+};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
@@ -3825,6 +3831,143 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             ProposalRewardStatus::Ineligible
         );
     }
+}
+
+#[tokio::test]
+async fn test_disallow_large_manage_neuron_proposals() {
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                        title: Some("An Install Code Proposal".to_string()),
+                        summary: "proposal 1".to_string(),
+                        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+                            nns_function: 42,
+                            payload: vec![1u8; 1_000_000],
+                        })),
+                        ..Default::default()
+                    }))),
+                }))),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::PreconditionFailed as i32
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(Command::DisburseMaturity(DisburseMaturity {
+                        percentage_to_disburse: 100,
+                        to_account: Some(Account {
+                            owner: None,
+                            subaccount: Some(GovernanceSubaccount {
+                                subaccount: vec![1u8; 1_000_000],
+                            }),
+                        }),
+                    })),
+                }))),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::PreconditionFailed as i32
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(Command::Disburse(Disburse {
+                        amount: Some(Amount { e8s: 1_000_000_000 }),
+                        to_account: Some(AccountIdentifierProto {
+                            hash: vec![1u8; 1_000_000],
+                        }),
+                    })),
+                }))),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::InvalidCommand as i32
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(Command::Follow(Follow {
+                        topic: Topic::Governance as i32,
+                        followees: vec![NeuronId { id: 1 }; 1000],
+                    })),
+                }))),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, error_message })
+        if error_type == ErrorType::InvalidCommand as i32
+            && error_message.contains("Too many followees")
+    );
 }
 
 #[test]
@@ -10347,7 +10490,7 @@ fn test_update_node_provider() {
 
     let np = NodeProvider {
         id: Some(controller),
-        reward_account: Some(protobuf::AccountIdentifier {
+        reward_account: Some(AccountIdentifierProto {
             hash: account.to_vec(),
         }),
     };
@@ -10356,7 +10499,7 @@ fn test_update_node_provider() {
 
     let hex = "b6a3539e69c6b75fe3c87b1ff82b1fc7f189a6113b77ba653b2e5eed67c95632";
     let new_reward_account = AccountIdentifier::from_hex(hex).unwrap();
-    let new_reward_account = protobuf::AccountIdentifier {
+    let new_reward_account = AccountIdentifierProto {
         hash: new_reward_account.to_vec(),
     };
     let update_np = UpdateNodeProvider {

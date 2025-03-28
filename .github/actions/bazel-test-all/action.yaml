@@ -6,8 +6,6 @@ inputs:
     default: 'test'
   BAZEL_TARGETS:
     required: true
-  BUILDEVENT_APIKEY:
-    required: false
   CLOUD_CREDENTIALS_CONTENT:
     required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
@@ -51,43 +49,62 @@ runs:
           mkdir -p "$(dirname "${AWS_CREDS}")"
           echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
 
-      - name: Run Bazel Test All
-        id: bazel-test-all
-        shell: bash
-        run: |
-          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
         env:
-          BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
-          BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          CI_EVENT_NAME: ${{ github.event_name }}
-          CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          run: |
 
-      - name: Export bazel build events to honeycomb
-        shell: bash
-        # only upload on success or failure but _not_ on canceled jobs
-        if: (success() || failure()) && inputs.BUILDEVENT_APIKEY != ''
-        run: |
-          if [ -f ./bazel-bep.pb ]; then
-              # avoid output unless an error occurs during bes export. This ensures
-              # only the (more relevant) output from the main bazel command is shown.
-              exportout=$(mktemp)
-              if ! BUILDEVENT_APIKEY='${{ inputs.BUILDEVENT_APIKEY }}' bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
-                echo "bes export failed:"
-                cat "$exportout"
-              fi
-              rm "$exportout"
-              echo "BEP events exported to honeycomb!"
-          fi
+            # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
+            release_build="false"
 
-      - name: Encrypt build events
-        shell: bash
-        # only upload on success or failure but _not_ on canceled jobs
-        if: (success() || failure()) && inputs.GPG_PASSPHRASE != ''
-        run: |
-          if [ -f ./bazel-bep.pb ]; then
-              gpg --symmetric --cipher-algo AES256 -o bazel-bep.pb.gpg \
-                  --passphrase '${{ inputs.GPG_PASSPHRASE }}' --batch --yes bazel-bep.pb
-              rm -f ./bazel-bep.pb
-          fi
+            # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
+            # the full build to occur (including versioning)
+            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+            for pattern in "${protected_branches[@]}"; do
+                if [[ "$BRANCH_NAME" =~ $pattern ]]; then
+                    IS_PROTECTED_BRANCH="true"
+                    break
+                fi
+            done
+
+            # if we are on a "protected" branch or targeting an rc branch we upload all artifacts and run a release build
+            # (with versioning)
+            if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
+                release_build="true"
+                RUN_ON_DIFF_ONLY="false"
+            fi
+
+            if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
+                RUN_ON_DIFF_ONLY="false"
+            fi
+
+            # Some environment variables needed by diff.sh
+            export BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
+            export BAZEL_COMMAND='${{ inputs.BAZEL_COMMAND }}'
+
+            if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+                # get bazel targets that changed within the MR
+                BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+            fi
+
+            # if bazel targets is empty we don't need to run any tests
+            if [ -z "${BAZEL_TARGETS:-}" ]; then
+                echo "No bazel targets to build"
+                exit 0
+            fi
+
+            bazel_args=( )
+
+            if [[ $release_build == "true" ]]; then
+              bazel_args+=( --config=release )
+            fi
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS "${bazel_args[@]}"

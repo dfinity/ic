@@ -9,15 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
+* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
+  removed in the future, giving clients time to migrate.
 
 ## Changed
+
+* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
 
 ## Deprecated
 
 ## Removed
-
-* Removed a migration mechanism previously used for data migrations through heartbeat.
 
 ## Fixed
 

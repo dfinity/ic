@@ -34,9 +34,10 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     page_map::{PageAllocatorRegistry, PageMapSerialization},
-    EmbedderCache, Global, Memory, PageMap,
+    EmbedderCache, Memory, PageMap,
 };
 use ic_types::CanisterId;
 

@@ -1,5 +1,5 @@
 {
-  "checksum": "4249036e98ab956f9e352645573979998592e705074d4202dd64834953f0107c",
+  "checksum": "20b0704a5807a13511ee3df0a87cca12700e295b4ee17f61396575ec2dfe27e9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11729,7 +11729,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -20996,7 +21002,7 @@
               "target": "mockall"
             },
             {
-              "id": "mockito 1.2.0",
+              "id": "mockito 1.7.0",
               "target": "mockito"
             },
             {
@@ -21042,11 +21048,6 @@
             {
               "id": "openssh-keys 0.5.0",
               "target": "openssh_keys"
-            },
-            {
-              "id": "opentelemetry 0.20.0",
-              "target": "opentelemetry",
-              "alias": "opentelemetry_0_20_0"
             },
             {
               "id": "opentelemetry 0.27.0",
@@ -31658,7 +31659,6 @@
           "common": [
             "client",
             "default",
-            "full",
             "h2",
             "http1",
             "http2",
@@ -42619,6 +42619,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -42802,7 +42808,8 @@
         ],
         "crate_features": {
           "common": [
-            "libc"
+            "libc",
+            "static"
           ],
           "selects": {}
         },
@@ -46310,14 +46317,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "mockito 1.2.0": {
+    "mockito 1.7.0": {
       "name": "mockito",
-      "version": "1.2.0",
+      "version": "1.7.0",
       "package_url": "https://github.com/lipanski/mockito",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockito/1.2.0/download",
-          "sha256": "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+          "url": "https://static.crates.io/crates/mockito/1.7.0/download",
+          "sha256": "7760e0e418d9b7e5777c0374009ca4c93861b9066f18cb334a20ce50ab63aa48"
         }
       },
       "targets": [
@@ -46343,7 +46350,8 @@
           "common": [
             "color",
             "colored",
-            "default"
+            "default",
+            "parking_lot"
           ],
           "selects": {}
         },
@@ -46354,23 +46362,43 @@
               "target": "assert_json_diff"
             },
             {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
               "id": "colored 2.0.4",
               "target": "colored"
             },
             {
-              "id": "futures 0.3.31",
-              "target": "futures"
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.5.1",
               "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.10",
+              "target": "hyper_util"
             },
             {
               "id": "log 0.4.20",
               "target": "log"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.9.0",
               "target": "rand"
             },
             {
@@ -46397,7 +46425,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.2.0"
+        "version": "1.7.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -49831,6 +49859,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -49849,6 +49883,15 @@
               "target": "vcpkg"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+            "OPENSSL_NO_VENDOR": "1",
+            "OPENSSL_STATIC": "1"
+          },
           "selects": {}
         },
         "links": "openssl"
@@ -49909,65 +49952,6 @@
         },
         "edition": "2021",
         "version": "0.18.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "opentelemetry 0.20.0": {
-      "name": "opentelemetry",
-      "version": "0.20.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry/0.20.0/download",
-          "sha256": "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "metrics",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry_api 0.20.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "opentelemetry_sdk 0.20.0",
-              "target": "opentelemetry_sdk"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.20.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -50800,22 +50784,13 @@
         "crate_features": {
           "common": [
             "async-trait",
-            "crossbeam-channel",
-            "default",
             "metrics",
-            "percent-encoding",
-            "rand",
-            "regex",
-            "trace"
+            "regex"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
-            {
-              "id": "crossbeam-channel 0.5.13",
-              "target": "crossbeam_channel"
-            },
             {
               "id": "futures-channel 0.3.31",
               "target": "futures_channel"
@@ -50839,14 +50814,6 @@
             {
               "id": "ordered-float 3.9.2",
               "target": "ordered_float"
-            },
-            {
-              "id": "percent-encoding 2.3.1",
-              "target": "percent_encoding"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
             },
             {
               "id": "regex 1.11.1",
@@ -94525,7 +94492,7 @@
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
     "mockall 0.13.0",
-    "mockito 1.2.0",
+    "mockito 1.7.0",
     "moka 0.12.8",
     "more-asserts 0.3.1",
     "nftables 0.4.1",
@@ -94537,7 +94504,6 @@
     "num_cpus 1.16.0",
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
-    "opentelemetry 0.20.0",
     "opentelemetry 0.27.0",
     "opentelemetry-otlp 0.27.0",
     "opentelemetry-prometheus 0.13.0",

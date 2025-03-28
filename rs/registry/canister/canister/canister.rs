@@ -14,7 +14,8 @@ use ic_protobuf::registry::{
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
-    AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
+    AddNodePayload, Chunk, GetChunkRequest, UpdateNodeDirectlyPayload,
+    UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -385,6 +386,16 @@ fn atomic_mutate() {
 
     let bytes = serialize_atomic_mutate_response(response_pb).expect("Error serializing response");
     reply(&bytes)
+}
+
+#[export_name = "canister_query get_chunk"]
+fn get_chunk() {
+    over(candid_one, get_chunk_);
+}
+
+#[candid_method(query, rename = "get_chunk")]
+fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
+    registry().get_chunk(request)
 }
 
 #[export_name = "canister_update revise_elected_guestos_versions"]

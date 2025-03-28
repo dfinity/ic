@@ -1,4 +1,5 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("//bazel:defs.bzl", "file_size_check")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "checksum_rule")
 load("//rs/nns:nns.bzl", NNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = "CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES")
@@ -52,6 +53,7 @@ CANISTERS = {
 
     # Node Rewards
     "node-rewards-canister.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister",
+    "node-rewards-canister-test.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister-test",
 }
 
 COMPRESSED_CANISTERS = {
@@ -61,39 +63,39 @@ COMPRESSED_CANISTERS = {
     "ledger-archive-node-canister.wasm.gz": "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
 }
 
-DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
+DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = 21
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # -- FI team --
     # The compressed version of these two canisters should be ~600kb,
     # we are setting the check to 7 to leave some space for growth
     # but enough to get an alert in case of a spike in size.
-    "ic-icrc1-ledger.wasm.gz": "7",
+    "ic-icrc1-ledger.wasm.gz": 7,
     # The size is currently at 704585 bytes.
-    "ic-icrc1-ledger-u256.wasm.gz": "8",
+    "ic-icrc1-ledger-u256.wasm.gz": 8,
     # Size when constraint addded: 841_234 bytes
-    "ledger-canister.wasm.gz": "9",
+    "ledger-canister.wasm.gz": 9,
     # Size when constraint addded: 906_940 bytes
-    "ledger-canister_notify-method.wasm.gz": "10",
+    "ledger-canister_notify-method.wasm.gz": 10,
 
     # -- XC team --
     # Size when constraint addded: 447_593 bytes
-    "ic-btc-checker.wasm.gz": "6",
+    "ic-btc-checker.wasm.gz": 6,
     # Size when constraint addded: 696_633 bytes
-    "ic-ckbtc-minter.wasm.gz": "8",
+    "ic-ckbtc-minter.wasm.gz": 8,
     # Size when constraint addded: 1_230_630 bytes
-    "ic-cketh-minter.wasm.gz": "13",
+    "ic-cketh-minter.wasm.gz": 13,
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
     # Size when constraint addded: 1_704_979 bytes
-    "ic-ledger-suite-orchestrator-canister.wasm.gz": "18",
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": 18,
 
     # -- BN team --
     # Size when constraint addded: 540_349 bytes
-    "rate-limit-canister.wasm.gz": "7",
+    "rate-limit-canister.wasm.gz": 7,
     # Size when constraint addded: 452_227 bytes
-    "salt-sharing-canister.wasm.gz": "6",
+    "salt-sharing-canister.wasm.gz": 6,
 }
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES)
@@ -101,17 +103,12 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTER_NAME_TO_MAX_COMPRESSE
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES)
 
 [
-    sh_test(
-        name = name + "_compressed_size_test",
-        srcs = ["file_size_test.sh"],
-        data = [name],
-        env = {
-            "FILE": "$(rootpath " + name + ")",
-            "MAX_SIZE": CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.get(
-                name,
-                DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
-            ) + "0" * 5,
-        },
+    file_size_check(
+        name = name,
+        max_file_size = CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.get(
+            name,
+            DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
+        ) * 100000,
     )
     for (name, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
 ]
