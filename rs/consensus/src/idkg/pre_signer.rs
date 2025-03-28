@@ -1,34 +1,44 @@
 //! The pre signature process manager
 
-use crate::idkg::complaints::IDkgTranscriptLoader;
-use crate::idkg::metrics::{timed_call, IDkgPayloadMetrics, IDkgPreSignerMetrics};
-use crate::idkg::utils::{load_transcripts, transcript_op_summary, IDkgBlockReaderImpl};
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::RoundRobin;
-use ic_interfaces::consensus_pool::ConsensusBlockCache;
-use ic_interfaces::crypto::{ErrorReproducibility, IDkgProtocol};
-use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
+use crate::idkg::{
+    complaints::IDkgTranscriptLoader,
+    metrics::{timed_call, IDkgPayloadMetrics, IDkgPreSignerMetrics},
+    utils::{load_transcripts, transcript_op_summary, update_purge_height, IDkgBlockReaderImpl},
+};
+use ic_consensus_utils::{crypto::ConsensusCrypto, RoundRobin};
+use ic_interfaces::{
+    consensus_pool::ConsensusBlockCache,
+    crypto::{ErrorReproducibility, IDkgProtocol},
+    idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
+};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::IDkgMessageId;
-use ic_types::consensus::idkg::{
-    dealing_prefix, dealing_support_prefix, IDkgBlockReader, IDkgMessage, IDkgStats,
-    IDkgTranscriptParamsRef,
+use ic_types::{
+    artifact::IDkgMessageId,
+    consensus::idkg::{
+        dealing_prefix, dealing_support_prefix, IDkgBlockReader, IDkgMessage, IDkgStats,
+        IDkgTranscriptParamsRef,
+    },
+    crypto::{
+        canister_threshold_sig::{
+            error::IDkgCreateDealingError,
+            idkg::{
+                BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgDealingSupport,
+                IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+                SignedIDkgDealing,
+            },
+        },
+        CryptoHashOf,
+    },
+    signature::BasicSignatureBatch,
+    Height, NodeId,
 };
-use ic_types::crypto::canister_threshold_sig::error::IDkgCreateDealingError;
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgDealingSupport, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
+use std::{
+    cell::RefCell,
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    fmt::{self, Debug, Formatter},
+    sync::Arc,
 };
-use ic_types::crypto::CryptoHashOf;
-use ic_types::signature::BasicSignatureBatch;
-use ic_types::{Height, NodeId};
-use std::cell::RefCell;
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
-use std::fmt::{self, Debug, Formatter};
-use std::sync::Arc;
-
-use super::utils::update_purge_height;
 
 pub(crate) trait IDkgPreSigner: Send {
     /// The on_state_change() called from the main IDKG path.
@@ -1346,8 +1356,7 @@ impl TranscriptState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::test_utils::*;
-    use crate::idkg::utils::algorithm_for_key_id;
+    use crate::idkg::{test_utils::*, utils::algorithm_for_key_id};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -1357,13 +1366,13 @@ mod tests {
     use ic_test_utilities_consensus::IDkgStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
-    use ic_types::consensus::idkg::IDkgObject;
-    use ic_types::crypto::{BasicSig, BasicSigOf, CryptoHash};
-    use ic_types::time::UNIX_EPOCH;
-    use ic_types::{Height, RegistryVersion};
-    use std::collections::HashSet;
-    use std::ops::Deref;
+    use ic_types::{
+        consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject},
+        crypto::{BasicSig, BasicSigOf, CryptoHash},
+        time::UNIX_EPOCH,
+        Height, RegistryVersion,
+    };
+    use std::{collections::HashSet, ops::Deref};
 
     // Tests the Action logic
     #[test]

@@ -9,6 +9,7 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/limits",
+    "//rs/nervous_system/chunks",  # TODO(NNS1-3682): Delete.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
@@ -120,6 +121,7 @@ DEV_DEPENDENCIES = [
     "//rs/nervous_system/common/test_utils",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
+    "//rs/registry/canister/api",
     "//rs/test_utilities/metrics",
     "//rs/types/types_test_utils",
     "@crate_index//:ic-cbor",

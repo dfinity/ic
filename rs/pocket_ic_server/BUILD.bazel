@@ -222,6 +222,7 @@ rust_test(
     ],
     data = [
         ":pocket-ic-server",
+        "//hs/spec_compliance:ic-ref-test",
         "//rs/tests/httpbin-rs:httpbin",
         "//rs/tests/research:ic-hs",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -230,6 +231,7 @@ rust_test(
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
+        "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     tags = [

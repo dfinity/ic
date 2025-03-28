@@ -37,12 +37,11 @@ use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use tracing::{debug, error, warn};
 
-use dfn_candid::CandidOne;
 use ic_ledger_canister_blocks_synchronizer::{
     blocks::{Blocks, RosettaBlocksMode},
     canister_access::CanisterAccess,
     certification::VerificationInfo,
-    ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics},
+    ledger_blocks_sync::LedgerBlocksSynchronizer,
 };
 use ic_nns_governance_api::pb::v1::{
     manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo,
@@ -53,7 +52,6 @@ use ic_types::{
     CanisterId,
 };
 use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
-use on_wire::{FromWire, IntoWire};
 
 use crate::{
     convert,
@@ -81,22 +79,6 @@ use self::{
     handle_list_neurons::handle_list_neurons, list_neurons_response::ListNeuronsResponse,
     proposal_info_response::ProposalInfoResponse,
 };
-
-struct LedgerBlocksSynchronizerMetricsImpl {}
-
-impl LedgerBlocksSynchronizerMetrics for LedgerBlocksSynchronizerMetricsImpl {
-    fn set_target_height(&self, height: u64) {
-        crate::rosetta_server::TARGET_HEIGHT.set(height as i64);
-    }
-
-    fn set_synced_height(&self, height: u64) {
-        crate::rosetta_server::SYNCED_HEIGHT.set(height as i64);
-    }
-
-    fn set_verified_height(&self, height: u64) {
-        crate::rosetta_server::VERIFIED_HEIGHT.set(height as i64);
-    }
-}
 
 #[async_trait]
 pub trait LedgerAccess {
@@ -192,7 +174,6 @@ impl LedgerClient {
             store_location,
             store_max_blocks,
             verification_info,
-            Box::new(LedgerBlocksSynchronizerMetricsImpl {}),
             enable_rosetta_blocks,
         )
         .await?;
@@ -213,8 +194,7 @@ impl LedgerClient {
         token_symbol: &str,
         canister_access: &CanisterAccess,
     ) -> Result<(), ApiError> {
-        let arg = CandidOne(())
-            .into_bytes()
+        let arg = Encode!(&())
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
         let symbol_res: Result<Symbol, String> = canister_access
@@ -224,7 +204,7 @@ impl LedgerClient {
             .call()
             .await
             .map_err(|e| format!("{}", e))
-            .and_then(|bytes| CandidOne::from_bytes(bytes).map(|c| c.0));
+            .and_then(|bytes| Decode!(&bytes, Symbol).map_err(|e| e.to_string()));
 
         match symbol_res {
             Ok(Symbol { symbol }) => {
@@ -336,8 +316,7 @@ impl LedgerAccess for LedgerClient {
         }
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
-        let arg = CandidOne(proposal_id)
-            .into_bytes()
+        let arg = Encode!(&proposal_id)
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
         let bytes = agent
             .query(&self.governance_canister_id.get().0, "get_proposal_info")
@@ -422,8 +401,7 @@ impl LedgerAccess for LedgerClient {
 
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
-        let arg = CandidOne(acc_id)
-            .into_bytes()
+        let arg = Encode!(&acc_id)
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
         let bytes = if verified {
             agent
@@ -446,7 +424,7 @@ impl LedgerAccess for LedgerClient {
         }
         .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
         let ninfo: Result<Result<NeuronInfo, GovernanceError>, _> =
-            CandidOne::from_bytes(bytes).map(|c| c.0);
+            Decode!(&bytes, Result<NeuronInfo, GovernanceError>);
         let ninfo = ninfo.map_err(|e| {
             ApiError::internal_error(format!(
                 "Deserialization of get_neuron_info response failed: {:?}",
@@ -471,8 +449,7 @@ impl LedgerAccess for LedgerClient {
 
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError> {
         let agent = &self.canister_access.as_ref().unwrap().agent;
-        let arg = CandidOne(TransferFeeArgs {})
-            .into_bytes()
+        let arg = Encode!(&TransferFeeArgs {})
             .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
 
         let res = agent
@@ -500,7 +477,7 @@ impl LedgerAccess for LedgerClient {
                     transfer_fee: DEFAULT_TRANSFER_FEE,
                 })
             }
-            Ok(bytes) => CandidOne::from_bytes(bytes).map(|c| c.0).map_err(|e| {
+            Ok(bytes) => Decode!(&bytes, TransferFee).map_err(|e| {
                 ApiError::internal_error(format!("Error querying transfer_fee: {}", e))
             }),
         }
