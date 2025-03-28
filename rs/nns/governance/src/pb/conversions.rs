@@ -2675,11 +2675,6 @@ impl From<pb_api::Governance> for pb::Governance {
                 .maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons: item.spawning_neurons,
             making_sns_proposal: item.making_sns_proposal.map(|x| x.into()),
-            topic_followee_index: item
-                .topic_followee_index
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
             // This is not intended to be initialized from outside of canister.
@@ -2981,48 +2976,6 @@ impl From<pb_api::governance::MakingSnsProposal> for pb::governance::MakingSnsPr
             proposer_id: item.proposer_id,
             caller: item.caller,
             proposal: item.proposal.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::governance::FollowersMap> for pb_api::governance::FollowersMap {
-    fn from(item: pb::governance::FollowersMap) -> Self {
-        Self {
-            followers_map: item
-                .followers_map
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-impl From<pb_api::governance::FollowersMap> for pb::governance::FollowersMap {
-    fn from(item: pb_api::governance::FollowersMap) -> Self {
-        Self {
-            followers_map: item
-                .followers_map
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-
-impl From<pb::governance::followers_map::Followers>
-    for pb_api::governance::followers_map::Followers
-{
-    fn from(item: pb::governance::followers_map::Followers) -> Self {
-        Self {
-            followers: item.followers,
-        }
-    }
-}
-impl From<pb_api::governance::followers_map::Followers>
-    for pb::governance::followers_map::Followers
-{
-    fn from(item: pb_api::governance::followers_map::Followers) -> Self {
-        Self {
-            followers: item.followers,
         }
     }
 }

@@ -14,7 +14,6 @@ use crate::{
     temporarily_disable_migrate_active_neurons_to_stable_memory,
     temporarily_enable_allow_active_neurons_in_stable_memory,
     temporarily_enable_migrate_active_neurons_to_stable_memory,
-    temporarily_enable_stable_memory_following_index,
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
 use ic_nervous_system_common::E8;
@@ -331,7 +330,6 @@ fn with_neuron_mut_main_section_maximum_stable() -> BenchResult {
 #[bench(raw)]
 fn update_recent_ballots_stable_memory() -> BenchResult {
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);

@@ -278,16 +278,6 @@ type Followees = record {
   followees : vec NeuronId;
 };
 
-type Followers = record {
-  followers : vec NeuronId;
-};
-
-type FollowersMap = record {
-  followers_map : vec record {
-  nat64;
-  Followers;
-} };
-
 type GetNeuronsFundAuditInfoRequest = record {
   nns_proposal_id : opt ProposalId;
 };
@@ -316,7 +306,6 @@ type Governance = record {
   latest_reward_event : opt RewardEvent;
   to_claim_transfers : vec NeuronStakeTransfer;
   short_voting_period_seconds : nat64;
-  topic_followee_index : vec record { int32; FollowersMap };
   proposals : vec record { nat64; ProposalData };
   xdr_conversion_rate : opt XdrConversionRate;
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };

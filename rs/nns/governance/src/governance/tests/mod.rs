@@ -2,11 +2,7 @@ use super::*;
 use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{
-        governance::{followers_map::Followers, FollowersMap},
-        neuron::DissolveState,
-        Neuron as NeuronProto,
-    },
+    pb::v1::{neuron::DissolveState, Neuron as NeuronProto},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
@@ -1155,7 +1151,7 @@ fn test_pre_and_post_upgrade_first_time() {
     };
     let neurons = btreemap! { 1 => neuron1 };
 
-    // This simulates the state of heap on first post_upgrade (empty topic_followee_index)
+    // This simulates the state of heap on first post_upgrade.
     let governance_proto = GovernanceProto {
         neurons,
         ..Default::default()
@@ -1163,7 +1159,6 @@ fn test_pre_and_post_upgrade_first_time() {
 
     // Precondition
     assert_eq!(governance_proto.neurons.len(), 1);
-    assert_eq!(governance_proto.topic_followee_index.len(), 0);
 
     // Then Governance is instantiated during upgrade with proto
     let mut governance = Governance::new(
@@ -1179,20 +1174,7 @@ fn test_pre_and_post_upgrade_first_time() {
 
     assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
-    let mut extracted_proto = governance.take_heap_proto();
-
-    // topic_followee_index should have been populated
-    assert_eq!(extracted_proto.topic_followee_index.len(), 1);
-
-    // We now modify it so that we can be assured that it is not rebuilding on the next post_upgrade
-    extracted_proto.topic_followee_index.insert(
-        4,
-        FollowersMap {
-            followers_map: hashmap! {5 => Followers { followers: vec![NeuronId { id : 6}]}},
-        },
-    );
-
-    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
+    let extracted_proto = governance.take_heap_proto();
 
     // We now simulate the post_upgrade
     let mut governance = Governance::new_restored(
@@ -1206,7 +1188,6 @@ fn test_pre_and_post_upgrade_first_time() {
     assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
-    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
     assert_eq!(extracted_proto.rng_seed, Some(vec![12; 32]));
 }
 
