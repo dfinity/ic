@@ -2045,7 +2045,7 @@ fn read_canister_snapshot_metadata_succeeds() {
         .snapshot_id();
 
     // Get the metadata
-    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id.to_vec());
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
     let WasmResult::Reply(bytes) = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap()
@@ -2100,14 +2100,14 @@ fn read_canister_snapshot_metadata_fails_canister_and_snapshot_must_match() {
         .snapshot_id();
 
     // Try to access metadata via the wrong canister id
-    let args = ReadCanisterSnapshotMetadataArgs::new(other_canister_id, snapshot_id.to_vec());
+    let args = ReadCanisterSnapshotMetadataArgs::new(other_canister_id, snapshot_id);
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
 
     // Try to access metadata via a bad snapshot id
-    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, vec![42; 37]);
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, (canister_id, 42).into());
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
@@ -2140,7 +2140,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
 
     // Non-controller user tries to get metadata
     test.set_user_id(user_test_id(42));
-    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id.to_vec());
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
     let error = test
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();

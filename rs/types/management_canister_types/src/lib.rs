@@ -3750,10 +3750,10 @@ pub struct ReadCanisterSnapshotMetadataArgs {
 }
 
 impl ReadCanisterSnapshotMetadataArgs {
-    pub fn new(canister_id: CanisterId, snapshot_id: Vec<u8>) -> Self {
+    pub fn new(canister_id: CanisterId, snapshot_id: SnapshotId) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
         }
     }
     pub fn get_canister_id(&self) -> CanisterId {
@@ -3986,12 +3986,12 @@ impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
 impl ReadCanisterSnapshotDataArgs {
     pub fn new(
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
             kind,
         }
     }
