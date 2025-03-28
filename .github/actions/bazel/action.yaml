@@ -75,7 +75,4 @@ runs:
       shell: bash
       if: always()
       run: |
-        echo "Data usage under /tmp"
-        sudo du -sh /tmp
-
         rm -rf '${{ steps.metrics-tmpdir.outputs.dir }}'
