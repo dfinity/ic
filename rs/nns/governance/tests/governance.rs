@@ -8891,6 +8891,12 @@ fn test_list_proposals() {
                     *x,
                     ProposalData {
                         id: Some(ProposalId { id: *x }),
+                        proposal: Some(Proposal {
+                            title: Some("Foo".to_string()),
+                            summary: "A great summary, the best".to_string(),
+                            url: "".to_string(),
+                            action: None,
+                        }),
                         ..Default::default()
                     },
                 )
@@ -14581,6 +14587,8 @@ async fn distribute_rewards_test() {
                         (n.id.as_ref().unwrap().id, ballot)
                     })
                     .collect(),
+                decided_timestamp_seconds: now - 100,
+                executed_timestamp_seconds: now - 99,
                 ..Default::default()
             };
 
