@@ -12641,6 +12641,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "thiserror 2.0.11",
  "tokio",
  "tokio-test",
 ]
