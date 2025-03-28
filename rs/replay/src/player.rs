@@ -82,6 +82,9 @@ use tower::ServiceExt;
 
 // Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
+// The backoff duration of computing the hash of a state.
+const STATE_HASH_BACKOFF_DURATION: Duration = Duration::from_secs(5);
+const STATE_HASH_MAX_TRIES: usize = 120;
 
 /// Represents the height, hash and registry version of the last execution state
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -1404,17 +1407,30 @@ fn setup_registry(
     registry
 }
 
-// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-// or when transient error persists `None` is returned.
+/// Returns the state hash for the given height once it is computed. For non-checkpoints heights
+/// or when transient error persists [`None`] is returned.
 fn get_state_hash<T>(
     state_manager: &dyn StateManager<State = T>,
     height: Height,
 ) -> Option<CryptoHashOfState> {
-    for _ in 0..120 {
+    let start = std::time::Instant::now();
+    for _ in 0..STATE_HASH_MAX_TRIES {
         match state_manager.get_state_hash_at(height) {
-            Ok(hash) => return Some(hash),
+            Ok(hash) => {
+                println!(
+                    "State hash computed after {} seconds.",
+                    std::time::Instant::now()
+                        .duration_since(start)
+                        .as_secs_f32()
+                );
+                return Some(hash);
+            }
             Err(StateHashError::Transient(err)) => {
-                println!("Waiting for state hash: {:?}", err);
+                println!(
+                    "Waiting for state hash: {}. Retrying in {} seconds.",
+                    err,
+                    STATE_HASH_BACKOFF_DURATION.as_secs_f32()
+                );
             }
             // This only happens for partially certified heights.
             Err(StateHashError::Permanent(PermanentStateHashError::StateNotFullyCertified(h)))
@@ -1426,7 +1442,7 @@ fn get_state_hash<T>(
                 panic!("State computation failed: {:?}", err)
             }
         }
-        std::thread::sleep(WAIT_DURATION);
+        std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
     }
     None
 }
