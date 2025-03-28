@@ -3,7 +3,7 @@ use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::Tokens;
-use ic_nns_constants::{NNS_UI_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
+use ic_nns_constants::SUBNET_RENTAL_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNodeVm,
@@ -135,7 +135,11 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step
     // it can't be installed yet since we need to get the ckETH ledger canister ID first
-    let nns_dapp_canister_id = NNS_UI_CANISTER_ID.get().0;
+    let nns_agent = nns_node.build_default_agent();
+    let nns_dapp_canister_id =
+        block_on(
+            async move { create_canister(&nns_agent, nns_node.effective_canister_id()).await },
+        );
 
     // deploy the Subnet Rental Canister
     let nns_node = topology.root_subnet().nodes().next().unwrap();
