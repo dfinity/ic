@@ -4323,6 +4323,7 @@ impl ClaimSwapNeuronsError {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     Debug,

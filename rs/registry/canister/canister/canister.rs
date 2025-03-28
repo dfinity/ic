@@ -14,7 +14,8 @@ use ic_protobuf::registry::{
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
-    AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
+    AddNodePayload, Chunk, GetChunkRequest, UpdateNodeDirectlyPayload,
+    UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -73,9 +74,8 @@ use registry_canister::{
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{
-        ApiBoundaryNodeIdRecord, Chunk, GetApiBoundaryNodeIdsRequest, GetChunkRequest,
-        GetSubnetForCanisterRequest, NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage,
-        SubnetForCanister,
+        ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, GetSubnetForCanisterRequest,
+        NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
     },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},

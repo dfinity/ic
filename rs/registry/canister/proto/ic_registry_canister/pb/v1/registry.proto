@@ -106,17 +106,6 @@ message SubnetForCanister {
     ic_base_types.pb.v1.PrincipalId subnet_id = 1;
 }
 
-message GetChunkRequest {
-  optional bytes content_sha256 = 1;
-}
-
-// When an entry is too large to fit into a "normal" response, the response
-// references multiple chunks, which need to be fetched in follow-up get_chunk
-// requests. (This is the main part of `get_chunk` responses.)
-message Chunk {
-  optional bytes content = 1;
-}
-
 // API boundary nodes IDs request payload.
 message GetApiBoundaryNodeIdsRequest {
 

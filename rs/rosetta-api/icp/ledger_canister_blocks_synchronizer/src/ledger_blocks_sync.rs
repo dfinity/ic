@@ -18,6 +18,7 @@ use crate::blocks::{Blocks, HashedBlock};
 use crate::blocks_access::BlocksAccess;
 use crate::certification::{verify_block_hash, VerificationInfo};
 use crate::errors::Error;
+use rosetta_core::metrics::RosettaMetrics;
 
 // If pruning is enabled, instead of pruning after each new block
 // we'll wait for PRUNE_DELAY blocks to accumulate and prune them in one go
@@ -37,14 +38,6 @@ struct BlockWithIndex {
     index: BlockIndex,
 }
 
-/// The LedgerBlocksSynchronizer will use this to output the metrics while
-/// synchronizing with the Ledger
-pub trait LedgerBlocksSynchronizerMetrics {
-    fn set_target_height(&self, height: u64);
-    fn set_synced_height(&self, height: u64);
-    fn set_verified_height(&self, height: u64);
-}
-
 /// Downloads the blocks of the Ledger to either an in-memory store or to
 /// a local sqlite store
 pub struct LedgerBlocksSynchronizer<B>
@@ -53,10 +46,8 @@ where
 {
     pub blockchain: RwLock<Blocks>,
     blocks_access: Option<Arc<B>>,
-    // TODO: move store_max_blocks in sync or move up_to_block here
     store_max_blocks: Option<u64>,
     verification_info: Option<VerificationInfo>,
-    metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
 }
 
 impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
@@ -65,7 +56,6 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_location: Option<&std::path::Path>,
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
-        metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
         enable_rosetta_blocks: bool,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let mut blocks = match store_location {
@@ -100,10 +90,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         }
 
         if let Ok(x) = last_block {
-            metrics.set_synced_height(x.index);
+            RosettaMetrics::set_synced_height(x.index);
         }
         if let Ok(x) = blocks.get_latest_verified_hashed_block() {
-            metrics.set_verified_height(x.index);
+            RosettaMetrics::set_verified_height(x.index);
         }
 
         blocks.try_prune(&store_max_blocks, PRUNE_DELAY)?;
@@ -113,7 +103,6 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             blocks_access,
             store_max_blocks,
             verification_info,
-            metrics,
         })
     }
 
@@ -276,7 +265,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 "Received tip_index == u64::MAX".to_string(),
             ));
         }
-        self.metrics.set_target_height(tip.index);
+        RosettaMetrics::set_target_height(tip.index);
 
         let mut blockchain = self.blockchain.write().await;
 
@@ -382,8 +371,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     .await
                     .map_err(Error::InternalError);
                 if batch.is_ok() || retry == MAX_RETRY {
+                    RosettaMetrics::add_blocks_fetched(batch.as_ref().unwrap().len() as u64);
                     break batch;
                 }
+                RosettaMetrics::inc_fetch_retries();
                 retry += 1;
             }
             .map_err(|e| {
@@ -420,7 +411,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 block_batch.push(hb);
                 i += 1;
             }
-            self.metrics.set_synced_height(i - 1);
+            RosettaMetrics::set_synced_height(i - 1);
             if (i - range.start) % DATABASE_WRITE_BLOCKS_BATCH_SIZE == 0 {
                 blockchain.push_batch(block_batch)?;
                 if print_progress {
@@ -432,7 +423,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         blockchain.push_batch(block_batch)?;
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
         blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
-        self.metrics.set_verified_height(range.end - 1);
+        RosettaMetrics::set_verified_height(range.end - 1);
         Ok(())
     }
 }
@@ -456,16 +447,6 @@ mod test {
 
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
-
-    use super::LedgerBlocksSynchronizerMetrics;
-
-    struct NopMetrics {}
-
-    impl LedgerBlocksSynchronizerMetrics for NopMetrics {
-        fn set_target_height(&self, _height: u64) {}
-        fn set_synced_height(&self, _height: u64) {}
-        fn set_verified_height(&self, _height: u64) {}
-    }
 
     struct RangeOfBlocks {
         pub blocks: Vec<EncodedBlock>,
@@ -513,7 +494,6 @@ mod test {
             /* store_location = */ None,
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
-            Box::new(NopMetrics {}),
             false,
         )
         .await

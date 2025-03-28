@@ -6,9 +6,9 @@ use ic_nns_test_utils::{
         registry_get_chunk, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
+use ic_registry_canister_api::Chunk;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use registry_canister::pb::v1::Chunk;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]

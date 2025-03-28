@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/base_types",
+    "//rs/utils",
     "@crate_index//:candid",
     "@crate_index//:serde",
     "@crate_index//:thiserror",

@@ -1797,7 +1797,6 @@ impl CanisterManager {
         system_state
             .certified_data
             .clone_from(snapshot.certified_data());
-
         let wasm_execution_mode = new_execution_state
             .as_ref()
             .map_or(WasmExecutionMode::Wasm32, |exec_state| {

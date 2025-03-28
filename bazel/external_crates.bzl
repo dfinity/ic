@@ -191,6 +191,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "actix-web": crate.spec(
                 version = "^4.9.0",
             ),
+            "actix-web-prom": crate.spec(
+                version = "0.9.0",
+            ),
             "addr": crate.spec(
                 version = "^0.15.6",
                 default_features = False,
