@@ -64,6 +64,10 @@ pub fn swap_participant_secret_keys(number_of_participants: usize) -> Vec<Secret
         .collect()
 }
 
+/// Create a new agent with the given secret key and network descriptor.
+///
+/// "Ephemeral" agents are used for testing purposes and do not necessarily have a DFX identity
+/// associated with them.
 pub async fn build_ephemeral_agent(
     secret_key: SecretKey,
     network_descriptor: &NetworkDescriptor,

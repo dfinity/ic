@@ -44,10 +44,10 @@ pub async fn bootstrap_nns(
     )
     .await;
 
-    if !canisters_installed.iter().any(|exists| *exists) {
+    if !canisters_installed.iter().any(|installed| *installed) {
         // TODO @rvem: at some point in the future we might want to use
         // non-default 'neurons_fund_hotkeys' to provide
-        // neuron hotkeys for user-provided indentities.
+        // neuron hotkeys for user-provided identities.
         let mut nns_installer = NnsInstaller::default();
         nns_installer.with_current_nns_canister_versions();
         nns_installer.with_test_governance_canister();
