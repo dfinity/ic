@@ -54,7 +54,8 @@ jobs:
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+        --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G
+        -v /cache:/cache
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -118,7 +119,8 @@ jobs:
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+        --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G
+        -v /cache:/cache
     timeout-minutes: 150
     #if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     # Disabling until we have data confirming stability of non-hourly system tests
