@@ -4561,10 +4561,6 @@ impl Governance {
                 )
             })?;
 
-        println!(
-            "{}INFO: Committing new NetworkEconomics:\n{:#?}",
-            LOG_PREFIX, new_network_economics,
-        );
         self.heap_data.economics = Some(new_network_economics);
         Ok(())
     }
