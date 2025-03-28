@@ -28,7 +28,7 @@ use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
-use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
+use ic_logger::{info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -611,7 +611,7 @@ impl Player {
             // We first check if `height` was executed. Otherwise the state manager
             // would return a permanent error on a too big height.
             if self.state_manager.latest_state_height() >= height {
-                if let Some(hash) = get_state_hash(&*self.state_manager, height) {
+                if let Some(hash) = self.get_state_hash(height) {
                     println!("Latest checkpoint at height: {}", height);
                     println!("Latest state hash: {}", hex::encode(hash.get().0));
                 };
@@ -1203,7 +1203,8 @@ impl Player {
         }
 
         // Verify state hash against the state hash in the CUP
-        if get_state_hash(&*self.state_manager, last_cup.height())
+        if self
+            .get_state_hash(last_cup.height())
             .expect("No state hash at a current CUP height found")
             != last_cup.content.state_hash
         {
@@ -1233,6 +1234,43 @@ impl Player {
         }
 
         Ok(())
+    }
+
+    /// Returns the state hash for the given height once it is computed. For non-checkpoints heights
+    /// or when transient error persists [`None`] is returned.
+    fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
+        let start = std::time::Instant::now();
+        for _ in 0..STATE_HASH_MAX_TRIES {
+            match self.state_manager.get_state_hash_at(height) {
+                Ok(hash) => {
+                    info!(
+                        self.log,
+                        "State hash computed after {} seconds.",
+                        std::time::Instant::now()
+                            .duration_since(start)
+                            .as_secs_f32()
+                    );
+                    return Some(hash);
+                }
+                Err(StateHashError::Transient(err)) => {
+                    warn!(
+                        self.log,
+                        "Waiting for state hash: {}. Retrying in {} seconds.",
+                        err,
+                        STATE_HASH_BACKOFF_DURATION.as_secs_f32()
+                    );
+                }
+                // This only happens for partially certified heights.
+                Err(StateHashError::Permanent(
+                    PermanentStateHashError::StateNotFullyCertified(h),
+                )) if h == height => return None,
+                Err(err) => {
+                    panic!("State computation failed: {}", err)
+                }
+            }
+            std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
+        }
+        None
     }
 }
 
@@ -1405,46 +1443,6 @@ fn setup_registry(
         panic!("fetch_and_start_polling failed: {}", e);
     }
     registry
-}
-
-/// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-/// or when transient error persists [`None`] is returned.
-fn get_state_hash<T>(
-    state_manager: &dyn StateManager<State = T>,
-    height: Height,
-) -> Option<CryptoHashOfState> {
-    let start = std::time::Instant::now();
-    for _ in 0..STATE_HASH_MAX_TRIES {
-        match state_manager.get_state_hash_at(height) {
-            Ok(hash) => {
-                println!(
-                    "State hash computed after {} seconds.",
-                    std::time::Instant::now()
-                        .duration_since(start)
-                        .as_secs_f32()
-                );
-                return Some(hash);
-            }
-            Err(StateHashError::Transient(err)) => {
-                println!(
-                    "Waiting for state hash: {}. Retrying in {} seconds.",
-                    err,
-                    STATE_HASH_BACKOFF_DURATION.as_secs_f32()
-                );
-            }
-            // This only happens for partially certified heights.
-            Err(StateHashError::Permanent(PermanentStateHashError::StateNotFullyCertified(h)))
-                if h == height =>
-            {
-                return None
-            }
-            Err(err) => {
-                panic!("State computation failed: {}", err)
-            }
-        }
-        std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
-    }
-    None
 }
 
 #[cfg(test)]
