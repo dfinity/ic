@@ -16,11 +16,7 @@ async fn test_mock_happy() {
     let response_1 = Chunk {
         content: Some(vec![101, 102, 103]),
     };
-    call_canisters.expect_call(
-        callee,
-        request_1.clone(),
-        Ok(Ok(response_1.clone())),
-    );
+    call_canisters.expect_call(callee, request_1.clone(), Ok(Ok(response_1.clone())));
 
     // Step 1.2: Expect a DIFFERENT one. By having both, we make sure that
     // MockCallCanisters is not doing things in the wrong order.
@@ -28,11 +24,7 @@ async fn test_mock_happy() {
     let request_2 = GetChunkRequest {
         content_sha256: Some(vec![4, 5, 6]),
     };
-    call_canisters.expect_call(
-        callee,
-        request_2.clone(),
-        Ok(Err("DOH!".to_string())),
-    );
+    call_canisters.expect_call(callee, request_2.clone(), Ok(Err("DOH!".to_string())));
 
     // Step 2: Call the code under test.
     let result_1 = call_canisters.call(callee, request_1).await;
@@ -59,15 +51,18 @@ async fn test_mock_wrong_call() {
     };
 
     let call_canisters = MockCallCanisters::new();
-    call_canisters.expect_call(
-        callee,
-        request.clone(),
-        Ok(Ok(response.clone())),
-    );
+    call_canisters.expect_call(callee, request.clone(), Ok(Ok(response.clone())));
 
     // Step 2: Call the code under test. This does not match `expect_call`.
     // Therefore, the correct behavior here is to panic.
-    let _ = call_canisters.call(callee, GetChunkRequest { content_sha256: Some(vec![0xFF]) }).await;
+    let _ = call_canisters
+        .call(
+            callee,
+            GetChunkRequest {
+                content_sha256: Some(vec![0xFF]),
+            },
+        )
+        .await;
 
     // Step 3: Verify results. Actually, the should_panic at the top is what does the verification.
 }
@@ -86,11 +81,7 @@ async fn test_mock_left_over_expected_call() {
     };
 
     let call_canisters = MockCallCanisters::new();
-    call_canisters.expect_call(
-        callee,
-        request.clone(),
-        Ok(Ok(response.clone())),
-    );
+    call_canisters.expect_call(callee, request.clone(), Ok(Ok(response.clone())));
 
     // Step 2: Do not call call_canisters. This is supposed to trigger a panic.
 

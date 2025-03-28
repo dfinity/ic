@@ -5,10 +5,7 @@
 
 use super::*;
 use candid::Encode;
-use std::{
-    cell::RefCell,
-    collections::VecDeque,
-};
+use std::{cell::RefCell, collections::VecDeque};
 
 pub struct MockCallCanisters {
     remaining_expected_calls: RefCell<VecDeque<ExpectedCall>>,
@@ -30,13 +27,13 @@ impl MockCallCanisters {
         let request = request.payload().unwrap();
         let result = result.map(|response| Encode!(&response).unwrap());
 
-        self.remaining_expected_calls.borrow_mut().push_back(
-            ExpectedCall {
+        self.remaining_expected_calls
+            .borrow_mut()
+            .push_back(ExpectedCall {
                 canister_id,
                 request,
                 result,
-            }
-        );
+            });
     }
 }
 
@@ -45,7 +42,8 @@ impl crate::sealed::Sealed for MockCallCanisters {}
 impl Drop for MockCallCanisters {
     fn drop(&mut self) {
         pretty_assertions::assert_eq!(
-            &*self.remaining_expected_calls.borrow(), &VecDeque::new(),
+            &*self.remaining_expected_calls.borrow(),
+            &VecDeque::new(),
             "Some expected calls were left over.",
         );
     }
@@ -62,10 +60,14 @@ impl CallCanisters for MockCallCanisters {
         let canister_id: Principal = canister_id.into();
         let request: Vec<u8> = request.payload().unwrap();
 
-        let next_expected_call = self.remaining_expected_calls.borrow_mut().pop_front().unwrap();
+        let next_expected_call = self
+            .remaining_expected_calls
+            .borrow_mut()
+            .pop_front()
+            .unwrap();
 
-        let result = next_expected_call
-            .get_return_value_or_panic::<R::Response>(canister_id, request);
+        let result =
+            next_expected_call.get_return_value_or_panic::<R::Response>(canister_id, request);
         std::future::ready(result)
     }
 
@@ -90,8 +92,7 @@ impl CallCanisters for MockCallCanisters {
 #[derive(Debug, PartialEq, Eq)]
 pub struct MockCallCanistersError(pub String);
 
-impl std::error::Error for MockCallCanistersError {
-}
+impl std::error::Error for MockCallCanistersError {}
 
 impl Display for MockCallCanistersError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -116,10 +117,7 @@ impl ExpectedCall {
         Response: CandidType + DeserializeOwned,
     {
         // Verify arguments.
-        pretty_assertions::assert_eq!(
-            (canister_id, request),
-            (self.canister_id, self.request),
-        );
+        pretty_assertions::assert_eq!((canister_id, request), (self.canister_id, self.request),);
 
         self.result.map(|ok| candid::decode_one(&ok).unwrap())
     }
