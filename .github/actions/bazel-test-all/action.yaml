@@ -10,9 +10,6 @@ inputs:
     required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
-  GPG_PASSPHRASE:
-    required: false
-    description: "GPG key to encrypt build events. If the key is not set, events won't be uploaded."
 
 runs:
   using: "composite"
@@ -55,8 +52,6 @@ runs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
-          BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
           run: |
 
             # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3

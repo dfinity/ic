@@ -93,7 +93,6 @@ jobs:
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload SHA256SUMS (cache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
@@ -152,7 +151,6 @@ jobs:
         with:
           BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
@@ -173,7 +171,6 @@ jobs:
         with:
           BAZEL_COMMAND: build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   python-ci-tests:
     name: Python CI Tests
     runs-on:

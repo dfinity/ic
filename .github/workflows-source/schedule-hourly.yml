@@ -43,7 +43,6 @@ jobs:
           BAZEL_COMMAND: build --config=ci --config=release --repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
@@ -61,7 +60,6 @@ jobs:
           # on images being uploaded to the S3 bucket
           BAZEL_COMMAND: test --config=ci --config=release --keep_going --test_tag_filters=system_test_hourly
           BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
