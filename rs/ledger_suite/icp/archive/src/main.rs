@@ -1,11 +1,14 @@
 use candid::{candid_method, Decode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::api::{
-    call::{arg_data_raw, reply, reply_raw},
-    caller, print,
-};
 use ic_cdk::query;
+use ic_cdk::{
+    api::{
+        call::{arg_data_raw, reply, reply_raw},
+        caller, print,
+    },
+    post_upgrade,
+};
 use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -372,23 +375,13 @@ fn get_blocks_candid_() {
     reply((get_blocks(args),));
 }
 
-#[export_name = "canister_post_upgrade"]
-fn post_upgrade() {
-    ic_cdk::setup();
-
+#[post_upgrade]
+fn post_upgrade(upgrade_arg: Option<ArchiveUpgradeArgument>) {
     set_last_upgrade_timestamp(ic_cdk::api::time());
 
-    let args = arg_data_raw();
-    let arg_max_memory_size_bytes = if args.is_empty() {
-        print("Upgrading archive without an upgrade argument.");
-        None
-    } else {
-        match Decode!(&args, ArchiveUpgradeArgument) {
-            Ok(args) => args.max_memory_size_bytes,
-            Err(e) => {
-                ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
-            }
-        }
+    let arg_max_memory_size_bytes = match upgrade_arg {
+        Some(upgrade_arg) => upgrade_arg.max_memory_size_bytes,
+        None => None,
     };
 
     // We do not support migration from scratch stable memory anymore
