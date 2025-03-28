@@ -459,6 +459,7 @@ impl RosettaApiServer {
                     BLOCK_SYNC_TIMEOUT,
                     on_restart_callback,
                     skip_first_heartbeat_check,
+                    None,
                 );
                 let server_handle = self.server_handle.clone();
                 let ledger = self.ledger.clone();
