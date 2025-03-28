@@ -23,7 +23,8 @@ anchors:
       options: >-
         -e NODE_NAME
         --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+        --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G
+        -v /cache:/cache
     timeout-minutes: 120
   checkout: &checkout
     name: Checkout
