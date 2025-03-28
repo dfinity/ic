@@ -55,6 +55,7 @@ const DEFAULT_STATE_HASH_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 ///     config: Some(PathBuf::from("/path/to/ic.json5")),
 ///     canister_caller_id: None,
 ///     replay_until_height: None,
+///     state_hash_timeout_seconds: None,
 ///     data_root: None,
 ///     subcmd: Some(SubCommand::RestoreFromBackup(RestoreFromBackupCmd {
 ///         registry_local_store_path: PathBuf::from("/path/to/ic_registry_local_store"),

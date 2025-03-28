@@ -55,6 +55,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
+    "//rs/interfaces/state_manager/mocks",
 ]
 
 MACRO_DEPENDENCIES = []
