@@ -25,7 +25,7 @@ use lazy_static::lazy_static;
 use reqwest::Client;
 use thiserror::Error;
 
-pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 9] = [
+pub const ALL_SNS_TESTING_CANISTER_IDS: [&CanisterId; 9] = [
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
     &ROOT_CANISTER_ID,
@@ -158,12 +158,12 @@ pub async fn validate_network<C: CallCanisters>(
     agent: &C,
 ) -> Vec<SnsTestingNetworkValidationError> {
     let canisters_installed = join_all(
-        ALL_NNS_CANISTER_IDS
+        ALL_SNS_TESTING_CANISTER_IDS
             .iter()
             .map(|canister_id| async { check_canister_installed(agent, canister_id).await }),
     )
     .await;
-    let (_, validation_errors): (Vec<_>, Vec<_>) = ALL_NNS_CANISTER_IDS
+    let (_, validation_errors): (Vec<_>, Vec<_>) = ALL_SNS_TESTING_CANISTER_IDS
         .iter()
         .zip(canisters_installed)
         .map(|(canister_id, installed)| {
@@ -211,7 +211,7 @@ pub async fn validate_network<C: CallCanisters>(
     validation_errors
 }
 
-// Function that validates that provided canister is suitable to be used in SNS.
+// Function that validates that provided canister is suitable to be controlled by SNS.
 // It ensures that canister exists, is installed and controlled by the NNS Root canister.
 pub async fn validate_target_canister<C: CallCanisters>(
     agent: &C,

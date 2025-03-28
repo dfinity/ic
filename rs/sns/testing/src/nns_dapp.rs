@@ -14,7 +14,7 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use icp_ledger::{AccountIdentifier, Tokens};
 use pocket_ic::nonblocking::PocketIc;
 
-use crate::utils::{check_canister_installed, ALL_NNS_CANISTER_IDS};
+use crate::utils::{check_canister_installed, ALL_SNS_TESTING_CANISTER_IDS};
 
 async fn validate_subnet_setup(pocket_ic: &PocketIc) {
     let topology = pocket_ic.topology().await;
@@ -38,7 +38,7 @@ pub async fn bootstrap_nns(
     validate_subnet_setup(pocket_ic).await;
     // Check if all NNS canisters are already installed
     let canisters_installed = join_all(
-        ALL_NNS_CANISTER_IDS
+        ALL_SNS_TESTING_CANISTER_IDS
             .iter()
             .map(|canister_id| async { check_canister_installed(pocket_ic, canister_id).await }),
     )

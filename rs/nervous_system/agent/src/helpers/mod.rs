@@ -19,7 +19,7 @@ pub mod sns;
 /// let upgrade_journal_interval_seconds = 60 * 60;
 /// await_with_timeout(
 ///     &agent,
-///     upgrade_journal_interval_seconds,
+///     0..upgrade_journal_interval_seconds,
 ///     |agent| async {
 ///         sns.governance.get_upgrade_journal(agent, GetUpgradeJournalRequest::default())
 ///             .await
