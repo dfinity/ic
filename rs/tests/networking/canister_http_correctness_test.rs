@@ -51,11 +51,12 @@ use std::{collections::HashSet, convert::TryFrom};
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 const MAX_MAX_RESPONSE_BYTES: usize = 2_000_000;
-const DEFAULT_MAX_RESPONSE_BYTES: usize = 2_000_000;
+const DEFAULT_MAX_RESPONSE_BYTES: u64 = 2_000_000;
 const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
 const MAX_HEADER_NAME_LENGTH: usize = 8192;
 const MAX_HEADER_VALUE_LENGTH: usize = 8192;
 const HTTP_HEADERS_MAX_NUMBER: usize = 64;
+const RESPONSE_OVERHEAD: u64 = 256;
 
 struct Handlers<'a> {
     subnet_size: usize,
@@ -167,6 +168,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_max_number_of_request_headers))
                 .add_test(systest!(test_max_number_of_request_headers_exceeded))
                 .add_test(systest!(test_max_number_of_response_headers))
+                .add_test(systest!(test_non_existent_transform_function))
                 .add_test(systest!(test_max_number_of_response_headers_exceeded)),
         )
         .execute_from_args()?;
@@ -174,7 +176,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-pub fn test_enforce_https(env: TestEnv) {
+fn test_enforce_https(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -208,7 +210,7 @@ pub fn test_enforce_https(env: TestEnv) {
     );
 }
 
-pub fn test_transform_function_is_executed(env: TestEnv) {
+fn test_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -250,7 +252,7 @@ pub fn test_transform_function_is_executed(env: TestEnv) {
     assert_eq!(response.status, 202);
 }
 
-pub fn test_non_existent_transform_function(env: TestEnv) {
+fn test_non_existent_transform_function(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -286,7 +288,7 @@ pub fn test_non_existent_transform_function(env: TestEnv) {
     );
 }
 
-pub fn test_composite_transform_function_is_executed(env: TestEnv) {
+fn test_composite_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -320,7 +322,7 @@ pub fn test_composite_transform_function_is_executed(env: TestEnv) {
     assert_eq!(response.headers[1].1, "aaaaa-aa");
 }
 
-pub fn test_no_cycles_attached(env: TestEnv) {
+fn test_no_cycles_attached(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -354,7 +356,7 @@ pub fn test_no_cycles_attached(env: TestEnv) {
     );
 }
 
-pub fn test_max_possible_request_size(env: TestEnv) {
+fn test_max_possible_request_size(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let headers_list = vec![
@@ -398,7 +400,7 @@ pub fn test_max_possible_request_size(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-pub fn test_max_possible_request_size_exceeded(env: TestEnv) {
+fn test_max_possible_request_size_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let headers_list = vec![
@@ -448,7 +450,7 @@ pub fn test_max_possible_request_size_exceeded(env: TestEnv) {
     );
 }
 
-pub fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
+fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -491,7 +493,7 @@ pub fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
     );
 }
 
-pub fn test_4096_max_response_cycle_case_1(env: TestEnv) {
+fn test_4096_max_response_cycle_case_1(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -528,7 +530,7 @@ pub fn test_4096_max_response_cycle_case_1(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-pub fn test_4096_max_response_cycle_case_2(env: TestEnv) {
+fn test_4096_max_response_cycle_case_2(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -570,7 +572,7 @@ pub fn test_4096_max_response_cycle_case_2(env: TestEnv) {
     );
 }
 
-pub fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
+fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -589,7 +591,6 @@ pub fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
                     }),
                     context: vec![0, 1, 2],
                 }),
-                //TODO(mihailjianu): add a test where this works too.
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES) as u64),
             },
             cycles: 500_000_000_000,
@@ -599,7 +600,7 @@ pub fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-pub fn test_max_response_bytes_too_large(env: TestEnv) {
+fn test_max_response_bytes_too_large(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -618,7 +619,6 @@ pub fn test_max_response_bytes_too_large(env: TestEnv) {
                     }),
                     context: vec![0, 1, 2],
                 }),
-                //TODO(mihailjianu): add a test where this works too.
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES + 1) as u64),
             },
             cycles: 500_000_000_000,
@@ -634,7 +634,7 @@ pub fn test_max_response_bytes_too_large(env: TestEnv) {
     );
 }
 
-pub fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
+fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -662,7 +662,7 @@ pub fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.status==200);
 }
 
-pub fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
+fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -696,7 +696,7 @@ pub fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
     );
 }
 
-pub fn test_non_existing_transform_function(env: TestEnv) {
+fn test_non_existing_transform_function(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -730,7 +730,7 @@ pub fn test_non_existing_transform_function(env: TestEnv) {
     )
 }
 
-pub fn test_post_request(env: TestEnv) {
+fn test_post_request(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -761,10 +761,10 @@ pub fn test_post_request(env: TestEnv) {
     assert_matches!(response, Ok(r) if r.body.contains("satoshi"));
 }
 
-pub fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(env: TestEnv) {
+fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let max_response_bytes = 1_000_000;
+    let max_response_bytes: u64 = 1_000_000;
 
     let response = block_on(submit_outcall(
         &handlers,
@@ -786,7 +786,7 @@ pub fn test_http_endpoint_response_is_within_limits_with_custom_max_response_byt
                 }),
                 // Note: the whole response will contain more than 1_000_000 bytes, it also contains a status code + headers etc.
                 // a 256B leeway is decent..
-                max_response_bytes: Some(max_response_bytes + 256),
+                max_response_bytes: Some(max_response_bytes + RESPONSE_OVERHEAD),
             },
             cycles: 500_000_000_000,
         },
@@ -796,7 +796,7 @@ pub fn test_http_endpoint_response_is_within_limits_with_custom_max_response_byt
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
 
-pub fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: TestEnv) {
+fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
     let max_response_bytes = 1_000_000;
@@ -834,7 +834,7 @@ pub fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(e
     );
 }
 
-pub fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(env: TestEnv) {
+fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -842,11 +842,11 @@ pub fn test_http_endpoint_response_is_within_limits_with_default_max_response_by
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                // Note: the response will also contain headers, status code etc.
-                // We need to have some leeway for that.
+                // Note: the whole response will contain more than (DEFAULT_MAX_RESPONSE_BYTES - 256) bytes, it also contains a status code + headers etc.
+                // a 256B leeway is decent..
                 url: format!(
                     "https://[{webserver_ipv6}]:20443/bytes/{}",
-                    DEFAULT_MAX_RESPONSE_BYTES - 256
+                    DEFAULT_MAX_RESPONSE_BYTES - RESPONSE_OVERHEAD
                 ),
                 headers: vec![],
                 method: HttpMethod::GET,
@@ -858,8 +858,6 @@ pub fn test_http_endpoint_response_is_within_limits_with_default_max_response_by
                     }),
                     context: vec![0, 1, 2],
                 }),
-                // Note: the whole response will contain more than 1_000_000 bytes, it also contains a status code + headers etc.
-                // a 256B leeway is decent..
                 max_response_bytes: None,
             },
             cycles: 500_000_000_000,
@@ -870,7 +868,7 @@ pub fn test_http_endpoint_response_is_within_limits_with_default_max_response_by
     assert_matches!(&response, RemoteHttpResponse { status: 200, .. });
 }
 
-pub fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env: TestEnv) {
+fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -907,7 +905,7 @@ pub fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(
     );
 }
 
-pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
+fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -942,7 +940,7 @@ pub fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
 }
 
 /// The adapter should not follow HTTP redirects.
-pub fn test_that_redirects_are_not_followed(env: TestEnv) {
+fn test_that_redirects_are_not_followed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -971,7 +969,7 @@ pub fn test_that_redirects_are_not_followed(env: TestEnv) {
 }
 
 /// The adapter should reject HTTP calls that are made to other IC replicas' HTTPS endpoints.
-pub fn test_http_calls_to_ic_fails(env: TestEnv) {
+fn test_http_calls_to_ic_fails(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
