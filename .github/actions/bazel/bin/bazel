@@ -47,7 +47,8 @@ startup_options=(
 bazel_command="$1"
 shift
 
-bazel_args=( "${@:-}" )
+bazel_args=( "$@" )
+: "${bazel_args[@]+set}"
 
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
