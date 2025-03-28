@@ -1233,6 +1233,7 @@ fn test_large_maximum_response_size(env: TestEnv) {
             cycles: 500_000_000_000,
         },
     ));
+
     assert_matches!(
         response,
         Err(RejectResponse {

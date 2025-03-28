@@ -6,19 +6,109 @@
 //! otherwise errors out.
 //!
 use candid::Principal;
+use futures::future::join_all;
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::caller;
+use ic_cdk::api::time;
+use ic_cdk::{caller, spawn};
 use ic_cdk_macros::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{
+    RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 thread_local! {
     #[allow(clippy::type_complexity)]
     pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
+}
+
+#[update]
+async fn send_requests_in_parallel(
+    request: RemoteHttpStressRequest,
+) -> Result<RemoteHttpStressResponse, (RejectionCode, String)> {
+    let start = time();
+    if request.count == 0 {
+        return Err((
+            RejectionCode::CanisterError,
+            "Count cannot be 0".to_string(),
+        ));
+    }
+
+    // This is the maximum size of the queue of canister messages. In our case, it's the highest number of requests we can send in parallel.
+    const MAX_CONCURRENCY: usize = 500;
+
+    let mut all_results: Vec<Result<RemoteHttpResponse, (RejectionCode, String)>> = Vec::new();
+
+    let indices: Vec<u64> = (0..request.count).collect();
+    for chunk in indices.chunks(MAX_CONCURRENCY) {
+        let futures_iter = chunk.iter().map(|_| send_request(request.request.clone()));
+        let chunk_results = join_all(futures_iter).await;
+        all_results.extend(chunk_results);
+    }
+
+    let mut response = None;
+
+    for result in all_results {
+        match result {
+            Ok(rsp) => response = Some(rsp),
+            Err(err) => {
+                return Err(err);
+            }
+        }
+    }
+    let duration_ns = time() - start;
+    Ok(RemoteHttpStressResponse {
+        response: response.unwrap(),
+        duration_ns,
+    })
+}
+
+#[update]
+pub fn start_continuous_requests(
+    request: RemoteHttpRequest,
+) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    spawn(async move {
+        run_continuous_request_loop(request).await;
+    });
+
+    Ok(RemoteHttpResponse::new(
+        200,
+        vec![],
+        "Started non-stop sending.".to_string(),
+    ))
+}
+
+// TODO: instead of sequentially awaiting on each batch, try to send the next requests anyway, with backoff.
+// This should improve the overall qps, as the canister message queue is the bottleneck, and it's not being saturated.
+async fn run_continuous_request_loop(request: RemoteHttpRequest) {
+    const BATCH_SIZE: usize = 500;
+    let futures_iter = (0..BATCH_SIZE).map(|_| send_request(request.clone()));
+    let results = join_all(futures_iter).await;
+
+    let mut successes = 0;
+    let mut errors = 0;
+    for result in results {
+        match result {
+            Ok(_resp) => {
+                successes += 1;
+            }
+            Err((rejection_code, msg)) => {
+                errors += 1;
+                println!("Request failed: {:?} - {}", rejection_code, msg);
+            }
+        }
+    }
+    println!(
+        "Finished batch of {} requests => successes: {}, errors: {}",
+        BATCH_SIZE, successes, errors
+    );
+
+    spawn(async move {
+        run_continuous_request_loop(request).await;
+    });
 }
 
 #[update]
