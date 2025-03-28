@@ -2,7 +2,11 @@ use canister_test::Canister;
 use canister_test::Runtime;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::boundary_node::BoundaryNode;
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
+use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
@@ -12,10 +16,6 @@ use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::*,
 };
-use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
-use ic_system_test_driver::driver::boundary_node::BoundaryNode;
-use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, Cycles, PrincipalId};
 use slog::info;
