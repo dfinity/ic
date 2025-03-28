@@ -50,6 +50,7 @@ use ic_nns_governance_api::pb::v1::{
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
@@ -73,7 +74,6 @@ use icrc_ledger_types::icrc1::{
 };
 use num_traits::ToPrimitive;
 use prost::Message;
-use registry_canister::pb::v1::GetChunkRequest;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
@@ -129,7 +129,7 @@ pub fn registry_get_changes_since(
 pub fn registry_get_chunk(
     state_machine: &StateMachine,
     chunk_content_sha256: &[u8],
-) -> Result<registry_canister::pb::v1::Chunk, String> {
+) -> Result<ic_registry_canister_api::Chunk, String> {
     let content_sha256 = Some(chunk_content_sha256.to_vec());
     let request = GetChunkRequest { content_sha256 };
 
@@ -151,7 +151,7 @@ pub fn registry_get_chunk(
         }
     };
 
-    Decode!(&result, Result<registry_canister::pb::v1::Chunk, String>).unwrap()
+    Decode!(&result, Result<ic_registry_canister_api::Chunk, String>).unwrap()
 }
 
 /// Creates a canister with a wasm, payload, and optionally settings on a StateMachine
