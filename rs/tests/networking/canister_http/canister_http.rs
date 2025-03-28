@@ -2,11 +2,7 @@ use canister_test::Canister;
 use canister_test::Runtime;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::boundary_node::BoundaryNode;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
-use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
@@ -22,7 +18,6 @@ use slog::info;
 use std::env;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
-const BN_NAME: &str = "socks-bn";
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
@@ -59,7 +54,7 @@ pub fn install_nns_canisters(env: &TestEnv) {
 
 pub fn setup(env: TestEnv) {
     std::thread::scope(|s| {
-        // Set up IC with 1 system subnet with one node, and one application subnet with 40 nodes.
+        // Set up IC with 1 system subnet with one node, and one application subnet with 4 nodes.
         s.spawn(|| {
             InternetComputer::new()
                 .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -69,7 +64,7 @@ pub fn setup(env: TestEnv) {
                             http_requests: true,
                             ..SubnetFeatures::default()
                         })
-                        .add_nodes(40),
+                        .add_nodes(4),
                 )
                 .setup_and_start(&env)
                 .expect("failed to setup IC under test");
@@ -269,11 +264,9 @@ pub fn create_proxy_canister_with_name_and_cycles<'a>(
 
     let principal_id = PrincipalId::from(proxy_canister_id);
 
-    // Write the canister ID to the environment so that other tests can read it.
     env.write_json_object(canister_name, &principal_id)
         .expect("Could not write proxy canister ID to TestEnv.");
 
-    // Return the `Canister` handle for further use in tests.
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
 }
 

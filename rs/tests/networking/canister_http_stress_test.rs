@@ -1,17 +1,24 @@
 /* tag::catalog[]
-Title:: Basic HTTP requests from canisters
+Title:: Stress test for the http_requests feature
 
-Goal:: Ensure simple HTTP requests can be made from canisters.
+Goal:: Measure the qps of http_requests originating from one canister. The test shuold be run with the following command:
+```
+ict ict testnet create canister_http_stress_test --lifetime-mins=180 --output-dir=./canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
+```
 
 Runbook::
 0. Instantiate a universal VM with a webserver
-1. Instantiate an IC with one application subnet with the HTTP feature enabled.
-2. Install NNS canisters
-3. Install the proxy canister
-4. Make an update call to the proxy canister.
+1. Instantiate a Prometheus VM to track the evolving qps in grafana
+2. Instantiate an IC with two application subnets (containing 13 and 40 ndoes respectively), both with the HTTP feature enabled.
+3. Install NNS canisters
+4. Install the proxy canister on both application subnets
+5. Make a few update calls to the proxy canisters, on update call for each concurrency level.
+6. For each update call, the canister tries to send multiple (up to 500) concurrent http requests to the webserver, and measures the observed time the requests took.
 
 Success::
-1. Received http response with status 200.
+1. All http responses with status 200.
+2. The proxy canister is left sending requests in batches of 500 to track the qps in grafana.
+3. The results are written to a json file (in benchmark/benchmark.json).
 
 end::catalog[] */
 
@@ -64,14 +71,6 @@ struct BenchmarkResult {
     average_latency_s: f64,
 }
 
-// This test uses the `send_requests_in_parallel` method of the proxy canister to send multiple
-// (up to 500) concurrent http requests. More than 500 requests will be batched by the canister.
-// The canister will measure the observed time the requests took, and will send that as a response.
-// The test will then calculate the average qps and average latency of a single request.
-// The main bottleneck of this test is the canister message queue limit of 500 messages.
-// TODO: bypass this bottleneck by creating multiple canisters.
-// This test also calls start_continuous_requests, which will continuously send requests to the
-// webserver, without stopping. The evolving qps can be seen in grafana.
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -156,6 +155,7 @@ pub fn test(env: TestEnv) {
     let app_subnets = get_all_application_subnets(&env);
 
     for (i, subnet_snapshot) in app_subnets.into_iter().enumerate() {
+        // For each application subnet, we run the stress test.
         let subnet_size = subnet_snapshot.nodes().count();
         info!(
             logger,
@@ -180,10 +180,11 @@ pub fn test(env: TestEnv) {
         block_on(async {
             let url = format!("https://[{webserver_ipv6}]:20443");
 
-            // Make an http_outcall once, to establish the session between the adapter the target server.
+            // Make an http_outcall once, to establish the session between the adapter and the target server.
             // This is necessary in order to avoid the server potentially being overloaded by 40 * 500 TCP/TLS handshake requests.
             test_proxy_canister(&proxy_canister, url.clone(), logger.clone(), 1).await;
             for concurrent_requests in CONCURRENCY_LEVELS.iter() {
+                // For each concurrency level in this subnet, we run the stress test.
                 let (qps, duration_s) = test_proxy_canister(
                     &proxy_canister,
                     url.clone(),
