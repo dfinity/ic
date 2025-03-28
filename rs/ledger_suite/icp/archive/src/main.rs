@@ -1,13 +1,12 @@
 use candid::{candid_method, Decode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::query;
 use ic_cdk::{
     api::{
         call::{arg_data_raw, reply, reply_raw},
         caller, print,
     },
-    post_upgrade,
+    post_upgrade, query,
 };
 use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_canister_core::range_utils;
