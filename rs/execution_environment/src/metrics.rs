@@ -1,10 +1,10 @@
+use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
 };
-use ic_system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_types::{
     NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
     MAX_WASM_MEMORY_IN_BYTES,
