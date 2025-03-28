@@ -101,6 +101,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     /// Which steps to skip
     #[clap(long)]
     pub skip: Option<Vec<StepType>>,
+
+    /// When replaying the state, how long to wait for a state hash to be computed,
+    /// before timing out.
+    pub(crate) replay_state_hash_timeout_seconds: Option<u64>,
 }
 
 pub struct NNSRecoveryFailoverNodes {
@@ -316,6 +320,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.new_registry_local_store.clone(),
                     CANISTER_CALLER_ID,
                     self.params.replay_until_height,
+                    self.params.replay_state_hash_timeout_seconds,
                 )?,
             )),
 

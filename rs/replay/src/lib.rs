@@ -25,7 +25,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
 use ic_types::ReplicaVersion;
 use prost::Message;
-use std::{cell::RefCell, convert::TryFrom, rc::Rc};
+use std::{cell::RefCell, convert::TryFrom, rc::Rc, time::Duration};
 
 mod backup;
 pub mod cmd;
@@ -34,6 +34,8 @@ mod mocks;
 pub mod player;
 mod registry_helper;
 mod validator;
+
+const DEFAULT_STATE_HASH_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 /// Replays the past blocks and creates a checkpoint of the latest state.
 /// # An example of how to set the arguments
@@ -71,6 +73,10 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
     let result: Rc<RefCell<ReplayResult>> = Rc::new(RefCell::new(Ok(Default::default())));
     let res_clone = Rc::clone(&result);
     Config::run_with_temp_config(|default_config| {
+        let state_hash_timeout = args
+            .state_hash_timeout_seconds
+            .map(Duration::from_secs)
+            .unwrap_or(DEFAULT_STATE_HASH_TIMEOUT);
         let subcmd = &args.subcmd;
 
         let source = ConfigSource::File(args.config.unwrap_or_else(|| {
@@ -119,6 +125,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 &cmd.registry_local_store_path,
                 subnet_id,
                 cmd.start_height,
+                state_hash_timeout,
             )
             .with_replay_target_height(target_height);
             *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
@@ -133,9 +140,8 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                     "Target height cannot be used with any sub-command in subnet-recovery mode."
                 );
                 }
-                (_, target_height) => {
-                    Player::new(cfg, subnet_id).with_replay_target_height(target_height)
-                }
+                (_, target_height) => Player::new(cfg, subnet_id, state_hash_timeout)
+                    .with_replay_target_height(target_height),
             };
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {

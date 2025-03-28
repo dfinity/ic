@@ -194,6 +194,7 @@ mod tests {
                 upgrade_image_url: None,
                 upgrade_image_hash: None,
                 skip: None,
+                replay_state_hash_timeout_seconds: Some(666),
             }),
             neuron_args: None,
         }

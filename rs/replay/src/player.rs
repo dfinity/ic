@@ -28,7 +28,7 @@ use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
-use ic_logger::{info, new_replica_logger_from_config, warn, ReplicaLogger};
+use ic_logger::{new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -84,7 +84,6 @@ use tower::ServiceExt;
 const WAIT_DURATION: Duration = Duration::from_millis(500);
 // The backoff duration of computing the hash of a state.
 const STATE_HASH_BACKOFF_DURATION: Duration = Duration::from_secs(5);
-const STATE_HASH_MAX_TRIES: usize = 120;
 
 /// Represents the height, hash and registry version of the last execution state
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -136,18 +135,20 @@ pub struct Player {
     // None means finalized height.
     replay_target_height: Option<u64>,
     runtime: Runtime,
+    state_hash_timeout: Duration,
 }
 
 impl Player {
     /// Create and return a `Player` from a replica configuration object for
     /// restoring states from backups.
-    pub fn new_for_backup(
+    pub(crate) fn new_for_backup(
         mut cfg: Config,
         replica_version: ReplicaVersion,
         backup_spool_path: &Path,
         registry_local_store_path: &Path,
         subnet_id: SubnetId,
         start_height: u64,
+        state_hash_timeout: Duration,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
 
@@ -206,6 +207,7 @@ impl Player {
             replica_version,
             log,
             _async_log_guard,
+            state_hash_timeout,
         );
         player.tmp_dir = Some(tmp_dir);
         player
@@ -213,7 +215,7 @@ impl Player {
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub fn new(cfg: Config, subnet_id: SubnetId) -> Self {
+    pub(crate) fn new(cfg: Config, subnet_id: SubnetId, state_hash_timeout: Duration) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
@@ -252,6 +254,7 @@ impl Player {
             replica_version,
             log,
             _async_log_guard,
+            state_hash_timeout,
         )
     }
 
@@ -265,6 +268,7 @@ impl Player {
         replica_version: ReplicaVersion,
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
+        state_hash_timeout: Duration,
     ) -> Self {
         println!("Setting default replica version {}", replica_version);
         if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
@@ -385,6 +389,7 @@ impl Player {
             tmp_dir: None,
             replay_target_height: None,
             runtime,
+            state_hash_timeout,
         }
     }
 
@@ -1240,18 +1245,9 @@ impl Player {
     /// or when transient error persists [`None`] is returned.
     fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
         let start = std::time::Instant::now();
-        for _ in 0..STATE_HASH_MAX_TRIES {
+        loop {
             match self.state_manager.get_state_hash_at(height) {
-                Ok(hash) => {
-                    info!(
-                        self.log,
-                        "State hash computed after {} seconds.",
-                        std::time::Instant::now()
-                            .duration_since(start)
-                            .as_secs_f32()
-                    );
-                    return Some(hash);
-                }
+                Ok(hash) => return Some(hash),
                 Err(StateHashError::Transient(err)) => {
                     warn!(
                         self.log,
@@ -1269,8 +1265,14 @@ impl Player {
                 }
             }
             std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
+            if std::time::Instant::now().duration_since(start) > self.state_hash_timeout {
+                warn!(
+                    self.log,
+                    "Waited too long to get the state hash. Returning `None`",
+                );
+                return None;
+            }
         }
-        None
     }
 }
 
