@@ -27,15 +27,6 @@ use icp_ledger::{
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::RefCell};
 
-#[derive(Debug, Deserialize, Serialize)]
-struct ArchiveNodeState {
-    pub max_memory_size_bytes: usize,
-    pub block_height_offset: u64,
-    pub blocks: Vec<EncodedBlock>,
-    pub total_block_size: usize,
-    pub ledger_canister_id: CanisterId,
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 struct ArchiveState {
     pub max_memory_size_bytes: u64,
