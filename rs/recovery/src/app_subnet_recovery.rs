@@ -159,7 +159,7 @@ pub struct AppSubnetRecoveryArgs {
 
     /// When replaying the state, how long to wait for a state hash to be computed,
     /// before timing out.
-    pub(crate) replay_state_hash_timeout_seconds: Option<u64>,
+    pub replay_state_hash_timeout_seconds: Option<u64>,
 }
 
 pub struct AppSubnetRecovery {
