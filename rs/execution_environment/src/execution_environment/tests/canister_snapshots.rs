@@ -970,6 +970,60 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
 }
 
 #[test]
+fn take_snapshot_with_maximal_chunk_store() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_heap_delta_rate_limit(u64::MAX.into())
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+        )
+        .unwrap();
+
+    // The chunk store may have no more than 100 entries.
+    // If this test fails, the wasm chunk store size or the
+    // max number of stored chunks may have changed.
+    // On macos, the OS pages are bigger, so there are
+    // fewer entries possible. FIXME in a nicer way.
+    let max = {
+        #[cfg(target_os = "macos")]
+        let m = 25u32;
+        #[cfg(not(target_os = "macos"))]
+        let m = 100u32;
+        m
+    };
+    for i in 0..max {
+        let chunk = i.to_be_bytes().to_vec();
+        let upload_args = UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk,
+        };
+        test.subnet_message("upload_chunk", upload_args.encode())
+            .unwrap();
+    }
+    // this one should fail
+    let chunk = vec![42; 42];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap_err();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let _snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // TODO: get metadata once pull/4514 is merged.
+}
+
+#[test]
 fn test_delete_canister_snapshot_decode_round_trip() {
     let canister_id = canister_test_id(4);
     let snapshot_id = SnapshotId::from((canister_id, 6));
