@@ -888,10 +888,10 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Start a new PocketIC server.
     let (new_server_url, child) = start_server_helper(None, None, false, false);
 
-    // Create a PocketIC instance mounting the state created so far.
+    // Create a PocketIC instance mounting the (read-only) state created so far.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_state_dir(state_dir_path_buf.clone())
+        .with_read_only_state_dir(state_dir_path_buf.clone())
         .build();
 
     // Check that the topology has been properly restored.
@@ -900,6 +900,36 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
 
     // Check that the canister states have not changed
     // after mounting selected subnets individually.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
+
+    // Bump the counters on all subnets.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the (read-only) state created so far.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .build();
+
+    // Check that the canister states have not changed
+    // after mounting read-only state.
     check_counter(&pic, nns_canister_id, 3);
     check_counter(&pic, app_canister_id, 2);
     check_counter(&pic, spec_canister_id, 4);
