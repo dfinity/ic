@@ -16,10 +16,10 @@ use ic_types::{
 use super::InvalidChainCacheError;
 
 #[derive(Clone, PartialEq, Debug)]
-// The fields are only read by the `Debug` implementation.
-// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
-// #[allow(dead_code)]
-pub(crate) enum IDkgPayloadError {
+/// The fields are only read by the `Debug` implementation.
+/// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
+/// #[allow(dead_code)]
+pub enum IDkgPayloadError {
     RegistryClientError(RegistryClientError),
     MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     ConsensusSummaryBlockNotFound(Height),

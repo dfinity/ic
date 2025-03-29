@@ -21,7 +21,7 @@
 //! approach, similar to what we have been doing in verifying other kinds
 //! payloads.
 
-use crate::idkg::{
+use crate::{
     metrics::timed_call,
     payload_builder::IDkgPayloadError,
     payload_builder::{create_data_payload_helper, create_summary_payload},
@@ -78,7 +78,7 @@ use std::{collections::BTreeMap, convert::TryFrom};
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
 /// Reasons for why an idkg payload might be invalid.
-pub(crate) enum IDkgPayloadValidationFailure {
+pub enum IDkgPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
 }
@@ -89,7 +89,7 @@ pub(crate) enum IDkgPayloadValidationFailure {
 #[allow(dead_code)]
 /// Possible failures which could occur while validating an idkg payload. They don't imply that the
 /// payload is invalid.
-pub(crate) enum InvalidIDkgPayloadReason {
+pub enum InvalidIDkgPayloadReason {
     // wrapper of other errors
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
@@ -184,7 +184,7 @@ pub(crate) type IDkgValidationError =
     ValidationError<InvalidIDkgPayloadReason, IDkgPayloadValidationFailure>;
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn validate_payload(
+pub fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
@@ -620,7 +620,7 @@ fn validate_new_signature_agreements(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::idkg::{
+    use crate::{
         payload_builder::{
             filter_idkg_reshare_chain_key_contexts,
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
@@ -640,6 +640,7 @@ mod test {
         MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{

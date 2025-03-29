@@ -1,6 +1,6 @@
 //! The signature process manager
 
-use crate::idkg::{
+use crate::{
     complaints::IDkgTranscriptLoader,
     metrics::{timed_call, IDkgPayloadMetrics, ThresholdSignerMetrics},
     utils::{build_signature_inputs, load_transcripts, update_purge_height, IDkgBlockReaderImpl},
@@ -858,7 +858,7 @@ impl Debug for Action<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::{test_utils::*, utils::algorithm_for_key_id};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, generate_tecdsa_protocol_inputs,
@@ -872,7 +872,7 @@ mod tests {
         EcdsaArguments, SchnorrArguments, ThresholdArguments, VetKdArguments,
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
-    use ic_test_utilities_consensus::IDkgStatsNoOp;
+    use ic_test_utilities_consensus::{idkg::*, IDkgStatsNoOp};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::{
         ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3},

@@ -1,6 +1,6 @@
 //! The pre signature process manager
 
-use crate::idkg::{
+use crate::{
     complaints::IDkgTranscriptLoader,
     metrics::{timed_call, IDkgPayloadMetrics, IDkgPreSignerMetrics},
     utils::{load_transcripts, transcript_op_summary, update_purge_height, IDkgBlockReaderImpl},
@@ -1356,14 +1356,14 @@ impl TranscriptState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::{test_utils::*, utils::algorithm_for_key_id};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_test_utilities_consensus::IDkgStatsNoOp;
+    use ic_test_utilities_consensus::{idkg::*, IDkgStatsNoOp};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{

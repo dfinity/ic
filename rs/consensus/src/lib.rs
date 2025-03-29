@@ -7,6 +7,4 @@
 
 pub mod consensus;
 pub mod cup_utils;
-pub mod idkg;
-
 pub use cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};

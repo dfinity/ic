@@ -3,7 +3,6 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
-use ic_consensus::idkg;
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, DkgKeyManager};
 use ic_consensus_utils::pool_reader::PoolReader;
@@ -184,7 +183,7 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         );
-        let idkg = idkg::IDkgImpl::new(
+        let idkg = ic_consensus_idkg::IDkgImpl::new(
             replica_config.node_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&fake_crypto) as Arc<_>,

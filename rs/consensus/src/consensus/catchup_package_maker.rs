@@ -266,12 +266,6 @@ impl CatchUpPackageMaker {
 #[cfg(test)]
 mod tests {
     //! CatchUpPackageMaker unit tests
-    use crate::idkg::test_utils::{
-        add_available_quadruple_to_payload, empty_idkg_payload,
-        fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-        fake_state_with_signature_requests, request_id,
-    };
-
     use super::*;
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
@@ -279,6 +273,11 @@ mod tests {
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_consensus::idkg::{
+        add_available_quadruple_to_payload, empty_idkg_payload,
+        fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
+        fake_state_with_signature_requests, request_id,
+    };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{

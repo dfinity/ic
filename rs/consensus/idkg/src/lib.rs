@@ -180,7 +180,7 @@
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
-use crate::idkg::{
+use crate::{
     complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl},
     metrics::{timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS},
     pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
@@ -199,11 +199,13 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader,
-    crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId,
+    batch::ConsensusResponse,
+    consensus::idkg::{CompletedSignature, IDkgBlockReader, IDkgPayload},
+    crypto::canister_threshold_sig::error::IDkgRetainKeysError,
+    malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
-
 use std::{
     cell::RefCell,
     collections::HashSet,
@@ -214,7 +216,7 @@ use std::{
 pub(crate) mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
 pub mod malicious_pre_signer;
-pub(crate) mod metrics;
+pub mod metrics;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
@@ -222,12 +224,13 @@ pub(crate) mod signer;
 pub mod stats;
 #[cfg(test)]
 pub(crate) mod test_utils;
-pub(crate) mod utils;
+pub mod utils;
 
-pub(crate) use payload_builder::{
+pub use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,
+    make_bootstrap_summary_with_initial_dealings,
 };
-pub(crate) use payload_verifier::{
+pub use payload_verifier::{
     validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
 };
 pub use stats::IDkgStatsImpl;
@@ -237,6 +240,20 @@ const LOOK_AHEAD: u64 = 10;
 
 /// Frequency for clearing the inactive key transcripts.
 pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
+
+/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
+/// signature.
+pub fn generate_responses_to_signature_request_contexts(
+    idkg_payload: &IDkgPayload,
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
+    for completed in idkg_payload.signature_agreements.values() {
+        if let CompletedSignature::Unreported(response) = completed {
+            consensus_responses.push(response.clone());
+        }
+    }
+    consensus_responses
+}
 
 /// `IDkgImpl` is the consensus component responsible for processing threshold
 /// IDKG payloads.
@@ -389,7 +406,7 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
             );
             #[cfg(any(feature = "malicious_code", test))]
             if self.malicious_flags.is_idkg_malicious() {
-                return super::idkg::malicious_pre_signer::maliciously_alter_changeset(
+                return crate::malicious_pre_signer::maliciously_alter_changeset(
                     changeset,
                     &self.pre_signer,
                     &self.malicious_flags,
@@ -564,6 +581,7 @@ mod tests {
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
+    use ic_test_utilities_consensus::idkg::request_id;
     use ic_types::{
         consensus::idkg::{
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
@@ -573,7 +591,6 @@ mod tests {
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
-    use test_utils::request_id;
 
     #[test]
     fn test_idkg_priority_fn_args() {

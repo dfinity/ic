@@ -1,6 +1,6 @@
 //! The malicious pre signature process manager
 
-use crate::idkg::{
+use crate::{
     metrics::IDkgPreSignerMetrics, pre_signer::IDkgPreSignerImpl, utils::transcript_op_summary,
     IDkgBlockReaderImpl,
 };

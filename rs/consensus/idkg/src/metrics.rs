@@ -130,7 +130,7 @@ impl ThresholdSignerMetrics {
     }
 }
 
-pub(crate) struct IDkgPayloadMetrics {
+pub struct IDkgPayloadMetrics {
     payload_metrics: IntGaugeVec,
     payload_errors: IntCounterVec,
     transcript_builder_metrics: IntCounterVec,
@@ -141,7 +141,7 @@ pub(crate) struct IDkgPayloadMetrics {
 }
 
 impl IDkgPayloadMetrics {
-    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             payload_metrics: metrics_registry.int_gauge_vec(
                 "idkg_payload_metrics",

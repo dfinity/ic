@@ -1,11 +1,10 @@
 //! This module contains functions for constructing CUPs from registry
 
-use crate::idkg::{
-    make_bootstrap_summary,
-    payload_builder::make_bootstrap_summary_with_initial_dealings,
+use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents;
+use ic_consensus_idkg::{
+    make_bootstrap_summary, make_bootstrap_summary_with_initial_dealings,
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
-use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
