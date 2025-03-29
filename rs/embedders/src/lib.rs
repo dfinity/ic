@@ -7,7 +7,7 @@ pub mod wasmtime_embedder;
 
 use std::{sync::Arc, time::Duration};
 
-pub use compilation_cache::{CompilationCache, CompilationCacheBuilder, StoredCompilation};
+pub use compilation_cache::{CompilationCache, CompilationCacheBuilder};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::{MessageMemoryUsage, PageIndex};
