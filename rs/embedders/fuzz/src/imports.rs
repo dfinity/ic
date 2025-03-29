@@ -5,12 +5,15 @@ use crate::wasm_executor::{
 };
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_embedders::wasmtime_embedder::{system_api, StoreData};
-use ic_embedders::WasmtimeEmbedder;
+use ic_embedders::{
+    wasm_utils::instrumentation::WasmMemoryType,
+    wasmtime_embedder::{
+        system_api::{self, ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
+        StoreData, WasmtimeEmbedder,
+    },
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NumWasmPages};
-use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{time::UNIX_EPOCH, NumBytes};
 use std::collections::{BTreeMap, HashMap};

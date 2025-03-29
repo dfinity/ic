@@ -6,6 +6,10 @@ use ic_config::{
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+        InstructionLimits,
+    },
     CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
@@ -17,10 +21,6 @@ use ic_replicated_state::{
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     ExecutionState, ExportedFunctions, Memory, MessageMemoryUsage, NetworkTopology,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
-    InstructionLimits,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;

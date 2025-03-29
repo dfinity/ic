@@ -14,6 +14,9 @@ use crate::{
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasmtime_embedder::system_api::{
+    ApiType, ExecutionParameters, InstructionLimits,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
@@ -27,7 +30,6 @@ use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
     CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
 };
-use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,

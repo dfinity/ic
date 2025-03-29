@@ -362,7 +362,6 @@ members = [
     "rs/state_layout",
     "rs/state_tool",
     "rs/sys",
-    "rs/system_api",
     "rs/test_utilities",
     "rs/test_utilities/artifact_pool",
     "rs/test_utilities/consensus",

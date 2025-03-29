@@ -6,8 +6,10 @@ use ic_config::{
     embedders::BestEffortResponsesFeature, execution_environment::MINIMUM_FREEZING_THRESHOLD,
 };
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+use ic_embedders::{
+    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
+};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types_private::Global;
@@ -26,7 +28,6 @@ use ic_replicated_state::{
     NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
-use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,

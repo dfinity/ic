@@ -116,7 +116,7 @@ impl Add for CyclesBalanceChange {
 
 #[cfg(test)]
 mod tests {
-    use crate::cycles_balance_change::CyclesBalanceChange;
+    use super::CyclesBalanceChange;
     use ic_types::Cycles;
 
     fn cc(value: u128) -> Cycles {

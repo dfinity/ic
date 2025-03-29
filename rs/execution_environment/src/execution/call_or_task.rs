@@ -12,7 +12,10 @@ use crate::execution_environment::{
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
+    wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
@@ -23,7 +26,6 @@ use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
     CallOrigin, CanisterState,
 };
-use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
     CanisterTask, RequestMetadata,
