@@ -1231,14 +1231,17 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 (method, call_args().other_side(args))
             }),
             Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
-                let args =
-                    ReadCanisterSnapshotMetadataArgs::new(aborted_canister_id, vec![]).encode();
+                let args = ReadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                )
+                .encode();
                 (method, call_args().other_side(args))
             }),
             Method::ReadCanisterSnapshotData => test_supported(|aborted_canister_id| {
                 let args = ReadCanisterSnapshotDataArgs::new(
                     aborted_canister_id,
-                    vec![],
+                    (aborted_canister_id, 0).into(),
                     CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
                 )
                 .encode();
