@@ -130,6 +130,7 @@ pub fn test(env: TestEnv) {
         download_node: Some(download_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         next_step: None,
+        replay_state_hash_timeout_seconds: None,
     };
 
     let mut subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
