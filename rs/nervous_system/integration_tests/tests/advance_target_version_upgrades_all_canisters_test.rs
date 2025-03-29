@@ -1,7 +1,8 @@
+use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, await_with_timeout, hash_sns_wasms, install_nns_canisters, nns,
+        add_wasms_to_sns_wasm, hash_sns_wasms, install_nns_canisters, nns,
         sns::{
             self,
             governance::{

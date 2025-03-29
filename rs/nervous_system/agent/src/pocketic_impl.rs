@@ -1,13 +1,15 @@
+use std::time::Duration;
+
 use crate::management_canister::requests::{
     CanisterStatusArgs, DeleteCanisterArgs, StopCanisterArgs, StoredChunksArgs, UploadChunkArgs,
 };
 use crate::Request;
-use crate::{CallCanisters, CanisterInfo};
+use crate::{CallCanisters, CanisterInfo, ProgressNetwork};
 use candid::Principal;
 use ic_management_canister_types::{CanisterStatusResult, DefiniteCanisterSettings};
 use pocket_ic::common::rest::RawEffectivePrincipal;
 use pocket_ic::nonblocking::PocketIc;
-
+use pocket_ic::ErrorCode;
 use thiserror::Error;
 
 /// A wrapper around PocketIc that specifies a sender for the requests.
@@ -179,6 +181,10 @@ impl CallCanisters for PocketIcAgent<'_> {
     fn caller(&self) -> Result<Principal, Self::Error> {
         Ok(self.sender)
     }
+
+    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
+        self.pocket_ic.is_canister_stopped_error(err)
+    }
 }
 
 impl CallCanisters for PocketIc {
@@ -204,5 +210,36 @@ impl CallCanisters for PocketIc {
 
     fn caller(&self) -> Result<Principal, Self::Error> {
         Ok(Principal::anonymous())
+    }
+
+    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
+        match err {
+            PocketIcCallError::PocketIc(err) => {
+                [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping].contains(&err.error_code)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl ProgressNetwork for PocketIcAgent<'_> {
+    async fn progress(&self, duration: Duration) {
+        self.pocket_ic.progress(duration).await
+    }
+}
+
+impl ProgressNetwork for PocketIc {
+    async fn progress(&self, duration: Duration) {
+        if !self.auto_progress_enabled().await {
+            self.advance_time(duration).await;
+            self.tick().await;
+        } else {
+            // Otherwise, we have to wait for the time to pass "naturally".
+            if duration > Duration::from_secs(5) {
+                eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+                eprintln!("Consider using shorter duration in 'progress' method calls");
+            }
+            std::thread::sleep(duration);
+        }
     }
 }
