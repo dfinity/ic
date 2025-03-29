@@ -983,7 +983,16 @@ fn take_snapshot_with_maximal_chunk_store() {
     // The chunk store may have no more than 100 entries.
     // If this test fails, the wasm chunk store size or the
     // max number of stored chunks may have changed.
-    for i in 0..100u32 {
+    // On macos, the OS pages are bigger, so there are
+    // fewer entries possible. FIXME in a nicer way.
+    let max = {
+        #[cfg(target_os = "macos")]
+        let m = 25u32;
+        #[cfg(not(target_os = "macos"))]
+        let m = 100u32;
+        m
+    };
+    for i in 0..max {
         let chunk = i.to_be_bytes().to_vec();
         let upload_args = UploadChunkArgs {
             canister_id: canister_id.into(),
