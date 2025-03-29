@@ -8,12 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-embedders = { path = "../../embedders" }
-ic-types = { path = "../../types/types" }
 lazy_static = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
 universal-canister = { path = "../impl" }
-
-[dev-dependencies]
-ic-types = { path = "../../types/types" }
