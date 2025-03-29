@@ -58,7 +58,7 @@ pub enum CallMode {
 /// Each query method in this agent takes in input
 /// the mode to allow to either use a query call or
 /// update calls.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Icrc1Agent {
     pub agent: Agent,
     pub ledger_canister_id: Principal,

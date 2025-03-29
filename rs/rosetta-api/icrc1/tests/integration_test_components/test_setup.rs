@@ -10,8 +10,11 @@ fn smoke_test() {
         .with_nns_subnet()
         .with_sns_subnet()
         .build();
-    let icrc_ledger_canister_id =
-        create_and_install_icrc_ledger(&pocket_ic, icrc_ledger_default_args_builder().build());
+    let icrc_ledger_canister_id = create_and_install_icrc_ledger(
+        &pocket_ic,
+        icrc_ledger_default_args_builder().build(),
+        None,
+    );
     println!(
         "The canister id of the icrc ledger is: {:?}",
         icrc_ledger_canister_id
