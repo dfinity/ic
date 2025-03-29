@@ -29,7 +29,7 @@ concurrency:
 
 env:
   TARGETS: |
-    ${{ github.event_name == 'schedule' && '//...' ||
+    ${{ github.event_name == 'schedule' && '//rs/tests/...' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
     '//rs/tests/nns:node_removal_from_registry_test' }}
   JOBS: |
@@ -74,20 +74,11 @@ jobs:
         env:
           TNET_KUBECONFIG: ${{ secrets.TNET_KUBECONFIG }}
 
-      - name: Write AWS credentials
-        shell: bash
-        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           BAZEL_COMMAND: >-
             test
               --config=ci
@@ -154,18 +145,11 @@ jobs:
           # Export to GitHub environment
           echo "TARGETS=$T" >> $GITHUB_ENV
 
-      - name: Write AWS credentials
-        shell: bash
-        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
-
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           BAZEL_COMMAND: >-
             test
               --config=ci
