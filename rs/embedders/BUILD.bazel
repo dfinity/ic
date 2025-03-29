@@ -218,6 +218,7 @@ rust_ic_bench(
     name = "stable_memory_bench",
     testonly = True,
     srcs = ["benches/stable_memory.rs"],
+    compile_data = glob(["benches/matrix-multiply.wasm"]),
     data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     deps = [

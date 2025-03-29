@@ -354,6 +354,38 @@ pub fn syscalls<
     }
 
     linker
+        .func_wrap(
+            "ic0",
+            "stable_read_v128",
+            move |_caller: Caller<'_, StoreData>, _src: i64| -> wasmtime::V128 { unimplemented!() },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            "ic0",
+            "unsafe_stable_read_v128",
+            move |_caller: Caller<'_, StoreData>, _src: i64| -> wasmtime::V128 { unimplemented!() },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            "ic0",
+            "stable_write_i32",
+            move |_caller: Caller<'_, StoreData>, _dst: i64, _val: i32| unimplemented!(),
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            "ic0",
+            "stable_prefetch",
+            move |_caller: Caller<'_, StoreData>, _offset: i64, _len: i64| unimplemented!(),
+        )
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "msg_caller_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
                 let dst: usize = dst.try_into().expect("Failed to convert I to usize");
