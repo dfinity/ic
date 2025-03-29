@@ -6,6 +6,7 @@ Before=setupos.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
+ExecStartPre=/opt/ic/bin/preload-config.sh
 ExecStart=/opt/ic/bin/config create-setupos-config
 StandardOutput=journal+console
 StandardError=journal+console
