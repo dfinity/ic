@@ -126,69 +126,113 @@ impl PageBitmap {
         }
     }
 
-    // Returns the largest prefix of the given range such that all pages there have
+    // Returns the largest range around the faulting page such that all pages there have
     // not been marked yet.
-    fn restrict_range_to_unmarked(&self, range: Range<PageIndex>) -> Range<PageIndex> {
+    fn restrict_range_to_unmarked(
+        &self,
+        faulting_page: PageIndex,
+        range: Range<PageIndex>,
+    ) -> Range<PageIndex> {
         let range = range_intersection(&range, &self.page_range());
 
-        let start = range.start.get() as usize;
-        let old_end = range.end.get() as usize;
-        let mut end = start;
+        let old_start = range.start.get();
+        let mut start = faulting_page.get();
+        while start > old_start {
+            if self.pages.get(start as usize - 1).unwrap_or(true) {
+                break;
+            }
+            start -= 1;
+        }
+        let old_end = range.end.get();
+        let mut end = faulting_page.get();
         while end < old_end {
-            if self.pages.get(end).unwrap_or(true) {
+            if self.pages.get(end as usize).unwrap_or(true) {
                 break;
             }
             end += 1;
         }
         Range {
-            start: PageIndex::new(start as u64),
-            end: PageIndex::new(end as u64),
+            start: PageIndex::new(start),
+            end: PageIndex::new(end),
         }
     }
 
-    // Returns the largest prefix of the given range such that all pages there have
-    // been already marked.
-    fn restrict_range_to_marked(&self, range: Range<PageIndex>) -> Range<PageIndex> {
+    // Returns the largest range around the faulting page such that
+    // all pages there have been already marked.
+    fn restrict_range_to_marked(
+        &self,
+        faulting_page: PageIndex,
+        range: Range<PageIndex>,
+    ) -> Range<PageIndex> {
         let range = range_intersection(&range, &self.page_range());
 
-        let start = range.start.get() as usize;
-        let old_end = range.end.get() as usize;
-        let mut end = start;
+        let old_start = range.start.get();
+        let mut start = faulting_page.get();
+        while start > old_start {
+            match self.pages.get(start as usize - 1) {
+                None | Some(false) => break,
+                Some(true) => {}
+            }
+            start -= 1;
+        }
+        let old_end = range.end.get();
+        let mut end = faulting_page.get();
         while end < old_end {
-            match self.pages.get(end) {
+            match self.pages.get(end as usize) {
                 None | Some(false) => break,
                 Some(true) => {}
             }
             end += 1;
         }
         Range {
-            start: PageIndex::new(start as u64),
-            end: PageIndex::new(end as u64),
+            start: PageIndex::new(start),
+            end: PageIndex::new(end),
         }
     }
 
     // Returns the range of pages that are predicted to be marked in the future
-    // based on the marked pages before the start of the given range.
-    fn restrict_range_to_predicted(&self, range: Range<PageIndex>) -> Range<PageIndex> {
+    // based on the marked pages before the start of the given range or after the end.
+    fn restrict_range_to_predicted(
+        &self,
+        faulting_page: PageIndex,
+        range: Range<PageIndex>,
+    ) -> Range<PageIndex> {
         let range = range_intersection(&range, &self.page_range());
         if range.is_empty() {
             return range;
         }
 
-        let start = range.start.get() as usize;
-        let old_end = range.end.get() as usize;
+        let page = faulting_page.get();
+        let start = range.start.get();
+        let end = range.end.get();
 
-        let mut predicted_count = 1;
-        while predicted_count < start && start + predicted_count < old_end {
-            if !self.pages.get(start - predicted_count).unwrap_or(false) {
+        let mut bwd_predicted_count = 0;
+        while page - bwd_predicted_count > start && bwd_predicted_count < page {
+            if !self
+                .pages
+                .get((page + bwd_predicted_count + 1) as usize)
+                .unwrap_or(false)
+            {
                 break;
             }
-            predicted_count += 1;
+            bwd_predicted_count += 1;
+        }
+
+        let mut fwd_predicted_count = 1;
+        while fwd_predicted_count < page && page + fwd_predicted_count < end {
+            if !self
+                .pages
+                .get((page - fwd_predicted_count) as usize)
+                .unwrap_or(false)
+            {
+                break;
+            }
+            fwd_predicted_count += 1;
         }
 
         Range {
-            start: PageIndex::new(start as u64),
-            end: PageIndex::new((start + predicted_count) as u64),
+            start: PageIndex::new(page - bwd_predicted_count),
+            end: PageIndex::new(page + fwd_predicted_count),
         }
     }
 
@@ -606,9 +650,10 @@ pub fn sigsegv_fault_handler_new(
             // for multiple pages as read/write right away.
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
-            let max_prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
-            let min_prefetch_range =
-                accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
+            let max_prefetch_range =
+                accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+            let min_prefetch_range = accessed_bitmap
+                .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
@@ -622,9 +667,10 @@ pub fn sigsegv_fault_handler_new(
             // write accesses to track dirty pages. We can do this for multiple pages.
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
-            let max_prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
-            let min_prefetch_range =
-                accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
+            let max_prefetch_range =
+                accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+            let min_prefetch_range = accessed_bitmap
+                .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
                 ProtFlags::PROT_READ,
@@ -639,7 +685,8 @@ pub fn sigsegv_fault_handler_new(
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
             // Ensure that we don't overwrite an already dirty page.
-            let prefetch_range = dirty_bitmap.restrict_range_to_unmarked(prefetch_range);
+            let prefetch_range =
+                dirty_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             if accessed_bitmap.is_marked(faulting_page) {
                 tracker
                     .read_before_write_stats
@@ -647,10 +694,12 @@ pub fn sigsegv_fault_handler_new(
                     .fetch_add(1, Ordering::Relaxed);
                 // Ensure that all pages in the range have already been accessed because we are
                 // going to simply `mprotect` the range.
-                let prefetch_range = accessed_bitmap.restrict_range_to_marked(prefetch_range);
+                let prefetch_range =
+                    accessed_bitmap.restrict_range_to_marked(faulting_page, prefetch_range);
                 // Amortize the prefetch work based on the previously written pages.
-                let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
-                let page_start_addr = tracker.page_start_addr_from(faulting_page);
+                let prefetch_range =
+                    dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
+                let page_start_addr = tracker.page_start_addr_from(prefetch_range.start);
                 unsafe {
                     mprotect(
                         page_start_addr,
@@ -676,9 +725,11 @@ pub fn sigsegv_fault_handler_new(
                 // Ensure that all pages in the range have not been accessed yet because we are
                 // going to set up a new mapping. Note that this implies that all pages in the
                 // range have not been written to.
-                let prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
+                let prefetch_range =
+                    accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
                 // Amortize the prefetch work based on the previously written pages.
-                let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
+                let prefetch_range =
+                    dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
                 let prefetch_range = map_unaccessed_pages(
                     tracker,
                     ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
@@ -712,7 +763,10 @@ fn map_unaccessed_pages(
 ) -> Range<PageIndex> {
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
-            && min_prefetch_range.end <= max_prefetch_range.end
+            && min_prefetch_range.end <= max_prefetch_range.end,
+        "Error asserting that min_prefetch_range:{:?} is withing the max_prefetch_range:{:?}",
+        min_prefetch_range,
+        max_prefetch_range
     );
 
     let instructions = tracker
@@ -837,7 +891,7 @@ fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
 
 fn range_from_count(page: PageIndex, count: NumOsPages) -> Range<PageIndex> {
     Range {
-        start: page,
+        start: PageIndex::new(page.get().saturating_sub(count.get())),
         end: PageIndex::new(page.get() + count.get()),
     }
 }
