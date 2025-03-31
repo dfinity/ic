@@ -50,7 +50,7 @@ mod signal_stack;
 pub mod system_api;
 pub mod system_api_complexity;
 
-use system_api::{ModificationTracking, SystemApiImpl};
+use system_api::{linker, ModificationTracking, SystemApiImpl};
 
 #[cfg(test)]
 mod wasmtime_embedder_tests;
@@ -258,7 +258,7 @@ impl WasmtimeEmbedder {
 
         match main_memory_type {
             WasmMemoryType::Wasm32 => {
-                system_api::syscalls::<u32>(
+                linker::syscalls::<u32>(
                     &mut linker,
                     self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
@@ -267,7 +267,7 @@ impl WasmtimeEmbedder {
                 );
             }
             WasmMemoryType::Wasm64 => {
-                system_api::syscalls::<u64>(
+                linker::syscalls::<u64>(
                     &mut linker,
                     self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,

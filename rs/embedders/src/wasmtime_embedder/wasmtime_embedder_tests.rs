@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use super::{
     system_api::{
-        self, sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
+        linker, sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
         DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
     },
     StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
@@ -138,7 +138,7 @@ fn test_wasmtime_system_api() {
 
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
 
-    system_api::syscalls::<u32>(
+    linker::syscalls::<u32>(
         &mut linker,
         config.feature_flags,
         config.stable_memory_dirty_page_limit,
