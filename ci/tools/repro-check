@@ -536,7 +536,6 @@ class ReproducibilityVerifier:
         """If a proposal ID is provided, fetch the proposal data and set internal state."""
         if not self.proposal_id:
             return (None, None)
-        proposal_json_path = Path("proposal-body.json")
         proposal_url = f"https://ic-api.internetcomputer.org/api/v3/proposals/{self.proposal_id}"
         logger.debug(f"Fetching proposal {proposal_url}")
         try:
@@ -545,12 +544,11 @@ class ReproducibilityVerifier:
                 if not (200 <= resp.status < 300):
                     raise RuntimeError(f"Could not fetch proposal {self.proposal_id}, HTTP code {resp.status}")
                 data = resp.read()
-            proposal_json_path.write_bytes(data)
         except Exception as e:
             err = f"Could not fetch {self.proposal_id}. Error: {e}"
             raise RuntimeError(err)
 
-        proposal_data = json.loads(proposal_json_path.read_text(encoding="utf-8"))
+        proposal_data = json.loads(data)
         self.proposal_package_urls = proposal_data["payload"]["release_package_urls"]
         self.proposal_package_sha256_hex = proposal_data["payload"]["release_package_sha256_hex"]
 
