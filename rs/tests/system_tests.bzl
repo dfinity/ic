@@ -48,13 +48,15 @@ def _run_system_test(ctx):
                   export "${{image_var_prefix}}_HASH=$image_download_hash"
               done
             fi
-            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP # clean up the env for the test
 
             if [ -n "RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST" ]; then
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL:-}}"
                 export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
             fi
+
+            # clean up the env for the test
+            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST
 
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
