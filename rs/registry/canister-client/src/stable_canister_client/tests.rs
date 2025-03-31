@@ -89,6 +89,21 @@ fn client_for_tests(
     )))
 }
 
+fn registry_value(version: u64, value: &[u8]) -> RegistryValue {
+    RegistryValue {
+        value: value.to_vec(),
+        version,
+        deletion_marker: value.is_empty(),
+    }
+}
+
+fn registry_delta(key: &str, values: &[RegistryValue]) -> RegistryDelta {
+    RegistryDelta {
+        key: key.as_bytes().to_vec(),
+        values: values.to_vec(),
+    }
+}
+
 #[test]
 fn test_absent_after_delete() {
     let client = client_for_tests(0, Default::default());
@@ -261,44 +276,17 @@ fn test_sync_registry_stored() {
     responses.insert(
         0,
         Ok(vec![
-            RegistryDelta {
-                key: "Foo".as_bytes().to_vec(),
-                values: vec![
-                    RegistryValue {
-                        value: vec![1],
-                        version: 1,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![2],
-                        version: 2,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![3],
-                        version: 3,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![4],
-                        version: 4,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![],
-                        version: 5,
-                        deletion_marker: true,
-                    },
+            registry_delta(
+                "Foo",
+                &[
+                    registry_value(1, &[1]),
+                    registry_value(2, &[2]),
+                    registry_value(3, &[3]),
+                    registry_value(4, &[4]),
+                    registry_value(5, &[]),
                 ],
-            },
-            RegistryDelta {
-                key: "Bar".as_bytes().to_vec(),
-                values: vec![RegistryValue {
-                    value: vec![50],
-                    version: 5,
-                    deletion_marker: false,
-                }],
-            },
+            ),
+            registry_delta("Bar", &[registry_value(5, &[50])]),
         ]),
     );
     let client = client_for_tests(5, responses);
@@ -330,21 +318,10 @@ fn test_error_on_local_too_large() {
     let mut responses = FakeRegistryResponses::new();
     responses.insert(
         0,
-        Ok(vec![RegistryDelta {
-            key: "Foo".as_bytes().to_vec(),
-            values: vec![
-                RegistryValue {
-                    value: vec![1],
-                    version: 1,
-                    deletion_marker: false,
-                },
-                RegistryValue {
-                    value: vec![2],
-                    version: 2,
-                    deletion_marker: false,
-                },
-            ],
-        }]),
+        Ok(vec![registry_delta(
+            "Foo",
+            &[registry_value(1, &[1]), registry_value(2, &[2])],
+        )]),
     );
     let client = client_for_tests(1, responses);
 
@@ -369,14 +346,7 @@ fn test_caching_behavior_of_get_latest_version() {
     let mut responses = FakeRegistryResponses::new();
     responses.insert(
         2, // The version it will make the request about
-        Ok(vec![RegistryDelta {
-            key: "Foo".as_bytes().to_vec(),
-            values: vec![RegistryValue {
-                value: vec![4],
-                version: 4,
-                deletion_marker: false,
-            }],
-        }]),
+        Ok(vec![registry_delta("Foo", &[registry_value(4, &[4])])]),
     );
     let client = client_for_tests(4, responses);
 
@@ -384,21 +354,10 @@ fn test_caching_behavior_of_get_latest_version() {
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
 
     client
-        .add_deltas(vec![RegistryDelta {
-            key: "Foo".as_bytes().to_vec(),
-            values: vec![
-                RegistryValue {
-                    value: vec![1],
-                    version: 1,
-                    deletion_marker: false,
-                },
-                RegistryValue {
-                    value: vec![2],
-                    version: 2,
-                    deletion_marker: false,
-                },
-            ],
-        }])
+        .add_deltas(vec![registry_delta(
+            "Foo",
+            &[registry_value(1, &[1]), registry_value(2, &[2])],
+        )])
         .expect("Couldn't add deltas");
 
     let current_latest = client.get_latest_version();
@@ -407,14 +366,7 @@ fn test_caching_behavior_of_get_latest_version() {
     // This is not a code path that should be utilized in production but for testing
     // we are going around the sync so we can test the caching behavior
     client
-        .add_deltas(vec![RegistryDelta {
-            key: "Foo".as_bytes().to_vec(),
-            values: vec![RegistryValue {
-                value: vec![3],
-                version: 3,
-                deletion_marker: false,
-            }],
-        }])
+        .add_deltas(vec![registry_delta("Foo", &[registry_value(3, &[3])])])
         .expect("Couldn't add deltas");
 
     // Cache is not updated (b/c we didn't run sync
@@ -430,21 +382,6 @@ fn test_caching_behavior_of_get_latest_version() {
     // Cache is updated
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, RegistryVersion::new(4));
-}
-
-fn registry_value(version: u64, value: &[u8]) -> RegistryValue {
-    RegistryValue {
-        value: value.to_vec(),
-        version,
-        deletion_marker: value.is_empty(),
-    }
-}
-
-fn registry_delta(key: &str, values: &[RegistryValue]) -> RegistryDelta {
-    RegistryDelta {
-        key: key.as_bytes().to_vec(),
-        values: values.to_vec(),
-    }
 }
 
 #[test]
