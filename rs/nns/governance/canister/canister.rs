@@ -1,4 +1,4 @@
-use candid::candid_method;
+use candid::{candid_method, Decode};
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
@@ -157,25 +157,41 @@ fn panic_with_probability(probability: f64, message: &str) {
     }
 }
 
-// TODO - can we migrate the canister_init to use candid later?
 #[export_name = "canister_init"]
 fn canister_init() {
     ic_cdk::setup();
 
-    match ApiGovernanceProto::decode(&arg_data_raw()[..]) {
-        Err(err) => {
-            println!(
-                "Error deserializing canister state in initialization: {}.",
-                err
-            );
-            Err(err)
+    let init_bytes = arg_data_raw();
+    let init_result = if init_bytes.starts_with(b"DIDL") {
+        match Decode!(&init_bytes, ApiGovernanceProto) {
+            Err(err) => {
+                println!(
+                    "Error deserializing canister state in initialization: {}.",
+                    err
+                );
+                Err(err.to_string())
+            }
+            Ok(proto) => {
+                canister_init_(proto);
+                Ok(())
+            }
         }
-        Ok(proto) => {
-            canister_init_(proto);
-            Ok(())
+    } else {
+        match ApiGovernanceProto::decode(&init_bytes[..]) {
+            Err(err) => {
+                println!(
+                    "Error deserializing canister state in initialization: {}.",
+                    err
+                );
+                Err(err.to_string())
+            }
+            Ok(proto) => {
+                canister_init_(proto);
+                Ok(())
+            }
         }
-    }
-    .expect("Couldn't initialize canister.");
+    };
+    init_result.expect("Couldn't initialize canister.");
 }
 
 #[candid_method(init)]

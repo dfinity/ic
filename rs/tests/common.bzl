@@ -53,6 +53,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "tip-of-branch": "//rs/nns/sns-wasm:sns-wasm-canister",
         "mainnet": "@mainnet_nns_sns-wasm-canister//file",
     },
+    "node-rewards": {
+        "tip-of-branch": "//rs/node_rewards/canister:node-rewards-canister",
+        "mainnet": "@mainnet_node-rewards-canister//file",
+    },
 }
 
 SNS_CANISTER_WASM_PROVIDERS = {

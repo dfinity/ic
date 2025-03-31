@@ -1,11 +1,11 @@
 use crate::{
     common::LOG_PREFIX,
     pb::v1::{
-        registry_stable_storage::Version as ReprVersion, ChangelogEntry, Chunk, GetChunkRequest,
-        RegistryStableStorage,
+        registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
     },
 };
 use ic_certified_map::RbTree;
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     pb::v1::{
         registry_mutation::Type, RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation,

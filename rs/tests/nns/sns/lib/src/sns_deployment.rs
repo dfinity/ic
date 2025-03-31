@@ -1327,7 +1327,7 @@ impl<'a> DappCanister<'a> {
         let dapp_canister = original_controller_canister
             .update(
                 wasm().call(
-                    management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
+                    management::create_canister(Cycles::from(2_000_000_000_000u64))
                         .with_controllers(controllers.clone()),
                 ),
             )

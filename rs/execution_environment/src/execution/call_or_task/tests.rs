@@ -3,6 +3,7 @@ use std::time::Duration;
 use assert_matches::assert_matches;
 
 use ic_base_types::NumSeconds;
+use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
@@ -14,6 +15,9 @@ use ic_replicated_state::{
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
+use ic_test_utilities_execution_environment::{
+    filtered_subnet_config, DropFeesFilter, ExecutionFeesFilter,
+};
 use ic_types::ingress::IngressStatus;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
@@ -151,7 +155,9 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         .with_manual_execution()
         .build();
 
-    let a_id = test.universal_canister().unwrap();
+    let a_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
     let b_id = test.universal_canister().unwrap();
 
     let transferred_cycles = Cycles::new(1000);
@@ -172,7 +178,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         )
         .build();
 
-    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+    test.update_freezing_threshold(a_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
@@ -184,7 +190,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(500 * MINIMUM_FREEZING_THRESHOLD as u128);
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
@@ -251,22 +257,27 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     // 4. The query method succeeds because there are enough cycles
     //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
+    let subnet_config = filtered_subnet_config(
+        SubnetType::Application,
+        ExecutionFeesFilter::Drop(DropFeesFilter::IdleResources),
+    );
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit_without_dts(instruction_limit)
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
+        .with_cycles_account_manager_config(subnet_config.cycles_account_manager_config)
         .with_manual_execution()
         .build();
 
     let canister_id = test.universal_canister().unwrap();
-    let cycles_to_burn = Cycles::new(1000);
+    let cycles_to_burn = Cycles::new(2000);
 
     let payload = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .cycles_burn128(cycles_to_burn)
         .build();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
+    test.update_freezing_threshold(canister_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_allocations_settings(canister_id, Some(1), None)
         .unwrap();
@@ -337,7 +348,9 @@ fn dts_update_concurrent_cycles_change_fails() {
         .with_manual_execution()
         .build();
 
-    let a_id = test.universal_canister().unwrap();
+    let a_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
     let b_id = test.universal_canister().unwrap();
 
     let transferred_cycles = Cycles::new(1000);
@@ -358,7 +371,7 @@ fn dts_update_concurrent_cycles_change_fails() {
         )
         .build();
 
-    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+    test.update_freezing_threshold(a_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
@@ -370,7 +383,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(500 * MINIMUM_FREEZING_THRESHOLD as u128);
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
@@ -446,10 +459,15 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     // 4. The query method fails because there are not enough cycles
     //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
+    let subnet_config = filtered_subnet_config(
+        SubnetType::Application,
+        ExecutionFeesFilter::Drop(DropFeesFilter::IdleResources),
+    );
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit_without_dts(instruction_limit)
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
+        .with_cycles_account_manager_config(subnet_config.cycles_account_manager_config)
         .with_manual_execution()
         .build();
 
@@ -461,7 +479,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
         .cycles_burn128(cycles_to_burn)
         .build();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
+    test.update_freezing_threshold(canister_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_allocations_settings(canister_id, Some(1), None)
         .unwrap();
@@ -607,20 +625,18 @@ fn hitting_page_delta_limit_fails_message_system_subnet() {
     );
 }
 
-fn hitting_page_delta_limit_fails_for_install_code_helper(with_native_stable_mem: bool) {
+#[test]
+fn hitting_page_delta_limit_fails_for_install_code() {
     let no_pages_upgrade = 10;
     // A large enough limit that will never be triggered.
     let no_pages_other_messages = no_pages_upgrade * 10_000_000;
-    let mut test =
-        ExecutionTestBuilder::new().with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
             upgrade: NumOsPages::new(no_pages_upgrade),
             message: NumOsPages::new(no_pages_other_messages),
             query: NumOsPages::new(no_pages_other_messages),
-        });
-    if with_native_stable_mem {
-        test = test.with_non_native_stable();
-    }
-    let mut test = test.build();
+        })
+        .build();
     let wat = wat_writing_to_each_stable_memory_page_long_execution(
         no_pages_upgrade * PAGE_SIZE as u64 + 1,
     );
@@ -629,87 +645,16 @@ fn hitting_page_delta_limit_fails_for_install_code_helper(with_native_stable_mem
     let result = test
         .install_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap_err();
-    if with_native_stable_mem {
-        result.assert_contains(
-            ErrorCode::CanisterMemoryAccessLimitExceeded,
-            &format!(
-                "Error from Canister {canister_id}: Canister exceeded memory access \
-            limits: Exceeded the limit for the number of modified pages in the stable \
-            memory in a single message execution: limit: 40 KB."
-            ),
-        );
-    } else {
-        result.assert_contains(
-            ErrorCode::CanisterMemoryAccessLimitExceeded,
-            &format!(
-                "Error from Canister {canister_id}: Canister exceeded memory access \
-            limits: Exceeded the limit for the number of modified pages in the stable memory \
-            in a single execution: limit {} KB for regular messages, {} KB for upgrade \
-            messages and {} KB for queries.",
-                no_pages_other_messages * (PAGE_SIZE as u64 / 1024),
-                no_pages_upgrade * (PAGE_SIZE as u64 / 1024),
-                no_pages_other_messages * (PAGE_SIZE as u64 / 1024)
-            ),
-        );
-    }
-}
-
-#[test]
-fn hitting_page_delta_limit_fails_for_install_code() {
-    hitting_page_delta_limit_fails_for_install_code_helper(false)
-}
-
-#[test]
-#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-fn hitting_page_delta_limit_fails_for_install_code_non_native_stable() {
-    hitting_page_delta_limit_fails_for_install_code_helper(true)
-}
-
-#[test]
-#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-fn hitting_page_delta_limit_fails_message_non_native_stable() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
-            upgrade: NumOsPages::new(10),
-            message: NumOsPages::new(10),
-            query: NumOsPages::new(10),
-        })
-        .with_non_native_stable()
-        .build();
-    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
     result.assert_contains(
         ErrorCode::CanisterMemoryAccessLimitExceeded,
         &format!(
             "Error from Canister {canister_id}: Canister exceeded memory access \
         limits: Exceeded the limit for the number of modified pages in the stable memory \
-        in a single message execution: limit: 40 KB."
-        ),
-    );
-}
-
-#[test]
-#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-fn hitting_page_delta_limit_fails_message_non_native_stable_system_subnet() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
-            upgrade: NumOsPages::new(10),
-            message: NumOsPages::new(10),
-            query: NumOsPages::new(10),
-        })
-        .with_non_native_stable()
-        .with_subnet_type(SubnetType::System)
-        .build();
-    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    result.assert_contains(
-        ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!(
-            "Error from Canister {canister_id}: Canister exceeded memory access \
-        limits: Exceeded the limit for the number of modified pages in the stable memory \
-        in a single message execution: limit: 40 KB."
+        in a single execution: limit {} KB for regular messages, {} KB for upgrade \
+        messages and {} KB for queries.",
+            no_pages_other_messages * (PAGE_SIZE as u64 / 1024),
+            no_pages_upgrade * (PAGE_SIZE as u64 / 1024),
+            no_pages_other_messages * (PAGE_SIZE as u64 / 1024)
         ),
     );
 }
