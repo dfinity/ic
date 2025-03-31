@@ -169,19 +169,32 @@ fn find_node_operator_record_for_provider<'a>(
 
 #[cfg(test)]
 mod tests {
+    use ic_protobuf::registry::{
+        dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord,
+    };
     use ic_registry_canister_api::ReplaceNodeOperatorPayload;
+    use ic_registry_keys::{
+        make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
+    };
+    use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
     use ic_types::{NodeId, PrincipalId};
 
     use crate::registry::Registry;
+    use prost::Message;
 
     fn operator(n: u64) -> PrincipalId {
         PrincipalId::new_user_test_id(n)
     }
 
+    // To differentiate between `operator(1)` and `provider(1)`.
+    fn provider(n: u64) -> PrincipalId {
+        PrincipalId::new_user_test_id(u64::MAX - n)
+    }
+
     // Convenience function for readability of
     // the test.
     fn caller(n: u64) -> PrincipalId {
-        operator(n)
+        provider(n)
     }
 
     fn node(n: u64) -> NodeId {
@@ -201,10 +214,12 @@ mod tests {
     }
 
     trait AssertErrContains {
+        #[track_caller]
         fn assert_err_contains(self, expected: &str);
     }
 
     impl<T> AssertErrContains for Result<T, String> {
+        #[track_caller]
         fn assert_err_contains(self, expected: &str) {
             match self {
                 Ok(_) => panic!("Expected error, but got Ok."),
@@ -214,6 +229,58 @@ mod tests {
                 ),
             }
         }
+    }
+
+    fn mutation(key: Vec<u8>, value: Vec<u8>) -> RegistryMutation {
+        RegistryMutation {
+            mutation_type: Type::Upsert as i32,
+            key,
+            value,
+        }
+    }
+
+    fn operator_mutation(
+        operator: PrincipalId,
+        provider: PrincipalId,
+        node_allowance: u64,
+        dc_id: &str,
+    ) -> RegistryMutation {
+        let operator_record = NodeOperatorRecord {
+            node_operator_principal_id: operator.as_slice().to_vec(),
+            node_allowance,
+            node_provider_principal_id: provider.as_slice().to_vec(),
+            dc_id: dc_id.to_string(),
+            ..Default::default()
+        };
+
+        mutation(
+            make_node_operator_record_key(operator).as_bytes().to_vec(),
+            operator_record.encode_to_vec(),
+        )
+    }
+
+    fn node_mutation(node_id: NodeId, operator: PrincipalId) -> RegistryMutation {
+        let node_record = NodeRecord {
+            node_operator_id: operator.as_slice().to_vec(),
+            ..Default::default()
+        };
+
+        mutation(
+            make_node_record_key(node_id).as_bytes().to_vec(),
+            node_record.encode_to_vec(),
+        )
+    }
+
+    fn dc_mutation(dc_id: &str) -> RegistryMutation {
+        let dc_record = DataCenterRecord {
+            id: dc_id.to_string(),
+            ..Default::default()
+        };
+
+        mutation(
+            make_data_center_record_key(dc_id).as_bytes().to_vec(),
+            dc_record.encode_to_vec(),
+        )
     }
 
     #[test]
@@ -232,5 +299,74 @@ mod tests {
         registry
             .do_replace_operator_(payload(operator(1), operator(1), &[node(1)]), caller(99))
             .assert_err_contains("Old and new operator ids have to differ.");
+    }
+
+    #[test]
+    fn disallow_unknown_provider() {
+        let mut registry = Registry::new();
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 10, "dc1"),
+            node_mutation(node(1), operator(1)),
+        ]);
+
+        registry
+            .do_replace_operator_(payload(operator(1), operator(2), &[node(1)]), caller(99))
+            .assert_err_contains("Unknown node provider");
+    }
+
+    #[test]
+    fn disallow_unknown_operators() {
+        let mut registry = Registry::new();
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 10, "dc1"),
+            node_mutation(node(1), operator(1)),
+        ]);
+
+        // Old operator should not be found in the registry
+        registry
+            .do_replace_operator_(payload(operator(3), operator(2), &[node(1)]), caller(1))
+            .assert_err_contains(&format!(
+                "Operator {} not found for provider {}",
+                operator(3),
+                caller(1)
+            ));
+
+        // New operator should not be found in the registry
+        registry
+            .do_replace_operator_(payload(operator(1), operator(4), &[node(1)]), caller(1))
+            .assert_err_contains(&format!(
+                "Operator {} not found for provider {}",
+                operator(4),
+                caller(1)
+            ));
+    }
+
+    #[test]
+    fn disallow_different_dcs_for_operators() {
+        let mut registry = Registry::new();
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            dc_mutation("dc2"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 10, "dc2"),
+            node_mutation(node(1), operator(1)),
+        ]);
+
+        registry
+            .do_replace_operator_(payload(operator(1), operator(2), &[node(1)]), caller(1))
+            .assert_err_contains(&format!(
+                "Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}",
+                operator(1),
+                "dc1",
+                operator(2),
+                "dc2"
+        ));
     }
 }
