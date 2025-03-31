@@ -125,12 +125,8 @@ class Dirs(object):
 logger = logging.getLogger(__name__)
 
 
-def fail(msg: str, *args: typing.Any) -> None:
-    """Logs the given message as critical and exits."""
-    if args is None:
-        args = []
-    logger.critical(msg, *args)
-    sys.exit(1)
+class VerificationError(RuntimeError):
+    pass
 
 
 def verify_sha256_against_sums(binary_path: Path, sums_file: Path, git_rev: str) -> str:
@@ -149,13 +145,12 @@ def verify_sha256_against_sums(binary_path: Path, sums_file: Path, git_rev: str)
                 break
     if not found_line:
         logger.info(f"Contents of {sums_file}:\n{''.join(lines)}")
-        fail(f"Couldn't find {binary_filename} in {sums_file}")
-        raise ValueError(binary_filename)  # to appease the MyPy gods
+        raise VerificationError(f"Couldn't find {binary_filename} in {sums_file}")
 
     listed_hash = found_line.split()[0]
     local_hash = compute_sha256(binary_path)
     if local_hash != listed_hash:
-        fail(
+        raise VerificationError(
             f"The hash for {binary_path} doesn't match the CDN sha256 sum for the git revision: {git_rev}\n"
             f"Local: {local_hash}\n"
             f"Published: {listed_hash}"
@@ -263,7 +258,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
                     if length is not None:
                         progressbar(sofar / length)
         if length is not None and length != sofar:
-            fail(
+            raise RuntimeError(
                 "Error downloading %s -> %s. File is supposed to be %s bytes, is %s bytes.",
                 url,
                 dest_path,
@@ -276,8 +271,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
     except Exception as e:
         if tmp_file.is_file():
             tmp_file.unlink()
-        fail("Could not download %s -> %s. Error: %s", url, dest_path, e)
-        raise RuntimeError("Could not download %s" % url)  # appease the MyPy gods
+        raise RuntimeError("Could not download %s -> %s. Error: %s", url, dest_path, e)
 
 
 # ------------------------------------------------------------------------------
@@ -332,7 +326,9 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def get_download_sources(mode: str) -> list[str]:
+def get_download_sources(
+    mode: typing.Literal["systems"] | typing.Literal["network"] | typing.Literal["both"],
+) -> list[str]:
     """Returns the list of base CDN domains from which the images should be downloaded."""
     if mode == "systems":
         return ["download.dfinity.systems"]
@@ -341,8 +337,7 @@ def get_download_sources(mode: str) -> list[str]:
     elif mode == "both":
         return ["download.dfinity.systems", "download.dfinity.network"]
     else:
-        fail(f"Invalid download source mode: {mode}")
-        return []  # appease the MyPy gods.
+        raise ValueError(f"Invalid download source mode: {mode}")
 
 
 Download = concurrent.futures.Future[Path]
@@ -390,7 +385,7 @@ class ReproducibilityVerifier:
         if platform.machine() == "x86_64":
             logger.info("x86_64 architecture detected.")
         else:
-            fail("Please run this script on x86_64 architecture.")
+            raise RuntimeError("Please run this script on x86_64 architecture.")
 
     def check_os_version(self) -> None:
         release_files = ["/etc/os-release", "/usr/lib/os-release"]
@@ -460,7 +455,7 @@ class ReproducibilityVerifier:
                 try:
                     subprocess.run(["sudo", "apt-get", "install", "-y", d], check=True)
                 except subprocess.CalledProcessError:
-                    fail(f"Failed to install {d}. Exiting.")
+                    raise RuntimeError(f"Failed to install {d}. Exiting.")
             else:
                 logger.info(f"{d} is already installed.")
 
@@ -470,10 +465,10 @@ class ReproducibilityVerifier:
             cmd = ["git", "rev-parse", "--is-inside-work-tree"]
             inside = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
             if inside != "true":
-                fail("Please run this script inside of a git repository.")
+                raise RuntimeError("Please run this script inside of a git repository.")
             logger.debug("Inside git repository.")
         except subprocess.CalledProcessError:
-            fail("Please run this script inside of a git repository.")
+            RuntimeError("Please run this script inside of a git repository.")
 
     def check_ic_repo(self) -> None:
         logger.debug("Checking the repository is the IC repository.")
@@ -481,10 +476,12 @@ class ReproducibilityVerifier:
             cmd = ["git", "config", "--get", "remote.origin.url"]
             git_remote = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
             if "/ic" not in git_remote:
-                fail("When not specifying any option, please run this script inside an IC git repository.")
+                raise RuntimeError(
+                    "When not specifying any option, please run this script inside an IC git repository."
+                )
             logger.debug("Inside IC repository.")
         except subprocess.CalledProcessError:
-            fail("When not specifying any option, please run this script inside an IC git repository.")
+            raise RuntimeError("When not specifying any option, please run this script inside an IC git repository.")
 
     def check_environment(self) -> None:
         self.check_architecture()
@@ -546,12 +543,11 @@ class ReproducibilityVerifier:
             req = urllib.request.Request(proposal_url, headers={"User-Agent": "ReproducibilityVerifier/1.0"})
             with urllib.request.urlopen(req) as resp:
                 if not (200 <= resp.status < 300):
-                    fail(f"Could not fetch proposal {self.proposal_id}, HTTP code {resp.status}")
+                    raise RuntimeError(f"Could not fetch proposal {self.proposal_id}, HTTP code {resp.status}")
                 data = resp.read()
             proposal_json_path.write_bytes(data)
         except Exception as e:
             err = f"Could not fetch {self.proposal_id}. Error: {e}"
-            fail(err)
             raise RuntimeError(err)
 
         proposal_data = json.loads(proposal_json_path.read_text(encoding="utf-8"))
@@ -567,8 +563,7 @@ class ReproducibilityVerifier:
             return (None, self.proposal_package_sha256_hex)
         else:
             err = f"Proposal #{self.proposal_id} is missing replica_version_to_elect or hostos_version_to_elect"
-            fail(err)
-            raise RuntimeError(err)
+            raise VerificationError(err)
 
     def decide_git_hash(self) -> None:
         """Determines which git hash to build and verify."""
@@ -647,7 +642,7 @@ class ReproducibilityVerifier:
             proposal_target = completed_download.result()
             actual_hash = compute_sha256(proposal_target)
             if actual_hash != self.proposal_package_sha256_hex:
-                fail(
+                raise VerificationError(
                     f"The proposal's artifact hash for {proposal_target} does not match!\n"
                     f"Expected: {self.proposal_package_sha256_hex}\n"
                     f"Actual:   {actual_hash}"
@@ -670,7 +665,7 @@ class ReproducibilityVerifier:
             final_hashes.append(h)
 
         if len(set(final_hashes)) != 1:
-            fail(f"The sources for {os_type} do not all match! {final_hashes}")
+            raise VerificationError(f"The sources for {os_type} do not all match! {final_hashes}")
         return final_hashes[0]
 
     def compare_proposal_vs_cdn(
@@ -688,7 +683,7 @@ class ReproducibilityVerifier:
             [f.result() for f in guest_os_downloads]
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
             if cdn_hash != guest_os_hash:
-                fail(
+                raise VerificationError(
                     "The sha256 sum from the proposal does not match the one from the CDN storage for GuestOS.\n"
                     f"Proposal sum: {guest_os_hash}\n"
                     f"CDN sum:      {cdn_hash}"
@@ -699,7 +694,7 @@ class ReproducibilityVerifier:
             [f.result() for f in host_os_downloads]
             cdn_hash = self.compare_cdn_hash("host-os", storage)
             if cdn_hash != host_os_hash:
-                fail(
+                raise VerificationError(
                     "The sha256 sum from the proposal does not match the one from the CDN storage for HostOS.\n"
                     f"Proposal sum: {host_os_hash}\n"
                     f"CDN sum:      {cdn_hash}"
@@ -745,7 +740,9 @@ class ReproducibilityVerifier:
             try:
                 subprocess.run(["git", "cat-file", "-e", f"{self.git_commit}^{{commit}}"], check=True)
             except subprocess.CalledProcessError:
-                fail("When specifying -c, please provide a valid git hash on a branch of the IC repository.")
+                raise RuntimeError(
+                    "When specifying -c, please provide a valid git hash on a branch of the IC repository."
+                )
 
         logger.info(f"Checking out {self.git_hash}.")
         subprocess.run(["git", "fetch", "--quiet", "origin", self.git_hash], check=True)
@@ -867,7 +864,17 @@ def main() -> None:
         clean=args.clean,
         download_source_mode=args.download_source,
     )
-    verifier.run()
+    try:
+        verifier.run()
+    except VerificationError as e:
+        logger.critical("%s", e)
+        sys.exit(1)
+    except RuntimeError as e:
+        logger.critical("%s", e)
+        sys.exit(2)
+    except KeyboardInterrupt:
+        verifier.download_executor.shutdown(cancel_futures=True)
+        raise
 
 
 if __name__ == "__main__":
