@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize};
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId};
 use serde::Serialize;
 use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
 use thiserror::Error;
@@ -216,6 +216,16 @@ pub struct GetChunkRequest {
 pub struct Chunk {
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub content: Option<Vec<u8>>,
+}
+
+/// The payload for a request to directly replace node's operator id
+/// with a different one in the same data center and that is linked
+/// to the same node provider.
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct ReplaceNodeOperatorPayload {
+    pub node_ids: Vec<NodeId>,
+    pub new_operator_id: PrincipalId,
+    pub old_operator_id: PrincipalId,
 }
 
 #[cfg(test)]
