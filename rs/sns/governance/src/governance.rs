@@ -3947,22 +3947,24 @@ impl Governance {
         // as voting required).
         neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
 
-        // First, validate the command in isolation.
+        // First, validate the requested followee modifications in isolation.
 
         // TODO[NNS1-3708]: Avoid cloning the neuron commands.
         let set_following = ValidatedSetFollowing::try_from(set_following.clone())
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
-        let result = if let Some(topic_followees) = neuron.topic_followees.as_mut() {
-            topic_followees.set_following(set_following);
-        } else {
-            let mut topic_followees = TopicFollowees::with_default_values();
-            topic_followees.set_following(set_following).map(|_| {
-                neuron.topic_followees.replace(topic_followees);
-            })
-        };
+        // Second, validate the requested followee modifications in composition with the neuron's
+        // old followees. If all validation steps succeed, save the new followees.
+        {
+            let old_topic_followees = neuron.topic_followees.clone();
 
-        result.map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+            let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
+                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+            neuron.topic_followees.replace(new_topic_followees);
+        }
+
+        // TODO[NNS1-3582]: Update the follower index.
 
         // TODO[NNS1-3582]: Enable following on topics.
         Err(GovernanceError::new_with_message(

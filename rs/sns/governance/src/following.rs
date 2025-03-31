@@ -1,5 +1,7 @@
 use crate::pb::v1::{
-    manage_neuron::SetFollowing, neuron::FolloweesForTopic, Followee, NeuronId, Topic,
+    manage_neuron::SetFollowing,
+    neuron::{FolloweesForTopic, TopicFollowees},
+    Followee, NeuronId, Topic,
 };
 use itertools::{Either, Itertools};
 use lazy_static::lazy_static;
@@ -453,7 +455,22 @@ impl TopicFollowees {
         }
     }
 
-    pub(crate) fn set_following(
+    pub(crate) fn new(
+        topic_followees: Option<Self>,
+        set_following: ValidatedSetFollowing,
+    ) -> Result<Self, SetFollowingError> {
+        let mut topic_followees = if let Some(topic_followees) = topic_followees {
+            topic_followees
+        } else {
+            TopicFollowees::with_default_values()
+        };
+
+        topic_followees.set_following(set_following)?;
+
+        Ok(topic_followees)
+    }
+
+    fn set_following(
         &mut self,
         set_following: ValidatedSetFollowing,
     ) -> Result<(), SetFollowingError> {
