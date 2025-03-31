@@ -1869,7 +1869,7 @@ fn open_wasm(
             Err(err)
         }
         Ok((serialized_module, compilation_result)) => {
-            observe_metrics(metrics, &serialized_module.imports_details());
+            observe_metrics(metrics, &serialized_module.imports_details);
             sandbox_process
                 .history
                 .record(format!("OpenWasmViaFile(wasm_id={})", wasm_id));
