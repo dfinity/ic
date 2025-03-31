@@ -17,10 +17,8 @@ use crate::{
     },
     temporarily_disable_allow_active_neurons_in_stable_memory,
     temporarily_disable_migrate_active_neurons_to_stable_memory,
-    temporarily_disable_stable_memory_following_index,
     temporarily_enable_allow_active_neurons_in_stable_memory,
     temporarily_enable_migrate_active_neurons_to_stable_memory,
-    temporarily_enable_stable_memory_following_index,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
@@ -413,24 +411,8 @@ fn make_neuron(
 }
 
 #[bench(raw)]
-fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_stable_memory_following_index();
-    let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
 fn cascading_vote_stable_everything() -> BenchResult {
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
@@ -445,7 +427,6 @@ fn cascading_vote_stable_everything() -> BenchResult {
 #[bench(raw)]
 fn cascading_vote_all_heap() -> BenchResult {
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_stable_memory_following_index();
     let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
@@ -460,7 +441,6 @@ fn cascading_vote_all_heap() -> BenchResult {
 #[bench(raw)]
 fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
     let _c = temporarily_disable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
@@ -475,7 +455,6 @@ fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
 #[bench(raw)]
 fn single_vote_all_stable() -> BenchResult {
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
@@ -487,7 +466,6 @@ fn single_vote_all_stable() -> BenchResult {
 #[bench(raw)]
 fn centralized_following_all_stable() -> BenchResult {
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
 
     cast_vote_cascade_helper(
@@ -840,4 +818,19 @@ fn list_proposals_benchmark() -> BenchResult {
 #[bench(raw)]
 fn list_proposals() -> BenchResult {
     list_proposals_benchmark()
+}
+
+/// Used for benchmarking compilation/instrumentation/execution changes in the
+/// embedders crate.
+#[export_name = "canister_update update_empty"]
+fn update_empty() {
+    ic_cdk::api::call::reply_raw(&[]);
+}
+
+/// Used for benchmarking compilation/instrumentation/execution changes in the
+/// embedders crate.
+#[export_name = "canister_query go"]
+fn go() {
+    let _ = list_neurons_stable();
+    ic_cdk::api::call::reply_raw(&[]);
 }

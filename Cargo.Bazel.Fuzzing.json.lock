@@ -1,5 +1,5 @@
 {
-  "checksum": "68aa001ce9abfda2b276ee96f8a584a5fe878c7eef2f8817c1a4f6301cf09995",
+  "checksum": "6519b9ae2df2f99918d39a51ff8ea72baf98a75b71c937b001b8a15dfcf6d54a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1091,6 +1091,77 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "actix-web-prom 0.9.0": {
+      "name": "actix-web-prom",
+      "version": "0.9.0",
+      "package_url": "https://github.com/nlopes/actix-web-prom.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/actix-web-prom/0.9.0/download",
+          "sha256": "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "actix_web_prom",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "actix_web_prom",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "actix-web 4.9.0",
+              "target": "actix_web"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "prometheus 0.13.4",
+              "target": "prometheus"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "strfmt 0.2.4",
+              "target": "strfmt"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "addr 0.15.6": {
       "name": "addr",
@@ -6830,7 +6901,10 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Zsanitizer=address"
+            "-Cstrip=none",
+            "-Zsanitizer=address",
+            "-Zexternal-clangrt",
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
           ],
           "selects": {}
         },
@@ -7620,7 +7694,10 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Zsanitizer=address"
+            "-Cstrip=none",
+            "-Zsanitizer=address",
+            "-Zexternal-clangrt",
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
           ],
           "selects": {}
         },
@@ -7737,7 +7814,10 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Zsanitizer=address"
+            "-Cstrip=none",
+            "-Zsanitizer=address",
+            "-Zexternal-clangrt",
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
           ],
           "selects": {}
         },
@@ -7884,7 +7964,10 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Zsanitizer=address"
+            "-Cstrip=none",
+            "-Zsanitizer=address",
+            "-Zexternal-clangrt",
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
           ],
           "selects": {}
         },
@@ -11412,7 +11495,10 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Zsanitizer=address"
+            "-Cstrip=none",
+            "-Zsanitizer=address",
+            "-Zexternal-clangrt",
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
           ],
           "selects": {}
         },
@@ -11762,7 +11848,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -20433,6 +20525,10 @@
             {
               "id": "actix-web 4.9.0",
               "target": "actix_web"
+            },
+            {
+              "id": "actix-web-prom 0.9.0",
+              "target": "actix_web_prom"
             },
             {
               "id": "addr 0.15.6",
@@ -35019,7 +35115,10 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Zsanitizer=address"
+            "-Cstrip=none",
+            "-Zsanitizer=address",
+            "-Zexternal-clangrt",
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
           ],
           "selects": {}
         },
@@ -42704,6 +42803,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -42887,7 +42992,8 @@
         ],
         "crate_features": {
           "common": [
-            "libc"
+            "libc",
+            "static"
           ],
           "selects": {}
         },
@@ -49931,6 +50037,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl//:gen_dir"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -49949,6 +50061,15 @@
               "target": "vcpkg"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
+            "OPENSSL_NO_VENDOR": "1",
+            "OPENSSL_STATIC": "1"
+          },
           "selects": {}
         },
         "links": "openssl"
@@ -74712,6 +74833,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "strfmt 0.2.4": {
+      "name": "strfmt",
+      "version": "0.2.4",
+      "package_url": "https://github.com/vitiral/strfmt",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/strfmt/0.2.4/download",
+          "sha256": "7a8348af2d9fc3258c8733b8d9d8db2e56f54b2363a4b5b81585c7875ed65e65"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "strfmt",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "strfmt",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.2.4"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
     "string_cache 0.8.7": {
       "name": "string_cache",
       "version": "0.8.7",
@@ -87057,7 +87216,10 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Zsanitizer=address"
+            "-Cstrip=none",
+            "-Zsanitizer=address",
+            "-Zexternal-clangrt",
+            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
           ],
           "selects": {}
         },
@@ -94266,6 +94428,7 @@
   "direct_deps": [
     "actix-rt 2.10.0",
     "actix-web 4.9.0",
+    "actix-web-prom 0.9.0",
     "addr 0.15.6",
     "aide 0.14.1",
     "anyhow 1.0.93",

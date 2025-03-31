@@ -1,5 +1,5 @@
 use candid::Encode;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -26,12 +26,13 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
-        create_canister_id_at_position, list_deployed_snses, nns_governance_make_proposal,
-        nns_list_proposals, nns_wait_for_proposal_execution, set_controllers,
-        setup_nns_canisters_with_features, state_machine_builder_for_nns_tests,
+        list_deployed_snses, nns_governance_make_proposal, nns_list_proposals,
+        nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters_with_features,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
+use ic_types::Cycles;
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};
@@ -65,7 +66,11 @@ fn test_several_proposals() {
     // Note that this uses governance with cfg(features = "test") enabled.
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
-    let dapp_canister = create_canister_id_at_position(&state_machine, 1000, None);
+    let dapp_canister = state_machine.create_canister_with_cycles(
+        Some(CanisterId::from_u64(1000).get()),
+        Cycles::zero(),
+        None,
+    );
     set_controllers(
         &state_machine,
         PrincipalId::new_anonymous(),

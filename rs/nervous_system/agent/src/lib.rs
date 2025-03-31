@@ -1,13 +1,14 @@
 use candid::{CandidType, Principal};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
-use std::fmt::Display;
+use std::{fmt::Display, future::Future};
 use std::time::Duration;
 
 pub mod agent_impl;
 pub mod helpers;
 pub mod ledger;
 pub mod management_canister;
+pub mod mock;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
@@ -30,7 +31,7 @@ pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
     fn payload(&self) -> Result<Vec<u8>, candid::Error>;
-    type Response: CandidType + DeserializeOwned;
+    type Response: CandidType + DeserializeOwned + Send;
 }
 
 pub struct CanisterInfo {
@@ -47,12 +48,12 @@ pub trait CallCanisters: sealed::Sealed {
         &self,
         canister_id: impl Into<Principal> + Send,
         request: R,
-    ) -> impl std::future::Future<Output = Result<R::Response, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<R::Response, Self::Error>> + Send;
 
     fn canister_info(
         &self,
         canister_id: impl Into<Principal> + Send,
-    ) -> impl std::future::Future<Output = Result<CanisterInfo, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<CanisterInfo, Self::Error>> + Send;
 
     // Functions that use 'call' need to be able
     // to determine if a call to the canister failed due to the canister being stopped.
@@ -68,5 +69,5 @@ pub trait CallCanisters: sealed::Sealed {
 //
 // @rvem: I don't really like the name, but I didn't manage to come up with a better one for now.
 pub trait ProgressNetwork: sealed::Sealed {
-    fn progress(&self, duration: Duration) -> impl std::future::Future<Output = ()>;
+    fn progress(&self, duration: Duration) -> impl Future<Output = ()>;
 }

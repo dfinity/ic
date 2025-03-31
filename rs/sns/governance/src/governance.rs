@@ -3,6 +3,7 @@ use crate::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
     },
+    following::ValidatedSetFollowing,
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -27,7 +28,7 @@ use crate::{
                 self,
                 claim_or_refresh::{By, MemoAndController},
                 AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
-                RemoveNeuronPermissions,
+                RemoveNeuronPermissions, SetFollowing,
             },
             manage_neuron_response::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
@@ -3929,6 +3930,23 @@ impl Governance {
         }
     }
 
+    fn set_following(
+        &mut self,
+        _id: &NeuronId,
+        _caller: &PrincipalId,
+        set_following: &SetFollowing,
+    ) -> Result<(), GovernanceError> {
+        // TODO[NNS1-3708]: Avoid cloning the neuron commands.
+        let _set_following = ValidatedSetFollowing::try_from(set_following.clone())
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+        // TODO[NNS1-3582]: Enable following on topics.
+        Err(GovernanceError::new_with_message(
+            ErrorType::InvalidCommand,
+            "SetFollowing is not supported yet.".to_string(),
+        ))
+    }
+
     /// Configures a given neuron (specified by the given neuron id).
     /// Specifically, this allows to stop and start dissolving a neuron
     /// as well as to increase a neuron's dissolve delay.
@@ -4585,13 +4603,9 @@ impl Governance {
             C::Follow(f) => self
                 .follow(&neuron_id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
-            C::SetFollowing(_) => {
-                // TODO[NNS1-3582]: Enable following on topics.
-                Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "SetFollowing is not supported yet.".to_string(),
-                ))
-            }
+            C::SetFollowing(set_following) => self
+                .set_following(&neuron_id, caller, set_following)
+                .map(|_| ManageNeuronResponse::set_following_response()),
             C::MakeProposal(p) => self
                 .make_proposal(&neuron_id, caller, p)
                 .await
