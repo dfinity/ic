@@ -47,8 +47,8 @@ fn vetkd_bench(criterion: &mut Criterion) {
 
         bench_create_encrypted_key_share(group, &config, &env, rng);
         bench_verify_encrypted_key_share(group, &config, &env, rng);
-        bench_combine_encrypted_key_shares_all_n(group, &config, subnet_size, &env, rng);
-        bench_combine_encrypted_key_shares_only_t(group, &config, threshold, &env, rng);
+        bench_combine_encrypted_key_shares(group, &config, "all_n", subnet_size, &env, rng);
+        bench_combine_encrypted_key_shares(group, &config, "only_t", threshold, &env, rng);
         bench_verify_encrypted_key(group, &config, &env, rng);
     }
 }
@@ -59,7 +59,7 @@ fn bench_create_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
     env: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
     rng: &mut ReproducibleRng,
 ) {
-    group.bench_function("VetKdProtocol::create_encrypted_key_share", |b| {
+    group.bench_function("create_encrypted_key_share", |b| {
         b.iter_batched_ref(
             || {
                 let vetkd_args = VetKdArgs {
@@ -87,7 +87,7 @@ fn bench_verify_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
     env: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
     rng: &mut ReproducibleRng,
 ) {
-    group.bench_function("VetKdProtocol::verify_encrypted_key_share", |b| {
+    group.bench_function("verify_encrypted_key_share", |b| {
         b.iter_batched_ref(
             || {
                 let vetkd_args = VetKdArgs {
@@ -114,14 +114,15 @@ fn bench_verify_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
     });
 }
 
-fn bench_combine_encrypted_key_shares_all_n<M: Measurement, C: CryptoComponentRng>(
+fn bench_combine_encrypted_key_shares<M: Measurement, C: CryptoComponentRng>(
     group: &mut BenchmarkGroup<'_, M>,
     config: &NiDkgConfig,
-    subnet_size: usize,
+    name_suffix: &str,
+    num_of_shares_to_combine: usize,
     env: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
     rng: &mut ReproducibleRng,
 ) {
-    group.bench_function("VetKdProtocol::combine_encrypted_key_shares (all n)", |b| {
+    group.bench_function(format!("combine_encrypted_key_shares_{name_suffix}"), |b| {
         b.iter_batched_ref(
             || {
                 let vetkd_args = VetKdArgs {
@@ -130,13 +131,13 @@ fn bench_combine_encrypted_key_shares_all_n<M: Measurement, C: CryptoComponentRn
                     input: random_n_bytes(32, rng),
                     transport_public_key: random_transports_secret_key(rng).public_key(),
                 };
-                let num_of_shares = NumberOfNodes::from(subnet_size as u32);
+                let num_of_shares = NumberOfNodes::from(num_of_shares_to_combine as u32);
                 let key_shares = create_and_verify_key_shares_for_each(
                     &n_random_nodes_in(config.receivers().get(), num_of_shares, rng),
                     &vetkd_args,
                     env,
                 );
-                assert_eq!(key_shares.len(), subnet_size);
+                assert_eq!(key_shares.len(), num_of_shares_to_combine);
                 let combiner = crypto_for(random_node_in(config.receivers().get(), rng), env);
                 (key_shares, combiner, vetkd_args)
             },
@@ -150,52 +151,13 @@ fn bench_combine_encrypted_key_shares_all_n<M: Measurement, C: CryptoComponentRn
     });
 }
 
-fn bench_combine_encrypted_key_shares_only_t<M: Measurement, C: CryptoComponentRng>(
-    group: &mut BenchmarkGroup<'_, M>,
-    config: &NiDkgConfig,
-    threshold: usize,
-    env: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
-    rng: &mut ReproducibleRng,
-) {
-    group.bench_function(
-        "VetKdProtocol::combine_encrypted_key_shares (only t)",
-        |b| {
-            b.iter_batched_ref(
-                || {
-                    let vetkd_args = VetKdArgs {
-                        ni_dkg_id: config.dkg_id().clone(),
-                        context: random_derivation_context_with_n_bytes(32, rng),
-                        input: random_n_bytes(32, rng),
-                        transport_public_key: random_transports_secret_key(rng).public_key(),
-                    };
-                    let num_of_shares = NumberOfNodes::from(threshold as u32);
-                    let key_shares = create_and_verify_key_shares_for_each(
-                        &n_random_nodes_in(config.receivers().get(), num_of_shares, rng),
-                        &vetkd_args,
-                        env,
-                    );
-                    assert_eq!(key_shares.len(), threshold);
-                    let combiner = crypto_for(random_node_in(config.receivers().get(), rng), env);
-                    (key_shares, combiner, vetkd_args)
-                },
-                |(key_shares, combiner, vetkd_args)| {
-                    combiner
-                        .combine_encrypted_key_shares(key_shares, vetkd_args)
-                        .expect("failed to combine signature shares")
-                },
-                SmallInput,
-            )
-        },
-    );
-}
-
 fn bench_verify_encrypted_key<M: Measurement, C: CryptoComponentRng>(
     group: &mut BenchmarkGroup<'_, M>,
     config: &NiDkgConfig,
     env: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
     rng: &mut ReproducibleRng,
 ) {
-    group.bench_function("VetKdProtocol::verify_encrypted_key", |b| {
+    group.bench_function("verify_encrypted_key", |b| {
         b.iter_batched_ref(
             || {
                 let vetkd_args = VetKdArgs {
