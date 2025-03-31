@@ -18,6 +18,7 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, crypto::CombinedThresholdSig, CanisterId,
     RegistryVersion, Time,
 };
+use pretty_assertions::assert_eq;
 use prost::Message;
 use std::string::ToString;
 

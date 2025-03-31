@@ -30,3 +30,4 @@ url = { workspace = true }
 futures-util = { workspace = true }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 leb128 = "0.2.4"
+pretty_assertions = { workspace = true }

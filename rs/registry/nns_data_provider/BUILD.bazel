@@ -28,6 +28,7 @@ DEV_DEPENDENCIES = [
     "//rs/certification/test-utils",
     "@crate_index//:futures-util",
     "@crate_index//:leb128",
+    "@crate_index//:pretty_assertions",
 ]
 
 MACRO_DEPENDENCIES = [
