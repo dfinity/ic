@@ -5252,15 +5252,12 @@ impl Governance {
             create_service_nervous_system.clone(),
         ));
 
-        let validated = match conversion_result {
-            Ok(validated) => validated,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Invalid CreateServiceNervousSystem: {}", err),
-                ));
-            }
-        };
+        let validated = conversion_result.map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid CreateServiceNervousSystem: {}", e),
+            )
+        })?;
 
         if are_nf_fund_proposals_disabled()
             && validated.neurons_fund_participation.unwrap_or_default()
