@@ -40,6 +40,17 @@ write_tty1_log() {
     logger -t "${SCRIPT}" "${message}"
 }
 
+function setup_sev_mounts() {
+    if [ "$(mount | grep 'sev-boot-components')" ]; then
+        write_log "SEV boot components are already ready."
+    else
+        write_log "Setting up SEV boot components."
+        mkdir -p /tmp/sev-boot-components/
+        losetup -P /dev/loop99 /dev/mapper/hostlvm-guestos
+        mount /dev/loop99p4 /tmp/sev-boot-components/
+    fi
+}
+
 function define_guestos() {
     if [ "$(virsh list --all | grep 'guestos')" ]; then
         write_log "GuestOS virtual machine is already defined."
@@ -119,6 +130,7 @@ function start_guestos() {
 
 function main() {
     # Establish run order
+    setup_sev_mounts
     define_guestos
     start_guestos
 }
