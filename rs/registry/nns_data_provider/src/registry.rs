@@ -183,7 +183,7 @@ impl RegistryCanister {
             &response[..],
             &AgentBasedFetchLargeValue {
                 registry_canister_id: self.canister_id,
-                agent: self.agent.choose(&mut rand::thread_rng()).unwrap(),
+                agent: self.choose_random_agent(),
             },
         )
         .await
