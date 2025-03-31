@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nervous_system_common_test_keys::{
@@ -60,7 +61,7 @@ fn test_several_proposals() {
         .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
         .build();
-    // Note that this uses governance with cfg(features = "test") enabled.
+    // Note that this uses production governance.
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = state_machine.create_canister_with_cycles(
@@ -196,7 +197,7 @@ fn test_nf_is_not_permitted() {
         .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
         .build();
-    // Note that this uses governance with cfg(features = "test") enabled.
+    // Use production governance (no test flags).
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = create_canister_id_at_position(&state_machine, 1000, None);
@@ -207,19 +208,17 @@ fn test_nf_is_not_permitted() {
         vec![ROOT_CANISTER_ID.get()],
     );
 
-    // In real life, DFINITY would top up SNS_WASM's cycle balance (and the SNS
-    // is supposed to repay with ICP raised).
     state_machine.add_cycles(SNS_WASM_CANISTER_ID, 200 * ONE_TRILLION);
 
-    // Step 2: Run code under test. Inspect intermediate results.
+    // Step 2: Run code under test.
 
     // Step 2.1: Make a proposal.  Should fail because it's using NF funding on non-test gov build.
-    let response_1 = make_proposal(&state_machine, /* sns_number = */ 1, true);
-    if let Some(manage_neuron_response::Command::MakeProposal(_)) = response_1.command {
-        panic!("Should not be able to submit a propsals with NF matched funding enabled.");
-    }
-
-    // Opposite case (without NF) is covered in 'test_several_proposals' above.
+    let response = make_proposal(&state_machine, /* sns_number = */ 1, true);
+    assert_matches!(response.command,
+        Some(manage_neuron_response::Command::Error(err))
+            if err.error_type == ErrorType::InvalidProposal as i32 &&
+            err.error_message.contains("NeuronsFundParticipation is not allowed"),
+        "Expected an InvalidProposal error because NeuronsFundParticipation is not allowed on non-test builds.");
 }
 
 #[test]
@@ -250,23 +249,21 @@ fn test_nf_is_permitted_with_test_flag() {
         vec![ROOT_CANISTER_ID.get()],
     );
 
-    // In real life, DFINITY would top up SNS_WASM's cycle balance (and the SNS
-    // is supposed to repay with ICP raised).
     state_machine.add_cycles(SNS_WASM_CANISTER_ID, 200 * ONE_TRILLION);
 
-    // Step 2: Run code under test. Inspect intermediate results.
+    // Step 2: Run code under test.
 
     // Step 2.1: Make a proposal.  Should succeed because it's using NF funding on test gov build.
     // Should work without matched funding.
-    let response_1 = make_proposal(&state_machine, /* sns_number = */ 1, false);
-    let response_1 = match response_1.command {
-        Some(manage_neuron_response::Command::MakeProposal(resp)) => resp,
-        _ => panic!("Second proposal failed to be submitted: {:#?}", response_1),
+    let response = make_proposal(&state_machine, /* sns_number = */ 1, false);
+    let response = match response.command {
+        Some(manage_neuron_response::Command::MakeProposal(make_proposal)) => make_proposal,
+        _ => panic!("Proposal failed to be submitted: {:#?}", response),
     };
-    response_1.proposal_id.unwrap_or_else(|| {
+    response.proposal_id.unwrap_or_else(|| {
         panic!(
-            "Second proposal response did not contain a proposal_id: {:#?}",
-            response_1
+            "Proposal response did not contain a proposal_id: {:#?}",
+            response
         )
     });
 }
