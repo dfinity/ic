@@ -142,7 +142,7 @@ pub trait FetchLargeValue {
             let len = chunk_content.len();
             let snippet_len = 20.min(len);
             return Err(format!(
-                "Chunk content hash does not match: len={}, head={:?}, tail={:?} SHA256={:?}", // DO NOT MERGE - Test this case.
+                "Chunk content hash does not match: len={}, head={:?}, tail={:?} SHA256={:?}",
                 len,
                 &chunk_content[..snippet_len],
                 &chunk_content[len - snippet_len..len],
@@ -180,17 +180,21 @@ async fn get_monolithic_value(
     mutation: HighCapacityRegistryMutation,
     fetch_large_value: &(impl FetchLargeValue + Sync),
 ) -> Result<Option<Vec<u8>>, CertificationError> {
-    let HighCapacityRegistryMutation {
-        mutation_type,
-        content,
-        key: _,
-    } = mutation;
+    let mutation_type = Type::try_from(mutation.mutation_type)
+        .map_err(|err| CertificationError::InvalidDeltas(format!(
+            "Unable to determine mutation's type. Cause: {}. mutation: {:#?}",
+            err, mutation,
+        )))?;
 
-    // DO NOT MERGE - Here, we assume that other mutation types have some
-    // content associated with them.
-    if mutation_type == Type::Delete as i32 {
+    if mutation_type == Type::Delete {
         return Ok(None);
     }
+
+    let HighCapacityRegistryMutation {
+        content,
+        mutation_type: _,
+        key: _,
+    } = mutation;
 
     let Some(content) = content else {
         return Ok(Some(vec![]));
