@@ -126,7 +126,7 @@ jobs:
           BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ""
+          GPG_PASSPHRASE: ''
       - name: Purge Bazel Output
         if: always()
         shell: bash
