@@ -26,6 +26,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/certification/test-utils",
+    "@crate_index//:futures-util",
     "@crate_index//:leb128",
 ]
 

@@ -11923,6 +11923,7 @@ dependencies = [
  "async-trait",
  "candid",
  "chrono",
+ "futures-util",
  "ic-canister-client",
  "ic-certification 0.9.0",
  "ic-certification-test-utils",

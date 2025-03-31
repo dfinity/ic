@@ -27,5 +27,6 @@ tree-deserializer = { path = "../../tree_deserializer" }
 url = { workspace = true }
 
 [dev-dependencies]
+futures-util = { workspace = true }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 leb128 = "0.2.4"

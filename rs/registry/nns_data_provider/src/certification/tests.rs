@@ -1,4 +1,5 @@
-use super::{decode_certified_deltas, CertificationError};
+use super::*;
+use futures_util::FutureExt;
 use ic_certification_test_utils::{CertificateBuilder, CertificateData};
 use ic_crypto_tree_hash::{
     flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
@@ -34,6 +35,23 @@ impl GarbleResponse {
 }
 
 type EncodedResponse = Vec<u8>;
+
+fn decode_certified_deltas_no_chunks(
+    since_version: u64,
+    canister_id: &CanisterId,
+    nns_pk: &ThresholdSigPublicKey,
+    payload: &[u8],
+) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), CertificationError> {
+    decode_certified_deltas(
+        since_version,
+        canister_id,
+        nns_pk,
+        payload,
+        &MockFetchLargeValue::new(),
+    )
+    .now_or_never()
+    .unwrap()
+}
 
 fn make_certified_delta(
     deltas: Vec<RegistryAtomicMutateRequest>,
@@ -140,7 +158,6 @@ fn make_change(mutations: Vec<RegistryMutation>) -> RegistryAtomicMutateRequest 
     }
 }
 
-/* DO NOT MERGE
 #[test]
 fn test_decode_no_update() {
     let (cid, pk, payload) = make_certified_delta(
@@ -149,7 +166,7 @@ fn test_decode_no_update() {
         GarbleResponse::LeaveAsIs,
     );
     assert_eq!(
-        decode_certified_deltas(1, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(1, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![],
             RegistryVersion::from(1u64),
@@ -166,7 +183,7 @@ fn test_decode_single_delta() {
         GarbleResponse::LeaveAsIs,
     );
     assert_eq!(
-        decode_certified_deltas(0, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![set_key(1, "key", "value")],
             RegistryVersion::from(1u64),
@@ -188,7 +205,7 @@ fn test_decode_prefix() {
     );
 
     assert_eq!(
-        decode_certified_deltas(0, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![
                 set_key(1, "key1", "value1"),
@@ -211,7 +228,7 @@ fn test_decode_bad_root_hash() {
         1..=1,
         GarbleResponse::OverrideCertifiedData(bad_digest.clone()),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::CertifiedDataMismatch { certified, .. })
             if &certified[..] == bad_digest.as_bytes() => {}
         other => panic!(
@@ -230,7 +247,7 @@ fn test_decode_bad_sig() {
         1..=1,
         GarbleResponse::OverrideSignature(bad_sig),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidSignature(_)) => (),
         other => panic!("Expected InvalidSignature error, got {:?}", other),
     }
@@ -249,7 +266,7 @@ fn test_missing_tail_is_ok() {
         GarbleResponse::DropVersion(4),
     );
     assert_eq!(
-        decode_certified_deltas(0, &cid, &pk, &payload[..]).unwrap(),
+        decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]).unwrap(),
         (
             vec![
                 set_key(1, "key1", "value1"),
@@ -272,7 +289,7 @@ fn test_decode_missing_version() {
         1..=2,
         GarbleResponse::DropVersion(1),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
     }
@@ -289,7 +306,7 @@ fn test_decode_missing_middle_version() {
         1..=3,
         GarbleResponse::DropVersion(2),
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
     }
@@ -306,9 +323,8 @@ fn test_decode_empty_prefix() {
         1..1,
         GarbleResponse::LeaveAsIs,
     );
-    match decode_certified_deltas(0, &cid, &pk, &payload[..]) {
+    match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
     }
 }
-*/
