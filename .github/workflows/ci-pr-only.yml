@@ -18,7 +18,7 @@ jobs:
     name: Bazel Build Fuzzers Archives
     timeout-minutes: 90
     runs-on:
-      labels: ${{ (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
@@ -48,7 +48,7 @@ jobs:
     name: Lock Generate
     timeout-minutes: 30
     runs-on:
-      labels: ${{ (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name && 'dind-small') || 'ubuntu-latest' }}
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-small') || 'ubuntu-latest' }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
@@ -89,7 +89,7 @@ jobs:
   dependencies-check:
     name: Dependency Scan for PR
     runs-on:
-      labels: ${{ (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name && 'dind-small') || 'ubuntu-latest' }}
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-small') || 'ubuntu-latest' }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
@@ -105,7 +105,6 @@ jobs:
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
       CI_COMMIT_SHA: ${{ github.sha }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       #JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       #SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
       REPO_NAME: ${{ github.repository }}
@@ -124,11 +123,17 @@ jobs:
               - 'bazel/external_crates.bzl'
               - '**/*.lock'
               - '**/*.toml'
-      # - name: Set up Python
-      #   uses: actions/setup-python@v5
-      #   if: steps.filter.outputs.depcheck == 'true'
-      #   with:
-      #     python-version: "3.12"
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        if: steps.filter.outputs.depcheck == 'true'
+        with:
+          python-version: "3.12"
       - name: Setup python deps
         id: setup-python-deps
         if: steps.filter.outputs.depcheck == 'true'
@@ -150,7 +155,7 @@ jobs:
     name: Bazel Test Coverage
     timeout-minutes: 90
     runs-on:
-      labels: ${{ (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
