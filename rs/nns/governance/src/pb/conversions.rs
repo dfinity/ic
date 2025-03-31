@@ -112,6 +112,8 @@ impl From<pb_api::Neuron> for pb::Neuron {
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
             // This field is internal only and should not be read from API types.
             recent_ballots_next_entry_index: None,
+            // TODO(NNS1-3607): Expose this field in the API.
+            maturity_disbursements_in_progress: vec![],
         }
     }
 }
