@@ -492,15 +492,15 @@ fn test_get_values_between() {
 
     let values_for_foo = changes_between
         .into_iter()
-        .filter(|(key, _)| key.key == "common_prefix_foo")
+        .filter(|record| record.key == "common_prefix_foo")
         .collect_vec();
 
     assert_eq!(values_for_foo.len(), 3);
 
     let last = values_for_foo.last().unwrap();
 
-    assert_eq!(last.0.version, 15);
-    assert_eq!(last.1 .0, None);
+    assert_eq!(last.version.get(), 15);
+    assert_eq!(last.value, None);
 }
 
 #[test]
@@ -605,10 +605,10 @@ fn test_get_effective_values_between_has_no_effective_versions_outside_requested
 
     let mut range_iter = range.iter();
     let first = range_iter.next().unwrap();
-    assert_eq!(first.0.version, 10);
+    assert_eq!(first.version.get(), 10);
 
     let second = range_iter.next().unwrap();
-    assert_eq!(second.0.version, 15);
+    assert_eq!(second.version.get(), 15);
 }
 
 // This usecase tests the following scenario
@@ -646,13 +646,13 @@ fn test_get_effective_values_between_has_effective_versions_outside_requested_ra
 
     let mut range_iter = range.iter();
     let first = range_iter.next().unwrap();
-    assert_eq!(first.0.version, 5);
+    assert_eq!(first.version.get(), 5);
 
     let second = range_iter.next().unwrap();
-    assert_eq!(second.0.version, 10);
+    assert_eq!(second.version.get(), 10);
 
     let third = range_iter.next().unwrap();
-    assert_eq!(third.0.version, 15)
+    assert_eq!(third.version.get(), 15)
 }
 
 // This usecase tests the following scenario
@@ -687,7 +687,7 @@ fn test_get_effective_values_between_no_effective_values_inside_range_only_befor
 
     let mut range_iter = range.iter();
     let first = range_iter.next().unwrap();
-    assert_eq!(first.0.version, 10);
+    assert_eq!(first.version.get(), 10);
 }
 
 // This usecase tests the following scenario
@@ -770,31 +770,31 @@ fn test_get_effective_values_between_multiple_keys() {
 
     let all_foo = range
         .iter()
-        .filter(|(key, _)| key.key == "common_prefix_foo")
+        .filter(|record| record.key == "common_prefix_foo")
         .collect_vec();
     assert_eq!(all_foo.len(), 3);
     let foo_first = all_foo.first().unwrap();
-    assert_eq!(foo_first.0.version, 5);
+    assert_eq!(foo_first.version.get(), 5);
     let foo_last = all_foo.last().unwrap();
-    assert_eq!(foo_last.0.version, 15);
+    assert_eq!(foo_last.version.get(), 15);
 
     let all_bar = range
         .iter()
-        .filter(|(key, _)| key.key == "common_prefix_bar")
+        .filter(|record| record.key == "common_prefix_bar")
         .collect_vec();
     assert_eq!(all_bar.len(), 3);
     let first_bar = all_bar.first().unwrap();
-    assert_eq!(first_bar.0.version, 8);
+    assert_eq!(first_bar.version.get(), 8);
     let last_bar = all_bar.last().unwrap();
-    assert_eq!(last_bar.0.version, 18);
+    assert_eq!(last_bar.version.get(), 18);
 
     let all_baz = range
         .iter()
-        .filter(|(key, _)| key.key == "common_prefix_baz")
+        .filter(|record| record.key == "common_prefix_baz")
         .collect_vec();
     assert_eq!(all_baz.len(), 2);
     let first_baz = all_baz.first().unwrap();
-    assert_eq!(first_baz.0.version, 14);
+    assert_eq!(first_baz.version.get(), 14);
     let last_baz = all_baz.last().unwrap();
-    assert_eq!(last_baz.0.version, 19);
+    assert_eq!(last_baz.version.get(), 19);
 }

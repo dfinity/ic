@@ -3,7 +3,7 @@ use crate::CanisterRegistryClient;
 use async_trait::async_trait;
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
-    RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    RegistryTransportRecord, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
@@ -161,7 +161,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         key_prefix: &str,
         lower_bound: RegistryVersion,
         upper_bound: RegistryVersion,
-    ) -> Result<BTreeMap<StorableRegistryKey, StorableRegistryValue>, RegistryClientError> {
+    ) -> Result<Vec<RegistryVersionedRecord<Vec<u8>>>, RegistryClientError> {
         // Lower bound has to be within accessible range
         if self.get_latest_version() < lower_bound {
             return Err(RegistryClientError::VersionNotAvailable {
@@ -241,7 +241,14 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
             }
         });
 
-        Ok(effective_records)
+        Ok(effective_records
+            .into_iter()
+            .map(|(key, value)| RegistryVersionedRecord {
+                key: key.key,
+                version: RegistryVersion::new(key.version),
+                value: value.0,
+            })
+            .collect())
     }
 }
 
