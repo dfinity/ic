@@ -3,7 +3,7 @@ Title:: Stress test for the http_requests feature
 
 Goal:: Measure the qps of http_requests originating from one canister. The test shuold be run with the following command:
 ```
-ict ict testnet create canister_http_stress_test --lifetime-mins=180 --output-dir=./canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
+ict testnet create canister_http_stress_test --lifetime-mins=180 --output-dir=./canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
 ```
 
 Runbook::
@@ -34,6 +34,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::boundary_node::BoundaryNode;
 use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
@@ -104,6 +105,7 @@ pub fn setup(env: TestEnv) {
     info!(&logger, "Created raw BN with IP {}!", bn_ipv6);
 
     let mut ic = InternetComputer::new()
+        .with_required_host_features(vec![HostFeature::Performance])
         .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
         .add_subnet(
             Subnet::new(SubnetType::System)
