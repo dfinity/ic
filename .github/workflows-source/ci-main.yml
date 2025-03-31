@@ -37,7 +37,7 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-large
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
     container:
       <<: *image
       options: >-
@@ -66,7 +66,6 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
-    runs-on: ubuntu-24-large
     timeout-minutes: 180
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
@@ -189,8 +188,7 @@ jobs:
 
   python-ci-tests:
     name: Python CI Tests
-    #<<: *dind-small-setup
-    runs-on: ubuntu-24-large
+    runs-on: ubuntu-latest
     steps:
       - <<: *checkout
       - <<: *python-setup
