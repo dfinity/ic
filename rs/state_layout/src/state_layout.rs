@@ -1515,7 +1515,7 @@ where
         collect_subdirs(states_dir.as_path(), 0, parse_canister_id)
     }
 
-    pub fn canister(
+    fn canister(
         &self,
         canister_id: &CanisterId,
     ) -> Result<CanisterLayout<Permissions>, LayoutError> {
@@ -1556,7 +1556,7 @@ where
     /// Directory where the snapshot for `snapshot_id` is stored.
     /// Note that we store them by canister. This means we have the canister id in the path, which is
     /// necessary in the context of subnet splitting. Also see [`canister_id_from_path`].
-    pub fn snapshot(
+    fn snapshot(
         &self,
         snapshot_id: &SnapshotId,
     ) -> Result<SnapshotLayout<Permissions>, LayoutError> {
@@ -1572,14 +1572,26 @@ where
         )
     }
 
-    pub fn wasm(&self, canister_id: &CanisterId) -> Result<WasmFile<Permissions>, LayoutError> {
+    fn snapshot_root(&self, snapshot_id: &SnapshotId) -> Result<PathBuf, LayoutError> {
+        let path = self.0.root.join(SNAPSHOTS_DIR).join(hex::encode(
+            snapshot_id.get_canister_id().get_ref().as_slice(),
+        ));
+        Permissions::check_dir(&path)?;
+        Ok(path)
+    }
+
+    pub fn canister_wasm(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Result<WasmFile<Permissions>, LayoutError> {
         Ok(self.canister(canister_id)?.wasm())
     }
+
     pub fn snapshot_wasm(
         &self,
         snapshot_id: &SnapshotId,
     ) -> Result<WasmFile<Permissions>, LayoutError> {
-        Ok(self.snapshot(snapshot_id)?.wasm())
+        Ok(self.snapshot_root(snapshot_id)?.join(WASM_FILE).into())
     }
 
     pub fn canister_path(&self, canister_id: &CanisterId) -> PathBuf {
@@ -1698,7 +1710,7 @@ where
     ) -> Result<PageMapLayout<Permissions>, LayoutError> {
         Ok(self.canister(canister_id)?.wasm_chunk_store())
     }
-        pub fn snapshot_wasm_chunk_store(
+    pub fn snapshot_wasm_chunk_store(
         &self,
         snapshot_id: &SnapshotId,
     ) -> Result<PageMapLayout<Permissions>, LayoutError> {
@@ -1708,7 +1720,7 @@ where
 
 impl<P> CheckpointLayout<P>
 where
-    P: WritePolicy,
+    P: WritePolicy + ReadPolicy,
 {
     /// Creates the unverified checkpoint marker.
     /// If the marker already exists, this function does nothing and returns `Ok(())`.
@@ -1726,6 +1738,9 @@ where
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
             io_err: err,
         })
+    }
+    pub fn delete_snapshot(&self, snapshot_id: &SnapshotId) -> Result<(), LayoutError> {
+        self.snapshot(snapshot_id)?.delete_dir()
     }
 }
 
@@ -2092,7 +2107,7 @@ where
     }
 }
 
-pub struct CanisterLayout<Permissions: AccessPolicy> {
+struct CanisterLayout<Permissions: AccessPolicy> {
     canister_root: PathBuf,
     permissions_tag: PhantomData<Permissions>,
     checkpoint: CheckpointLayout<Permissions>,
@@ -2102,7 +2117,7 @@ impl<Permissions> CanisterLayout<Permissions>
 where
     Permissions: ReadPolicy,
 {
-    pub fn new(
+    fn new(
         canister_root: PathBuf,
         checkpoint: &CheckpointLayout<Permissions>,
     ) -> Result<Self, LayoutError> {
@@ -2175,7 +2190,7 @@ where
     }
 }
 
-pub struct SnapshotLayout<Permissions: AccessPolicy> {
+struct SnapshotLayout<Permissions: AccessPolicy> {
     snapshot_root: PathBuf,
     permissions_tag: PhantomData<Permissions>,
     checkpoint: CheckpointLayout<Permissions>,
@@ -2185,7 +2200,7 @@ impl<Permissions> SnapshotLayout<Permissions>
 where
     Permissions: ReadPolicy,
 {
-    pub fn new(
+    fn new(
         snapshot_root: PathBuf,
         checkpoint: &CheckpointLayout<Permissions>,
     ) -> Result<Self, LayoutError> {
@@ -2199,10 +2214,6 @@ where
 
     fn raw_path(&self) -> PathBuf {
         self.snapshot_root.clone()
-    }
-
-    fn wasm(&self) -> WasmFile<Permissions> {
-        self.snapshot_root.join(WASM_FILE).into()
     }
 
     fn snapshot(
@@ -2246,7 +2257,7 @@ where
         }
     }
 
-     fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
+    fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
             name_stem: "wasm_chunk_store".into(),
@@ -2261,7 +2272,7 @@ where
     P: ReadPolicy + WritePolicy,
 {
     /// Remove the entire directory for the snapshot.
-    pub fn delete_dir(&self) -> Result<(), LayoutError> {
+    fn delete_dir(&self) -> Result<(), LayoutError> {
         let map_error = |err| LayoutError::IoError {
             path: self.raw_path(),
             message: "Cannot remove snapshot.".to_string(),

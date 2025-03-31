@@ -1128,7 +1128,7 @@ fn switch_to_checkpoint(
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
             let wasm_binary = layout
-                .wasm(tip_id)
+                .canister_wasm(tip_id)
                 .unwrap()
                 .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?;
             debug_assert_eq!(

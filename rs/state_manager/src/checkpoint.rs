@@ -15,7 +15,7 @@ use ic_replicated_state::{
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
     error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, PageMapLayout,
-    ReadOnly, ReadPolicy
+    ReadOnly, ReadPolicy,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -802,7 +802,7 @@ pub fn load_canister_state(
             let starting_time = Instant::now();
             let wasm_binary = WasmBinary::new(
                 checkpoint_layout
-                    .wasm(canister_id)?
+                    .canister_wasm(canister_id)?
                     .deserialize(execution_state_bits.binary_hash)?,
             );
             durations.insert("wasm_binary", starting_time.elapsed());
@@ -1033,7 +1033,7 @@ fn load_snapshot_from_checkpoint(
 ) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
     load_snapshot(
         checkpoint_layout,
-            snapshot_id,
+        snapshot_id,
         checkpoint_layout.height(),
         Arc::clone(&fd_factory),
     )

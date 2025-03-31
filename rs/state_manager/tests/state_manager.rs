@@ -464,7 +464,7 @@ fn checkpoint_marked_ro_at_restart() {
         // Make sure we don't do asynchronous operations with checkpoint.
         state_manager.flush_tip_channel();
         let canister_100_wasm = checkpoint_layout
-            .wasm(&canister_test_id(100))
+            .canister_wasm(&canister_test_id(100))
             .unwrap()
             .raw_path()
             .to_path_buf();
@@ -5528,7 +5528,7 @@ fn can_uninstall_code() {
             0
         );
         assert!(checkpoint_layout
-            .wasm(&canister_test_id(100))
+            .canister_wasm(&canister_test_id(100))
             .unwrap()
             .raw_path()
             .exists());
@@ -5566,7 +5566,7 @@ fn can_uninstall_code() {
         );
         // WASM binary should be missing
         assert!(!checkpoint_layout
-            .wasm(&canister_test_id(100))
+            .canister_wasm(&canister_test_id(100))
             .unwrap()
             .raw_path()
             .exists());
@@ -5598,7 +5598,7 @@ fn can_uninstall_code_state_machine() {
         .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
         .unwrap();
     assert!(checkpoint_layout
-        .wasm(&canister_id)
+        .canister_wasm(&canister_id)
         .unwrap()
         .raw_path()
         .exists());
@@ -5612,7 +5612,7 @@ fn can_uninstall_code_state_machine() {
         .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
         .unwrap();
     assert!(!checkpoint_layout
-        .wasm(&canister_id)
+        .canister_wasm(&canister_id)
         .unwrap()
         .raw_path()
         .exists());
@@ -5657,7 +5657,11 @@ fn tip_is_initialized_correctly() {
             .unwrap()
             .raw_path()
             .exists());
-        assert!(tip_layout.wasm(canister_id).unwrap().raw_path().exists());
+        assert!(tip_layout
+            .canister_wasm(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists());
         let vmemory_layout = tip_layout.canister_vmemory_0(canister_id).unwrap();
         assert!(
             vmemory_layout.base().exists()
@@ -5693,7 +5697,7 @@ fn tip_is_initialized_correctly() {
             .raw_path()
             .exists());
         assert!(checkpoint_layout
-            .wasm(canister_id)
+            .canister_wasm(canister_id)
             .unwrap()
             .raw_path()
             .exists());

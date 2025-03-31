@@ -433,7 +433,7 @@ fn flush_snapshot_changes<T>(
     for op in snapshot_operations {
         match op {
             SnapshotOperation::Delete(snapshot_id) => {
-                layout.snapshot(&snapshot_id)?.delete_dir()?;
+                layout.delete_snapshot(&snapshot_id)?;
             }
             SnapshotOperation::Backup(canister_id, snapshot_id) => {
                 backup(log, layout, canister_id, snapshot_id)?;
@@ -471,7 +471,7 @@ fn backup<T>(
         .copy_or_hardlink_files_to(&layout.snapshot_wasm_chunk_store(&snapshot_id)?, log)?;
 
     WasmFile::hardlink_file(
-        &layout.wasm(&canister_id)?,
+        &layout.canister_wasm(&canister_id)?,
         &layout.snapshot_wasm(&snapshot_id)?,
     )?;
 
@@ -505,10 +505,10 @@ fn restore<T>(
         .snapshot_wasm_chunk_store(&snapshot_id)?
         .copy_or_hardlink_files_to(&layout.canister_wasm_chunk_store(&canister_id)?, log)?;
 
-    layout.wasm(&canister_id)?.try_delete_file()?;
+    layout.canister_wasm(&canister_id)?.try_delete_file()?;
     WasmFile::hardlink_file(
         &layout.snapshot_wasm(&snapshot_id)?,
-        &layout.wasm(&canister_id)?,
+        &layout.canister_wasm(&canister_id)?,
     )?;
 
     Ok(())
@@ -844,7 +844,7 @@ fn serialize_canister_to_tip(
             let wasm_binary = &execution_state.wasm_binary.binary;
             match wasm_binary.file() {
                 Some(path) => {
-                    let wasm = tip.wasm(&canister_id)?;
+                    let wasm = tip.canister_wasm(&canister_id)?;
                     // This if should always be false, as we reflink copy the entire checkpoint to the tip
                     // It is left in mainly as defensive programming
                     if !wasm.raw_path().exists() {
@@ -859,7 +859,7 @@ fn serialize_canister_to_tip(
                 }
                 None => {
                     // Canister was installed/upgraded. Persist the new wasm binary.
-                    tip.wasm(&canister_id)?
+                    tip.canister_wasm(&canister_id)?
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
@@ -890,7 +890,7 @@ fn serialize_canister_to_tip(
         None => {
             tip.canister_vmemory_0(&canister_id)?.delete_files()?;
             tip.canister_stable_memory(&canister_id)?.delete_files()?;
-            tip.wasm(&canister_id)?.try_delete_file()?;
+            tip.canister_wasm(&canister_id)?.try_delete_file()?;
             None
         }
     };
