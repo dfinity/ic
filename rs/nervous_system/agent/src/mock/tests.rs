@@ -67,7 +67,7 @@ async fn test_mock_wrong_call() {
     // Step 3: Verify results. Actually, the should_panic at the top is what does the verification.
 }
 
-#[should_panic(expected = "Some expected calls were left over.")]
+#[should_panic(expected = "expected calls were left over")]
 #[tokio::test]
 async fn test_mock_left_over_expected_call() {
     // Step 1: Prepare the world: Expect a couple of `get_chunk` calls.

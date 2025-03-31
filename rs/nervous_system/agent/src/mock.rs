@@ -47,10 +47,12 @@ impl crate::sealed::Sealed for MockCallCanisters {}
 
 impl Drop for MockCallCanisters {
     fn drop(&mut self) {
-        pretty_assertions::assert_eq!(
-            &*self.remaining_expected_calls.borrow(),
-            &VecDeque::new(),
-            "Some expected calls were left over.",
+        let calls = self.remaining_expected_calls.borrow();
+        let len = calls.len();
+        assert!(
+            calls.is_empty(),
+            "{} expected calls were left over (i.e. were never made):\n{:#?}",
+            len, calls,
         );
     }
 }
