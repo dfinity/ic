@@ -204,7 +204,7 @@ pub mod neuron {
         candid::CandidType, candid::Deserialize, Clone, comparable::Comparable, Debug, PartialEq,
     )]
     pub struct TopicFollowees {
-        pub topic_id_to_followees: BTreeMap<u64, FolloweesForTopic>,
+        pub topic_id_to_followees: BTreeMap<i32, FolloweesForTopic>,
     }
 
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
