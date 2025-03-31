@@ -85,8 +85,7 @@ pub fn deliver_batches(
             break;
         };
         let Some(tape) = pool.get_random_tape(height) else {
-            // Do not deliver batch if we don't have random tape
-            warn!(
+            info!(
                 every_n_seconds => 30,
                 log,
                 "Do not deliver height {} because RandomTape is not ready. Will re-try later",
