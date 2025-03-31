@@ -755,25 +755,12 @@ pub fn process(
                     ));
 
                     // Update the stable memory and serialize the delta.
-                    let stable_memory_delta =
-                        match embedder.config().feature_flags.wasm_native_stable_memory {
-                            FlagStatus::Enabled => {
-                                stable_memory.size = instance.heap_size(CanisterMemoryType::Stable);
-                                stable_memory.page_map.update(&compute_page_delta(
-                                    &mut instance,
-                                    &run_result.stable_memory_dirty_pages,
-                                    CanisterMemoryType::Stable,
-                                ))
-                            }
-                            FlagStatus::Disabled => {
-                                // unwrap should not fail, because we passed Some(system_api) when creating the instance
-                                let sys_api = instance.store_data_mut().system_api_mut().unwrap();
-                                stable_memory.size = sys_api.stable_memory_size();
-                                stable_memory
-                                    .page_map
-                                    .update(&sys_api.stable_memory_dirty_pages())
-                            }
-                        };
+                    stable_memory.size = instance.heap_size(CanisterMemoryType::Stable);
+                    let stable_memory_delta = stable_memory.page_map.update(&compute_page_delta(
+                        &mut instance,
+                        &run_result.stable_memory_dirty_pages,
+                        CanisterMemoryType::Stable,
+                    ));
                     // unwrap should not fail, because we passed Some(system_api) when creating the instance
                     let sys_api = instance.store_data().system_api().unwrap();
                     allocated_bytes = sys_api.get_allocated_bytes();

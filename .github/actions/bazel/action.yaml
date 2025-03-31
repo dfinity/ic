@@ -63,7 +63,7 @@ runs:
       if: success() || failure()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}-bep-${{ strategy.job-index }}
+        name: ${{ github.job }}-bep
         retention-days: 14
         if-no-files-found: ignore
         compression-level: 9

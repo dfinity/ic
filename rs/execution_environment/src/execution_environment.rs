@@ -1657,10 +1657,16 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
-                // TODO: EXC-1955
-                #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotMetadataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
+                    match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
+                                .map(|x| (x, Some(canister_id)))
+                        }
+                    }
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1670,8 +1676,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
                 // TODO: EXC-1957
                 #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotDataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res =
+                    ReadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
+                        match self.config.canister_snapshot_download {
+                            FlagStatus::Disabled => Ok((vec![], None)),
+                            FlagStatus::Enabled => Ok((vec![], None)),
+                        }
+                    });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1681,8 +1692,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
                 // TODO: EXC-1959
                 #[allow(clippy::bind_instead_of_map)]
-                let res = UploadCanisterSnapshotMetadataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res =
+                    UploadCanisterSnapshotMetadataArgs::decode(payload).and_then(
+                        |_args| match self.config.canister_snapshot_upload {
+                            FlagStatus::Disabled => Ok((vec![], None)),
+                            FlagStatus::Enabled => Ok((vec![], None)),
+                        },
+                    );
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1692,8 +1708,12 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadCanisterSnapshotData) => {
                 // TODO: EXC-1960
                 #[allow(clippy::bind_instead_of_map)]
-                let res = UploadCanisterSnapshotDataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res = UploadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
+                    match self.config.canister_snapshot_upload {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => Ok((vec![], None)),
+                    }
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -2426,6 +2446,20 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
         result
+    }
+
+    fn read_canister_snapshot_metadata(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        let snapshot_id = args.get_snapshot_id();
+        self.canister_manager
+            .read_snapshot_metadata(sender, snapshot_id, canister, state)
+            .map(|res| Encode!(&res).unwrap())
+            .map_err(|e| e.into())
     }
 
     fn node_metrics_history(

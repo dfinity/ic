@@ -74,10 +74,10 @@ const SANDBOX_PROCESSES_TO_EVICT: usize = 200;
 /// The RSS to evict in one go in order to amortize for the eviction cost (1 GiB).
 const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 1024);
 
-/// By default, assume each sandbox process consumes 50 MiB of RSS.
+/// By default, assume each sandbox process consumes 5 MiB of RSS.
 /// The actual memory usage is updated asynchronously.
 /// See `monitor_and_evict_sandbox_processes`
-const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024);
+const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(5 * 1024 * 1024);
 
 /// To speedup synchronous operations, the sandbox RSS-based eviction
 /// is triggered only when the system's available memory falls below
