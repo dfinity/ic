@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import collections
 import concurrent.futures
 import contextlib
 import hashlib
@@ -9,7 +10,6 @@ import logging
 import os
 import platform
 import shutil
-import typing
 
 # permit ctrl+c to work correctly
 import signal as _signal  # noqa
@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import typing
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -124,7 +125,7 @@ class Dirs(object):
 logger = logging.getLogger(__name__)
 
 
-def fail(msg: str, args: list[str] | None = None) -> None:
+def fail(msg: str, *args: typing.Any) -> None:
     """Logs the given message as critical and exits."""
     if args is None:
         args = []
@@ -194,10 +195,13 @@ def compute_sha256(file_path: Path) -> str:
     return sha.hexdigest()
 
 
+progress_hidden: collections.deque[None] = collections.deque()
+
+
 def progress(
     prefix: str = "",
     out: typing.TextIO = sys.stderr,
-) -> typing.Callable[[int], None]:
+) -> typing.Callable[[float], None]:
     def termsize() -> int:
         try:
             size = os.get_terminal_size()[0]
@@ -227,8 +231,8 @@ def progress(
             )
             prev_progress_width = progress_width
 
-    def callme(progress) -> None:
-        if sys.stderr.isatty():
+    def callme(progress: float) -> None:
+        if sys.stderr.isatty() and len(progress_hidden) == 0:
             if progress >= 1.0:
                 print(f"\r{' '*(termsize())}", end="\r", flush=True, file=out)
             else:
@@ -251,7 +255,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
             except (IndexError, KeyError, ValueError):
                 length = None
             sofar = 0
-            progressbar = progress((dest_path))
+            progressbar = progress(str(dest_path))
             with tmp_file.open("wb") as out_file:
                 while chunk := response.read(64 * 1024):
                     sofar = sofar + len(chunk)
@@ -273,6 +277,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
         if tmp_file.is_file():
             tmp_file.unlink()
         fail("Could not download %s -> %s. Error: %s", url, dest_path, e)
+        raise RuntimeError("Could not download %s" % url)  # appease the MyPy gods
 
 
 # ------------------------------------------------------------------------------
@@ -340,6 +345,9 @@ def get_download_sources(mode: str) -> list[str]:
         return []  # appease the MyPy gods.
 
 
+Download = concurrent.futures.Future[Path]
+
+
 # ------------------------------------------------------------------------------
 # REPRODUCIBILITY VERIFIER
 # ------------------------------------------------------------------------------
@@ -364,8 +372,6 @@ class ReproducibilityVerifier:
         logger.debug(f"CDNs selected: {self.cdn_domains}")
 
         self.git_hash = ""
-        self.guestos_proposal = False
-        self.hostos_proposal = False
         self.proposal_package_urls: list[str] = []
         self.proposal_package_sha256_hex = ""
 
@@ -375,8 +381,7 @@ class ReproducibilityVerifier:
             shutil.rmtree(self.base_cache_dir)
         self.cache_for_this_hash: Path = Path()
 
-        self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
-        self.download_futures: list[concurrent.futures.Future[Path]] = []
+        self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=9)
 
     # --------------------------------------------------------------------------
     # ENVIRONMENT CHECKS
@@ -524,34 +529,16 @@ class ReproducibilityVerifier:
         os.link(cache_file, target_file)
         return target_file
 
-    def start_download(
-        self, url: str, target_file: Path, os_type: str, append_to_futures: bool = True
-    ) -> concurrent.futures.Future[Path]:
-        future = self.download_executor.submit(self.cached_download, url, target_file, os_type)
-        self.download_futures.append(future)
-        return future
-
-    def wait_for_downloads(self, futures: None | list[concurrent.futures.Future[Path]] = None) -> list[Path]:
-        results: list[Path] = []
-        for n, f in enumerate(futures or self.download_futures):
-            if not f.done():
-                logger.info(
-                    "Waiting for background download %s/%s to finish...",
-                    n + 1,
-                    len(futures or self.download_futures),
-                )
-            results.append(f.result())
-        if futures is not None:
-            self.download_futures = []
-        return results
+    def start_download(self, url: str, target_file: Path, os_type: str, append_to_futures: bool = True) -> Download:
+        return self.download_executor.submit(self.cached_download, url, target_file, os_type)
 
     # --------------------------------------------------------------------------
     # Core logic restructured to start downloads early
     # --------------------------------------------------------------------------
-    def process_proposal(self) -> None:
+    def process_proposal(self) -> tuple[str | None, str | None]:
         """If a proposal ID is provided, fetch the proposal data and set internal state."""
         if not self.proposal_id:
-            return
+            return (None, None)
         proposal_json_path = Path("proposal-body.json")
         proposal_url = f"https://ic-api.internetcomputer.org/api/v3/proposals/{self.proposal_id}"
         logger.debug(f"Fetching proposal {proposal_url}")
@@ -563,7 +550,9 @@ class ReproducibilityVerifier:
                 data = resp.read()
             proposal_json_path.write_bytes(data)
         except Exception as e:
-            fail(f"Could not fetch {self.proposal_id}. Error: {e}")
+            err = f"Could not fetch {self.proposal_id}. Error: {e}"
+            fail(err)
+            raise RuntimeError(err)
 
         proposal_data = json.loads(proposal_json_path.read_text(encoding="utf-8"))
         self.proposal_package_urls = proposal_data["payload"]["release_package_urls"]
@@ -571,13 +560,15 @@ class ReproducibilityVerifier:
 
         prop_str = json.dumps(proposal_data)
         if "replica_version_to_elect" in prop_str:
-            self.guestos_proposal = True
             self.git_hash = proposal_data["payload"]["replica_version_to_elect"]
+            return (self.proposal_package_sha256_hex, None)
         elif "hostos_version_to_elect" in prop_str:
-            self.hostos_proposal = True
             self.git_hash = proposal_data["payload"]["hostos_version_to_elect"]
+            return (None, self.proposal_package_sha256_hex)
         else:
-            fail(f"Proposal #{self.proposal_id} is missing replica_version_to_elect or hostos_version_to_elect")
+            err = f"Proposal #{self.proposal_id} is missing replica_version_to_elect or hostos_version_to_elect"
+            fail(err)
+            raise RuntimeError(err)
 
     def decide_git_hash(self) -> None:
         """Determines which git hash to build and verify."""
@@ -589,7 +580,7 @@ class ReproducibilityVerifier:
             self.check_git_repo()
             self.git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
-    def start_cdn_downloads_for_os(self, os_type: str, storage: Dirs) -> None:
+    def start_cdn_downloads_for_os(self, os_type: str, storage: Dirs) -> list[Download]:
         """Queues downloading of the OS artifact and sums file from the selected CDNs."""
         if os_type == "setup-os":
             artifact = "disk-img"
@@ -597,6 +588,7 @@ class ReproducibilityVerifier:
             artifact = "update-img"
 
         tar_name = f"{artifact}.tar.zst"
+        downloads: list[Download] = []
         for cdn_domain in self.cdn_domains:
             artifact_url = f"https://{cdn_domain}/ic/{self.git_hash}/{os_type}/{artifact}/{tar_name}"
             sums_url = f"https://{cdn_domain}/ic/{self.git_hash}/{os_type}/{artifact}/SHA256SUMS"
@@ -605,12 +597,17 @@ class ReproducibilityVerifier:
             local_artifact_path = subdir / tar_name
             local_sums_path = subdir / "SHA256SUMS"
 
-            self.start_download(artifact_url, local_artifact_path, os_type)
-            self.start_download(sums_url, local_sums_path, os_type)
+            downloads.extend(
+                [
+                    self.start_download(artifact_url, local_artifact_path, os_type),
+                    self.start_download(sums_url, local_sums_path, os_type),
+                ]
+            )
+        return downloads
 
-    def start_proposal_download_if_needed(self, storage: Dirs) -> list[concurrent.futures.Future[Path]]:
+    def start_proposal_download_if_needed(self, storage: Dirs) -> list[Download]:
         """If a proposal is set, download the package from the proposal-specified URLs."""
-        downloads: list[concurrent.futures.Future[Path]] = []
+        downloads: list[Download] = []
         if not self.proposal_id:
             return downloads
         for url in self.proposal_package_urls:
@@ -644,7 +641,7 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     # Verification steps
     # --------------------------------------------------------------------------
-    def verify_proposal_artifacts(self, downloads: list[concurrent.futures.Future[Path]] = []) -> None:
+    def verify_proposal_artifacts(self, downloads: list[Download] = []) -> None:
         """Verifies proposal artifact SHA-256 if a proposal is specified."""
         for completed_download in concurrent.futures.as_completed(downloads):
             proposal_target = completed_download.result()
@@ -664,7 +661,6 @@ class ReproducibilityVerifier:
         else:
             artifact = "update-img"
 
-        self.wait_for_downloads()
         final_hashes = []
         for cdn_domain in self.cdn_domains:
             subdir = storage.cdn_out / cdn_domain / os_type
@@ -677,31 +673,39 @@ class ReproducibilityVerifier:
             fail(f"The sources for {os_type} do not all match! {final_hashes}")
         return final_hashes[0]
 
-    def compare_proposal_vs_cdn(self, storage: Dirs) -> None:
+    def compare_proposal_vs_cdn(
+        self,
+        storage: Dirs,
+        guest_os_hash: str | None,
+        guest_os_downloads: list[Download],
+        host_os_hash: str | None,
+        host_os_downloads: list[Download],
+    ) -> None:
         """Compares the proposal’s artifact hash against the CDN-stored hash if a proposal is specified."""
         if not self.proposal_id:
             return
-        if self.guestos_proposal:
+        if guest_os_hash:
+            [f.result() for f in guest_os_downloads]
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
-            if cdn_hash != self.proposal_package_sha256_hex:
+            if cdn_hash != guest_os_hash:
                 fail(
                     "The sha256 sum from the proposal does not match the one from the CDN storage for GuestOS.\n"
-                    f"Proposal sum: {self.proposal_package_sha256_hex}\n"
+                    f"Proposal sum: {guest_os_hash}\n"
                     f"CDN sum:      {cdn_hash}"
                 )
             else:
                 logger.info("The GuestOS sha256sum from the proposal and remote match.")
-        else:
+        if host_os_hash:
+            [f.result() for f in host_os_downloads]
             cdn_hash = self.compare_cdn_hash("host-os", storage)
-            if self.verify_hostos:
-                if cdn_hash != self.proposal_package_sha256_hex:
-                    fail(
-                        "The sha256 sum from the proposal does not match the one from the CDN storage for HostOS.\n"
-                        f"Proposal sum: {self.proposal_package_sha256_hex}\n"
-                        f"CDN sum:      {cdn_hash}"
-                    )
-                else:
-                    logger.info("The HostOS sha256sum from the proposal and remote match.")
+            if cdn_hash != host_os_hash:
+                fail(
+                    "The sha256 sum from the proposal does not match the one from the CDN storage for HostOS.\n"
+                    f"Proposal sum: {host_os_hash}\n"
+                    f"CDN sum:      {cdn_hash}"
+                )
+            else:
+                logger.info("The HostOS sha256sum from the proposal and remote match.")
 
     def clone_and_checkout_repo(self, ic_clone_path: Path) -> None:
         """Clones and checks out the IC repository at the desired commit."""
@@ -750,14 +754,23 @@ class ReproducibilityVerifier:
         shutil.rmtree(ic_clone_path_cache, ignore_errors=True)
         shutil.copytree(ic_clone_path, ic_clone_path_cache)
 
-    def build_and_compare_locally(self, storage: Dirs) -> None:
+    def build_locally(
+        self,
+        storage: Dirs,
+    ) -> None:
         """Builds the OS images locally, then compares their hashes to the remote (CDN) artifacts."""
-        ic_clone_path = storage.tmp_dir / "ic"
-        self.clone_and_checkout_repo(ic_clone_path)
+        global progress_hidden
 
-        logger.info("Building IC-OS (./ci/container/build-ic.sh --icos).")
-        subprocess.run(["./ci/container/build-ic.sh", "--icos"], check=True)
-        logger.info("IC-OS build complete.")
+        progress_hidden.append(None)
+        try:
+            ic_clone_path = storage.tmp_dir / "ic"
+            self.clone_and_checkout_repo(ic_clone_path)
+
+            logger.info("Building IC-OS (./ci/container/build-ic.sh --icos).")
+            subprocess.run(["./ci/container/build-ic.sh", "--icos"], check=True)
+            logger.info("IC-OS build complete.")
+        finally:
+            progress_hidden.popleft()
 
         artifacts_path = ic_clone_path / "artifacts" / "icos"
 
@@ -774,20 +787,32 @@ class ReproducibilityVerifier:
         if self.verify_setupos:
             move_artifact("setupos", "disk-img.tar.zst")
 
+    def compare_with_local_build(
+        self,
+        storage: Dirs,
+        compile_future: concurrent.futures.Future[None],
+        guest_os_downloads: list[Download],
+        host_os_downloads: list[Download],
+        setup_os_downloads: list[Download],
+    ) -> None:
+        compile_future.result()
         logger.info("Verifying locally built artifacts against remote CDN artifacts.")
-        if self.verify_guestos:
+        if guest_os_downloads:
+            [f.result() for f in guest_os_downloads]
             local_path = storage.dev_out / "guestos" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
             compare_hashes(local_hash, cdn_hash, "GuestOS")
 
-        if self.verify_hostos:
+        if host_os_downloads:
+            [f.result() for f in host_os_downloads]
             local_path = storage.dev_out / "hostos" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("host-os", storage)
             compare_hashes(local_hash, cdn_hash, "HostOS")
 
-        if self.verify_setupos:
+        if setup_os_downloads:
+            [f.result() for f in setup_os_downloads]
             local_path = storage.dev_out / "setupos" / "disk-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("setup-os", storage)
@@ -799,33 +824,31 @@ class ReproducibilityVerifier:
     def run(self) -> None:
         """Main entry point for reproducibility verification logic."""
         start_time = time.time()
+
         with self.storage() as dirs:
-            self.process_proposal()
+            guest_os_hash, host_os_hash = self.process_proposal()
             self.decide_git_hash()
             self.init_cache()
             self.storage()
 
             downloads_for_proposal = self.start_proposal_download_if_needed(dirs)
-
-            if self.verify_guestos:
-                self.start_cdn_downloads_for_os("guest-os", dirs)
-            if self.verify_hostos:
-                self.start_cdn_downloads_for_os("host-os", dirs)
-            if self.verify_setupos:
-                self.start_cdn_downloads_for_os("setup-os", dirs)
+            guest_os_downloads = self.start_cdn_downloads_for_os("guest-os", dirs) if self.verify_guestos else []
+            host_os_downloads = self.start_cdn_downloads_for_os("host-os", dirs) if self.verify_hostos else []
+            setup_os_downloads = self.start_cdn_downloads_for_os("setup-os", dirs) if self.verify_setupos else []
+            build = self.download_executor.submit(self.build_locally, dirs)
 
             # Environment checks can happen while downloads progress
             self.check_environment()
 
-            # Final verifications after downloads
+            # Verifications after downloads.  They take futures and await for them to be finished.
             self.verify_proposal_artifacts(downloads_for_proposal)
-            self.compare_proposal_vs_cdn(dirs)
-            self.build_and_compare_locally(dirs)
+            self.compare_proposal_vs_cdn(dirs, guest_os_hash, guest_os_downloads, host_os_hash, host_os_downloads)
+            self.compare_with_local_build(dirs, build, guest_os_downloads, host_os_downloads, setup_os_downloads)
 
-            elapsed = time.time() - start_time
-            h, rem = divmod(elapsed, 3600)
-            m, s = divmod(rem, 60)
-            logger.info(f"Total time: {int(h)}h {int(m)}m {int(s)}s")
+        elapsed = time.time() - start_time
+        h, rem = divmod(elapsed, 3600)
+        m, s = divmod(rem, 60)
+        logger.info(f"Total time: {int(h)}h {int(m)}m {int(s)}s")
 
 
 # ------------------------------------------------------------------------------
