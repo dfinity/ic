@@ -450,8 +450,7 @@ fn test_get_values_between_invalid_lower_bound() {
             RegistryVersion::new(10),
             RegistryVersion::new(15),
         )
-        .err()
-        .expect("Should have been an 'Invalid version' error");
+        .expect_err("Should have been an 'Invalid version' error");
 
     assert_matches!(
         err,
@@ -476,8 +475,7 @@ fn test_get_values_between_invalid_upper_bound() {
             RegistryVersion::new(10),
             RegistryVersion::new(15),
         )
-        .err()
-        .expect("Should have been an 'Invalid version' error");
+        .expect_err("Should have been an 'Invalid version' error");
 
     assert_matches!(
         err,
