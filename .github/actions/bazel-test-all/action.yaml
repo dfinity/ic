@@ -98,13 +98,11 @@ runs:
                 exit 0
             fi
 
-            bazel_args=( )
-
-            if [[ $release_build == "true" ]]; then
-              bazel_args+=( --config=release )
-            fi
-
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
-            bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS "${bazel_args[@]}"
+            if [[ $release_build == "true" ]]; then
+              bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS --config=release
+            else
+              bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS
+            fi
