@@ -703,17 +703,17 @@ impl From<CanisterManagerError> for UserError {
                         requested,
                         available
                     ))
-                }
+            }
             CanisterNotFound(canister_id) => {
                 Self::new(
-                        ErrorCode::CanisterNotFound,
-                        format!("Canister {} not found.{additional_help}", &canister_id),
-                    )
-                }
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.{additional_help}", &canister_id),
+                )
+            }
             CanisterIdAlreadyExists(canister_id) => {
                 Self::new(
                     ErrorCode::CanisterIdAlreadyExists,
-                    format!("Unsuccessful canister creation: canister id {} already exists.{additional_help}", canister_id)
+                        format!("Unsuccessful canister creation: canister id {} already exists.{additional_help}", canister_id)
                 )
             }
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),
@@ -740,14 +740,14 @@ impl From<CanisterManagerError> for UserError {
             CanisterNonEmpty(canister_id) => {
                 Self::new(
                     ErrorCode::CanisterNonEmpty,
-                    format!("Canister {} cannot be installed because the canister is not empty. Try installing with mode='reinstall' instead.{additional_help}", canister_id),
+                    format!("Canister {} cannot be installed because the canister is not empty. Try installing with mode='reinstall' instead.{additional_help}",
+                            canister_id),
                 )
             }
             CanisterInvalidController {
                 canister_id,
                 controllers_expected,
-                controller_provided } =>
-            {
+                controller_provided } => {
                 let controllers_expected = controllers_expected.iter().map(|id| format!("{}", id)).collect::<Vec<String>>().join(" ");
                 Self::new(
                     ErrorCode::CanisterInvalidController,
@@ -840,7 +840,7 @@ impl From<CanisterManagerError> for UserError {
             }
             InvalidSettings { message } => {
                 Self::new(ErrorCode::CanisterContractViolation,
-                            format!("Could not validate the settings: {} {additional_help}", message),
+                          format!("Could not validate the settings: {} {additional_help}", message),
                 )
             }
             MaxNumberOfCanistersReached { subnet_id, max_number_of_canisters } => {
@@ -883,9 +883,9 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::InsufficientCyclesInMemoryGrow,
                     format!(
                         "Canister cannot grow memory by {} bytes due to insufficient cycles. \
-                        At least {} additional cycles are required.{additional_help}",
-                        bytes,
-                        required - available)
+                         At least {} additional cycles are required.{additional_help}",
+                         bytes,
+                         required - available)
                 )
             }
             ReservedCyclesLimitExceededInMemoryAllocation { memory_allocation, requested, limit} =>
@@ -894,7 +894,7 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation,
                     format!(
                         "Cannot increase memory allocation to {} due to its reserved cycles limit. \
-                        The current limit ({}) would be exceeded by {}.{additional_help}",
+                         The current limit ({}) would be exceeded by {}.{additional_help}",
                         memory_allocation, limit, requested - limit,
                     ),
                 )
@@ -906,7 +906,7 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::ReservedCyclesLimitExceededInMemoryGrow,
                     format!(
                         "Canister cannot grow memory by {} bytes due to its reserved cycles limit. \
-                        The current limit ({}) would exceeded by {}.{additional_help}",
+                         The current limit ({}) would exceeded by {}.{additional_help}",
                         bytes, limit, requested - limit,
                     ),
                 )
@@ -998,7 +998,10 @@ impl From<CanisterManagerError> for UserError {
                 )
             }
             InvalidSubslice{ offset, size, actual_size } => {
-                Self::new(ErrorCode::InvalidManagementPayload, format!("Invalid subslice into wasm module / main memory / stable memory: offset {} + size {} > actual_size {}", offset, size, actual_size))
+                Self::new(
+                    ErrorCode::InvalidManagementPayload, 
+                    format!("Invalid subslice into wasm module / main memory / stable memory: offset {} + size {} > actual_size {}", offset, size, actual_size)
+                )
             }
         }
     }
