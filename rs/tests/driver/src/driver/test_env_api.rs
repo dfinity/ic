@@ -1611,15 +1611,12 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
         let dashboard_endpoint = format!("http://[{}]:7070", ip);
 
-        let client = match reqwest::blocking::Client::builder()
+        let Ok(client) = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
-        {
-            Ok(client) => client,
-            Err(e) => {
-                eprintln!("Failed to build HTTP client: {}", e);
-                return false;
-            }
+        else {
+            eprintln!("Failed to build HTTP client");
+            return false;
         };
 
         let resp = match client.get(&dashboard_endpoint).send() {
