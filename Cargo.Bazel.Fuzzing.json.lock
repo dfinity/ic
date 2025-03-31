@@ -1,5 +1,5 @@
 {
-  "checksum": "e904ebd5eba74e59f5c8c82f9170ceb30c11cb23b89e7edc0f00a0b3bade57c1",
+  "checksum": "adb0b755676b830e1779a5c0fb010479ea1cf0697f58c8e3286cf9af3e7414c0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11244,7 +11244,7 @@
                 "target": "serde_wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               }
             ],
@@ -11254,7 +11254,7 @@
                 "target": "serde_wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               }
             ],
@@ -11861,11 +11861,11 @@
             ],
             "wasm32-unknown-unknown": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               }
             ],
@@ -13677,7 +13677,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "wasm-bindgen 0.2.100",
               "target": "wasm_bindgen"
             }
           ],
@@ -19543,8 +19543,12 @@
               "target": "warp"
             },
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "wasm-bindgen 0.2.100",
               "target": "wasm_bindgen"
+            },
+            {
+              "id": "wasm-bindgen-test 0.3.50",
+              "target": "wasm_bindgen_test"
             },
             {
               "id": "wasm-encoder 0.217.0",
@@ -29660,11 +29664,11 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               }
             ],
@@ -35733,14 +35737,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "js-sys 0.3.64": {
+    "js-sys 0.3.77": {
       "name": "js-sys",
-      "version": "0.3.64",
+      "version": "0.3.77",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/js-sys",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/js-sys/0.3.64/download",
-          "sha256": "c5f195fe497f702db0f318b07fdd68edb16955aed830df8363d837542f8f935a"
+          "url": "https://static.crates.io/crates/js-sys/0.3.77/download",
+          "sha256": "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
         }
       },
       "targets": [
@@ -35762,19 +35766,36 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "default"
+            ],
+            "wasm32-wasi": [
+              "default"
+            ]
+          }
+        },
         "deps": {
           "common": [
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "wasm-bindgen 0.2.100",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.3.64"
+        "edition": "2021",
+        "version": "0.3.77"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -41461,6 +41482,87 @@
       ],
       "license_file": "LICENSE.md"
     },
+    "minicov 0.3.7": {
+      "name": "minicov",
+      "version": "0.3.7",
+      "package_url": "https://github.com/Amanieu/minicov",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/minicov/0.3.7/download",
+          "sha256": "f27fe9f1cc3c22e1687f9446c2083c4c5fc7f0bcf1c7a86bdbded14985895b4b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "minicov",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "minicov",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "minicov 0.3.7",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.7"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.83",
+              "target": "cc"
+            },
+            {
+              "id": "walkdir 2.3.3",
+              "target": "walkdir"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0/MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "minimal-lexical 0.2.1": {
       "name": "minimal-lexical",
       "version": "0.2.1",
@@ -45244,7 +45346,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               }
             ]
@@ -45324,7 +45426,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               }
             ]
@@ -45764,7 +45866,7 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               }
             ]
@@ -45851,7 +45953,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               }
             ]
@@ -49096,11 +49198,11 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "web-sys 0.3.64",
+                "id": "web-sys 0.3.77",
                 "target": "web_sys"
               }
             ]
@@ -52656,7 +52758,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))": [
               {
-                "id": "web-sys 0.3.64",
+                "id": "web-sys 0.3.77",
                 "target": "web_sys"
               }
             ],
@@ -52763,7 +52865,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))": [
               {
-                "id": "web-sys 0.3.64",
+                "id": "web-sys 0.3.77",
                 "target": "web_sys"
               }
             ],
@@ -53601,6 +53703,12 @@
                 "target": "libc"
               }
             ],
+            "aarch64-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "libc 0.2.158",
@@ -53649,6 +53757,12 @@
                 "target": "libc"
               }
             ],
+            "i686-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "i686-unknown-freebsd": [
               {
                 "id": "libc 0.2.158",
@@ -53692,6 +53806,12 @@
               }
             ],
             "x86_64-linux-android": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -56256,19 +56376,19 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.37",
+                "id": "wasm-bindgen-futures 0.4.50",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.64",
+                "id": "web-sys 0.3.77",
                 "target": "web_sys"
               }
             ],
@@ -57646,19 +57766,19 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.37",
+                "id": "wasm-bindgen-futures 0.4.50",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.64",
+                "id": "web-sys 0.3.77",
                 "target": "web_sys"
               }
             ],
@@ -58959,7 +59079,7 @@
             ],
             "cfg(all(target_arch = \"wasm32\", target_vendor = \"unknown\", target_os = \"unknown\", target_env = \"\"))": [
               {
-                "id": "web-sys 0.3.64",
+                "id": "web-sys 0.3.77",
                 "target": "web_sys"
               }
             ],
@@ -60618,6 +60738,11 @@
               "time",
               "use-libc-auxv"
             ],
+            "aarch64-pc-windows-msvc": [
+              "default",
+              "termios",
+              "use-libc-auxv"
+            ],
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
@@ -60708,6 +60833,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "i686-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "i686-unknown-freebsd": [
@@ -60822,6 +60952,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "x86_64-unknown-freebsd": [
@@ -60939,9 +61074,46 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "arm-unknown-linux-gnueabi": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61024,9 +61196,24 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "i686-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "i686-unknown-linux-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61174,9 +61361,35 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-nixos-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -64370,7 +64583,7 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.64",
+              "id": "js-sys 0.3.77",
               "target": "js_sys"
             },
             {
@@ -64378,7 +64591,7 @@
               "target": "serde"
             },
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "wasm-bindgen 0.2.100",
               "target": "wasm_bindgen"
             }
           ],
@@ -75529,7 +75742,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               },
               {
@@ -78510,14 +78723,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen 0.2.95": {
+    "wasm-bindgen 0.2.100": {
       "name": "wasm-bindgen",
-      "version": "0.2.95",
+      "version": "0.2.100",
       "package_url": "https://github.com/rustwasm/wasm-bindgen",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.95/download",
-          "sha256": "128d1e363af62632b8eb57219c8fd7877144af57558fb2ef0368d0087bddeb2e"
+          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.100/download",
+          "sha256": "1edc8929d7499fc4e8f0be2262a241556cfc54a0bea223790e71446f2aab1ef5"
         }
       },
       "targets": [
@@ -78554,7 +78767,8 @@
         "crate_features": {
           "common": [
             "default",
-            "spans",
+            "msrv",
+            "rustversion",
             "std"
           ],
           "selects": {}
@@ -78570,7 +78784,7 @@
               "target": "once_cell"
             },
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "wasm-bindgen 0.2.100",
               "target": "build_script_build"
             }
           ],
@@ -78580,13 +78794,17 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasm-bindgen-macro 0.2.95",
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            },
+            {
+              "id": "wasm-bindgen-macro 0.2.100",
               "target": "wasm_bindgen_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.2.95"
+        "version": "0.2.100"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -78603,14 +78821,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-backend 0.2.95": {
+    "wasm-bindgen-backend 0.2.100": {
       "name": "wasm-bindgen-backend",
-      "version": "0.2.95",
+      "version": "0.2.100",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/backend",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-backend/0.2.95/download",
-          "sha256": "cb6dd4d3ca0ddffd1dd1c9c04f94b868c37ff5fac97c30b97cff2d74fce3a358"
+          "url": "https://static.crates.io/crates/wasm-bindgen-backend/0.2.100/download",
+          "sha256": "2f0a0651a5c2bc21487bde11ee802ccaf4c51935d0d3d42a6101f98161700bc6"
         }
       },
       "targets": [
@@ -78632,12 +78850,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "spans"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -78647,10 +78859,6 @@
             {
               "id": "log 0.4.20",
               "target": "log"
-            },
-            {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
             },
             {
               "id": "proc-macro2 1.0.89",
@@ -78665,14 +78873,14 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.95",
+              "id": "wasm-bindgen-shared 0.2.100",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.95"
+        "version": "0.2.100"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -78681,14 +78889,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-futures 0.4.37": {
+    "wasm-bindgen-futures 0.4.50": {
       "name": "wasm-bindgen-futures",
-      "version": "0.4.37",
+      "version": "0.4.50",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/futures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-futures/0.4.37/download",
-          "sha256": "c02dbc21516f9f1f04f187958890d7e6026df8d16540b7ad9492bc34a67cea03"
+          "url": "https://static.crates.io/crates/wasm-bindgen-futures/0.4.50/download",
+          "sha256": "555d470ec0bc3bb57890405e5d4322cc9ea83cebb085523ced7be4144dac1e61"
         }
       },
       "targets": [
@@ -78710,6 +78918,19 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "default"
+            ],
+            "wasm32-wasi": [
+              "default"
+            ]
+          }
+        },
         "deps": {
           "common": [
             {
@@ -78717,41 +78938,45 @@
               "target": "cfg_if"
             },
             {
-              "id": "js-sys 0.3.64",
+              "id": "js-sys 0.3.77",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "wasm-bindgen 0.2.100",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {
             "cfg(target_feature = \"atomics\")": [
               {
-                "id": "web-sys 0.3.64",
+                "id": "web-sys 0.3.77",
                 "target": "web_sys"
               }
             ]
           }
         },
-        "edition": "2018",
-        "version": "0.4.37"
+        "edition": "2021",
+        "version": "0.4.50"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro 0.2.95": {
+    "wasm-bindgen-macro 0.2.100": {
       "name": "wasm-bindgen-macro",
-      "version": "0.2.95",
+      "version": "0.2.100",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/macro",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.95/download",
-          "sha256": "e79384be7f8f5a9dd5d7167216f022090cf1f9ec128e6e6a482a2cb5c5422c56"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.100/download",
+          "sha256": "7fe63fc6d09ed3792bd0897b314f53de8e16568c2b3f7982f468c0bf9bd0b407"
         }
       },
       "targets": [
@@ -78773,12 +78998,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "spans"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -78786,14 +79005,14 @@
               "target": "quote"
             },
             {
-              "id": "wasm-bindgen-macro-support 0.2.95",
+              "id": "wasm-bindgen-macro-support 0.2.100",
               "target": "wasm_bindgen_macro_support"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.95"
+        "version": "0.2.100"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -78802,14 +79021,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro-support 0.2.95": {
+    "wasm-bindgen-macro-support 0.2.100": {
       "name": "wasm-bindgen-macro-support",
-      "version": "0.2.95",
+      "version": "0.2.100",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/macro-support",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.95/download",
-          "sha256": "26c6ab57572f7a24a4985830b120de1594465e5d500f24afe89e16b4e833ef68"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.100/download",
+          "sha256": "8ae87ea40c9f689fc23f209965b6fb8a99ad69aeeb0231408be24920604395de"
         }
       },
       "targets": [
@@ -78831,12 +79050,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "spans"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -78852,18 +79065,18 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-backend 0.2.95",
+              "id": "wasm-bindgen-backend 0.2.100",
               "target": "wasm_bindgen_backend"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.95",
+              "id": "wasm-bindgen-shared 0.2.100",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.95"
+        "version": "0.2.100"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -78872,14 +79085,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-shared 0.2.95": {
+    "wasm-bindgen-shared 0.2.100": {
       "name": "wasm-bindgen-shared",
-      "version": "0.2.95",
+      "version": "0.2.100",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/shared",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.95/download",
-          "sha256": "65fc09f10666a9f147042251e0dda9c18f166ff7de300607007e96bdebc1068d"
+          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.100/download",
+          "sha256": "1a05d73b933a847d6cccdda8f838a22ff101ad9bf93e33684f39c1f5f0eece3d"
         }
       },
       "targets": [
@@ -78916,14 +79129,18 @@
         "deps": {
           "common": [
             {
-              "id": "wasm-bindgen-shared 0.2.95",
+              "id": "unicode-ident 1.0.12",
+              "target": "unicode_ident"
+            },
+            {
+              "id": "wasm-bindgen-shared 0.2.100",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.95"
+        "version": "0.2.100"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -78933,6 +79150,141 @@
           "**"
         ],
         "links": "wasm_bindgen"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasm-bindgen-test 0.3.50": {
+      "name": "wasm-bindgen-test",
+      "version": "0.3.50",
+      "package_url": "https://github.com/rustwasm/wasm-bindgen",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-bindgen-test/0.3.50/download",
+          "sha256": "66c8d5e33ca3b6d9fa3b4676d774c5778031d27a578c2b007f905acf816152c3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_bindgen_test",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_bindgen_test",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "js-sys 0.3.77",
+              "target": "js_sys"
+            },
+            {
+              "id": "wasm-bindgen 0.2.100",
+              "target": "wasm_bindgen"
+            },
+            {
+              "id": "wasm-bindgen-futures 0.4.50",
+              "target": "wasm_bindgen_futures"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", wasm_bindgen_unstable_test_coverage))": [
+              {
+                "id": "minicov 0.3.7",
+                "target": "minicov"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "wasm-bindgen-test-macro 0.3.50",
+              "target": "wasm_bindgen_test_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.3.50"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasm-bindgen-test-macro 0.3.50": {
+      "name": "wasm-bindgen-test-macro",
+      "version": "0.3.50",
+      "package_url": "https://github.com/rustwasm/wasm-bindgen",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-bindgen-test-macro/0.3.50/download",
+          "sha256": "17d5042cc5fa009658f9a7333ef24291b1291a25b6382dd68862a7f3b969f69b"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "wasm_bindgen_test_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_bindgen_test_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.50"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -79224,19 +79576,19 @@
               "target": "futures_util"
             },
             {
-              "id": "js-sys 0.3.64",
+              "id": "js-sys 0.3.77",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "wasm-bindgen 0.2.100",
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-bindgen-futures 0.4.37",
+              "id": "wasm-bindgen-futures 0.4.50",
               "target": "wasm_bindgen_futures"
             },
             {
-              "id": "web-sys 0.3.64",
+              "id": "web-sys 0.3.77",
               "target": "web_sys"
             }
           ],
@@ -80853,14 +81205,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "web-sys 0.3.64": {
+    "web-sys 0.3.77": {
       "name": "web-sys",
-      "version": "0.3.64",
+      "version": "0.3.77",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/web-sys",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/web-sys/0.3.64/download",
-          "sha256": "9b85cbef8c220a6abc02aefd892dfc0fc23afb1c6a426316ec33253a3877249b"
+          "url": "https://static.crates.io/crates/web-sys/0.3.77/download",
+          "sha256": "33b6dd2ef9186f1f2072e409e99cd22a975331a6b3591b12c764e0e55c60d5d2"
         }
       },
       "targets": [
@@ -80920,7 +81272,9 @@
             "WorkerGlobalScope",
             "WritableStream",
             "WritableStreamDefaultController",
-            "WritableStreamDefaultWriter"
+            "WritableStreamDefaultWriter",
+            "default",
+            "std"
           ],
           "selects": {
             "wasm32-unknown-unknown": [
@@ -80940,20 +81294,20 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.64",
+              "id": "js-sys 0.3.77",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.95",
+              "id": "wasm-bindgen 0.2.100",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.3.64"
+        "edition": "2021",
+        "version": "0.3.77"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -80994,11 +81348,11 @@
           "selects": {
             "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
               {
-                "id": "js-sys 0.3.64",
+                "id": "js-sys 0.3.77",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.95",
+                "id": "wasm-bindgen 0.2.100",
                 "target": "wasm_bindgen"
               }
             ]
@@ -85881,6 +86235,7 @@
     "cfg(all(target_arch = \"wasm32\", target_vendor = \"unknown\", target_os = \"unknown\", target_env = \"\"))": [
       "wasm32-unknown-unknown"
     ],
+    "cfg(all(target_arch = \"wasm32\", wasm_bindgen_unstable_test_coverage))": [],
     "cfg(all(target_arch = \"x86\", target_env = \"gnu\", not(target_abi = \"llvm\"), not(windows_raw_dylib)))": [
       "i686-unknown-linux-gnu"
     ],
@@ -87126,7 +87481,8 @@
     "vsock 0.4.0",
     "walkdir 2.3.3",
     "warp 0.3.7",
-    "wasm-bindgen 0.2.95",
+    "wasm-bindgen 0.2.100",
+    "wasm-bindgen-test 0.3.50",
     "wasm-encoder 0.217.0",
     "wasm-smith 0.212.0",
     "wasmparser 0.217.0",
