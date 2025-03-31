@@ -121,7 +121,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
+          BAZEL_COMMAND: test --config=ci --config=local ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
 
       - name: Upload SHA256SUMS (cache)
@@ -154,8 +154,6 @@ jobs:
         with:
           BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Purge Bazel Output
         if: always()
         shell: bash
