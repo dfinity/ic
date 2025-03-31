@@ -209,11 +209,7 @@ jobs:
 
   build-ic:
     name: Build IC
-    container:
-      <<: *image
-      options: >-
-        -e NODE_NAME
-        --privileged --cgroupns host
+    <<: *dind-large-setup
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
