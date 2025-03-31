@@ -63,7 +63,7 @@ fn make_certified_delta<AtomicMutation>(
     garble_response: GarbleResponse,
 ) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse)
 where
-    // TODO( DO NOT MERGE - ticket): No generic; just HighCapacityRegistryAtomicMutateRequest.
+    // TODO(NNS1-3679): No generic; just HighCapacityRegistryAtomicMutateRequest.
     AtomicMutation: prost::Message,
 {
     let cid = CanisterId::from_u64(1);
