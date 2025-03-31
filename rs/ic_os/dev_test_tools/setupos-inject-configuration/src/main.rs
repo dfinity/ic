@@ -112,16 +112,8 @@ async fn main() -> Result<(), Error> {
 
     // Update node_operator_private_key.pem
     if let Some(key_path) = cli.node_operator_private_key {
-        let key_content = fs::read(&key_path).with_context(|| {
-            format!(
-                "failed to read node operator private key file at {:?}",
-                key_path
-            )
-        })?;
-        let mut key_temp = NamedTempFile::new()?;
-        key_temp.write_all(&key_content)?;
         config
-            .write_file(key_temp.path(), Path::new("/node_operator_private_key.pem"))
+            .write_file(&key_path, Path::new("/node_operator_private_key.pem"))
             .await
             .context("failed to write node_operator_private_key.pem")?;
     }
