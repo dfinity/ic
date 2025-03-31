@@ -8,7 +8,10 @@ use ic_crypto_tree_hash::{
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
     delete,
-    pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryMutation},
+    pb::v1::{
+        high_capacity_registry_mutation, registry_mutation, CertifiedResponse, LargeValueChunkKeys,
+        RegistryAtomicMutateRequest, RegistryMutation,
+    },
     upsert,
 };
 use ic_types::{
@@ -53,11 +56,15 @@ fn decode_certified_deltas_no_chunks(
     .unwrap()
 }
 
-fn make_certified_delta(
-    deltas: Vec<RegistryAtomicMutateRequest>,
+fn make_certified_delta<AtomicMutation>(
+    deltas: Vec<AtomicMutation>,
     selection: impl std::ops::RangeBounds<u64>,
     garble_response: GarbleResponse,
-) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse) {
+) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse)
+where
+    // TODO( DO NOT MERGE - ticket): No generic; just HighCapacityRegistryAtomicMutateRequest.
+    AtomicMutation: prost::Message,
+{
     let cid = CanisterId::from_u64(1);
 
     let mut encoded_version = vec![];
@@ -327,4 +334,92 @@ fn test_decode_empty_prefix() {
         Err(CertificationError::InvalidDeltas(_)) => (),
         other => panic!("Expected InvalidDeltas error, got {:?}", other),
     }
+}
+
+#[test]
+fn test_chunked() {
+    // Step 1: Prepare the world.
+
+    let chunk_contents = vec![
+        b"It was the best of times.\n".to_vec(),
+        b"It was the worst of times.\n".to_vec(),
+        b"It was the age of foolishness.\n".to_vec(),
+        b"It was the epoch of belief.\n".to_vec(),
+    ];
+
+    let chunk_content_sha256s = chunk_contents
+        .iter()
+        .map(|chunk_content| Sha256::hash(chunk_content).to_vec())
+        .collect::<Vec<Vec<u8>>>();
+
+    let mut fetch_large_value = MockFetchLargeValue::new();
+    for (content, content_sha256) in chunk_contents.iter().zip(chunk_content_sha256s.iter()) {
+        fetch_large_value
+            .expect_get_chunk_no_validation()
+            .with(mockall::predicate::eq(content_sha256.clone()))
+            .times(1)
+            .return_const(Ok(content.clone()));
+    }
+
+    // A wrapper around fetch_large_value. Unlike MockFetchLargeValue, this gets
+    // the default implementations of methods in FetchLargeValue. This means
+    // that this only implements get_chunk_no_validation, which just a wrapper
+    // around MockFetchLargeValue::get_chunk_no_validation.
+    struct SemiMockFetchLargeValue {
+        implementation: MockFetchLargeValue,
+    }
+
+    #[async_trait]
+    impl FetchLargeValue for SemiMockFetchLargeValue {
+        async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+            self.implementation
+                .get_chunk_no_validation(content_sha256)
+                .await
+        }
+    }
+
+    let fetch_large_value = SemiMockFetchLargeValue {
+        implementation: fetch_large_value,
+    };
+
+    let (cid, pk, payload) = make_certified_delta(
+        vec![HighCapacityRegistryAtomicMutateRequest {
+            mutations: vec![HighCapacityRegistryMutation {
+                key: b"giant_blob".to_vec(),
+                mutation_type: registry_mutation::Type::Insert as i32,
+                content: Some(
+                    high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                        LargeValueChunkKeys {
+                            chunk_content_sha256s,
+                        },
+                    ),
+                ),
+            }],
+            preconditions: vec![],
+            timestamp_seconds: 1735689600, // Jan 1, 2025 midnight UTC
+        }],
+        1..=1,
+        GarbleResponse::LeaveAsIs,
+    );
+
+    // Step 2: Call the code under test.
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &fetch_large_value)
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    // Step 3: Verify result(s).
+    let monolithic_blob = chunk_contents
+        .clone()
+        .into_iter()
+        .flatten()
+        .collect::<Vec<u8>>();
+    assert_eq!(
+        result,
+        (
+            vec![set_key(1, "giant_blob", monolithic_blob)],
+            RegistryVersion::from(1u64),
+            Time::from_nanos_since_unix_epoch(REPLICA_TIME),
+        ),
+    );
 }
