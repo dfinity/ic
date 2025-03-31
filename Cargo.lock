@@ -10344,6 +10344,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-registry-canister-api",
  "ic-sns-governance-api",
  "ic-sns-root",
  "ic-sns-swap",
@@ -10351,6 +10352,7 @@ dependencies = [
  "ic-state-machine-tests",
  "itertools 0.12.1",
  "pocket-ic",
+ "pretty_assertions",
  "registry-canister",
  "serde",
  "serde_cbor",
@@ -14236,6 +14238,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
+ "getrandom 0.2.15",
  "hex",
  "ic-canister-client-sender",
  "ic-cdk 0.17.1",
@@ -14254,6 +14257,7 @@ dependencies = [
  "ic-validator-http-request-test-utils",
  "rand 0.8.5",
  "strum",
+ "time",
 ]
 
 [[package]]
@@ -22143,6 +22147,7 @@ checksum = "35e7868883861bd0e56d9ac6efcaaca0d6d5d82a2a7ec8209ff492c07cf37b21"
 dependencies = [
  "deranged",
  "itoa",
+ "js-sys",
  "libc",
  "num-conv",
  "num_threads",
