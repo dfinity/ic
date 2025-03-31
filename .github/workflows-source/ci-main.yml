@@ -1,4 +1,4 @@
-name: CI Main
+name: CI Main # Main workflow
 
 on:
   merge_group:
