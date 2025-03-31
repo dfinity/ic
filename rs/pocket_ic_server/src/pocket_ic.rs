@@ -796,8 +796,11 @@ impl PocketIc {
                     Self::create_state_machine_state_dir(&state_dir, &subnet_seed);
 
                 if let Some(subnet_state_dir) = subnet_state_dir {
+                    println!(">>> subnet_state_dir = {:?}", subnet_state_dir);
+                    println!(">>> state_machine_state_dir = {:?}", state_machine_state_dir.path());
                     copy_dir(subnet_state_dir, state_machine_state_dir.path())
                         .expect("Failed to copy state directory");
+                    println!(">>> Finished copying the state dir to PocketIC server");
                 }
 
                 subnet_config_info.push(SubnetConfigInfo {
