@@ -841,3 +841,18 @@ fn list_proposals_benchmark() -> BenchResult {
 fn list_proposals() -> BenchResult {
     list_proposals_benchmark()
 }
+
+/// Used for benchmarking compilation/instrumentation/execution changes in the
+/// embedders crate.
+#[export_name = "canister_update update_empty"]
+fn update_empty() {
+    ic_cdk::api::call::reply_raw(&[]);
+}
+
+/// Used for benchmarking compilation/instrumentation/execution changes in the
+/// embedders crate.
+#[export_name = "canister_query go"]
+fn go() {
+    let _ = list_neurons_stable();
+    ic_cdk::api::call::reply_raw(&[]);
+}

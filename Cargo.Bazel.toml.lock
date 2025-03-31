@@ -219,6 +219,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-web-prom"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+dependencies = [
+ "actix-web",
+ "futures-core",
+ "log",
+ "pin-project-lite",
+ "prometheus",
+ "regex",
+ "strfmt",
+]
+
+[[package]]
 name = "addr"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3332,6 +3347,7 @@ version = "0.0.1"
 dependencies = [
  "actix-rt",
  "actix-web",
+ "actix-web-prom",
  "addr",
  "aide",
  "anyhow",
@@ -7717,16 +7733,21 @@ dependencies = [
 
 [[package]]
 name = "mockito"
-version = "1.2.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+checksum = "7760e0e418d9b7e5777c0374009ca4c93861b9066f18cb334a20ce50ab63aa48"
 dependencies = [
  "assert-json-diff",
+ "bytes",
  "colored",
- "futures",
- "hyper 0.14.27",
+ "futures-util",
+ "http 1.2.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "hyper 1.5.1",
+ "hyper-util",
  "log",
- "rand 0.8.5",
+ "rand 0.9.0",
  "regex",
  "serde_json",
  "serde_urlencoded",
@@ -11789,6 +11810,12 @@ name = "str_stack"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9091b6114800a5f2141aee1d1b9d6ca3592ac062dc5decb3764ec5895a47b4eb"
+
+[[package]]
+name = "strfmt"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a8348af2d9fc3258c8733b8d9d8db2e56f54b2363a4b5b81585c7875ed65e65"
 
 [[package]]
 name = "string_cache"

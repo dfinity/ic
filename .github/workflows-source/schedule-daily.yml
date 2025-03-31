@@ -86,10 +86,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test
-              --config=ci --keep_going
-              --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200
           BAZEL_TARGETS: //rs/ledger_suite/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -104,10 +101,7 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            test
-              --config=ci --keep_going
-              --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
+          BAZEL_COMMAND: test --config=ci --keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all
           BAZEL_TARGETS: //rs/nns/...
           SSH_PRIVATE_KEY_BACKUP_POD: ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -128,10 +122,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           # note: there's just one performance cluster, so the job can't be parallelized
-          BAZEL_COMMAND: >-
-            test
-              --config=ci
-              --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
+          BAZEL_COMMAND: test --config=ci --test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1
           BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Post Slack Notification
