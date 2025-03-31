@@ -40,7 +40,7 @@ async fn test_mock_happy() {
 #[should_panic(expected = "left == right")]
 #[tokio::test]
 async fn test_mock_wrong_call() {
-    // Step 1: Prepare the world: Expect a couple of `get_chunk` calls.
+    // Step 1: Prepare the world: Expect a `get_chunk` call.
 
     let callee = Principal::from(PrincipalId::new_user_test_id(42));
     let request = GetChunkRequest {
