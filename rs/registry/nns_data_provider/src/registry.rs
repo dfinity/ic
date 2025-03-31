@@ -25,6 +25,9 @@ pub struct RegistryCanister {
     agent: Vec<Agent>,
 }
 
+/// The only thing this implements in FetchLargeValue is
+/// get_chunk_no_validation. The other methods use the default implementation
+/// from FetchLargeValue.
 struct AgentBasedFetchLargeValue<'a> {
     registry_canister_id: CanisterId,
     agent: &'a Agent,
@@ -32,6 +35,7 @@ struct AgentBasedFetchLargeValue<'a> {
 
 #[async_trait]
 impl<'a> crate::certification::FetchLargeValue for AgentBasedFetchLargeValue<'a> {
+    /// Just calls the Registry canister's get_chunk method.
     async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
         fn new_err(cause: impl std::fmt::Debug) -> String {
             format!("Unable to fetch large registry record: {:?}", cause,)
