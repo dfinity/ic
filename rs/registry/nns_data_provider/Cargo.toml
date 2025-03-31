@@ -19,6 +19,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-registry-canister-api = { path = "../canister/api" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
+mockall = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

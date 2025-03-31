@@ -11934,6 +11934,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-types",
  "leb128",
+ "mockall",
  "prost 0.13.4",
  "rand 0.8.5",
  "serde",

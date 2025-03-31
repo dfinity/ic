@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:chrono",
+    "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:serde",

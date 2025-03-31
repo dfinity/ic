@@ -10,6 +10,7 @@ use ic_registry_transport::pb::v1::{
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
 };
+use mockall::automock;
 use prost::Message;
 use serde::Deserialize;
 use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
@@ -123,8 +124,8 @@ fn validate_version_range(
 /// Converts LargeValueChunkKeys into a blob by (repeatedly) calling Registry
 /// canister's get_chunk method.
 ///
-/// Even though this is pub, it should't be used outside this crate. It is pub
-/// only in order to support some existing tests.
+/// Although this is pub, this should only be used in tests.
+#[automock]
 #[async_trait]
 pub trait FetchLargeValue {
     /// This is just a "thin wrapper" around Registry's `get_chunk` method.
