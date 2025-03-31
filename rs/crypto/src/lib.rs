@@ -16,6 +16,7 @@ mod common;
 mod keygen;
 mod sign;
 mod tls;
+mod vetkd;
 
 use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{

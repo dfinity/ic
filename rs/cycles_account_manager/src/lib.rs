@@ -17,11 +17,12 @@ use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{error, info, ReplicaLogger};
-use ic_management_canister_types::Method;
+use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase, CanisterState, SystemState,
+    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
+    CanisterState, MessageMemoryUsage, SystemState,
 };
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
@@ -40,6 +41,7 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
+const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
@@ -61,24 +63,6 @@ impl std::fmt::Display for CyclesAccountManagerError {
             CyclesAccountManagerError::ContractViolation(msg) => {
                 write!(f, "Contract violation: {}", msg)
             }
-        }
-    }
-}
-
-/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
-/// can charge cycles accordingly.
-#[derive(Debug, Copy, Clone)]
-pub enum WasmExecutionMode {
-    Wasm32,
-    Wasm64,
-}
-
-impl From<bool> for WasmExecutionMode {
-    fn from(is_wasm64: bool) -> Self {
-        if is_wasm64 {
-            WasmExecutionMode::Wasm64
-        } else {
-            WasmExecutionMode::Wasm32
         }
     }
 }
@@ -273,7 +257,7 @@ impl CyclesAccountManager {
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> Cycles {
@@ -296,7 +280,7 @@ impl CyclesAccountManager {
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> [(CyclesUseCase, Cycles); 3] {
@@ -304,19 +288,18 @@ impl CyclesAccountManager {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => memory_usage,
         };
-        let day = Duration::from_secs(SECONDS_PER_DAY as u64);
         [
             (
                 CyclesUseCase::Memory,
-                self.memory_cost(memory, day, subnet_size),
+                self.memory_cost(memory, DAY, subnet_size),
             ),
             (
                 CyclesUseCase::Memory,
-                self.memory_cost(message_memory_usage, day, subnet_size),
+                self.memory_cost(message_memory_usage.total(), DAY, subnet_size),
             ),
             (
                 CyclesUseCase::ComputeAllocation,
-                self.compute_allocation_cost(compute_allocation, day, subnet_size),
+                self.compute_allocation_cost(compute_allocation, DAY, subnet_size),
             ),
         ]
     }
@@ -328,7 +311,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reserved_balance: Cycles,
@@ -368,7 +351,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         cycles_balance: &mut Cycles,
         cycles: Cycles,
@@ -406,7 +389,7 @@ impl CyclesAccountManager {
         &self,
         canister: &mut CanisterState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -460,7 +443,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -520,7 +503,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
         subnet_size: usize,
@@ -764,7 +747,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         request: &Request,
         prepayment_for_response_execution: Cycles,
@@ -774,16 +757,15 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
     ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
-        //   - the fee to do the xnet call (request + response)
-        //   - the fee to send the request (by size)
-        //   - the fee for the largest possible response
-        //   - the fee for executing the largest allowed response when it eventually arrives.
-        let transmission_fee = self.scale_cost(
-            self.config.xnet_call_fee
-                + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get(),
+        // the fee to do the xnet call (request + response),
+        // the fee to send the request (by size),
+        // the fee for the largest possible response,
+        let transmission_fee = self.xnet_total_transmission_fee(
+            request.payload_size_bytes(),
             subnet_size,
-        ) + prepayment_for_response_transmission;
-
+            prepayment_for_response_transmission,
+        );
+        // and the fee for executing the largest allowed response when it eventually arrives.
         let fee = transmission_fee + prepayment_for_response_execution;
 
         self.withdraw_with_threshold(
@@ -812,6 +794,40 @@ impl CyclesAccountManager {
                 transmission_fee,
             ),
         ]))
+    }
+
+    /// The total amount for an xnet call transmission. Includes response transmission, but
+    /// excludes the response execution.
+    pub fn xnet_total_transmission_fee(
+        &self,
+        payload_size: NumBytes,
+        subnet_size: usize,
+        prepayment_for_response_transmission: Cycles,
+    ) -> Cycles {
+        self.xnet_call_performed_fee(subnet_size)
+            + self.xnet_call_bytes_transmitted_fee(payload_size, subnet_size)
+            + prepayment_for_response_transmission
+    }
+
+    /// The total fee for an xnet call, including payload size, transmission (both ways)
+    /// and the reservation for the response execution. Corresponds to the amount of
+    /// cycles above the freezing threshold a canister must be for ic0.call_perform to
+    /// succeed.
+    pub fn xnet_call_total_fee(
+        &self,
+        payload_size: NumBytes,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
+        let subnet_size = self.config.reference_subnet_size;
+        let prepayment_for_response_transmission =
+            self.prepayment_for_response_transmission(subnet_size);
+        let prepayment_for_response_execution =
+            self.prepayment_for_response_execution(subnet_size, execution_mode);
+        self.xnet_total_transmission_fee(
+            payload_size,
+            subnet_size,
+            prepayment_for_response_transmission,
+        ) + prepayment_for_response_execution
     }
 
     /// Returns the amount of cycles required for executing the longest-running
@@ -880,7 +896,7 @@ impl CyclesAccountManager {
         system_state: &SystemState,
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reveal_top_up: bool,
@@ -934,7 +950,8 @@ impl CyclesAccountManager {
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
-            | CyclesUseCase::BurnedCycles => system_state.balance(),
+            | CyclesUseCase::BurnedCycles
+            | CyclesUseCase::DroppedMessages => system_state.balance(),
         };
 
         self.verify_cycles_balance_with_threshold(
@@ -1045,7 +1062,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
+        message_memory_usage: MessageMemoryUsage,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reserved_balance: Cycles,
@@ -1211,7 +1228,7 @@ pub enum IngressInductionCostError {
 mod tests {
     use super::*;
     use candid::Encode;
-    use ic_management_canister_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
+    use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
     use ic_test_utilities_types::ids::subnet_test_id;
 
     const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
@@ -1325,7 +1342,7 @@ mod tests {
                 NumSeconds::new(0),
                 MemoryAllocation::default(),
                 0.into(),
-                0.into(),
+                MessageMemoryUsage::ZERO,
                 ComputeAllocation::default(),
                 13,
                 Cycles::new(0)

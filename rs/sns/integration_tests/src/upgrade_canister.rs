@@ -5,7 +5,7 @@ use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
-use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -44,6 +44,8 @@ use tokio::time::Duration;
 lazy_static! {
     pub static ref EMPTY_WASM: Vec<u8> = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
 }
+
+const EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS: u64 = 60;
 
 // Note: Tests for UpgradeSnsToNextVersion action is in rs/nns/sns-wasm/tests/upgrade_sns_instance.rs
 
@@ -135,6 +137,7 @@ fn test_upgrade_canister_proposal_is_successful() {
                 canister_upgrade_arg: Some(wasm().set_global_data(&[42]).build()),
                 // mode: None corresponds to CanisterInstallModeProto::Upgrade
                 mode: None,
+                chunked_canister_wasm: None,
             },
         )),
         ..Default::default()
@@ -261,6 +264,7 @@ fn test_upgrade_canister_proposal_reinstall() {
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: Some(wasm().build()),
                     mode: Some(CanisterInstallModeProto::Reinstall.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()
@@ -418,6 +422,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: None,
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()
@@ -442,16 +447,16 @@ fn test_upgrade_canister_proposal_execution_fail() {
                 action
             ),
         };
-        fn age_s(t: u64) -> f64 {
+        fn age_s(t: u64) -> u64 {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs_f64()
-                - (t as f64)
+                .as_secs()
+                .saturating_sub(t)
         }
         let decision_age_s = age_s(proposal.decided_timestamp_seconds);
         assert!(
-            decision_age_s < 30.0,
+            decision_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
             "decision_age_s: {}, proposal: {:?}",
             decision_age_s,
             proposal
@@ -463,7 +468,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
         );
         let failure_age_s = age_s(proposal.failed_timestamp_seconds);
         assert!(
-            failure_age_s < 30.0,
+            failure_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
             "failure_age_s: {}, proposal: {:?}",
             failure_age_s,
             proposal
@@ -520,6 +525,7 @@ fn test_upgrade_canister_proposal_too_large() {
                 canister_upgrade_arg: Some(wasm().set_global_data(&[42; 2_000_000]).build()),
                 // mode: None corresponds to CanisterInstallModeProto::Upgrade
                 mode: None,
+                chunked_canister_wasm: None,
             },
         )),
         ..Default::default()
@@ -641,6 +647,7 @@ fn test_upgrade_after_state_shrink() {
                     new_canister_wasm: governance_wasm,
                     canister_upgrade_arg: None,
                     mode: Some(CanisterInstallModeProto::Upgrade.into()),
+                    chunked_canister_wasm: None,
                 },
             )),
             ..Default::default()

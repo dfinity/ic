@@ -11,7 +11,7 @@ set -ue
 ##
 
 printf "%-12s := %s\n" \
-    "REPEAT" "${REPEAT:=9}" >&2
+    "REPEAT" "${REPEAT:=3}" >&2
 
 RUN_BENCHMARK="${0%/*}/run-benchmark.sh"
 [ -x "${RUN_BENCHMARK}" ] || (echo "Error accessing script: ${RUN_BENCHMARK}" >&2 && exit 1)
@@ -28,25 +28,30 @@ run() {
 
     # Counter file tracks the number of benchmark executions so far.
     counter_file="${min_file%.*}.counter"
-    counter=$(cat "${counter_file}" 2>/dev/null || echo "-1")
-    # Quickly execute the benchmarks initially to identify any broken ones.
-    [ "${counter}" -eq "-1" ] && quick="yes" || quick="no"
-    [ -f "${min_file}" ] || counter="-1"
+    counter=$(cat "${counter_file}" 2>/dev/null || echo "0")
+    [ -f "${min_file}" ] || counter="0"
     # Execute benchmark if needed.
     if [ "${counter}" -lt "${i}" ]; then
         echo "==> Running ${name} benchmarks ($((counter + 1)) of ${REPEAT})" >&2
-        QUICK="${quick}" BENCH="${bench}" MIN_FILE="${min_file}" FILTER="${filter}" \
-            "${RUN_BENCHMARK}"
+        BENCH="${bench}" MIN_FILE="${min_file}" FILTER="${filter}" "${RUN_BENCHMARK}"
         echo "$((counter + 1))" >"${counter_file}"
     fi
     # Summarize results if the benchmark was executed or if it's the final iteration.
     if [ "${counter}" -lt "${i}" -o "${i}" = "${REPEAT}" ]; then
         echo "==> Summarizing ${name} results:" >&2
+        set +e
         NAME="${name}" MIN_FILE="${min_file}" "${SUMMARIZE_RESULTS}"
+        local ret="${?}"
+        set -e
+        # Stop repeating the benchmark if there are no changes.
+        if [ "${ret}" -eq 0 ]; then
+            echo "    Skipping further benchmark invocations due to no changes..."
+            echo "${REPEAT}" >"${counter_file}"
+        fi
     fi
 }
 
-for i in $(seq 0 "${REPEAT}"); do
+for i in $(seq 1 "${REPEAT}"); do
     run "${i}" "Embedders Compilation" \
         "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
     run "${i}" "Embedders Heap" \

@@ -586,16 +586,16 @@ fn retain_neurons_with_castable_ballots(
 
 #[cfg(test)]
 mod test {
+    use crate::canister_state::{governance_mut, set_governance_for_tests};
+    use crate::test_utils::MockRandomness;
     use crate::{
-        governance::{
-            Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-            REWARD_DISTRIBUTION_PERIOD_SECONDS,
-        },
+        governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
-            neuron::Followees, proposal::Action, Ballot, Governance as GovernanceProto, Motion,
-            Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics, WaitForQuietState,
+            self as pb, neuron::Followees, proposal::Action, Ballot, Governance as GovernanceProto,
+            Motion, Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics,
+            WaitForQuietState,
         },
         storage::with_voting_state_machines_mut,
         test_utils::{
@@ -611,12 +611,14 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_ledger_core::Tokens;
     use ic_nervous_system_long_message::in_test_temporarily_set_call_context_over_threshold;
+    use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use ic_nns_constants::GOVERNANCE_CANISTER_ID;
     use ic_stable_structures::DefaultMemoryImpl;
     use icp_ledger::Subaccount;
     use maplit::{btreemap, hashmap};
     use std::collections::{BTreeMap, BTreeSet, HashMap};
+    use std::sync::Arc;
 
     fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
         Ballot {
@@ -637,9 +639,13 @@ mod test {
         let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
 
         let now = 123_456_789;
+        let dissolve_delay_seconds =
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+        let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
+
         let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-            aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            dissolve_delay_seconds,
+            aging_since_timestamp_seconds,
         };
 
         NeuronBuilder::new(
@@ -716,7 +722,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -729,9 +735,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         governance
@@ -815,7 +822,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -828,9 +835,10 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 234)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 234)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         governance
@@ -1113,15 +1121,16 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         // In our test configuration, we always return "true" for is_over_instructions_limit()
@@ -1188,15 +1197,16 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         let _e = temporarily_set_over_soft_message_limit(true);
@@ -1248,15 +1258,16 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         // In test mode, we are always saying we're over the soft-message limit, so we know that
@@ -1356,15 +1367,16 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 1234)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 1234)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         governance.record_neuron_vote(ProposalId { id: 1 }, NeuronId { id: 1 }, Vote::Yes, topic);
@@ -1474,7 +1486,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
+                .map(|(id, neuron)| (id, pb::Neuron::from(neuron)))
                 .collect(),
             ..Default::default()
         };
@@ -1493,9 +1505,10 @@ mod test {
 
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(environment),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(environment),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         assert_eq!(
@@ -1522,7 +1535,12 @@ mod test {
             0
         );
 
+        // Because of how the timers work, we need to shift governance into global state
+        // to make this work, so that the timer accesses the same value of governance.
+        set_governance_for_tests(governance);
+        let governance = governance_mut();
         governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
             governance
@@ -1534,13 +1552,14 @@ mod test {
 
         now_setter(now + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
         // Finish processing the vote
+
         governance
             .process_voting_state_machines()
             .now_or_never()
             .unwrap();
-
-        // Now rewards should be able to be distributed
         governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+        // Now rewards should be able to be distributed
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
 
         assert_eq!(
             governance

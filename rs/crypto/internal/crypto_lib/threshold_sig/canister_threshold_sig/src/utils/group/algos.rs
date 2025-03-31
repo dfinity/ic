@@ -124,7 +124,7 @@ macro_rules! declare_mul2_table_impl {
 
             // The number of windows (of WINDOW_BITS size) required to examine every
             // bit of a scalar of this curve.
-            const WINDOWS: usize = (<$scalar>::BITS + Self::WINDOW_BITS - 1) / Self::WINDOW_BITS;
+            const WINDOWS: usize = <$scalar>::BITS.div_ceil(Self::WINDOW_BITS);
 
             pub fn for_standard_generators() -> Self {
                 let g = <$projective>::generator();

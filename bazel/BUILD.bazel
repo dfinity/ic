@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("//bazel:status.bzl", "FAKE_IC_VERSION", "ic_version_or_git_sha")
+load("//bazel:defs.bzl", "write_info_file_var")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -40,25 +40,17 @@ config_setting(
     },
 )
 
-string_flag(
-    name = "ic_version",
-    build_setting_default = "",
-)
-
-string_flag(
-    name = "ic_version_rc_only",
-    build_setting_default = FAKE_IC_VERSION,
-)
-
+# Allow targets to opt out of hermetic toolchains, in favor of the one provided
+# by the system
 bool_flag(
-    name = "release_build",
-    build_setting_default = False,
+    name = "hermetic_cc",
+    build_setting_default = True,
 )
 
 config_setting(
-    name = "is_release_build",
+    name = "use_hermetic_cc",
     flag_values = {
-        ":release_build": "True",
+        ":hermetic_cc": "True",
     },
 )
 
@@ -68,32 +60,10 @@ string_flag(
     visibility = ["//visibility:public"],
 )
 
-# Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise <git sha>-<timestamp>.
-# It has to be tagged as `no-cache` as bazel treats version_file as never changing.
-# Visibility of ic_version is limited to package group uploaders and subpackages.
-# Other packages should consume ic_version of artifacts they target.
-ic_version_or_git_sha(
+write_info_file_var(
     name = "version.txt",
-    ic_version = ":ic_version",
-    tags = ["no-cache"],
-    visibility = [
-        "__subpackages__",
-        "//ci/src/artifacts:uploaders",
-    ],
-)
-
-# Similar to the above target, but use the `ic_version_rc_only` flag. The intention is to set this flag to a dummy value on MR pipelines to preserve caching
-# but on master and release candidate branches set to the current git commit sha.
-ic_version_or_git_sha(
-    name = "rc_only_version.txt",
-    ic_version = ":ic_version_rc_only",
-    tags = ["no-cache"],
+    varname = "STABLE_VERSION",
     visibility = ["//visibility:public"],
-)
-
-sh_binary(
-    name = "ic_version_or_git_sha_sh",
-    srcs = ["ic_version_or_git_sha.sh"],
 )
 
 exports_files(
@@ -101,6 +71,7 @@ exports_files(
         "prost_generator.sh",
         "generic_rust_bench.sh",
         "canbench.sh",
+        "file_size_test.sh",
     ],
     visibility = ["//visibility:public"],
 )

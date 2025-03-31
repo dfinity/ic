@@ -52,8 +52,8 @@ use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
-    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+use ic_management_canister_types_private::{
+    CanisterHttpRequestArgs, DataSize, HttpHeader, HttpMethod, TransformContext,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -457,6 +457,10 @@ pub struct CanisterHttpRequest {
     pub id: CanisterHttpRequestId,
     /// The context of the request which captures all the metadata about this request
     pub context: CanisterHttpRequestContext,
+    /// The most up to date api boundary nodes address that should be used as a socks proxy in the case of a request to an IPv4 address.
+    /// The addresses should be sent in the following format: "socks5://[<ip>]:<port>", for example:
+    /// "socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080"
+    pub socks_proxy_addrs: Vec<String>,
 }
 
 /// The content of a response after the transformation
@@ -471,7 +475,16 @@ pub struct CanisterHttpResponse {
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        size_of::<CallbackId>() + size_of::<Time>() + self.content.count_bytes()
+        let CanisterHttpResponse {
+            id,
+            timeout,
+            canister_id,
+            content,
+        } = &self;
+        size_of_val(id)
+            + size_of_val(timeout)
+            + canister_id.get_ref().data_size()
+            + content.count_bytes()
     }
 }
 
@@ -514,7 +527,11 @@ impl From<&CanisterHttpReject> for RejectContext {
 
 impl CountBytes for CanisterHttpReject {
     fn count_bytes(&self) -> usize {
-        size_of::<RejectCode>() + self.message.len()
+        let CanisterHttpReject {
+            reject_code,
+            message,
+        } = &self;
+        size_of_val(reject_code) + message.len()
     }
 }
 
@@ -569,7 +586,8 @@ pub struct CanisterHttpResponseWithConsensus {
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        self.proof.count_bytes() + self.content.count_bytes()
+        let CanisterHttpResponseWithConsensus { content, proof } = &self;
+        proof.count_bytes() + content.count_bytes()
     }
 }
 
@@ -585,7 +603,8 @@ pub struct CanisterHttpResponseDivergence {
 
 impl CountBytes for CanisterHttpResponseDivergence {
     fn count_bytes(&self) -> usize {
-        self.shares.iter().map(|share| share.count_bytes()).sum()
+        let CanisterHttpResponseDivergence { shares } = &self;
+        shares.iter().map(|share| share.count_bytes()).sum()
     }
 }
 

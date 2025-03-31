@@ -1,16 +1,17 @@
-use std::collections::{BTreeMap, BTreeSet};
-
+use crate::idkg::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
 use ic_logger::{warn, ReplicaLogger};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
+use ic_management_canister_types_private::{
+    ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
+};
 use ic_types::{
+    batch::ConsensusResponse,
     consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
-    messages::CallbackId,
+    messages::{CallbackId, Payload},
 };
-
-use crate::idkg::pre_signer::IDkgTranscriptBuilder;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Checks for new reshare requests from execution and initiates the processing
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
@@ -57,21 +58,25 @@ pub(crate) fn initiate_reshare_requests(
 fn make_reshare_dealings_response(
     request: &IDkgReshareRequest,
     initial_dealings: &InitialIDkgDealings,
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
-) -> Option<ic_types::batch::ConsensusResponse> {
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
+) -> Option<ConsensusResponse> {
     idkg_dealings_contexts
         .iter()
         .find(|(_, context)| *request == reshare_request_from_dealings_context(context))
-        .map(|(callback_id, _)| {
-            ic_types::batch::ConsensusResponse::new(
-                *callback_id,
-                ic_types::messages::Payload::Data(
-                    ic_management_canister_types::ComputeInitialIDkgDealingsResponse {
-                        initial_dkg_dealings: initial_dealings.into(),
-                    }
-                    .encode(),
-                ),
-            )
+        .map(|(callback_id, context)| {
+            let data = match context.request.method_name.as_str() {
+                // TODO(CRP-2613): Remove the different cases and always return a ReshareChainKeyResponse
+                // once the registry has been migrated
+                "reshare_chain_key" => {
+                    ReshareChainKeyResponse::IDkg(initial_dealings.into()).encode()
+                }
+                _ => ComputeInitialIDkgDealingsResponse {
+                    initial_dkg_dealings: initial_dealings.into(),
+                }
+                .encode(),
+            };
+
+            ConsensusResponse::new(*callback_id, Payload::Data(data))
         })
 }
 
@@ -82,7 +87,7 @@ fn make_reshare_dealings_response(
 ///   [`idkg::CompletedReshareRequest::Unreported`].
 pub(crate) fn update_completed_reshare_requests(
     payload: &mut idkg::IDkgPayload,
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
     resolver: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     log: &ReplicaLogger,
@@ -157,7 +162,7 @@ pub(crate) fn update_completed_reshare_requests(
 
 /// Translates the reshare requests in the replicated state to the internal format
 pub(super) fn get_reshare_requests(
-    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
 ) -> BTreeSet<idkg::IDkgReshareRequest> {
     idkg_dealings_contexts
         .values()
@@ -166,10 +171,10 @@ pub(super) fn get_reshare_requests(
 }
 
 fn reshare_request_from_dealings_context(
-    context: &IDkgDealingsContext,
+    context: &IDkgDealingContext<'_>,
 ) -> idkg::IDkgReshareRequest {
     idkg::IDkgReshareRequest {
-        master_key_id: context.key_id.clone(),
+        master_key_id: context.key_id(),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
     }
@@ -178,26 +183,25 @@ fn reshare_request_from_dealings_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use crate::idkg::{
+        payload_builder::filter_idkg_reshare_chain_key_contexts,
+        test_utils::{
+            create_reshare_request, dealings_context_from_reshare_request,
+            fake_ecdsa_idkg_master_public_key_id,
+            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+            TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+        },
+        utils::algorithm_for_key_id,
+    };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
         dummy_dealings, dummy_initial_idkg_dealing_for_tests,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::ComputeInitialIDkgDealingsResponse;
+    use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
-    use ic_types::consensus::idkg::IDkgPayload;
-
-    use crate::idkg::{
-        test_utils::{
-            create_reshare_request, dealings_context_from_reshare_request,
-            fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-            set_up_idkg_payload, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
-        },
-        utils::algorithm_for_key_id,
-    };
+    use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload};
 
     fn set_up(
         key_ids: Vec<IDkgMasterPublicKeyId>,
@@ -222,7 +226,7 @@ mod tests {
         ic_types::batch::ConsensusResponse::new(
             callback_id,
             ic_types::messages::Payload::Data(
-                ic_management_canister_types::ComputeInitialIDkgDealingsResponse {
+                ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse {
                     initial_dkg_dealings: initial_dealings.into(),
                 }
                 .encode(),
@@ -234,7 +238,7 @@ mod tests {
     fn test_make_reshare_dealings_response() {
         let mut contexts = BTreeMap::new();
         let mut initial_dealings = BTreeMap::new();
-        for (i, key_id) in fake_master_public_key_ids_for_all_algorithms()
+        for (i, key_id) in fake_master_public_key_ids_for_all_idkg_algorithms()
             .iter()
             .enumerate()
         {
@@ -250,8 +254,9 @@ mod tests {
                 ),
             );
         }
+        let contexts = filter_idkg_reshare_chain_key_contexts(&contexts);
 
-        for (i, key_id) in fake_master_public_key_ids_for_all_algorithms()
+        for (i, key_id) in fake_master_public_key_ids_for_all_idkg_algorithms()
             .iter()
             .enumerate()
         {
@@ -289,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_should_not_accept_when_key_transcript_not_created() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -306,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_good_path() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -328,7 +333,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_incremental() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -359,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_initiate_reshare_requests_should_not_accept_already_completed() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
@@ -380,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_update_completed_reshare_requests_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_ecdsa_update_completed_reshare_requests(key_id);
         }
@@ -402,7 +407,7 @@ mod tests {
 
         let callback_1 = ic_types::messages::CallbackId::new(1);
         let callback_2 = ic_types::messages::CallbackId::new(2);
-        let mut contexts = BTreeMap::from([
+        let contexts = BTreeMap::from([
             (
                 callback_1,
                 dealings_context_from_reshare_request(request_1.clone()),
@@ -412,6 +417,7 @@ mod tests {
                 dealings_context_from_reshare_request(request_2.clone()),
             ),
         ]);
+        let mut contexts = filter_idkg_reshare_chain_key_contexts(&contexts);
 
         // Request 1 dealings are created, it should be moved from in
         // progress -> completed (unreported)

@@ -15,10 +15,6 @@ use ic_types::{
 };
 use std::sync::Arc;
 
-// TODO(NET-776)
-// The IC API version reported on status requests.
-const IC_API_VERSION: &str = "0.18.0";
-
 #[derive(Clone)]
 pub(crate) struct StatusService {
     log: ReplicaLogger,
@@ -72,7 +68,6 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
     });
 
     let response = HttpStatusResponse {
-        ic_api_version: IC_API_VERSION.to_string(),
         // For test networks, and networks that we still reset
         // rather often, let them indicate the root public key
         // in /api/v2/status, so that agents can fetch them.

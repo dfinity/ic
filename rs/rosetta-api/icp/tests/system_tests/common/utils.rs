@@ -7,9 +7,9 @@ use ic_icp_rosetta_client::RosettaClient;
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::ListNeurons;
-use ic_nns_governance::pb::v1::ListNeuronsResponse;
 use ic_nns_governance_api::pb::v1::GovernanceError;
+use ic_nns_governance_api::pb::v1::ListNeurons;
+use ic_nns_governance_api::pb::v1::ListNeuronsResponse;
 use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
@@ -180,6 +180,9 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
                     include_neurons_readable_by_caller: true,
                     include_empty_neurons_readable_by_caller: Some(true),
                     include_public_neurons_in_full_neurons: None,
+                    page_number: None,
+                    page_size: None,
+                    neuron_subaccounts: None
                 })
                 .unwrap()
             )

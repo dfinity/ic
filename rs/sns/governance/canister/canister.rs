@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -11,7 +14,7 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_journal, serve_logs, serve_logs_v2, serve_metrics,
+    serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
@@ -25,28 +28,28 @@ use ic_sns_governance::{
     logs::{ERROR, INFO},
     pb::v1 as sns_gov_pb,
     types::{Environment, HeapGrowthPotential},
+    upgrade_journal::serve_journal,
+};
+use ic_sns_governance_api::pb::v1::{
+    get_running_sns_version_response::UpgradeInProgress,
+    governance::Version,
+    topics::{ListTopicsRequest, ListTopicsResponse},
+    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
+    FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+    GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+    RewardEvent, SetMode, SetModeResponse,
 };
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
-    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
+    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
-};
-use ic_sns_governance_api::pb::{
-    v1 as api,
-    v1::{
-        get_running_sns_version_response::UpgradeInProgress, governance::Version,
-        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
-        FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-        GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-        GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
-        GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
-        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-        RewardEvent, SetMode, SetModeResponse,
-    },
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
@@ -210,11 +213,13 @@ fn caller() -> PrincipalId {
     PrincipalId::from(cdk_caller())
 }
 
-/// In contrast to canister_init(), this method does not do deserialization.
-/// In addition to canister_init, this method is called by canister_post_upgrade.
 #[init]
-fn canister_init_(init_payload: GovernanceProto) {
+fn canister_init(init_payload: GovernanceApi) {
     let init_payload = sns_gov_pb::Governance::from(init_payload);
+    canister_init_(init_payload);
+}
+
+fn canister_init_(init_payload: sns_gov_pb::Governance) {
     let init_payload = ValidGovernanceProto::try_from(init_payload).expect(
         "Cannot start canister, because the deserialized \
          GovernanceProto is invalid in some way",
@@ -279,7 +284,7 @@ fn canister_post_upgrade() {
 
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
 
-    match GovernanceProto::decode(reader) {
+    match sns_gov_pb::Governance::decode(reader) {
         Err(err) => {
             log!(
                 ERROR,
@@ -306,7 +311,7 @@ fn canister_post_upgrade() {
     log!(INFO, "Completed post upgrade");
 }
 
-fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut GovernanceProto) {
+fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut sns_gov_pb::Governance) {
     for neuron in governance_proto.neurons.values_mut() {
         for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
             disbursement.finalize_disbursement_timestamp_seconds = Some(
@@ -384,7 +389,7 @@ async fn manage_neuron(request: ManageNeuron) -> ManageNeuronResponse {
 #[cfg(feature = "test")]
 #[update]
 /// Test only feature. Update neuron parameters.
-fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
+fn update_neuron(neuron: ic_sns_governance_api::pb::v1::Neuron) -> Option<GovernanceError> {
     log!(INFO, "update_neuron");
     let governance = governance_mut();
     measure_span(governance.profiling_information, "update_neuron", || {
@@ -646,9 +651,7 @@ pub fn http_request(request: HttpRequest) -> HttpResponse {
                 .clone()
                 .expect("The upgrade journal is not initialized for this SNS.");
 
-            let journal = api::UpgradeJournal::from(journal);
-
-            serve_journal(&journal.entries)
+            serve_journal(journal)
         }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
@@ -696,6 +699,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     }
 
     Ok(())
+}
+
+/// Returns a list of topics
+#[query]
+async fn list_topics(request: ListTopicsRequest) -> ListTopicsResponse {
+    let ListTopicsRequest {} = request;
+    ListTopicsResponse::from(governance().list_topics())
 }
 
 /// Adds maturity to a neuron for testing

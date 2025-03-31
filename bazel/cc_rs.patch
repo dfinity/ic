@@ -1,18 +1,23 @@
+# Adjust target naming to match what zig expects.
+#
+# zig does not plan to change their target naming: https://github.com/ziglang/zig/issues/4911
+# and cc-rs is waiting on a 1.0 release to support zig's scheme: https://github.com/rust-lang/cc-rs/pull/986
+# Other related links: https://github.com/bazelbuild/rules_rust/issues/2529
+#                      https://github.com/Asana/cc-rs
 diff --git a/src/lib.rs b/src/lib.rs
-index 2fe30b9..88cd566 100644
+index f75b951..8e770a7 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -1121,6 +1121,13 @@ impl Build {
-                     .ok_or_else(|| Error::new(ErrorKind::InvalidArgument, "parent() failure"))?
-                     .to_string_lossy();
-                 let mut hasher = hash_map::DefaultHasher::new();
-+                let out_dir = self.get_out_dir().expect("Could not get out dir");
+@@ -2091,6 +2091,12 @@ impl Build {
+                         target.versioned_llvm_target(None)
+                     };
+ 
++                    let llvm_target = match llvm_target.clone() {
++                        std::borrow::Cow::Borrowed("x86_64-unknown-linux-gnu") => "x86_64-linux-gnu",
++                        std::borrow::Cow::Borrowed("wasm32-unknown-unknown") => "wasm32-freestanding-musl",
++                        _other => &llvm_target,
++                    };
 +
-+                let prefix = out_dir.parent().expect("Could not get parent");
-+                let prefix: &str = &prefix.to_string_lossy();
-+
-+                let err = format!("could not strip prefix {prefix} from {dirname}");
-+                let dirname = dirname.strip_prefix(prefix).expect(&err);
-                 hasher.write(dirname.to_string().as_bytes());
-                 dst.join(format!("{:016x}-{}", hasher.finish(), basename))
-                     .with_extension("o")
+                     // Pass `--target` with the LLVM target to properly
+                     // configure Clang even when cross-compiling.
+                     cmd.push_cc_arg(format!("--target={llvm_target}").into());

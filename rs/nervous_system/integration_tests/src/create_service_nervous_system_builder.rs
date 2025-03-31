@@ -101,6 +101,28 @@ impl CreateServiceNervousSystemBuilder {
         self
     }
 
+    pub fn with_governance_parameters_proposal_initial_voting_period(
+        mut self,
+        initial_voting_period_seconds: u64,
+    ) -> Self {
+        let governance_parameters = self.0.governance_parameters.as_mut().unwrap();
+        governance_parameters.proposal_initial_voting_period = Some(DurationPb {
+            seconds: Some(initial_voting_period_seconds),
+        });
+        self
+    }
+
+    pub fn with_governance_parameters_proposal_wait_for_quiet_deadline_increase(
+        mut self,
+        wait_for_quiet_deadline_increase_seconds: u64,
+    ) -> Self {
+        let governance_parameters = self.0.governance_parameters.as_mut().unwrap();
+        governance_parameters.proposal_wait_for_quiet_deadline_increase = Some(DurationPb {
+            seconds: Some(wait_for_quiet_deadline_increase_seconds),
+        });
+        self
+    }
+
     /// Sets the total distribution (which is the sum of all the initial distributions)
     pub fn initial_token_distribution_total(mut self, total: TokensPb) -> Self {
         let swap_distribution = self

@@ -135,14 +135,14 @@ fn test_known_neurons() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid_1))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid_2))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // Check that neuron 2 has the correct name

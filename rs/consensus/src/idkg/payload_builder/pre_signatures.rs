@@ -1,8 +1,9 @@
-use super::IDkgPayloadError;
-
-use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
+use crate::idkg::{
+    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
+    utils::algorithm_for_key_id,
+};
 use ic_logger::{debug, error, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
 use ic_types::{
@@ -534,12 +535,10 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::test_utils::*;
-    use super::*;
-
+    use super::{test_utils::*, *};
     use crate::idkg::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
         fake_schnorr_idkg_master_public_key_id, fake_schnorr_key_id,
         fake_signature_request_context_with_pre_sig, into_idkg_contexts, request_id,
         set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
@@ -550,7 +549,7 @@ pub(super) mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::SchnorrAlgorithm;
+    use ic_management_canister_types_private::SchnorrAlgorithm;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
@@ -561,7 +560,6 @@ pub(super) mod tests {
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
-
     use strum::IntoEnumIterator;
 
     fn set_up(
@@ -647,7 +645,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_make_new_pre_signatures_if_needed_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_make_new_pre_signatures_if_needed(key_id);
         }
@@ -1059,7 +1057,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_matched_pre_signatures_are_not_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_matched_pre_signatures_are_not_purged(key_id);
         }
@@ -1129,7 +1127,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_unmatched_pre_signatures_of_current_key_are_not_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id);
         }
@@ -1167,7 +1165,7 @@ pub(super) mod tests {
 
     #[test]
     fn test_unmatched_pre_signatures_of_different_key_are_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
             test_unmatched_pre_signatures_of_different_key_are_purged(key_id);
         }

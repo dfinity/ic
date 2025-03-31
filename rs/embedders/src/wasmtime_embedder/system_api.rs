@@ -155,42 +155,6 @@ fn charge_for_cpu_and_mem(
     charge_for_system_api_call(caller, overhead, num_bytes).map_err(|e| process_err(caller, e))
 }
 
-/// Charge for system api call that involves writing/reading stable memory
-// TODO: RUN-841: Cover with tests
-#[inline(always)]
-fn charge_for_stable_write(
-    caller: &mut Caller<'_, StoreData>,
-    mut overhead: NumInstructions,
-    offset: u64,
-    size: u64,
-    dirty_page_limit: StableMemoryPageLimit,
-) -> HypervisorResult<()> {
-    let system_api = caller.data().system_api()?;
-    let (new_stable_dirty_pages, dirty_page_cost) =
-        system_api.dirty_pages_from_stable_write(offset, size)?;
-
-    let dirty_page_limit = system_api.get_page_limit(&dirty_page_limit);
-
-    overhead = overhead.saturating_add(&dirty_page_cost);
-
-    let stable_dirty_pages = &mut caller
-        .data_mut()
-        .num_stable_dirty_pages_from_non_native_writes;
-    let total_pages = stable_dirty_pages.saturating_add(&new_stable_dirty_pages);
-
-    if total_pages > dirty_page_limit {
-        let error = HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                            dirty_page_limit * (PAGE_SIZE as u64 / 1024),
-                            ),
-                        );
-        return Err(error);
-    }
-    *stable_dirty_pages = total_pages;
-
-    charge_for_system_api_call(caller, overhead, size as usize)
-}
-
 /// Charges a canister (in instructions) for system API call overhead (exit,
 /// accessing state, etc) and for using `num_bytes` bytes of memory. If
 /// the canister has run out instructions or there are unexpected bugs, return
@@ -356,7 +320,7 @@ pub fn syscalls<
     /// Check if debug print is enabled.
     fn debug_print_is_enabled(
         caller: &mut Caller<'_, StoreData>,
-        feature_flags: FeatureFlags,
+        feature_flags: &FeatureFlags,
     ) -> Result<bool, anyhow::Error> {
         match (
             feature_flags.rate_limiting_of_debug_prints,
@@ -383,7 +347,7 @@ pub fn syscalls<
         // by the log capacity and the remaining space in the log.
         // The cost is calculated as follows:
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
-        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types`
+        //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types_private`
         // - the transmitted bytes (multiplied by the cost factor) for sending the payload to the replica.
         Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes)
         // LINT.ThenChange(logging_charge_bytes_rule)
@@ -459,7 +423,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::MSG_METHOD_NAME_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_method_name_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
+                        anyhow::Error::msg(format!("ic0::msg_method_name_size failed: {}", e))
                     })
                 })
             }
@@ -612,11 +576,12 @@ pub fn syscalls<
 
     linker
         .func_wrap("ic0", "debug_print", {
+            let feature_flags = feature_flags.clone();
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
                 num_bytes += logging_charge_bytes(&mut caller, length)?;
-                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
+                let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
                 }
@@ -754,76 +719,6 @@ pub fn syscalls<
         .unwrap();
 
     linker
-        .func_wrap("ic0", "stable_size", {
-            move |mut caller: Caller<'_, StoreData>| {
-                charge_for_cpu(&mut caller, overhead::STABLE_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_size())
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable_grow", {
-            move |mut caller: Caller<'_, StoreData>, additional_pages: u32| {
-                charge_for_cpu(&mut caller, overhead::STABLE_GROW)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_grow(additional_pages))
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable_read", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::STABLE_READ, size as usize)?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable_read(dst, offset, size, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
-                } else {
-                    Ok(())
-                }
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable_write", {
-            move |mut caller: Caller<'_, StoreData>, offset: u32, src: u32, size: u32| {
-                charge_for_stable_write(
-                    &mut caller,
-                    overhead::STABLE_WRITE,
-                    offset as u64,
-                    size as u64,
-                    stable_memory_dirty_page_limit,
-                )
-                .map_err(|e| process_err(&mut caller, e))?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable_write(offset, src, size, memory)
-                })
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_size", {
-            move |mut caller: Caller<'_, StoreData>| {
-                charge_for_cpu(&mut caller, overhead::STABLE64_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_size())
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_grow", {
-            move |mut caller: Caller<'_, StoreData>, additional_pages: u64| {
-                charge_for_cpu(&mut caller, overhead::STABLE64_GROW)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_grow(additional_pages))
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("__", "stable_read_first_access", {
             move |mut caller: Caller<'_, StoreData>, dst: u64, offset: u64, size: u64| {
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -834,40 +729,6 @@ pub fn syscalls<
                 } else {
                     Ok(())
                 }
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_read", {
-            move |mut caller: Caller<'_, StoreData>, dst: u64, offset: u64, size: u64| {
-                charge_for_cpu_and_mem(&mut caller, overhead::STABLE64_READ, size as usize)?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable64_read(dst, offset, size, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
-                } else {
-                    Ok(())
-                }
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_write", {
-            move |mut caller: Caller<'_, StoreData>, offset: u64, src: u64, size: u64| {
-                charge_for_stable_write(
-                    &mut caller,
-                    overhead::STABLE64_WRITE,
-                    offset,
-                    size,
-                    stable_memory_dirty_page_limit,
-                )
-                .map_err(|e| process_err(&mut caller, e))?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable64_write(offset, src, size, memory)
-                })
             }
         })
         .unwrap();
@@ -929,6 +790,23 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_cycle_balance128(dst, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, 16)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "canister_liquid_cycle_balance128", {
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu(&mut caller, overhead::CANISTER_LIQUID_CYCLE_BALANCE128)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    s.ic0_canister_liquid_cycle_balance128(dst, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst, 16)
@@ -1033,6 +911,38 @@ pub fn syscalls<
                         .out_of_instructions(instruction_counter)?;
                     store_value(&global, instruction_counter, c)
                 })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "subnet_self_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_self_size()).and_then(|s| {
+                    I::try_from(s).map_err(|e| {
+                        anyhow::Error::msg(format!("ic0::subnet_self_size failed: {}", e))
+                    })
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "subnet_self_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::SUBNET_SELF_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_subnet_self_copy(dst, offset, size, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst, size)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -1205,6 +1115,7 @@ pub fn syscalls<
     linker
         .func_wrap("ic0", "cycles_burn128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                charge_for_cpu(&mut caller, overhead::CYCLES_BURN128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
@@ -1215,19 +1126,104 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "cost_call", {
+            move |mut caller: Caller<'_, StoreData>,
+                  method_name_size: u64,
+                  payload_size: u64,
+                  dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_CALL)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_call(method_name_size, payload_size, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_call failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_create_canister", {
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_CREATE_CANISTER)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_create_canister(dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_create_canister failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_http_request", {
+            move |mut caller: Caller<'_, StoreData>,
+                  request_size: u64,
+                  max_res_bytes: u64,
+                  dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_HTTP_REQUEST)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_http_request(request_size, max_res_bytes, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_sign_with_ecdsa", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, size)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_sign_with_ecdsa(src, size, curve, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_sign_with_ecdsa failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_sign_with_schnorr", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, algorithm: u32, dst: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_SCHNORR, size)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
+                })
+                .map_err(|e| {
+                    anyhow::Error::msg(format!("ic0_cost_sign_with_schnorr failed: {}", e))
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_vetkd_derive_key", {
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, size)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_vetkd_derive_key(src, size, curve, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_vetkd_derive_key failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "call_with_best_effort_response", {
             move |mut caller: Caller<'_, StoreData>, timeout_seconds: u32| {
                 charge_for_cpu(&mut caller, overhead::CALL_WITH_BEST_EFFORT_RESPONSE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| {
-                        system_api.ic0_call_with_best_effort_response(timeout_seconds)
-                    })
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| {
+                    system_api.ic0_call_with_best_effort_response(timeout_seconds)
+                })
             }
         })
         .unwrap();
@@ -1236,14 +1232,141 @@ pub fn syscalls<
         .func_wrap("ic0", "msg_deadline", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_DEADLINE)?;
-                if feature_flags.best_effort_responses == FlagStatus::Enabled {
-                    with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
-                } else {
-                    let err = HypervisorError::ToolchainContractViolation {
-                        error: "ic0::msg_deadline is not enabled.".to_string(),
-                    };
-                    Err(process_err(&mut caller, err))
-                }
+                with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
+            }
+        })
+        .unwrap();
+
+    // Stable memory APIs are implemented natively in Wasm. Link the functions here to dummy
+    // versions that will trap if ever called to satisfy the Wasm module requirements (the alternative
+    // would be to change the imports in the Wasm to link to a dummy function but this approach here
+    // seemed simpler).
+    //
+    // This code should be unreachable unless the Wasm module is modified to call these functions.
+    linker
+        .func_wrap("ic0", "stable_size", {
+            move |mut caller: Caller<'_, StoreData>| -> Result<u32, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_size is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable_grow", {
+            move |mut caller: Caller<'_, StoreData>, _pages: u32| -> Result<u32, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_grow is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable_read", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _dst: u32,
+                  _offset: u32,
+                  _size: u32|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_read is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable_write", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _offset: u32,
+                  _src: u32,
+                  _size: u32|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_write is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_size", {
+            move |mut caller: Caller<'_, StoreData>| -> Result<u64, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_size is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_grow", {
+            move |mut caller: Caller<'_, StoreData>, _pages: u64| -> Result<u64, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_grow is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_read", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _dst: u64,
+                  _offset: u64,
+                  _size: u64|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_read is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_write", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _offset: u64,
+                  _src: u64,
+                  _size: u64|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_write is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
             }
         })
         .unwrap();

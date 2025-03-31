@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use minicbor::Encoder;
 use minicbor::{Decode, Encode};
 
@@ -37,9 +38,11 @@ pub enum MintMemo<'a> {
         kyt_fee: Option<u64>,
     },
     #[n(1)]
+    #[deprecated]
     /// The minter minted accumulated check fees to the KYT provider.
     Kyt,
     #[n(2)]
+    #[deprecated]
     /// The minter failed to check retrieve btc destination address
     /// or the destination address is tainted.
     KytFail {

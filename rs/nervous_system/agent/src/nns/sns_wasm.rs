@@ -1,7 +1,10 @@
 use crate::sns::Sns;
+use crate::CallCanisters;
 use anyhow::anyhow;
 use ic_agent::Agent;
+use ic_base_types::PrincipalId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_sns_wasm::pb::v1::{GetNextSnsVersionRequest, SnsVersion};
 use ic_sns_wasm::pb::v1::{
     GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListUpgradeStepsRequest,
     ListUpgradeStepsResponse,
@@ -13,7 +16,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::process::Command;
 
-use crate::CallCanisters;
+pub mod requests;
 
 pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
     agent: &C,
@@ -112,4 +115,19 @@ async fn extract_git_commit_id(
 
     let git_commit_id = String::from_utf8(output.stdout)?.trim().to_string();
     Ok(git_commit_id)
+}
+
+pub async fn get_next_sns_version<C: CallCanisters>(
+    agent: &C,
+    current_version: SnsVersion,
+    governance_canister_id: Option<PrincipalId>,
+) -> Result<Option<SnsVersion>, C::Error> {
+    let request = GetNextSnsVersionRequest {
+        current_version: Some(current_version),
+        governance_canister_id,
+    };
+
+    let response = agent.call(SNS_WASM_CANISTER_ID, request).await?;
+
+    Ok(response.next_version)
 }

@@ -26,7 +26,6 @@ use std::{
 };
 
 pub mod binary_search;
-pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod ledger_validation;
@@ -168,6 +167,12 @@ impl NervousSystemError {
         NervousSystemError {
             error_message: message.to_string(),
         }
+    }
+}
+
+impl From<NervousSystemError> for String {
+    fn from(value: NervousSystemError) -> Self {
+        value.error_message
     }
 }
 
@@ -719,21 +724,6 @@ pub fn serve_metrics(
         Err(err) => {
             HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err)).build()
         }
-    }
-}
-
-pub fn serve_journal<Journal>(journal: &Journal) -> HttpResponse
-where
-    Journal: serde::Serialize,
-{
-    match serde_json::to_string(journal) {
-        Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
-        }
-        Ok(body) => HttpResponseBuilder::ok()
-            .header("Content-Type", "application/json")
-            .with_body_and_content_length(body)
-            .build(),
     }
 }
 

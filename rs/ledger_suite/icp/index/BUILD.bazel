@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/index-ng",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:candid",
@@ -79,7 +78,10 @@ rust_test(
 rust_test(
     name = "ic_icp_index_canister_test",
     crate = ":_wasm_ic-icp-index-canister",
-    data = [":index.did"],
+    data = [
+        ":index.did",
+        "//rs/ledger_suite/icp:ledger.did",
+    ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
     },
@@ -91,18 +93,17 @@ rust_ic_test(
     timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
-        ":ic-icp-index-canister.wasm",
+        ":ic-icp-index-canister.wasm.gz",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
-        "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm)",
+        "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm.gz)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
-    flaky = True,
     tags = ["cpu:4"],
     deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

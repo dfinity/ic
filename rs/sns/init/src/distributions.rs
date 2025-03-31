@@ -1,7 +1,7 @@
 use crate::{
     pb::v1::{
-        AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
-        NeuronDistribution, SwapDistribution, TreasuryDistribution,
+        DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+        SwapDistribution, TreasuryDistribution,
     },
     SnsCanisterIds,
 };
@@ -16,7 +16,6 @@ use ic_nervous_system_common::{
 };
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
-    neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
     pb::v1::{neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission},
 };
 use ic_sns_swap::swap::{NEURON_BASKET_MEMO_RANGE_START, SALE_NEURON_MEMO_RANGE_END};
@@ -30,9 +29,6 @@ pub const SWAP_SUBACCOUNT_NONCE: u64 = 1;
 /// The max number of DeveloperDistributions that can be specified in the SnsInitPayload.
 pub const MAX_DEVELOPER_DISTRIBUTION_COUNT: usize = 100;
 
-/// The max number of AirdropDistributions that can be specified in the SnsInitPayload.
-pub const MAX_AIRDROP_DISTRIBUTION_COUNT: usize = 1000;
-
 impl FractionalDeveloperVotingPower {
     /// Given the configuration of the different buckets, when provided the SnsCanisterIds calculate
     /// all the `AccountId`s of SNS Ledger accounts that will have tokens distributed at genesis.
@@ -45,7 +41,6 @@ impl FractionalDeveloperVotingPower {
         self.insert_developer_accounts(sns_canister_ids, &mut accounts)?;
         self.insert_treasury_accounts(sns_canister_ids, &mut accounts)?;
         self.insert_swap_accounts(sns_canister_ids, &mut accounts)?;
-        self.insert_airdrop_accounts(sns_canister_ids, &mut accounts)?;
 
         Ok(accounts)
     }
@@ -58,7 +53,6 @@ impl FractionalDeveloperVotingPower {
         parameters: &NervousSystemParameters,
     ) -> Result<BTreeMap<String, Neuron>, String> {
         let developer_neurons = &self.developer_distribution()?.developer_neurons;
-        let airdrop_neurons = &self.airdrop_distribution()?.airdrop_neurons;
 
         let swap = self.swap_distribution()?;
 
@@ -77,16 +71,6 @@ impl FractionalDeveloperVotingPower {
             let neuron = self.create_neuron(
                 developer_neuron_distribution,
                 developer_voting_power_percentage_multiplier,
-                parameters,
-            )?;
-
-            initial_neurons.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
-        }
-
-        for airdrop_neuron_distribution in airdrop_neurons {
-            let neuron = self.create_neuron(
-                airdrop_neuron_distribution,
-                DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
                 parameters,
             )?;
 
@@ -115,21 +99,7 @@ impl FractionalDeveloperVotingPower {
             .as_ref()
             .ok_or("Error: swap_distribution must be specified")?;
 
-        let airdrop_distribution = self
-            .airdrop_distribution
-            .as_ref()
-            .ok_or("Error: airdrop_distribution must be specified")?;
-
-        self.validate_neurons(
-            developer_distribution,
-            airdrop_distribution,
-            nervous_system_parameters,
-        )?;
-
-        match Self::get_total_distributions(&airdrop_distribution.airdrop_neurons) {
-            Ok(_) => (),
-            Err(_) => return Err("Error: The sum of all airdrop allocated tokens overflowed and is an invalid distribution".to_string()),
-        };
+        self.validate_neurons(developer_distribution, nervous_system_parameters)?;
 
         if swap_distribution.initial_swap_amount_e8s == 0 {
             return Err(
@@ -201,11 +171,10 @@ impl FractionalDeveloperVotingPower {
         })
     }
 
-    /// Validate the NeuronDistributions in the Developer and Airdrop bucket
+    /// Validate the NeuronDistributions in the developer bucket.
     fn validate_neurons(
         &self,
         developer_distribution: &DeveloperDistribution,
-        airdrop_distribution: &AirdropDistribution,
         nervous_system_parameters: &NervousSystemParameters,
     ) -> Result<(), String> {
         let neuron_minimum_dissolve_delay_to_vote_seconds = nervous_system_parameters
@@ -268,76 +237,9 @@ impl FractionalDeveloperVotingPower {
             }
         }
 
-        let missing_airdrop_principals_count = airdrop_distribution
-            .airdrop_neurons
-            .iter()
-            .filter(|neuron_distribution| neuron_distribution.controller.is_none())
-            .count();
-
-        if missing_airdrop_principals_count != 0 {
-            return Err(format!(
-                "Error: {} airdrop_neurons are missing controllers",
-                missing_airdrop_principals_count
-            ));
-        }
-
-        let deduped_airdrop_neurons = airdrop_distribution
-            .airdrop_neurons
-            .iter()
-            .map(|neuron_distribution| {
-                (
-                    (neuron_distribution.controller, neuron_distribution.memo),
-                    neuron_distribution.stake_e8s,
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        if deduped_airdrop_neurons.len() != airdrop_distribution.airdrop_neurons.len() {
-            return Err(
-                "Error: Neurons with the same controller and memo detected in airdrop_neurons"
-                    .to_string(),
-            );
-        }
-
-        if deduped_airdrop_neurons.len() > MAX_AIRDROP_DISTRIBUTION_COUNT {
-            return Err(format!(
-                "Error: The number of airdrop neurons must be less than {}. Current count is {}",
-                MAX_AIRDROP_DISTRIBUTION_COUNT,
-                deduped_airdrop_neurons.len(),
-            ));
-        }
-
-        for (controller, memo) in deduped_airdrop_neurons.keys() {
-            if NEURON_BASKET_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
-                return Err(format!(
-                    "Error: Airdrop neuron with controller {} cannot have a memo in the range {} to {}",
-                    controller.unwrap(),
-                    NEURON_BASKET_MEMO_RANGE_START,
-                    SALE_NEURON_MEMO_RANGE_END
-                ));
-            }
-        }
-
-        let mut duplicated_neuron_principals = vec![];
-        for developer_principal in deduped_dev_neurons.keys() {
-            if deduped_airdrop_neurons.contains_key(developer_principal) {
-                // Safe to unwrap due to the checks done above
-                duplicated_neuron_principals.push(developer_principal.0.unwrap())
-            }
-        }
-
-        if !duplicated_neuron_principals.is_empty() {
-            return Err(format!(
-                "Error: The following controllers are present in AirdropDistribution \
-                and DeveloperDistribution: {:?}",
-                duplicated_neuron_principals
-            ));
-        }
-
         let configured_at_least_one_voting_neuron = developer_distribution
             .developer_neurons
             .iter()
-            .chain(&airdrop_distribution.airdrop_neurons)
             .any(|neuron_distribution| {
                 neuron_distribution.dissolve_delay_seconds
                     >= *neuron_minimum_dissolve_delay_to_vote_seconds
@@ -354,7 +256,6 @@ impl FractionalDeveloperVotingPower {
         let misconfigured_dissolve_delay_principals: Vec<PrincipalId> = developer_distribution
             .developer_neurons
             .iter()
-            .chain(&airdrop_distribution.airdrop_neurons)
             .filter(|neuron_distribution| {
                 neuron_distribution.dissolve_delay_seconds > *max_dissolve_delay_seconds
             })
@@ -440,26 +341,6 @@ impl FractionalDeveloperVotingPower {
         Ok(())
     }
 
-    /// Calculate and insert the airdrop bucket accounts into the provided map.
-    fn insert_airdrop_accounts(
-        &self,
-        sns_canister_ids: &SnsCanisterIds,
-        accounts: &mut BTreeMap<Account, Tokens>,
-    ) -> Result<(), String> {
-        for neuron_distribution in &self.airdrop_distribution()?.airdrop_neurons {
-            let principal_id = neuron_distribution.controller()?;
-
-            let (account, tokens) = Self::get_neuron_account_id_and_tokens(
-                &sns_canister_ids.governance,
-                &principal_id,
-                neuron_distribution.stake_e8s,
-                neuron_distribution.memo,
-            );
-            accounts.insert(account, tokens);
-        }
-        Ok(())
-    }
-
     /// Given a the PrincipalId of Governance, compute the AccountId and the number of tokens
     /// of a distribution account.
     pub fn get_distribution_account_id_and_tokens(
@@ -533,12 +414,6 @@ impl FractionalDeveloperVotingPower {
             .ok_or_else(|| "Expected swap distribution to exist".to_string())
     }
 
-    fn airdrop_distribution(&self) -> Result<&AirdropDistribution, String> {
-        self.airdrop_distribution
-            .as_ref()
-            .ok_or_else(|| "Expected airdrop distribution to exist".to_string())
-    }
-
     /// This gives us some values that work for testing but would not be useful
     /// in a real world scenario. They are only meant to validate, not be sensible.
     pub fn with_valid_values_for_testing() -> Self {
@@ -552,9 +427,6 @@ impl FractionalDeveloperVotingPower {
             swap_distribution: Some(SwapDistribution {
                 total_e8s: 10_000_000_000,
                 initial_swap_amount_e8s: 10_000_000_000,
-            }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: Default::default(),
             }),
         }
     }
@@ -593,12 +465,10 @@ impl NeuronDistribution {
 #[cfg(test)]
 mod test {
     use crate::{
-        distributions::{
-            MAX_AIRDROP_DISTRIBUTION_COUNT, MAX_DEVELOPER_DISTRIBUTION_COUNT, SWAP_SUBACCOUNT_NONCE,
-        },
+        distributions::{MAX_DEVELOPER_DISTRIBUTION_COUNT, SWAP_SUBACCOUNT_NONCE},
         pb::v1::{
-            AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
-            NeuronDistribution, SwapDistribution, TreasuryDistribution,
+            DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+            SwapDistribution, TreasuryDistribution,
         },
         SnsCanisterIds, Tokens,
     };
@@ -609,11 +479,10 @@ mod test {
         ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
     };
     use ic_nervous_system_common_test_keys::{
-        TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
+        TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
     };
     use ic_sns_governance::{
         governance::TREASURY_SUBACCOUNT_NONCE,
-        neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
         pb::v1::{neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission},
     };
     use ic_sns_swap::swap::NEURON_BASKET_MEMO_RANGE_START;
@@ -697,13 +566,6 @@ mod test {
                 total_e8s: swap_total,
                 initial_swap_amount_e8s: swap_initial_round,
             }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: vec![NeuronDistribution {
-                    controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
-                    stake_e8s: neuron_stake,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                }],
-            }),
         };
 
         let canister_ids = create_canister_ids();
@@ -721,19 +583,12 @@ mod test {
             Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
             None,
         );
-        let neuron_3_account = get_neuron_account_identifier(
-            canister_ids.governance,
-            Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
-            None,
-        );
 
         let neuron_1_account_balance = initial_ledger_accounts.get(&neuron_1_account).unwrap();
         let neuron_2_account_balance = initial_ledger_accounts.get(&neuron_2_account).unwrap();
-        let neuron_3_account_balance = initial_ledger_accounts.get(&neuron_3_account).unwrap();
 
         assert_eq!(neuron_1_account_balance, &Tokens::from_e8s(neuron_stake));
         assert_eq!(neuron_2_account_balance, &Tokens::from_e8s(neuron_stake));
-        assert_eq!(neuron_3_account_balance, &Tokens::from_e8s(neuron_stake));
 
         // Verify swap related bucket
         let locked_swap_account = get_distribution_account_identifier(
@@ -782,7 +637,6 @@ mod test {
     fn test_initial_neurons() {
         // Different token values
         let developer_neuron_stake = 100_000_000;
-        let airdrop_neuron_stake = 50_000;
         let swap_total = 1_000_000_000;
         let swap_initial_round = 400_000_000;
         let treasury_total = 1_000_000_000;
@@ -790,7 +644,6 @@ mod test {
         // Different dissolve delays
         let neuron_1_dissolve_delay = 6 * ONE_MONTH_SECONDS;
         let neuron_2_dissolve_delay = ONE_YEAR_SECONDS;
-        let neuron_3_dissolve_delay = 2 * ONE_YEAR_SECONDS;
 
         let neuron_2_vesting_period_seconds = Some(3 * ONE_YEAR_SECONDS);
 
@@ -820,15 +673,6 @@ mod test {
                 total_e8s: swap_total,
                 initial_swap_amount_e8s: swap_initial_round,
             }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: vec![NeuronDistribution {
-                    controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
-                    stake_e8s: airdrop_neuron_stake,
-                    memo: 0,
-                    dissolve_delay_seconds: neuron_3_dissolve_delay,
-                    vesting_period_seconds: None,
-                }],
-            }),
         };
 
         let parameters = NervousSystemParameters::with_default_values();
@@ -845,10 +689,6 @@ mod test {
             *TEST_NEURON_2_OWNER_PRINCIPAL,
             0,
         ));
-        let neuron_id_3 = NeuronId::from(compute_neuron_staking_subaccount_bytes(
-            *TEST_NEURON_3_OWNER_PRINCIPAL,
-            0,
-        ));
 
         // Validate they exist
         let neuron_1 = initial_neurons
@@ -857,14 +697,10 @@ mod test {
         let neuron_2 = initial_neurons
             .get(&neuron_id_2.to_string())
             .expect("Expected neuron_id to exist");
-        let neuron_3 = initial_neurons
-            .get(&neuron_id_3.to_string())
-            .expect("Expected neuron_id to exist");
 
         // That their stake is as configured
         assert_eq!(neuron_1.stake_e8s(), developer_neuron_stake);
         assert_eq!(neuron_2.stake_e8s(), developer_neuron_stake);
-        assert_eq!(neuron_3.stake_e8s(), airdrop_neuron_stake);
 
         // That the neurons have permissions to use them
         let mut expected_neuron_permission = NeuronPermission {
@@ -888,9 +724,6 @@ mod test {
             vec![expected_neuron_permission.clone()]
         );
 
-        expected_neuron_permission.principal = Some(*TEST_NEURON_3_OWNER_PRINCIPAL);
-        assert_eq!(neuron_3.permissions, vec![expected_neuron_permission]);
-
         assert_eq!(
             neuron_1.dissolve_state,
             Some(DissolveState::DissolveDelaySeconds(neuron_1_dissolve_delay))
@@ -899,14 +732,9 @@ mod test {
             neuron_2.dissolve_state,
             Some(DissolveState::DissolveDelaySeconds(neuron_2_dissolve_delay))
         );
-        assert_eq!(
-            neuron_3.dissolve_state,
-            Some(DissolveState::DissolveDelaySeconds(neuron_3_dissolve_delay))
-        );
 
         // That they have the correct voting_power_percentage_multiplier. The developer neurons
-        // (neuron_1, neuron_2) should have the voting_power_percentage_multiplier, and the airdrop
-        // neuron (neuron_3) should have the default set.
+        // (neuron_1, neuron_2) should have the voting_power_percentage_multiplier.
         let swap_ratio = swap_initial_round as f32 / swap_total as f32;
         let voting_power_percentage_multiplier = (swap_ratio * 100_f32) as u64;
         assert_eq!(
@@ -917,15 +745,10 @@ mod test {
             neuron_2.voting_power_percentage_multiplier,
             voting_power_percentage_multiplier
         );
-        assert_eq!(
-            neuron_3.voting_power_percentage_multiplier,
-            DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER
-        );
 
         // That they have the expected vesting periods
         assert_eq!(neuron_1.vesting_period_seconds, None);
         assert_eq!(neuron_2.vesting_period_seconds, Some(3 * ONE_YEAR_SECONDS));
-        assert_eq!(neuron_3.vesting_period_seconds, None);
     }
 
     #[test]
@@ -939,9 +762,6 @@ mod test {
             swap_distribution: Some(SwapDistribution {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
-            }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: Default::default(),
             }),
         };
 
@@ -1081,26 +901,6 @@ mod test {
             .validate(&nervous_system_parameters)
             .is_ok());
 
-        // Using the same controller + memo in the AirdropDistribution and DeveloperDistribution should fail
-        // validation
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![NeuronDistribution {
-                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                stake_e8s: 50,
-                ..NeuronDistribution::with_valid_values_for_testing()
-            }],
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
-
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: Default::default(),
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
-
         // There must be at least one neuron with the dissolve_delay greater than or equal to
         // neuron_minimum_dissolve_delay_to_vote_seconds.
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
@@ -1168,9 +968,6 @@ mod test {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
             }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: Default::default(),
-            }),
         };
 
         // A basic valid NervousSystemParameter
@@ -1218,9 +1015,6 @@ mod test {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
             }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: Default::default(),
-            }),
         };
 
         // A basic valid NervousSystemParameter
@@ -1265,154 +1059,11 @@ mod test {
             .is_err());
     }
 
-    #[test]
-    fn test_fractional_developer_voting_power_airdrop_validation() {
-        // A basic valid FractionalDeveloperVotingPower
-        let mut initial_token_distribution = FractionalDeveloperVotingPower {
-            developer_distribution: Some(DeveloperDistribution {
-                developer_neurons: Default::default(),
-            }),
-            treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
-            swap_distribution: Some(SwapDistribution {
-                total_e8s: 1_000_000_000,
-                initial_swap_amount_e8s: 100_000_000,
-            }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
-            }),
-        };
-
-        // A basic valid NervousSystemParameter
-        let nervous_system_parameters = NervousSystemParameters::with_default_values();
-
-        // Validate that the initial version is valid
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
-
-        // The airdrop_distribution being absent should fail validation
-        initial_token_distribution.airdrop_distribution = None;
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
-
-        // Check that returning to a default is valid
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
-
-        // Duplicate principals + memo should fail validation
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    memo: 0,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    memo: 0,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-            ],
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
-
-        // Unique principals + memo should pass validation
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    memo: 0,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    memo: 1,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
-                    memo: 1,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-            ],
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
-
-        // The sum of the distributions MUST fit into a u64
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    stake_e8s: u64::MAX,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-                NeuronDistribution {
-                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
-                    stake_e8s: u64::MAX,
-                    ..NeuronDistribution::with_valid_values_for_testing()
-                },
-            ],
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
-
-        // Reset to a valid airdrop_distribution
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_ok());
-
-        // Using the same controller in the AirdropDistribution and DeveloperDistribution should fail
-        // validation
-        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
-            developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
-
-        // Exceeding the maximum count of developer neurons should fail
-        let invalid_airdrop_neurons = (0..MAX_AIRDROP_DISTRIBUTION_COUNT + 1)
-            .map(|i| NeuronDistribution {
-                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                memo: i as u64,
-                ..NeuronDistribution::with_valid_values_for_testing()
-            })
-            .collect();
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: invalid_airdrop_neurons,
-        });
-        assert!(initial_token_distribution
-            .validate(&nervous_system_parameters)
-            .is_err());
-    }
-
-    /// Test that validation fails if Airdrop or Developer neurons are given memos in the incorrect
-    /// range.
+    /// Test that validation fails if developer neurons are given memos in the incorrect range.
     #[test]
     fn test_fractional_developer_voting_power_memos() {
         let mut distribution1 = NeuronDistribution {
             controller: Some(PrincipalId::new_user_test_id(1)),
-            stake_e8s: 100_000_000,
-            memo: 0,
-            dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
-            vesting_period_seconds: None,
-        };
-
-        let mut distribution2 = NeuronDistribution {
-            controller: Some(PrincipalId::new_user_test_id(2)),
             stake_e8s: 100_000_000,
             memo: 0,
             dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
@@ -1428,9 +1079,6 @@ mod test {
             swap_distribution: Some(SwapDistribution {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
-            }),
-            airdrop_distribution: Some(AirdropDistribution {
-                airdrop_neurons: vec![distribution2.clone()],
             }),
         };
 
@@ -1457,16 +1105,5 @@ mod test {
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![distribution1],
         });
-
-        // An airdrop distribution with a memo in the Sale neuron memo range should fail validation
-        distribution2.memo = NEURON_BASKET_MEMO_RANGE_START + 888;
-        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
-            airdrop_neurons: vec![distribution2],
-        });
-
-        assert_eq!(initial_token_distribution
-                       .validate(&nervous_system_parameters)
-                       .unwrap_err(),
-                   "Error: Airdrop neuron with controller djduj-3qcaa-aaaaa-aaaap-4ai cannot have a memo in the range 1000000 to 10000000".to_string());
     }
 }

@@ -1,5 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
+use crate::artifact::IngressMessageId;
+use crate::batch::VetKdAgreement;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
@@ -28,6 +30,7 @@ use crate::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
     IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
 };
+use crate::messages::{CallbackId, SignedRequestBytes};
 use crate::signature::{
     BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
@@ -42,7 +45,7 @@ use ic_btc_replica_types::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
@@ -1002,6 +1005,8 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
     }
 }
 
+impl HasId<CallbackId> for VetKdAgreement {}
+impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}
 impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}

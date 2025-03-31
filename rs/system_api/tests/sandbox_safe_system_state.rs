@@ -4,7 +4,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -12,7 +12,7 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::{NetworkTopology, SystemState};
+use ic_replicated_state::{MessageMemoryUsage, NetworkTopology, SystemState};
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
@@ -34,7 +34,7 @@ use std::sync::Arc;
 mod common;
 use common::*;
 
-use ic_cycles_account_manager::WasmExecutionMode;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
@@ -77,7 +77,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
-            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
             request.clone(),
             Cycles::zero(),
             Cycles::zero(),
@@ -132,7 +132,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
-            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
             request.clone(),
             prepayment_for_response_execution,
             prepayment_for_response_transmission
@@ -175,7 +175,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
             NumBytes::from(0),
-            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
             RequestBuilder::default()
                 .sender(canister_test_id(0))
                 .build(),
@@ -235,7 +235,7 @@ fn correct_charging_source_canister_for_a_request() {
     sandbox_safe_system_state
         .push_output_request(
             NumBytes::from(0),
-            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
             request,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
@@ -253,7 +253,7 @@ fn correct_charging_source_canister_for_a_request() {
     // => Mock the response_cycles_refund() invocation from the
     // execute_canister_response()
     sandbox_safe_system_state
-        .system_state_changes
+        .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -443,8 +443,8 @@ fn call_increases_cycles_consumed_metric() {
     api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]).unwrap();
     api.ic0_call_perform().unwrap();
 
-    let system_state_changes = api.into_system_state_changes();
-    system_state_changes
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
@@ -518,7 +518,7 @@ fn test_inter_canister_call(
     sandbox_safe_system_state
         .push_output_request(
             NumBytes::from(0),
-            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
             request,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
@@ -526,7 +526,7 @@ fn test_inter_canister_call(
         .unwrap();
 
     sandbox_safe_system_state
-        .system_state_changes
+        .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,

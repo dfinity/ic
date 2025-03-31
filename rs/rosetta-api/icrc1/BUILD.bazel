@@ -6,6 +6,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -149,7 +150,6 @@ rust_test_suite_with_extra_srcs(
         "tests/integration_test_components/blocks_synchronizer/*.rs",
         "tests/integration_test_components/storage/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
@@ -172,7 +172,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
@@ -275,6 +274,12 @@ expand_template(
     template = [
         "0.0.0",
     ],
+)
+
+oci_tar(
+    name = "icrc_rosetta_image.tar",
+    image = ":ic_icrc_rosetta_image",
+    repo_tags = ["icrc-rosetta:image"],
 )
 
 # Push image with:

@@ -138,7 +138,8 @@ fn should_discover_new_archive_and_top_up() {
         .expect_new_ledger_and_index_canisters()
         .assert_ledger_has_cycles(200_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+        .into()
         .trigger_creation_of_archive()
         .assert_ledger_has_cycles(100_000_000_000_000_u128)
         .assert_all_archives_have_cycles(100_000_000_000_000_u128);
@@ -149,14 +150,15 @@ fn should_discover_new_archive_and_top_up() {
     let managed_canisters = managed_canisters
         .assert_all_archives_have_cycles(100_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1")
+        .into();
 
     managed_canisters.setup.advance_time_for_periodic_tasks();
 
     managed_canisters
         .assert_all_archives_have_cycles(110_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1");
 }
 
 #[test]
@@ -541,7 +543,7 @@ mod upgrade {
         default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
         usdt_erc20_contract, GIT_COMMIT_HASH_UPGRADE,
     };
-    use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
+    use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusType};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use proptest::prelude::Rng;
@@ -990,7 +992,8 @@ mod upgrade {
             .assert_ledger_has_wasm_hash(embedded_ledger_wasm_hash.clone())
             .assert_index_has_wasm_hash(embedded_index_wasm_hash.clone())
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into();
 
         // Run task DiscoverArchives pre-emptively to ensure it's not run during upgrade
         // so that we can test the case where the orchestrator doesn't know about the archive
@@ -998,11 +1001,13 @@ mod upgrade {
 
         let managed_canisters = managed_canisters
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into()
             .trigger_creation_of_archive()
             .check_metrics()
             // the orchestrator is not yet aware of the archive
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into();
 
         let orchestrator = managed_canisters.setup.upgrade_ledger_suite_orchestrator(
             ledger_suite_orchestrator_wasm(),
@@ -1026,7 +1031,8 @@ mod upgrade {
             })
             .check_metrics()
             // the orchestrator is not yet aware of the archive
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into()
             .setup;
 
         orchestrator.env.tick();
@@ -1038,7 +1044,7 @@ mod upgrade {
                 has_been_upgraded_to(t, &embedded_archive_wasm_hash)
             })
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1");
     }
 
     #[test]

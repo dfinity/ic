@@ -3,19 +3,18 @@ use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
 use crate::{key_id::KeyId, LocalCspVault};
 use assert_matches::assert_matches;
-use ic_crypto_internal_bls12_381_vetkd::{G2Affine, Scalar, TransportSecretKey};
+use ic_crypto_internal_bls12_381_vetkd::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use ic_types::crypto::ExtendedDerivationPath;
+use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types_test_utils::ids::canister_test_id;
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 #[test]
 fn should_correctly_create_encrypted_vetkd_key_share() {
-    let rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let result = create_encrypted_vetkd_key_share(rng);
 
@@ -24,7 +23,7 @@ fn should_correctly_create_encrypted_vetkd_key_share() {
 
 #[test]
 fn should_correctly_create_encrypted_vetkd_key_share_for_smoke_test_vector() {
-    let rng = ChaCha20Rng::seed_from_u64(123);
+    let rng = &mut ChaCha20Rng::seed_from_u64(123);
 
     let result = create_encrypted_vetkd_key_share(rng);
 
@@ -32,159 +31,69 @@ fn should_correctly_create_encrypted_vetkd_key_share_for_smoke_test_vector() {
         result,
         Ok(VetKdEncryptedKeyShareContent(
             hex::decode(
-                "8fb20ba0025e22ebc546852eca21e324cfc96c8b7b127b9c6790d5f5a2d1a7\
-                2ad7c18c852215b44e3fe0315203b9565fafc0c7d8178ba92f0d6dca8c79d48\
-                8c9f9ebf1469af0ebad6908c0edbd4c546a21ba9e1530732de2748f1c54ddbb\
-                2a6406a9ad976f0487ec4d0063aec5f27301eeaeb47d3977d9a472dacdc8ad7\
-                546c1f26453229d6f1aa612ea109e1ad4a05d9352b91693c734f7207002e2f9\
-                da6ac9dac0aefe136247b46d44c763d33718604c6340e8c9c9fe388af7e3c93\
-                3fc9255",
+                "a8d7c58088640a9639267c5843824ee31f6ed8c6a90ea31e05a12459ea2498\
+                f3e68e13f62604d027660883213c90ea72810bcecee58b883fb62118e538243\
+                03718e6876ea400d083beb0439d3934122a4c4b2e58e3f145305b9a0c0a00e3\
+                2dd808574dec2605dbc7f122fe593ca0c07ca92720d0f17b7d53c9c68dbb93d\
+                489078859e5e5fe2b6612ac9536fe7f8b463ca890e170836d25beee4806cc5a\
+                1e087be4fa2223d4b8e1e12ff0932ab3d5c71916f5a1fb0d72f44dadb79eb4c\
+                eff8670",
             )
             .expect("invalid test vector")
         ))
     );
 }
 
-fn create_encrypted_vetkd_key_share<R: Rng + CryptoRng + 'static>(
-    mut rng: R,
+fn create_encrypted_vetkd_key_share<R: Rng + CryptoRng>(
+    rng: &mut R,
 ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
-    let master_secret_key = Scalar::random(&mut rng);
-    let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-    let encryption_public_key = TransportSecretKey::generate(&mut rng).public_key();
-    let key_id = KeyId::from([123; 32]);
+    let test_env = CreateVetKdKeyShareTestSetup::new(rng);
 
-    let mut node_sks = MockSecretKeyStore::new();
-    node_sks
-        .expect_get()
-        .times(1)
-        .withf(move |key_id_| *key_id_ == key_id)
-        .return_const(Some(CspSecretKey::ThresBls12_381(
-            threshold_types::SecretKeyBytes::from(&master_secret_key),
-        )));
-
-    let derivation_path = ExtendedDerivationPath {
-        caller: canister_test_id(234).get(),
-        derivation_path: vec![b"some".to_vec(), b"derivation".to_vec(), b"path".to_vec()],
-    };
-    let derivation_id = b"some-derivation-id".to_vec();
-
-    let vault = LocalCspVault::builder_for_test()
-        .with_rng(rng)
-        .with_mock_stores()
-        .with_node_secret_key_store(node_sks)
-        .build();
-
-    vault.create_encrypted_vetkd_key_share(
-        key_id,
-        master_public_key.serialize().to_vec(),
-        encryption_public_key.serialize().to_vec(),
-        derivation_path,
-        derivation_id,
-    )
+    test_env.create_encrypted_vetkd_key_share()
 }
 
 #[test]
 fn should_fail_to_create_key_share_with_invalid_master_public_key() {
     let rng = &mut reproducible_rng();
+    let mut test_env = CreateVetKdKeyShareTestSetup::new(rng);
+    test_env.master_public_key = b"invalid-master-public-key".to_vec();
+    test_env.secret_key_store_override = Some(MockSecretKeyStore::new());
 
-    let invalid_master_public_key = b"invalid-master-public-key".to_vec();
-    let encryption_public_key = TransportSecretKey::generate(rng).public_key();
-    let key_id = KeyId::from([123; 32]);
-
-    let derivation_path = ExtendedDerivationPath {
-        caller: canister_test_id(234).get(),
-        derivation_path: vec![b"some".to_vec(), b"derivation".to_vec(), b"path".to_vec()],
-    };
-    let derivation_id = b"some-derivation-id".to_vec();
-
-    let vault = LocalCspVault::builder_for_test().with_mock_stores().build();
-
-    let result = vault.create_encrypted_vetkd_key_share(
-        key_id,
-        invalid_master_public_key,
-        encryption_public_key.serialize().to_vec(),
-        derivation_path,
-        derivation_id,
-    );
+    let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
-        if error.contains("invalid master public key")
+        result,
+        Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentMasterPublicKey)
     );
 }
 
 #[test]
 fn should_fail_to_create_key_share_with_invalid_encryption_public_key() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let master_secret_key = Scalar::random(&mut rng);
-    let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-    let invalid_encryption_public_key = b"invalid-encryption-public-key".to_vec();
-    let key_id = KeyId::from([123; 32]);
+    let mut test_env = CreateVetKdKeyShareTestSetup::new(rng);
+    test_env.transport_public_key = b"invalid-encryption-public-key".to_vec();
+    test_env.secret_key_store_override = Some(MockSecretKeyStore::new());
 
-    let derivation_path = ExtendedDerivationPath {
-        caller: canister_test_id(234).get(),
-        derivation_path: vec![b"some".to_vec(), b"derivation".to_vec(), b"path".to_vec()],
-    };
-    let derivation_id = b"some-derivation-id".to_vec();
-
-    let vault = LocalCspVault::builder_for_test()
-        .with_rng(rng)
-        .with_mock_stores()
-        .build();
-
-    let result = vault.create_encrypted_vetkd_key_share(
-        key_id,
-        master_public_key.serialize().to_vec(),
-        invalid_encryption_public_key,
-        derivation_path,
-        derivation_id,
-    );
+    let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
-        if error.contains("invalid encryption public key")
+        result,
+        Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentEncryptionPublicKey)
     );
 }
 
 #[test]
 fn should_fail_to_create_key_share_if_key_is_missing_in_secret_key_store() {
     let mut rng = reproducible_rng();
+    let mut test_env = CreateVetKdKeyShareTestSetup::new(&mut rng);
 
-    let master_secret_key = Scalar::random(&mut rng);
-    let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-    let encryption_public_key = TransportSecretKey::generate(&mut rng).public_key();
-    let key_id = KeyId::from([123; 32]);
+    test_env.secret_key_store_return_override = Some(None);
 
-    let mut node_sks = MockSecretKeyStore::new();
-    node_sks
-        .expect_get()
-        .times(1)
-        .withf(move |key_id_| *key_id_ == key_id)
-        .return_const(None);
-
-    let derivation_path = ExtendedDerivationPath {
-        caller: canister_test_id(234).get(),
-        derivation_path: vec![b"some".to_vec(), b"derivation".to_vec(), b"path".to_vec()],
-    };
-    let derivation_id = b"some-derivation-id".to_vec();
-
-    let vault = LocalCspVault::builder_for_test()
-        .with_rng(rng)
-        .with_mock_stores()
-        .with_node_secret_key_store(node_sks)
-        .build();
-
-    let result = vault.create_encrypted_vetkd_key_share(
-        key_id,
-        master_public_key.serialize().to_vec(),
-        encryption_public_key.serialize().to_vec(),
-        derivation_path,
-        derivation_id,
-    );
+    let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
+        result, Err(VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(error))
         if error.contains("missing key with ID")
     );
 }
@@ -192,43 +101,95 @@ fn should_fail_to_create_key_share_if_key_is_missing_in_secret_key_store() {
 #[test]
 fn should_fail_to_create_key_share_if_key_in_secret_key_store_has_wrong_type() {
     let mut rng = reproducible_rng();
+    let mut test_env = CreateVetKdKeyShareTestSetup::new(&mut rng);
 
-    let master_secret_key = Scalar::random(&mut rng);
-    let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
-    let encryption_public_key = TransportSecretKey::generate(&mut rng).public_key();
-    let key_id = KeyId::from([123; 32]);
+    test_env.secret_key_store_return_override = Some(Some(CspSecretKey::MultiBls12_381(
+        multi_types::SecretKeyBytes::from(&test_env.master_secret_key),
+    )));
 
-    let mut node_sks = MockSecretKeyStore::new();
-    node_sks
-        .expect_get()
-        .times(1)
-        .withf(move |key_id_| *key_id_ == key_id)
-        .return_const(Some(CspSecretKey::MultiBls12_381(
-            multi_types::SecretKeyBytes::from(&master_secret_key),
-        )));
-
-    let derivation_path = ExtendedDerivationPath {
-        caller: canister_test_id(234).get(),
-        derivation_path: vec![b"some".to_vec(), b"derivation".to_vec(), b"path".to_vec()],
-    };
-    let derivation_id = b"some-derivation-id".to_vec();
-
-    let vault = LocalCspVault::builder_for_test()
-        .with_rng(rng)
-        .with_mock_stores()
-        .with_node_secret_key_store(node_sks)
-        .build();
-
-    let result = vault.create_encrypted_vetkd_key_share(
-        key_id,
-        master_public_key.serialize().to_vec(),
-        encryption_public_key.serialize().to_vec(),
-        derivation_path,
-        derivation_id,
-    );
+    let result = test_env.create_encrypted_vetkd_key_share();
 
     assert_matches!(
-        result, Err(VetKdEncryptedKeyShareCreationVaultError::InvalidArgument(error))
+        result, Err(VetKdEncryptedKeyShareCreationVaultError::SecretKeyMissingOrWrongType(error))
         if error.contains("wrong secret key type")
     );
+}
+
+struct CreateVetKdKeyShareTestSetup {
+    key_id: KeyId,
+    master_public_key: Vec<u8>,
+    transport_public_key: Vec<u8>,
+    context: VetKdDerivationContext,
+    input: Vec<u8>,
+    master_secret_key: Scalar,
+    rng: ChaCha20Rng,
+    secret_key_store_override: Option<MockSecretKeyStore>,
+    secret_key_store_return_override: Option<Option<CspSecretKey>>,
+}
+
+impl CreateVetKdKeyShareTestSetup {
+    pub fn new<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        let master_secret_key = Scalar::random(rng);
+        let master_public_key = G2Affine::from(G2Affine::generator() * &master_secret_key);
+        let transport_public_key = G1Affine::from(G1Affine::generator() * Scalar::random(rng));
+        let key_id = KeyId::from([123; 32]);
+        let context = VetKdDerivationContext {
+            caller: canister_test_id(234).get(),
+            context: b"context-123".to_vec(),
+        };
+        let input = b"some-input".to_vec();
+        let rng = ChaCha20Rng::from_seed(rng.gen());
+
+        Self {
+            master_secret_key,
+            master_public_key: master_public_key.serialize().to_vec(),
+            transport_public_key: transport_public_key.serialize().to_vec(),
+            key_id,
+            context,
+            input,
+            rng,
+            secret_key_store_override: None,
+            secret_key_store_return_override: None,
+        }
+    }
+
+    pub fn create_encrypted_vetkd_key_share(
+        self,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
+        let node_sks = if let Some(node_sks_override) = self.secret_key_store_override {
+            node_sks_override
+        } else {
+            let return_value = if let Some(opt_sk) = self.secret_key_store_return_override {
+                opt_sk
+            } else {
+                Some(CspSecretKey::ThresBls12_381(
+                    threshold_types::SecretKeyBytes::from(&self.master_secret_key),
+                ))
+            };
+            let mut node_sks = MockSecretKeyStore::new();
+            node_sks
+                .expect_get()
+                .times(1)
+                .withf({
+                    let self_key_id = self.key_id;
+                    move |key_id_| key_id_ == &self_key_id
+                })
+                .return_const(return_value);
+            node_sks
+        };
+
+        let vault = LocalCspVault::builder_for_test()
+            .with_rng(self.rng)
+            .with_mock_stores()
+            .with_node_secret_key_store(node_sks)
+            .build();
+
+        vault.create_encrypted_vetkd_key_share(
+            self.key_id,
+            self.master_public_key.clone(),
+            self.transport_public_key.clone(),
+            self.context.clone(),
+            self.input.clone(),
+        )
+    }
 }

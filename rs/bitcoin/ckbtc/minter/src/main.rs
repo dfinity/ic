@@ -50,7 +50,6 @@ fn init(args: MinterArg) {
 fn setup_tasks() {
     schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
-    schedule_now(TaskType::DistributeKytFee, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -82,16 +81,6 @@ fn check_invariants() -> Result<(), String> {
 
         Ok(())
     })
-}
-
-#[cfg(feature = "self_check")]
-#[update]
-async fn distribute_kyt_fee() {
-    let _guard = match ic_ckbtc_minter::guard::DistributeKytFeeGuard::new() {
-        Some(guard) => guard,
-        None => return,
-    };
-    ic_ckbtc_minter::distribute_kyt_fees().await;
 }
 
 #[cfg(feature = "self_check")]
@@ -210,6 +199,14 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
     .0
 }
 
+#[cfg(feature = "self_check")]
+#[update]
+async fn upload_events(events: Vec<Event>) {
+    for event in events {
+        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+    }
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
@@ -237,7 +234,7 @@ fn get_deposit_fee() -> u64 {
 
 #[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
-    if ic_cdk::api::data_certificate().is_none() {
+    if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 

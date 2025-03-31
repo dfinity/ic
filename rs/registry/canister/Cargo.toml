@@ -25,9 +25,11 @@ ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-string = { path = "../../nervous_system/string" }
@@ -41,15 +43,21 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
+ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"
 ipnet = "2.5.0"
+maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
@@ -69,7 +77,6 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 lazy_static = { workspace = true }
-maplit = "1.0"
 rand = { workspace = true }
 rand_distr = "0.4.0"
 serde_json = { workspace = true }

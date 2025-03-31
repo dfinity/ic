@@ -70,6 +70,9 @@ fn test_insert() {
             (time(50 + REQUEST_LIFETIME.as_secs() as u32), id5)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
 
     // All best-effort messages should be in the load shedding queue.
@@ -102,7 +105,7 @@ fn test_insert_outbound_request_deadline_rounding() {
 
     pool.insert_outbound_request(request(NO_DEADLINE).into(), current_time);
 
-    assert_eq!(expected_deadline, pool.deadline_queue.first().unwrap().0);
+    assert_eq!(expected_deadline, pool.deadline_queue.min_key().unwrap().0);
 }
 
 #[test]
@@ -233,6 +236,9 @@ fn test_expiration() {
             (time(40 + REQUEST_LIFETIME.as_secs() as u32), id4)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
     // There are expiring messages.
     assert!(pool.has_expired_deadlines(t_max));
@@ -1028,9 +1034,12 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
-fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T, Id)>) {
+fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &MutableIntMap<(T, Id), ()>)
+where
+    (T, Id): AsInt,
+{
     assert_eq!(messages.len(), queue.len());
-    assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
+    assert_eq!(messages, queue.iter().map(|((_, id), ())| *id).collect())
 }
 
 /// Generates an `InboundReference` for a request of the given class.

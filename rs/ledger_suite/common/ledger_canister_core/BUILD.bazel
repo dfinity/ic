@@ -21,6 +21,8 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/utils",
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:serde",
     ],
 )

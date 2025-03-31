@@ -240,6 +240,7 @@ mod loading {
             lockable_threshold_sig_data_store,
             &csp_transcript,
             &transcript.dkg_id,
+            transcript.registry_version,
             &transcript.committee,
         );
         let epoch = epoch(transcript.registry_version);
@@ -321,6 +322,7 @@ mod loading {
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         csp_transcript: &CspNiDkgTranscript,
         dkg_id: &NiDkgId,
+        registry_version: RegistryVersion,
         committee: &NiDkgReceivers,
     ) {
         lockable_threshold_sig_data_store
@@ -329,6 +331,7 @@ mod loading {
                 dkg_id,
                 CspPublicCoefficients::from(csp_transcript),
                 indices(committee),
+                registry_version,
             );
     }
 

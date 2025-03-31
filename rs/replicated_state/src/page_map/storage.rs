@@ -161,7 +161,8 @@ pub(crate) struct StorageImpl {
     overlays: Vec<OverlayFile>,
 }
 
-pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError> {
+/// Validate that the overlay files are loadable.
+pub fn validate(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError> {
     StorageImpl::load(storage_layout)?;
     Ok(())
 }
@@ -473,7 +474,7 @@ impl OverlayFile {
         for (index, data) in delta.iter() {
             let shard = index.get() / lsmt_config.shard_num_pages;
             page_data[shard as usize].push(data.contents());
-            page_indices[shard as usize].push(index);
+            page_indices[shard as usize].push(*index);
         }
 
         for shard in 0..num_shards {

@@ -5,9 +5,8 @@ use super::{
     RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
 };
 use crate::state::invariants::CheckInvariantsImpl;
-use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
 use crate::storage::record_event;
-use crate::{CanisterRuntime, ReimbursementReason, Timestamp};
+use crate::{CanisterRuntime, Timestamp};
 use candid::Principal;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
@@ -116,6 +115,22 @@ pub fn mark_utxo_checked<R: CanisterRuntime>(
     state.mark_utxo_checked_v2(utxo, &account);
 }
 
+pub fn mark_utxo_checked_mint_unknown<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    utxo: Utxo,
+    account: Account,
+    runtime: &R,
+) {
+    record_event(
+        EventType::CheckedUtxoMintUnknown {
+            utxo: utxo.clone(),
+            account,
+        },
+        runtime,
+    );
+    state.mark_utxo_checked_mint_unknown(utxo, &account);
+}
+
 pub fn quarantine_utxo<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     utxo: Utxo,
@@ -212,59 +227,4 @@ pub fn distributed_kyt_fee<R: CanisterRuntime>(
         runtime,
     );
     state.distribute_kyt_fee(kyt_provider, amount)
-}
-
-pub fn schedule_deposit_reimbursement<R: CanisterRuntime>(
-    state: &mut CkBtcMinterState,
-    account: Account,
-    amount: u64,
-    reason: ReimbursementReason,
-    burn_block_index: u64,
-    runtime: &R,
-) {
-    record_event(
-        EventType::ScheduleDepositReimbursement {
-            account,
-            amount,
-            reason,
-            burn_block_index,
-        },
-        runtime,
-    );
-    state.schedule_deposit_reimbursement(
-        burn_block_index,
-        ReimburseDepositTask {
-            account,
-            amount,
-            reason,
-        },
-    );
-}
-
-pub fn reimbursed_failed_deposit<R: CanisterRuntime>(
-    state: &mut CkBtcMinterState,
-    burn_block_index: u64,
-    mint_block_index: u64,
-    runtime: &R,
-) {
-    record_event(
-        EventType::ReimbursedFailedDeposit {
-            burn_block_index,
-            mint_block_index,
-        },
-        runtime,
-    );
-    let reimbursed_tx = state
-        .pending_reimbursements
-        .remove(&burn_block_index)
-        .expect("bug: reimbursement task should be present");
-    state.reimbursed_transactions.insert(
-        burn_block_index,
-        ReimbursedDeposit {
-            account: reimbursed_tx.account,
-            amount: reimbursed_tx.amount,
-            reason: reimbursed_tx.reason,
-            mint_block_index,
-        },
-    );
 }

@@ -56,7 +56,7 @@ impl<const N: usize> serde::Serialize for SecretArray<N> {
 
 struct SecretArrayVisitor<const N: usize>;
 
-impl<'de, const N: usize> serde::de::Visitor<'de> for SecretArrayVisitor<N> {
+impl<const N: usize> serde::de::Visitor<'_> for SecretArrayVisitor<N> {
     type Value = SecretArray<N>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
