@@ -696,20 +696,20 @@ impl From<CanisterManagerError> for UserError {
                     format!("Canister {} is already installed.{additional_help}", canister_id))
             },
             SubnetComputeCapacityOverSubscribed {requested , available } => {
-            Self::new(
-                ErrorCode::SubnetOversubscribed,
-                format!(
-                    "Canister requested a compute allocation of {} which cannot be satisfied because the Subnet's remaining compute capacity is {}%.{additional_help}",
-                    requested,
-                    available
-                ))
-            }
+                Self::new(
+                    ErrorCode::SubnetOversubscribed,
+                    format!(
+                        "Canister requested a compute allocation of {} which cannot be satisfied because the Subnet's remaining compute capacity is {}%.{additional_help}",
+                        requested,
+                        available
+                    ))
+                }
             CanisterNotFound(canister_id) => {
-            Self::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.{additional_help}", &canister_id),
-                )
-            }
+                Self::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.{additional_help}", &canister_id),
+                    )
+                }
             CanisterIdAlreadyExists(canister_id) => {
                 Self::new(
                     ErrorCode::CanisterIdAlreadyExists,
