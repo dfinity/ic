@@ -739,9 +739,11 @@ pub(crate) fn create_data_payload_helper_2(
 mod tests {
     use super::*;
     use crate::{
-        generate_responses_to_signature_request_contexts,
         test_utils::*,
-        utils::{algorithm_for_key_id, block_chain_reader},
+        utils::{
+            algorithm_for_key_id, block_chain_reader,
+            generate_responses_to_signature_request_contexts,
+        },
     };
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};

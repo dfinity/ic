@@ -7,9 +7,9 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg::get_vetkey_public_keys;
-use ic_consensus_idkg::{
-    generate_responses_to_signature_request_contexts,
-    utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
+use ic_consensus_idkg::utils::{
+    generate_responses_to_signature_request_contexts, get_idkg_subnet_public_keys,
+    get_pre_signature_ids_to_deliver,
 };
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,

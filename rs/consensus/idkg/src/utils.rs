@@ -22,13 +22,15 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
 use ic_types::{
+    batch::ConsensusResponse,
     consensus::{
         idkg::{
             common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef},
             ecdsa::ThresholdEcdsaSigInputsRef,
             schnorr::ThresholdSchnorrSigInputsRef,
-            HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage,
-            IDkgTranscriptParamsRef, PreSigId, RequestId, TranscriptLookupError, TranscriptRef,
+            CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
+            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
+            TranscriptLookupError, TranscriptRef,
         },
         Block, HasHeight,
     },
@@ -540,6 +542,20 @@ pub fn get_pre_signature_ids_to_deliver(
     }
 
     pre_sig_ids
+}
+
+/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
+/// signature.
+pub fn generate_responses_to_signature_request_contexts(
+    idkg_payload: &IDkgPayload,
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
+    for completed in idkg_payload.signature_agreements.values() {
+        if let CompletedSignature::Unreported(response) = completed {
+            consensus_responses.push(response.clone());
+        }
+    }
+    consensus_responses
 }
 
 /// This function returns the subnet master public keys to be added to the batch, if required.

@@ -199,11 +199,8 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::IDkgMessageId,
-    batch::ConsensusResponse,
-    consensus::idkg::{CompletedSignature, IDkgBlockReader, IDkgPayload},
-    crypto::canister_threshold_sig::error::IDkgRetainKeysError,
-    malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader,
+    crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 use std::{
@@ -240,20 +237,6 @@ const LOOK_AHEAD: u64 = 10;
 
 /// Frequency for clearing the inactive key transcripts.
 pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
-
-/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
-/// signature.
-pub fn generate_responses_to_signature_request_contexts(
-    idkg_payload: &IDkgPayload,
-) -> Vec<ConsensusResponse> {
-    let mut consensus_responses = Vec::new();
-    for completed in idkg_payload.signature_agreements.values() {
-        if let CompletedSignature::Unreported(response) = completed {
-            consensus_responses.push(response.clone());
-        }
-    }
-    consensus_responses
-}
 
 /// `IDkgImpl` is the consensus component responsible for processing threshold
 /// IDKG payloads.
