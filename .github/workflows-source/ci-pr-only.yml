@@ -104,7 +104,8 @@ jobs:
 
   dependencies-check:
     name: Dependency Scan for PR
-    <<: *dind-small-setup
+    runs-on:
+      labels: dind-small
     <<: *skip-merge-group
     timeout-minutes: 60
     permissions:
