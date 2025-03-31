@@ -34,7 +34,7 @@ struct AgentBasedFetchLargeValue<'a> {
 }
 
 #[async_trait]
-impl<'a> crate::certification::FetchLargeValue for AgentBasedFetchLargeValue<'a> {
+impl crate::certification::FetchLargeValue for AgentBasedFetchLargeValue<'_> {
     /// Just calls the Registry canister's get_chunk method.
     async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
         fn new_err(cause: impl std::fmt::Debug) -> String {
@@ -183,7 +183,7 @@ impl RegistryCanister {
             &response[..],
             &AgentBasedFetchLargeValue {
                 registry_canister_id: self.canister_id,
-                agent: &self.agent.choose(&mut rand::thread_rng()).unwrap(),
+                agent: self.agent.choose(&mut rand::thread_rng()).unwrap(),
             },
         )
         .await

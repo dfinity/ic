@@ -180,11 +180,12 @@ async fn get_monolithic_value(
     mutation: HighCapacityRegistryMutation,
     fetch_large_value: &(impl FetchLargeValue + Sync),
 ) -> Result<Option<Vec<u8>>, CertificationError> {
-    let mutation_type = Type::try_from(mutation.mutation_type)
-        .map_err(|err| CertificationError::InvalidDeltas(format!(
+    let mutation_type = Type::try_from(mutation.mutation_type).map_err(|err| {
+        CertificationError::InvalidDeltas(format!(
             "Unable to determine mutation's type. Cause: {}. mutation: {:#?}",
             err, mutation,
-        )))?;
+        ))
+    })?;
 
     if mutation_type == Type::Delete {
         return Ok(None);
