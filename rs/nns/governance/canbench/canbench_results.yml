@@ -110,13 +110,13 @@ benches:
   list_neurons_by_subaccount_stable:
     total:
       instructions: 64762990
-      heap_increase: 5
+      heap_increase: 4
       stable_memory_increase: 0
     scopes: {}
   list_neurons_heap:
     total:
       instructions: 4697992
-      heap_increase: 9
+      heap_increase: 8
       stable_memory_increase: 0
     scopes: {}
   list_neurons_stable:

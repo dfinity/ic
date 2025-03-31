@@ -52,30 +52,6 @@ pub fn take(r: &Range<u64>, n: usize) -> Range<u64> {
     }
 }
 
-/// Constructs an interval by dropping at most `n` first elements of range `r`.
-pub fn skip(r: &Range<u64>, n: usize) -> Range<u64> {
-    Range {
-        start: r.end.min(r.start.saturating_add(n as u64)),
-        end: r.end,
-    }
-}
-
-/// Constructs an interval by removing at most `n` last elements of range `r`.
-pub fn drop_last(r: &Range<u64>, n: usize) -> Range<u64> {
-    Range {
-        start: r.start,
-        end: r.start + range_len(r).saturating_sub(n as u64),
-    }
-}
-
-/// Converts the range of u64 integers into a range of array indices.
-pub fn as_indices(r: &Range<u64>) -> Range<usize> {
-    Range {
-        start: r.start as usize,
-        end: r.end as usize,
-    }
-}
-
 /// Remove any suffix of the `earlier_range` that intersects with the `later_range` by modifying
 /// the `earlier_range` in place.
 pub fn remove_suffix(earlier_range: &mut Range<u64>, later_range: &Range<u64>) {

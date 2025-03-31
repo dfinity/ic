@@ -98,6 +98,23 @@ fn random_derivation_context<R: RngCore + CryptoRng>(rng: &mut R) -> DerivationC
 }
 
 #[test]
+fn key_derivation_outputs_expected_values() {
+    let mpk = DerivedPublicKey::deserialize(&hex::decode("9183b871aa141d15ba2efc5bc58a49cb6a167741364804617f48dfe11e0285696b7018f172dad1a87ed81abf27ea4c320995041e2ee4a47b2226a2439d92a38557a7e2acc72fd157283b20f1f37ba872be235214c6a9cbba1eb2ef39deec72a5").unwrap()).unwrap().point().clone();
+
+    let canister_id = b"test-canister-id";
+
+    let context1 = DerivationContext::new(canister_id, &[]);
+    assert_eq!(hex::encode(DerivedPublicKey::compute_derived_key(&mpk, &context1).serialize()),
+               "8bf165ea580742abf5fd5123eb848aa116dcf75c3ddb3cd3540c852cf99f0c5394e72dfc2f25dbcb5f9220f251cd04040a508a0bcb8b2543908d6626b46f09d614c924c5deb63a9949338ae4f4ac436bd77f8d0a392fd29de0f392a009fa61f3");
+
+    let context = b"test-context";
+
+    let context2 = DerivationContext::new(canister_id, context);
+    assert_eq!(hex::encode(DerivedPublicKey::compute_derived_key(&mpk, &context2).serialize()),
+               "9784a7db548f0271d7e35abf3bda4021d8a5993c7736bfe3cc8304d35f77441c0618bb47b53694e04a33382668a96012155cae5b0e48d586475a7148bc648a13ba680b847a2853a438a557c5e6ab2d430c8a5213042918145277aaa7c1ff75e2");
+}
+
+#[test]
 fn encrypted_key_share_creation_is_stable() {
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(1);
 
