@@ -117,10 +117,7 @@ impl PageBitmap {
     }
 
     fn mark_range(&mut self, range: &Range<PageIndex>) {
-        let range = Range {
-            start: range.start.get(),
-            end: range.end.get(),
-        };
+        let range = range.start.get()..range.end.get();
         for i in range {
             self.mark(PageIndex::new(i));
         }
@@ -133,6 +130,10 @@ impl PageBitmap {
         faulting_page: PageIndex,
         range: Range<PageIndex>,
     ) -> Range<PageIndex> {
+        debug_assert!(
+            range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ range:{range:?}"
+        );
         let range = range_intersection(&range, &self.page_range());
 
         let old_start = range.start.get();
@@ -151,10 +152,8 @@ impl PageBitmap {
             }
             end += 1;
         }
-        Range {
-            start: PageIndex::new(start),
-            end: PageIndex::new(end),
-        }
+
+        PageIndex::new(start)..PageIndex::new(end)
     }
 
     // Returns the largest range around the faulting page such that
@@ -164,6 +163,10 @@ impl PageBitmap {
         faulting_page: PageIndex,
         range: Range<PageIndex>,
     ) -> Range<PageIndex> {
+        debug_assert!(
+            range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ range:{range:?}"
+        );
         let range = range_intersection(&range, &self.page_range());
 
         let old_start = range.start.get();
@@ -184,10 +187,7 @@ impl PageBitmap {
             }
             end += 1;
         }
-        Range {
-            start: PageIndex::new(start),
-            end: PageIndex::new(end),
-        }
+        PageIndex::new(start)..PageIndex::new(end)
     }
 
     // Returns the range of pages that are predicted to be marked in the future
@@ -197,6 +197,10 @@ impl PageBitmap {
         faulting_page: PageIndex,
         range: Range<PageIndex>,
     ) -> Range<PageIndex> {
+        debug_assert!(
+            range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ range:{range:?}"
+        );
         let range = range_intersection(&range, &self.page_range());
         if range.is_empty() {
             return range;
@@ -230,17 +234,11 @@ impl PageBitmap {
             fwd_predicted_count += 1;
         }
 
-        Range {
-            start: PageIndex::new(page - bwd_predicted_count),
-            end: PageIndex::new(page + fwd_predicted_count),
-        }
+        PageIndex::new(page - bwd_predicted_count)..PageIndex::new(page + fwd_predicted_count)
     }
 
     fn page_range(&self) -> Range<PageIndex> {
-        Range {
-            start: PageIndex::new(0),
-            end: PageIndex::new(self.pages.len() as u64),
-        }
+        PageIndex::new(0)..PageIndex::new(self.pages.len() as u64)
     }
 }
 
@@ -411,10 +409,7 @@ impl SigsegvMemoryTracker {
     }
 
     fn add_dirty_pages(&self, dirty_page: PageIndex, prefetched_range: Range<PageIndex>) {
-        let range = Range {
-            start: prefetched_range.start.get() as usize,
-            end: prefetched_range.end.get() as usize,
-        };
+        let range = prefetched_range.start.get() as usize..prefetched_range.end.get() as usize;
         let mut dirty_pages = self.dirty_pages.borrow_mut();
         let mut speculatively_dirty_pages = self.speculatively_dirty_pages.borrow_mut();
         for i in range {
@@ -764,7 +759,7 @@ fn map_unaccessed_pages(
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
             && min_prefetch_range.end <= max_prefetch_range.end,
-        "Error asserting min_prefetch_range:{:?} ⊆ max_prefetch_range:{:?}",
+        "Error checking min_prefetch_range:{:?} ⊆ max_prefetch_range:{:?}",
         min_prefetch_range,
         max_prefetch_range
     );
@@ -879,10 +874,7 @@ fn apply_memory_instructions(
 }
 
 fn range_intersection(range1: &Range<PageIndex>, range2: &Range<PageIndex>) -> Range<PageIndex> {
-    Range {
-        start: std::cmp::max(range1.start, range2.start),
-        end: std::cmp::min(range1.end, range2.end),
-    }
+    range1.start.max(range2.start)..range1.end.min(range2.end)
 }
 
 fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
@@ -890,10 +882,7 @@ fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
 }
 
 fn range_from_count(page: PageIndex, count: NumOsPages) -> Range<PageIndex> {
-    Range {
-        start: PageIndex::new(page.get().saturating_sub(count.get())),
-        end: PageIndex::new(page.get() + count.get()),
-    }
+    PageIndex::new(page.get().saturating_sub(count.get()))..PageIndex::new(page.get() + count.get())
 }
 
 fn print_enomem_help(errno: Errno) -> Errno {

@@ -1,4 +1,4 @@
-use std::{io::Write, ops::Range};
+use std::io::Write;
 
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{
@@ -17,7 +17,6 @@ use std::sync::Mutex;
 
 use crate::{
     new_signal_handler_available, AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker,
-    MAX_PAGES_TO_MAP,
 };
 
 /// Sets up the SigsegvMemoryTracker to track accesses to a region of memory. Returns:
@@ -518,14 +517,14 @@ fn prefetch_for_write_page_delta_contiguous() {
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
             if new_signal_handler_available() {
-                let prefetched_at_51 = std::cmp::min(2, MAX_PAGES_TO_MAP);
+                let prefetched_at_51 = 2;
                 assert_eq!(tracker.num_accessed_pages(), 1 + prefetched_at_51);
                 sigsegv(
                     &tracker,
                     PageIndex::new(51 + prefetched_at_51 as u64),
                     AccessKind::Write,
                 );
-                let prefetched_at_last = std::cmp::min(1 + prefetched_at_51 + 1, MAX_PAGES_TO_MAP);
+                let prefetched_at_last = 1 + prefetched_at_51 + 1;
                 assert_eq!(
                     tracker.num_accessed_pages(),
                     1 + prefetched_at_51 + prefetched_at_last
@@ -552,9 +551,9 @@ fn prefetch_for_write_after_read_stop_at_dirty_forward() {
         DirtyPageTracking::Track,
         |tracker, _| {
             // Access pages 51..=55.
-            for i in 51..=55 {
-                sigsegv(&tracker, PageIndex::new(i), AccessKind::Read);
-            }
+            sigsegv(&tracker, PageIndex::new(51), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(52), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(54), AccessKind::Read);
             // Write to the last page to set it as the boundary for write prefetching.
             sigsegv(&tracker, PageIndex::new(55), AccessKind::Write);
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
@@ -581,9 +580,9 @@ fn prefetch_for_write_after_read_stop_at_dirty_backward() {
         DirtyPageTracking::Track,
         |tracker, _| {
             // Access pages 51..=55.
-            for i in 51..=55 {
-                sigsegv(&tracker, PageIndex::new(i), AccessKind::Read);
-            }
+            sigsegv(&tracker, PageIndex::new(51), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(52), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(54), AccessKind::Read);
             // Write to the first page to set it as the boundary for write prefetching.
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
             sigsegv(&tracker, PageIndex::new(55), AccessKind::Write);
@@ -612,9 +611,9 @@ fn prefetch_for_write_after_read_stop_at_unaccessed_forward() {
             // Access page 55 t prevent prefetching after this page.
             sigsegv(&tracker, PageIndex::new(55), AccessKind::Read);
             // Access pages 51..=54.
-            for i in 51..=54 {
-                sigsegv(&tracker, PageIndex::new(i), AccessKind::Read);
-            }
+            sigsegv(&tracker, PageIndex::new(51), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(52), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(54), AccessKind::Read);
 
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
             // This should prefetch page 53.
@@ -640,9 +639,9 @@ fn prefetch_for_write_after_read_stop_at_unaccessed_backward() {
         DirtyPageTracking::Track,
         |tracker, _| {
             // Access pages 51..=55.
-            for i in 51..=55 {
-                sigsegv(&tracker, PageIndex::new(i), AccessKind::Read);
-            }
+            sigsegv(&tracker, PageIndex::new(51), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(52), AccessKind::Read);
+            sigsegv(&tracker, PageIndex::new(54), AccessKind::Read);
 
             sigsegv(&tracker, PageIndex::new(55), AccessKind::Write);
             // This should prefetch page 53.
@@ -764,37 +763,17 @@ fn page_bitmap_restrict_to_unaccessed_forward() {
     let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(5));
     assert_eq!(
-        Range {
-            start: PageIndex::new(0),
-            end: PageIndex::new(5),
-        },
+        PageIndex::new(0)..PageIndex::new(5),
         bitmap.restrict_range_to_unmarked(0.into(), bitmap.page_range()),
     );
+    // We should not hit an already marked page.
     assert_eq!(
-        Range {
-            start: PageIndex::new(5),
-            end: PageIndex::new(5),
-        },
-        bitmap.restrict_range_to_unmarked(
-            5.into(),
-            Range {
-                start: PageIndex::new(5),
-                end: PageIndex::new(15)
-            }
-        ),
+        PageIndex::new(5)..PageIndex::new(5),
+        bitmap.restrict_range_to_unmarked(5.into(), PageIndex::new(5)..PageIndex::new(15)),
     );
     assert_eq!(
-        Range {
-            start: PageIndex::new(6),
-            end: PageIndex::new(10),
-        },
-        bitmap.restrict_range_to_unmarked(
-            6.into(),
-            Range {
-                start: PageIndex::new(6),
-                end: PageIndex::new(15)
-            }
-        ),
+        PageIndex::new(6)..PageIndex::new(10),
+        bitmap.restrict_range_to_unmarked(6.into(), PageIndex::new(6)..PageIndex::new(15)),
     );
 }
 
@@ -803,24 +782,12 @@ fn page_bitmap_restrict_to_unaccessed_backward() {
     let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(5));
     assert_eq!(
-        Range {
-            start: PageIndex::new(0),
-            end: PageIndex::new(5),
-        },
+        PageIndex::new(0)..PageIndex::new(5),
         bitmap.restrict_range_to_unmarked(4.into(), bitmap.page_range()),
     );
     assert_eq!(
-        Range {
-            start: PageIndex::new(6),
-            end: PageIndex::new(10),
-        },
-        bitmap.restrict_range_to_unmarked(
-            10.into(),
-            Range {
-                start: PageIndex::new(6),
-                end: PageIndex::new(15)
-            }
-        ),
+        PageIndex::new(6)..PageIndex::new(10),
+        bitmap.restrict_range_to_unmarked(10.into(), PageIndex::new(6)..PageIndex::new(15)),
     );
 }
 
@@ -829,38 +796,17 @@ fn page_bitmap_restrict_to_predicted_forward() {
     let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(5));
     assert_eq!(
-        Range {
-            start: PageIndex::new(0),
-            end: PageIndex::new(1),
-        },
+        PageIndex::new(0)..PageIndex::new(1),
         bitmap.restrict_range_to_predicted(0.into(), bitmap.page_range()),
     );
+    // We should not hit an already marked page.
     assert_eq!(
-        Range {
-            // We should not hit an already marked page.
-            start: PageIndex::new(5),
-            end: PageIndex::new(6),
-        },
-        bitmap.restrict_range_to_predicted(
-            5.into(),
-            Range {
-                start: PageIndex::new(5),
-                end: PageIndex::new(15)
-            }
-        ),
+        PageIndex::new(5)..PageIndex::new(6),
+        bitmap.restrict_range_to_predicted(5.into(), PageIndex::new(5)..PageIndex::new(15)),
     );
     assert_eq!(
-        Range {
-            start: PageIndex::new(6),
-            end: PageIndex::new(8),
-        },
-        bitmap.restrict_range_to_predicted(
-            6.into(),
-            Range {
-                start: PageIndex::new(6),
-                end: PageIndex::new(15)
-            }
-        ),
+        PageIndex::new(6)..PageIndex::new(8),
+        bitmap.restrict_range_to_predicted(6.into(), PageIndex::new(6)..PageIndex::new(15)),
     );
 }
 
@@ -869,24 +815,12 @@ fn page_bitmap_restrict_to_predicted_backward() {
     let mut bitmap = PageBitmap::new(NumOsPages::new(10));
     bitmap.mark(PageIndex::new(5));
     assert_eq!(
-        Range {
-            start: PageIndex::new(10),
-            end: PageIndex::new(11),
-        },
-        bitmap.restrict_range_to_predicted(10.into(), bitmap.page_range()),
+        (PageIndex::new(9)..PageIndex::new(10)),
+        bitmap.restrict_range_to_predicted(9.into(), bitmap.page_range()),
     );
     assert_eq!(
-        Range {
-            start: PageIndex::new(3),
-            end: PageIndex::new(5),
-        },
-        bitmap.restrict_range_to_predicted(
-            4.into(),
-            Range {
-                start: PageIndex::new(0),
-                end: PageIndex::new(4)
-            }
-        ),
+        PageIndex::new(3)..PageIndex::new(5),
+        bitmap.restrict_range_to_predicted(4.into(), PageIndex::new(0)..PageIndex::new(5)),
     );
 }
 
@@ -900,17 +834,8 @@ fn page_bitmap_restrict_to_predicted_stops_at_end() {
     bitmap.mark(PageIndex::new(4));
     bitmap.mark(PageIndex::new(5));
     assert_eq!(
-        Range {
-            start: PageIndex::new(6),
-            end: PageIndex::new(10),
-        },
-        bitmap.restrict_range_to_predicted(
-            6.into(),
-            Range {
-                start: PageIndex::new(6),
-                end: PageIndex::new(15)
-            }
-        ),
+        PageIndex::new(6)..PageIndex::new(10),
+        bitmap.restrict_range_to_predicted(6.into(), PageIndex::new(6)..PageIndex::new(15)),
     );
 }
 
@@ -921,17 +846,8 @@ fn page_bitmap_restrict_to_predicted_stops_at_start() {
     bitmap.mark(PageIndex::new(1));
     bitmap.mark(PageIndex::new(2));
     assert_eq!(
-        Range {
-            start: PageIndex::new(3),
-            end: PageIndex::new(6),
-        },
-        bitmap.restrict_range_to_predicted(
-            3.into(),
-            Range {
-                start: PageIndex::new(3),
-                end: PageIndex::new(15)
-            }
-        ),
+        PageIndex::new(3)..PageIndex::new(6),
+        bitmap.restrict_range_to_predicted(3.into(), PageIndex::new(3)..PageIndex::new(15)),
     );
 }
 
