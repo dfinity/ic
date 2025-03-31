@@ -200,7 +200,11 @@ fn test_nf_is_not_permitted() {
     // Use production governance (no test flags).
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
-    let dapp_canister = create_canister_id_at_position(&state_machine, 1000, None);
+    let dapp_canister = state_machine.create_canister_with_cycles(
+        Some(CanisterId::from_u64(1000).get()),
+        Cycles::zero(),
+        None,
+    );
     set_controllers(
         &state_machine,
         PrincipalId::new_anonymous(),
@@ -241,7 +245,11 @@ fn test_nf_is_permitted_with_test_flag() {
         /* features */ &["test"],
     );
     add_real_wasms_to_sns_wasms(&state_machine);
-    let dapp_canister = create_canister_id_at_position(&state_machine, 1000, None);
+    let dapp_canister = state_machine.create_canister_with_cycles(
+        Some(CanisterId::from_u64(1000).get()),
+        Cycles::zero(),
+        None,
+    );
     set_controllers(
         &state_machine,
         PrincipalId::new_anonymous(),
