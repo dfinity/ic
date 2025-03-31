@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
-use criterion::{Criterion, Throughput};
+use criterion::{BatchSize, Criterion, Throughput};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::ingress::WasmResult;
 use ic_types::NumBytes;
@@ -127,6 +127,39 @@ pub fn update_bench(
             }
             total_duration
         });
+    });
+    group.finish();
+}
+
+pub fn update_bench_once(
+    c: &mut Criterion,
+    name: &str,
+    wasm: &[u8],
+    initialization_arg: &[u8],
+    method: &str,
+    payload: &[u8],
+    throughput: Option<Throughput>,
+    setup_action: SetupAction,
+) {
+    let mut group = c.benchmark_group("update");
+    if let Some(throughput) = throughput {
+        group.throughput(throughput);
+    }
+    group.bench_function(name, |bench| {
+        bench.iter_batched(
+            || {
+                let cell = RefCell::new(None);
+                initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
+                let mut setup = cell.borrow_mut();
+                setup.take().unwrap()
+            },
+            |(mut test, canister_id)| {
+                let result = test.ingress(canister_id, method, payload.to_vec()).unwrap();
+                assert!(matches!(result, WasmResult::Reply(_)));
+                (test, canister_id, result)
+            },
+            BatchSize::PerIteration,
+        );
     });
     group.finish();
 }

@@ -39,4 +39,4 @@ if [[ ${#ARGS[@]} -eq 0 ]]; then
     exit 0
 fi
 
-ci/container/build-ic.sh "${ARGS[@]}"
+ci/container/build-ic.sh "${ARGS[@]}" --no-release

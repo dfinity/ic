@@ -143,9 +143,11 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
 
     // deploy the Subnet Rental Canister
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let subnet_rental_canister_id = nns_node
-        .create_and_install_canister_with_arg(&env::var("SUBNET_RENTAL_WASM_PATH").unwrap(), None);
-    assert_eq!(subnet_rental_canister_id, SUBNET_RENTAL_CANISTER_ID.into());
+    nns_node.install_canister_with_arg(
+        SUBNET_RENTAL_CANISTER_ID.get().0,
+        &env::var("SUBNET_RENTAL_WASM_PATH").unwrap(),
+        None,
+    );
 
     // deploy the ckETH ledger canister (ICRC1-ledger with "ckETH" as token symbol and name) required by NNS dapp
     let cketh_init_args = InitArgsBuilder::for_tests()

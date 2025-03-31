@@ -31,6 +31,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/canister/api",

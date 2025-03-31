@@ -1039,7 +1039,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .on_reply(wasm().reply_data(&[43]));
 
         let subnet_message = wasm()
-            .call_with_cycles(IC_00, method, args, 100_000_000_000_u128.into())
+            .call_with_cycles(IC_00, method, args, 100_000_000_000_u128)
             .build();
 
         let subnet_message_id =
@@ -1231,14 +1231,17 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 (method, call_args().other_side(args))
             }),
             Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
-                let args =
-                    ReadCanisterSnapshotMetadataArgs::new(aborted_canister_id, vec![]).encode();
+                let args = ReadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                )
+                .encode();
                 (method, call_args().other_side(args))
             }),
             Method::ReadCanisterSnapshotData => test_supported(|aborted_canister_id| {
                 let args = ReadCanisterSnapshotDataArgs::new(
                     aborted_canister_id,
-                    vec![],
+                    (aborted_canister_id, 0).into(),
                     CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
                 )
                 .encode();
@@ -1318,7 +1321,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
                 .other_side(args)
                 .on_reject(wasm().reject_message().reject())
                 .on_reply(wasm().reply_data(&[43])),
-            1_u128.into(),
+            1_u128,
         )
         .build();
 

@@ -95,6 +95,10 @@
     "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
+  "node-rewards": {
+    "rev": "3a3cf55373bfe5843fac9fff6657127ae11b5dd8",
+    "sha256": "8637e0182ffc1255563e295efee28f2163f9be21bbd27f3e65bfc3c1f470d3ca"
+  },
   "registry": {
     "rev": "c5dee3a11b79da7b5c433574f38605d75c9feaf5",
     "sha256": "a0f4a36d46816619ef042d8de1a893c105a33c0c493106f5f9d04602ed9afbcf"

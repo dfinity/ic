@@ -36,7 +36,7 @@ fn can_create_canister_from_another_canister() {
         // Call method "create_canister" on ic:00. This should create a canister
         // with the auto-generated id above.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
+            canister.update(wasm().call(management::create_canister(num_cycles))),
             Ok(WasmResult::Reply(expected_response_payload))
         );
     });
@@ -52,7 +52,7 @@ fn full_canister_lifecycle_from_another_canister() {
 
         // Create a new canister from within a canister.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
+            canister.update(wasm().call(management::create_canister(num_cycles))),
             Ok(WasmResult::Reply(canister_id_record,)),
         );
 
@@ -975,7 +975,7 @@ fn test_canister_skip_upgrade() {
 
         // Create a new canister from within a canister.
         let reply = match canister
-            .update(wasm().call(management::create_canister(num_cycles.into_parts())))
+            .update(wasm().call(management::create_canister(num_cycles)))
             .unwrap()
         {
             WasmResult::Reply(reply) => reply,

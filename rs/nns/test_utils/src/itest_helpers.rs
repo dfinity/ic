@@ -29,6 +29,7 @@ use ic_nns_governance_api::{
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_node_rewards_canister_api::lifecycle_args::InitArgs as NodeRewardsInitArgs;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
@@ -43,7 +44,9 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use std::{future::Future, path::Path, thread, time::SystemTime};
 
-/// All the NNS canisters that exist at genesis.
+/// All the NNS canisters that are use in tests, but not all canisters
+/// on NNS mainnet (there are 4 ledger archives, for example and a ledger index that aren't tested
+/// using this struct)
 #[derive(Clone)]
 pub struct NnsCanisters<'a> {
     // Canisters here are listed in creation order.
@@ -262,7 +265,7 @@ impl NnsCanisters<'_> {
         }
     }
 
-    pub fn all_canisters(&self) -> [&Canister<'_>; NUM_NNS_CANISTERS] {
+    pub fn all_canisters(&self) -> [&Canister<'_>; 10] {
         [
             &self.registry,
             &self.governance,
@@ -632,6 +635,14 @@ pub async fn install_sns_wasm_canister(
 ) {
     let encoded = Encode!(&init_payload).unwrap();
     install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
+}
+
+pub async fn install_node_rewards_canister(
+    canister: &mut Canister<'_>,
+    init_payload: NodeRewardsInitArgs,
+) {
+    let encoded = Encode!(&init_payload).unwrap();
+    install_rust_canister(canister, "node-rewards-canister", &[], Some(encoded)).await;
 }
 
 /// Creates and installs the sns_wasm canister.
