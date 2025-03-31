@@ -11,8 +11,8 @@ inputs:
   SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
   GPG_PASSPHRASE:
-    required: false
-    description: "GPG key to encrypt build events. If the key is not set, events won't be uploaded."
+    required: true
+    description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
 
 runs:
   using: "composite"
