@@ -2882,7 +2882,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             OnLowWasmMemoryHookStatus::try_from(on_low_wasm_memory_hook_status).unwrap_or_default();
         let source =
             pb_canister_snapshot_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
-        let source = SnapshotSource::try_from(source)?;
+        let source = SnapshotSource::try_from(source).unwrap_or_default();
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
