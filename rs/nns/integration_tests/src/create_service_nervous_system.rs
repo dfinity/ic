@@ -59,9 +59,6 @@ fn test_several_proposals() {
         .with_test_neurons_fund_neurons(100_000_000_000_000)
         .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
-        // TODO: Delete this once the SNS_WASM canister takes any requests
-        // coming from NNS governance.
-        .with_sns_wasm_allowed_principals(vec![PrincipalId::from(GOVERNANCE_CANISTER_ID)])
         .build();
     // Note that this uses governance with cfg(features = "test") enabled.
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
@@ -198,9 +195,6 @@ fn test_nf_is_not_permitted() {
         .with_test_neurons_fund_neurons(100_000_000_000_000)
         .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
-        // TODO: Delete this once the SNS_WASM canister takes any requests
-        // coming from NNS governance.
-        .with_sns_wasm_allowed_principals(vec![PrincipalId::from(GOVERNANCE_CANISTER_ID)])
         .build();
     // Note that this uses governance with cfg(features = "test") enabled.
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
@@ -240,9 +234,6 @@ fn test_nf_is_permitted_with_test_flag() {
         .with_test_neurons_fund_neurons(100_000_000_000_000)
         .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
-        // TODO: Delete this once the SNS_WASM canister takes any requests
-        // coming from NNS governance.
-        .with_sns_wasm_allowed_principals(vec![PrincipalId::from(GOVERNANCE_CANISTER_ID)])
         .build();
     // Note that this uses governance with cfg(features = "test") enabled.
     setup_nns_canisters_with_features(
