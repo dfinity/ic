@@ -9,7 +9,8 @@ on:
 # validates the title and adds a label based on the PR type
 
 permissions:
-  pull-requests: write
+  pull-requests: read
+  statuses: write
 
 jobs:
   validate-pr-title:
