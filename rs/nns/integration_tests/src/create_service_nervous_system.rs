@@ -221,7 +221,7 @@ fn test_nf_is_not_permitted() {
     assert_matches!(response.command,
         Some(manage_neuron_response::Command::Error(err))
             if err.error_type == ErrorType::InvalidProposal as i32 &&
-            err.error_message.contains("NeuronsFundParticipation is not allowed"),
+            err.error_message.contains("NeuronsFundParticipation is not currently allowed"),
         "Expected an InvalidProposal error because NeuronsFundParticipation is not allowed on non-test builds.");
 }
 
