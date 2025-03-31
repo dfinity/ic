@@ -1125,6 +1125,8 @@ fn switch_to_checkpoint(
             )?);
     }
 
+    let start_total = Instant::now();
+    let mut wasm_deserialize_time = std::time::Duration::ZERO;
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
         if let Some(tip_state) = &mut tip_canister.execution_state {
             let canister_layout = layout.canister(tip_id).unwrap();
@@ -1132,9 +1134,12 @@ fn switch_to_checkpoint(
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
+
+            let start = Instant::now();
             let wasm_binary = canister_layout
                 .wasm()
                 .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?;
+            wasm_deserialize_time += start.elapsed();
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
                 wasm_binary.as_slice()
@@ -1152,6 +1157,14 @@ fn switch_to_checkpoint(
             tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
+    let total_wasm_processing_time = start_total.elapsed();
+    eprintln!(
+        "Checkpoint loading {} canisters: total wasm processing time: {:?}, deserialization time: {:?}",
+        tip.canister_states.len(),
+        total_wasm_processing_time,
+        wasm_deserialize_time
+    );
+
     Ok(())
 }
 
