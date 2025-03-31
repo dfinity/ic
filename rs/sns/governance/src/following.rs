@@ -1,7 +1,5 @@
 use crate::pb::v1::{
-    manage_neuron::SetFollowing,
-    neuron::{FolloweesForTopic, TopicFollowees},
-    Followee, NeuronId, Topic,
+    manage_neuron::SetFollowing, neuron::FolloweesForTopic, Followee, NeuronId, Topic,
 };
 use itertools::{Either, Itertools};
 use lazy_static::lazy_static;
@@ -121,7 +119,7 @@ impl fmt::Debug for ValidatedFollowee {
 }
 
 /// Represents followees grouped by neuron ID.
-type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<ValidatedFollowee>>>;
+type FolloweeGroups = BTreeMap<NeuronId, Vec<ValidatedFollowee>>;
 
 /// Helper function to aid checking the invariant: **Followees on a given topic must have
 /// unique neuron IDs.**
@@ -136,38 +134,26 @@ type FolloweeGroups = BTreeMap<Topic, BTreeMap<NeuronId, Vec<ValidatedFollowee>>
 /// }
 /// ```
 ///
-/// Returns the nested map from topics to duplicate neuron IDs (from `followees`). The map values
-/// are the actual followee instances for the corresponding neuron IDs.
+/// Returns the map from neuron IDs (from `followees`) to the actual followee instances
+/// for the corresponding neuron IDs.
 ///
 /// Assumption: `followees` all correspond to the same topic.
 ///
 /// The implementation of this function relies on the fact that `ValidatedFollowee` instances are
 /// ordered by topic and *then* neuron ID, which is enforced by the `PartialOrd` implementation.
+///
+/// This function assumes that all followees correspond to the same topic.
 fn get_duplicate_followee_groups(followees: &BTreeSet<ValidatedFollowee>) -> FolloweeGroups {
     followees
         .iter()
-        .sorted_by_key(|followee| followee.topic)
-        .group_by(|followee| followee.topic)
+        .sorted_by_key(|followee| followee.neuron_id.clone())
+        .group_by(|followee| followee.neuron_id.clone())
         .into_iter()
-        .filter_map(|(topic, group_for_this_topic)| {
-            let duplicates_for_this_topic = group_for_this_topic
-                .into_iter()
-                .sorted_by_key(|followee| followee.neuron_id.clone())
-                .group_by(|followee| followee.neuron_id.clone())
-                .into_iter()
-                .filter_map(|(neuron_id, group)| {
-                    let followees_with_this_neuron_id = group.cloned().collect::<Vec<_>>();
+        .filter_map(|(neuron_id, group)| {
+            let followees_with_this_neuron_id = group.into_iter().cloned().collect::<Vec<_>>();
 
-                    if followees_with_this_neuron_id.len() > 1 {
-                        Some((neuron_id, followees_with_this_neuron_id))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<BTreeMap<NeuronId, _>>();
-
-            if !duplicates_for_this_topic.is_empty() {
-                Some((topic, duplicates_for_this_topic))
+            if followees_with_this_neuron_id.len() > 1 {
+                Some((neuron_id, followees_with_this_neuron_id))
             } else {
                 None
             }
@@ -178,37 +164,23 @@ fn get_duplicate_followee_groups(followees: &BTreeSet<ValidatedFollowee>) -> Fol
 /// Formats an instance of `FolloweeGroups` into a string.
 ///
 /// Need this since `Display for Vec<ValidatedFollowee>` cannot be implemented in this crate.
-fn fmt_neuron_groups(followee_groups: &FolloweeGroups) -> String {
+fn fmt_followee_groups(followee_groups: &FolloweeGroups) -> String {
     followee_groups
         .iter()
-        .map(|(topic, neuron_ids_to_followees)| {
-            let neuron_ids_to_followees = neuron_ids_to_followees
+        .map(|(neuron_id, followees)| {
+            let followees = followees
                 .iter()
-                .map(|(neuron_id, followees)| {
-                    let followees = followees
-                        .iter()
-                        .map(|followee| format!("{}", followee))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-
-                    format!("{}: {}", neuron_id, followees)
-                })
+                .map(|followee| format!("{}", followee))
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            format!("{}: [{}]", topic, neuron_ids_to_followees)
+            format!("{}: {}", neuron_id, followees)
         })
         .collect::<Vec<_>>()
         .join(", ")
 }
 
-/// Represents followee-related data grouped by alias.
-///
-/// Normally, followees are represented by `ValidatedFollowee` instances, but in this case, we need
-/// to group them by alias to check for inconsistencies (as defined in `get_inconsistent_aliases`),
-/// and the topics are associated with each neuron ID for auditability, i.e., if followee aliases
-/// are inconsistent, it should be possible to report which exact topics are misconfigured (since
-/// the same followee can appear under multiple topics).
+/// Represents followee-related data grouped by neuron ID.
 type FolloweeAliasGroups = BTreeMap<NeuronId, BTreeSet<ValidatedFollowee>>;
 
 /// Helper function to aid checking the invariant: **followees with the same alias must have
@@ -326,7 +298,7 @@ pub(crate) enum FolloweesForTopicValidationError {
     #[error("some followees were not specified correctly: {:?}", .0)]
     FolloweeValidationError(Vec<FolloweeValidationError>),
 
-    #[error("followees on a given topic must have unique neuron IDs, got: {}", fmt_neuron_groups(.0))]
+    #[error("followees on a given topic must have unique neuron IDs, got: {}", fmt_followee_groups(.0))]
     DuplicateFolloweeNeuronId(FolloweeGroups),
 }
 
@@ -447,8 +419,6 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
             .iter()
             .flat_map(|followees_for_topic| followees_for_topic.followees.iter().cloned())
             .collect();
-
-        println!(">>> all_followees {:?}", all_followees);
 
         let inconsistent_aliases = get_inconsistent_aliases(&all_followees);
 

@@ -1,47 +1,51 @@
 //! The signature process manager
 
-use crate::idkg::complaints::IDkgTranscriptLoader;
-use crate::idkg::metrics::{timed_call, IDkgPayloadMetrics, ThresholdSignerMetrics};
-use crate::idkg::utils::{load_transcripts, IDkgBlockReaderImpl};
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::RoundRobin;
-use ic_interfaces::consensus_pool::ConsensusBlockCache;
-use ic_interfaces::crypto::{
-    ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, VetKdProtocol,
+use crate::idkg::{
+    complaints::IDkgTranscriptLoader,
+    metrics::{timed_call, IDkgPayloadMetrics, ThresholdSignerMetrics},
+    utils::{build_signature_inputs, load_transcripts, update_purge_height, IDkgBlockReaderImpl},
 };
-use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
+use ic_consensus_utils::{crypto::ConsensusCrypto, RoundRobin};
+use ic_interfaces::{
+    consensus_pool::ConsensusBlockCache,
+    crypto::{
+        ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+        ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, VetKdProtocol,
+    },
+    idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
+};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    SignWithThresholdContext, ThresholdArguments,
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
+    ReplicatedState,
 };
-use ic_replicated_state::ReplicatedState;
-use ic_types::artifact::IDkgMessageId;
-use ic_types::consensus::idkg::common::{
-    CombinedSignature, SignatureScheme, ThresholdSigInputs, ThresholdSigInputsRef,
+use ic_types::{
+    artifact::IDkgMessageId,
+    consensus::idkg::{
+        common::{CombinedSignature, SignatureScheme, ThresholdSigInputs, ThresholdSigInputsRef},
+        ecdsa_sig_share_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, EcdsaSigShare,
+        IDkgBlockReader, IDkgMessage, IDkgStats, RequestId, SchnorrSigShare, SigShare,
+        VetKdKeyShare,
+    },
+    crypto::{
+        canister_threshold_sig::error::{
+            ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
+            ThresholdEcdsaVerifySigShareError, ThresholdSchnorrCombineSigSharesError,
+            ThresholdSchnorrCreateSigShareError, ThresholdSchnorrVerifySigShareError,
+        },
+        vetkd::{VetKdKeyShareCreationError, VetKdKeyShareVerificationError},
+    },
+    messages::CallbackId,
+    Height, NodeId,
 };
-use ic_types::consensus::idkg::{
-    ecdsa_sig_share_prefix, vetkd_key_share_prefix, EcdsaSigShare, IDkgBlockReader, IDkgMessage,
-    IDkgStats, RequestId, VetKdKeyShare,
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    fmt::{self, Debug, Formatter},
+    sync::Arc,
 };
-use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
-use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
-use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifySigShareError,
-    ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
-    ThresholdSchnorrVerifySigShareError,
-};
-use ic_types::crypto::vetkd::{VetKdKeyShareCreationError, VetKdKeyShareVerificationError};
-use ic_types::messages::CallbackId;
-use ic_types::{Height, NodeId};
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{self, Debug, Formatter};
-use std::sync::Arc;
-
-use super::utils::{build_signature_inputs, update_purge_height};
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -854,8 +858,7 @@ impl Debug for Action<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::test_utils::*;
-    use crate::idkg::utils::algorithm_for_key_id;
+    use crate::idkg::{test_utils::*, utils::algorithm_for_key_id};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, generate_tecdsa_protocol_inputs,
@@ -871,16 +874,17 @@ mod tests {
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::IDkgStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{
-        canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3,
+    use ic_test_utilities_types::{
+        ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3},
+        messages::RequestBuilder,
     };
-    use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::consensus::idkg::*;
-    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
-    use ic_types::time::UNIX_EPOCH;
-    use ic_types::{Height, Randomness};
-    use std::ops::Deref;
-    use std::sync::RwLock;
+    use ic_types::{
+        consensus::idkg::*,
+        crypto::{AlgorithmId, ExtendedDerivationPath},
+        time::UNIX_EPOCH,
+        Height, Randomness,
+    };
+    use std::{ops::Deref, sync::RwLock};
 
     #[test]
     fn test_ecdsa_signer_action() {
