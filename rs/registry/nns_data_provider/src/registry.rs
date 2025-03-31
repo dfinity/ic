@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use prost::Message;
 use rand::seq::SliceRandom;
 use std::time::Duration;
@@ -5,6 +7,7 @@ use url::Url;
 
 use ic_canister_client::{Agent, Sender};
 use ic_interfaces_registry::RegistryTransportRecord;
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
     deserialize_get_value_response,
@@ -20,6 +23,40 @@ pub const MAX_NUM_SSH_KEYS: usize = 50;
 pub struct RegistryCanister {
     canister_id: CanisterId,
     agent: Vec<Agent>,
+}
+
+struct AgentBasedFetchLargeValue<'a> {
+    registry_canister_id: CanisterId,
+    agent: &'a Agent,
+}
+
+#[async_trait]
+impl<'a> crate::certification::FetchLargeValue for AgentBasedFetchLargeValue<'a> {
+    async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+        fn new_err(cause: impl std::fmt::Debug) -> String {
+            format!("Unable to fetch large registry record: {:?}", cause,)
+        }
+
+        // Call get_chunk.
+        let content_sha256 = Some(content_sha256.to_vec());
+        let request = Encode!(&GetChunkRequest { content_sha256 }).map_err(new_err)?;
+        let get_chunk_response: Vec<u8> = self
+            .agent
+            .execute_query(&self.registry_canister_id, "get_chunk", request)
+            .await
+            .map_err(new_err)?
+            // I honestly do not know what it means if None is returned
+            // instead of Some(blob), but it really seems like something
+            // has gone wrong (not just empty reply, but rather, no
+            // reply at all), so we treat it as an error.
+            .ok_or_else(|| new_err("No reply (not even empty)"))?;
+
+        // Extract chunk from get_chunk call.
+        let Chunk { content } = Decode!(&get_chunk_response, Result<Chunk, String>)
+            .map_err(new_err)? // unable to decode
+            .map_err(new_err)?; // Registry canister returned Err.
+        content.ok_or_else(|| new_err("get_chunk response has no content (not even empty)"))
+    }
 }
 
 impl RegistryCanister {
@@ -135,56 +172,12 @@ impl RegistryCanister {
                 ))
             })?;
 
-        struct Fetcher<'a> {
-            registry_canister_id: CanisterId,
-            agent: &'a Agent,
-        }
-        use async_trait::async_trait;
-        #[async_trait]
-        impl<'a> crate::certification::FetchLargeValue for Fetcher<'a> {
-            async fn get_chunk(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
-                // DO NOT MERGE
-                use candid::{Decode, Encode};
-                #[derive(candid::CandidType)]
-                struct GetChunkRequest {
-                    content_sha256: Option<Vec<u8>>,
-                }
-                #[derive(candid::Deserialize, candid::CandidType)]
-                struct Chunk {
-                    content: Option<Vec<u8>>,
-                }
-
-                fn new_err(cause: impl std::fmt::Debug) -> String {
-                    format!("Unable to fetch large registry record: {:?}", cause,)
-                }
-
-                // Call get_chunk.
-                let content_sha256 = Some(content_sha256.to_vec());
-                let request = Encode!(&GetChunkRequest { content_sha256 }).map_err(new_err)?;
-                let get_chunk_response = self
-                    .agent
-                    .execute_query(&self.registry_canister_id, "get_chunk", request)
-                    .await
-                    .map_err(new_err)?
-                    // I honestly do not know what it means if None is returned
-                    // instead of Some(blob), but it really seems like something
-                    // has gone wrong (not just empty reply, but rather, no
-                    // reply at all), so we treat it as an error.
-                    .ok_or_else(|| new_err("No reply (not even empty)"))?;
-
-                // Extract chunk from get_chunk call.
-                let Chunk { content } = Decode!(&get_chunk_response, Result<Chunk, String>)
-                    .map_err(new_err)? // unable to decode
-                    .map_err(new_err)?; // Registry canister returned Err.
-                content.ok_or_else(|| new_err("get_chunk response has no content (not even empty)"))
-            }
-        }
         crate::certification::decode_certified_deltas(
             version,
             &self.canister_id,
             nns_public_key,
             &response[..],
-            &Fetcher {
+            &AgentBasedFetchLargeValue {
                 registry_canister_id: self.canister_id,
                 agent: &self.agent.choose(&mut rand::thread_rng()).unwrap(),
             },

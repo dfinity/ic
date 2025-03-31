@@ -6,9 +6,11 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/certification",
+    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
+    "//rs/registry/canister/api",
     "//rs/registry/transport",
     "//rs/tree_deserializer",
     "//rs/types/types",

@@ -1,10 +1,8 @@
 use async_trait::async_trait;
-use candid::{Decode, Encode};
-use ic_canister_client::Agent;
 use ic_certification::{verify_certified_data, CertificateValidationError};
+use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryTransportRecord;
-use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_transport::pb::v1::{
     high_capacity_registry_mutation, registry_mutation::Type, CertifiedResponse,
     HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation, LargeValueChunkKeys,
@@ -13,7 +11,6 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
 };
 use prost::Message;
-// DO NOT MERGE use registry_canister::pb::v1::GetChunkRequest;
 use serde::Deserialize;
 use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
 use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
@@ -123,15 +120,34 @@ fn validate_version_range(
     Ok(p.current_version.0)
 }
 
-/// Converts LargeValueChunkKeys into a blob by calling Registry canister's get_chunk method.
+/// Converts LargeValueChunkKeys into a blob by (repeatedly) calling Registry
+/// canister's get_chunk method.
+///
+/// Even though this is pub, it should't be used outside this crate. It is pub
+/// only in order to support some existing tests.
 #[async_trait]
 pub trait FetchLargeValue {
-    async fn get_chunk(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
+    /// This is just a "thin wrapper" around Registry's `get_chunk` method.
+    ///
+    /// The only required method in this trait.
+    async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Verification is needed because `get_chunk` is a query.
+    async fn get_chunk_with_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+        let chunk_content = self.get_chunk_no_validation(content_sha256).await?;
+
+        // Verify chunk.
+        if Sha256::hash(&chunk_content) != content_sha256 {
+            return Err(format!(" DO NOT MERGE "));
+        }
+
+        Ok(chunk_content)
+    }
 
     async fn fetch_large_value(&self, keys: &LargeValueChunkKeys) -> Result<Vec<u8>, String> {
         let mut result = vec![];
         for key in &keys.chunk_content_sha256s {
-            let mut chunk_content = self.get_chunk(key).await?;
+            let mut chunk_content = self.get_chunk_with_validation(key).await?;
             result.append(&mut chunk_content);
         }
         Ok(result)
@@ -156,9 +172,9 @@ async fn get_monolithic_value(
     fetch_large_value: &(impl FetchLargeValue + Sync),
 ) -> Result<Option<Vec<u8>>, CertificationError> {
     let HighCapacityRegistryMutation {
-        key,
         mutation_type,
         content,
+        key: _,
     } = mutation;
 
     // DO NOT MERGE - Here, we assume that other mutation types have some
