@@ -175,8 +175,11 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
         assert_eq!(count_deltas(&tree), MAX_VERSIONS_PER_QUERY as usize);
         assert!(has_delta(&tree, 1));
         assert!(has_delta(&tree, MAX_VERSIONS_PER_QUERY));
-        let mixed_hash_tree = MixedHashTree::try_from(certified_response.hash_tree.unwrap()).unwrap();
-        decode_hash_tree(0, mixed_hash_tree, &MockFetchLargeValue::new()).await.unwrap();
+        let mixed_hash_tree =
+            MixedHashTree::try_from(certified_response.hash_tree.unwrap()).unwrap();
+        decode_hash_tree(0, mixed_hash_tree, &MockFetchLargeValue::new())
+            .await
+            .unwrap();
 
         let certified_response: CertifiedResponse = canister
             .query_(
