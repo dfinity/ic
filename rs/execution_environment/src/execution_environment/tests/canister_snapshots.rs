@@ -6,10 +6,11 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
-    CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, GlobalTimer,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus,
-    Payload as Ic00Payload, ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
-    SnapshotSource, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    CanisterSnapshotDataKind, CanisterSnapshotResponse, ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -2199,6 +2200,100 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+}
+
+#[test]
+fn read_canister_snapshot_data_fails_invalid_controller() {
+    let own_subnet = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .build();
+    // Create new canister.
+    let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            uni_canister_wasm.clone(),
+        )
+        .unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Non-controller user tries to get metadata
+    test.set_user_id(user_test_id(42));
+    let args = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+    );
+    let error = test
+        .subnet_message("read_canister_snapshot_data", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+}
+
+#[test]
+fn read_canister_snapshot_data_fails_canister_and_snapshot_must_match() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+        )
+        .unwrap();
+
+    // Create other canister.
+    let other_canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+        )
+        .unwrap();
+
+    // Take a snapshot of the first canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Try to access metadata via the wrong canister id
+    let args = ReadCanisterSnapshotDataArgs::new(
+        other_canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+    );
+    let error = test
+        .subnet_message("read_canister_snapshot_data", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+
+    // Try to access metadata via a bad snapshot id
+    let args = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        (canister_id, 42).into(),
+        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+    );
+    let error = test
+        .subnet_message("read_canister_snapshot_data", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
 }
 
 /// Early warning system / stumbling block forcing the authors of changes adding
