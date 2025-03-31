@@ -593,7 +593,7 @@ mod authenticated_requests_direct_ed25519 {
     use ic_validator_http_request_test_utils::HttpRequestEnvelopeFactory;
 
     #[test]
-    fn should_validate_signed_request() {
+    pub fn should_validate_signed_request() {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
@@ -1883,6 +1883,15 @@ mod authenticated_requests_delegations {
             .build();
         let result = verifier.validate_request(&request);
         expect(result, builder_info);
+    }
+}
+
+mod wasm_smoke_test {
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn wasm_bindgen_smoke_test() {
+        super::authenticated_requests_direct_ed25519::should_validate_signed_request();
     }
 }
 

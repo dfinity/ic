@@ -1410,6 +1410,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "wasm-bindgen": crate.spec(
                 version = "^0.2",
             ),
+            "wasm-bindgen-test": crate.spec(
+                version = "^0.3.50",
+            ),
             "wasm-encoder": crate.spec(
                 version = "^0.217.0",
                 features = [

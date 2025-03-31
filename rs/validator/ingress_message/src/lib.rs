@@ -11,6 +11,9 @@ pub use internal::IngressMessageVerifierBuilder;
 pub use internal::StandaloneIngressSigVerifier;
 pub use internal::TimeProvider;
 
+#[cfg(target_family = "wasm")]
+fn main() {}
+
 /// Validate an incoming HTTP request according to the
 /// [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication).
 ///

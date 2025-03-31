@@ -26,6 +26,7 @@ js = ["time/wasm-bindgen", "getrandom/js"]
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+wasm-bindgen-test = "0.3.50"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-limits = { path = "../../limits" }
