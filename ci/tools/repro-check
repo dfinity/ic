@@ -873,8 +873,9 @@ def main() -> None:
         logger.critical("%s", e)
         sys.exit(2)
     except KeyboardInterrupt:
-        verifier.download_executor.shutdown(cancel_futures=True)
         raise
+    finally:
+        verifier.download_executor.shutdown(cancel_futures=True)
 
 
 if __name__ == "__main__":
