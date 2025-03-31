@@ -2077,20 +2077,21 @@ fn read_canister_snapshot_metadata_succeeds() {
         canister_id: canister_id.into(),
         chunk,
     };
-    let result = test.subnet_message("upload_chunk", upload_args.encode());
-    assert!(result.is_ok());
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
     // Grow the stable memory
     let stable_pages = 13;
     let payload = wasm().stable64_grow(stable_pages).reply().build();
-    let _res = test.ingress(canister_id, "update", payload).unwrap();
+    test.ingress(canister_id, "update", payload).unwrap();
     // Set some cert data
     let cert_data = [42];
     let payload = wasm().certified_data_set(&cert_data).reply().build();
-    let _res = test.ingress(canister_id, "update", payload).unwrap();
+    test.ingress(canister_id, "update", payload).unwrap();
     // Set a global timer
     let timestamp = 43;
     let payload = wasm().api_global_timer_set(timestamp).reply().build();
-    let _res = test.ingress(canister_id, "update", payload).unwrap();
+    test.ingress(canister_id, "update", payload).unwrap();
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -2200,6 +2201,98 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
+}
+
+#[test]
+fn read_canister_snapshot_data_succeeds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    // Create new canister.
+    let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            uni_canister_wasm.clone(),
+        )
+        .unwrap();
+
+    // Upload chunk 1.
+    let chunk1 = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: chunk1,
+    };
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+    // Upload chunk 2.
+    let chunk2 = vec![6, 7, 8];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: chunk2,
+    };
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
+    // Grow the stable memory
+    let stable_pages = 13;
+    let payload = wasm().stable64_grow(stable_pages).reply().build();
+    test.ingress(canister_id, "update", payload).unwrap();
+    // Set some cert data
+    let cert_data = [42];
+    let payload = wasm().certified_data_set(&cert_data).reply().build();
+    test.ingress(canister_id, "update", payload).unwrap();
+    // Set a global timer
+    let timestamp = 43;
+    let payload = wasm().api_global_timer_set(timestamp).reply().build();
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Get the metadata
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let ReadCanisterSnapshotMetadataResponse {
+        wasm_module_size,
+        wasm_memory_size,
+        stable_memory_size,
+        wasm_chunk_store,
+        ..
+    } = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmModule { offset: 0, size: 0 },
+    );
+    let args_main = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+    );
+    let args_stable = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::StableMemory { offset: 0, size: 0 },
+    );
+    let args_chunks = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmChunk { hash: todo!() },
+    );
 }
 
 #[test]
