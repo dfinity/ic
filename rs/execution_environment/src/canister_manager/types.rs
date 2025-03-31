@@ -997,9 +997,9 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
-            InvalidSubslice{ offset, size, actual_size } => {
+            InvalidSubslice { offset, size, actual_size } => {
                 Self::new(
-                    ErrorCode::InvalidManagementPayload, 
+                    ErrorCode::InvalidManagementPayload,
                     format!("Invalid subslice into wasm module / main memory / stable memory: offset {} + size {} > actual_size {}", offset, size, actual_size)
                 )
             }
