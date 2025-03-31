@@ -1,5 +1,5 @@
 use crate::{
-    decoder_config,
+    are_nf_fund_proposals_disabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -5252,7 +5252,6 @@ impl Governance {
             create_service_nervous_system.clone(),
         ));
 
-        #[allow(unused_variables)]
         let validated = match conversion_result {
             Ok(validated) => validated,
             Err(err) => {
@@ -5263,9 +5262,9 @@ impl Governance {
             }
         };
 
-        // NF is disabled in release builds.
-        #[cfg(not(any(feature = "canbench-rs", feature = "test")))]
-        if validated.neurons_fund_participation.unwrap_or_default() {
+        if are_nf_fund_proposals_disabled()
+            && validated.neurons_fund_participation.unwrap_or_default()
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed \
