@@ -14,7 +14,7 @@ pub struct UpgradeArgs {
     upgrade_args: String,
     encoded_upgrade_args: Vec<u8>,
     args_sha256: ArgsHash,
-    candid_file_name: String,
+    candid_file: String,
 }
 
 impl UpgradeArgs {
@@ -30,7 +30,7 @@ impl UpgradeArgs {
         if self.upgrade_args != EMPTY_UPGRADE_ARGS {
             format!(
                 "didc encode -d {} -t '{}' '{}'",
-                self.candid_file_name,
+                self.candid_file,
                 format_types(&self.constructor_types),
                 self.upgrade_args
             )
@@ -52,17 +52,13 @@ pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F)
         .to_bytes_with_types(&env, &upgrade_types)
         .expect("failed to encode");
     let args_sha256 = ArgsHash::sha256(&encoded_upgrade_args);
-    let candid_file_name = candid_file
-        .file_name()
-        .expect("missing file name")
-        .to_string_lossy()
-        .to_string();
+    let candid_file = candid_file.to_path_buf().to_string_lossy().to_string();
     UpgradeArgs {
         constructor_types: upgrade_types,
         upgrade_args,
         encoded_upgrade_args,
         args_sha256,
-        candid_file_name,
+        candid_file,
     }
 }
 
