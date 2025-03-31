@@ -2842,8 +2842,8 @@ impl Governance {
         // Step 3: Locking the neurons.
         let _target_lock =
             self.lock_neuron_for_command(effect.source_neuron_id().id, in_flight_command.clone())?;
-        let _source_lock =
-            self.lock_neuron_for_command(effect.target_neuron_id().id, in_flight_command.clone())?;
+        // let _source_lock =
+        //     self.lock_neuron_for_command(effect.target_neuron_id().id, in_flight_command.clone())?;
 
         // Step 4: burn neuron fees if needed.
         if let Some(source_burn_fees) = effect.source_burn_fees() {
