@@ -207,7 +207,7 @@ impl PageBitmap {
         let end = range.end.get();
 
         let mut bwd_predicted_count = 0;
-        while page - bwd_predicted_count > start && bwd_predicted_count < page {
+        while page - bwd_predicted_count > start {
             if !self
                 .pages
                 .get((page + bwd_predicted_count + 1) as usize)
@@ -764,7 +764,7 @@ fn map_unaccessed_pages(
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
             && min_prefetch_range.end <= max_prefetch_range.end,
-        "Error asserting that min_prefetch_range:{:?} is withing the max_prefetch_range:{:?}",
+        "Error asserting min_prefetch_range:{:?} ⊆ max_prefetch_range:{:?}",
         min_prefetch_range,
         max_prefetch_range
     );
