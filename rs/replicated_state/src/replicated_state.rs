@@ -732,8 +732,8 @@ impl ReplicatedState {
             .sum()
     }
 
-    /// Canister migrations require that a canister is stopped, and has no
-    /// guaranteed responses in either the output queue or any outgoing stream.
+    /// Canister migrations require that a canister is stopped, has no guaranteed responses
+    /// in any outgoing stream, and nothing in the output queue (guaranteed or otherwise).
     pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
         let streams_flushed = || {
             self.metadata
