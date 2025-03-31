@@ -337,7 +337,7 @@ fn test_decode_empty_prefix() {
 }
 
 #[test]
-fn test_chunked() {
+fn test_honest_chunked() {
     // Step 1: Prepare the world.
 
     let chunk_contents = vec![
@@ -422,4 +422,76 @@ fn test_chunked() {
             Time::from_nanos_since_unix_epoch(REPLICA_TIME),
         ),
     );
+}
+
+#[test]
+fn test_evil_chunked() {
+    // Step 1: Prepare the world.
+
+    let chunk_content = b"response from an honest node".to_vec();
+
+    let chunk_content_sha256 = Sha256::hash(&chunk_content).to_vec();
+
+    let mut fetch_large_value = MockFetchLargeValue::new();
+    fetch_large_value
+        .expect_get_chunk_no_validation()
+        .with(mockall::predicate::eq(chunk_content_sha256.clone()))
+        .times(1)
+        .return_const(Ok(b"DO NOT BELIEVE THE LIES OF THIS EVIL NODE".to_vec()));
+
+    // Same as test_honest_chunked.
+    struct SemiMockFetchLargeValue {
+        implementation: MockFetchLargeValue,
+    }
+
+    #[async_trait]
+    impl FetchLargeValue for SemiMockFetchLargeValue {
+        async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+            self.implementation
+                .get_chunk_no_validation(content_sha256)
+                .await
+        }
+    }
+
+    let fetch_large_value = SemiMockFetchLargeValue {
+        implementation: fetch_large_value,
+    };
+
+    // Same as test_honest_chunked.
+    let (cid, pk, payload) = make_certified_delta(
+        vec![HighCapacityRegistryAtomicMutateRequest {
+            mutations: vec![HighCapacityRegistryMutation {
+                key: b"giant_blob".to_vec(),
+                mutation_type: registry_mutation::Type::Insert as i32,
+                content: Some(
+                    high_capacity_registry_mutation::Content::LargeValueChunkKeys(
+                        LargeValueChunkKeys {
+                            chunk_content_sha256s: vec![chunk_content_sha256],
+                        },
+                    ),
+                ),
+            }],
+            preconditions: vec![],
+            timestamp_seconds: 1735689600, // Jan 1, 2025 midnight UTC
+        }],
+        1..=1,
+        GarbleResponse::LeaveAsIs,
+    );
+
+    // Step 2: Call the code under test.
+    let result = decode_certified_deltas(0, &cid, &pk, &payload[..], &fetch_large_value)
+        .now_or_never()
+        .unwrap();
+
+    // Step 3: Verify result(s).
+    match result {
+        Err(CertificationError::InvalidDeltas(err)) => {
+            let message = err.to_lowercase();
+            for key_word in ["chunk", "hash", "match"] {
+                assert!(message.contains(key_word), "{} not in {}", key_word, err);
+            }
+        }
+
+        _ => panic!("{:?}", result),
+    }
 }

@@ -139,7 +139,15 @@ pub trait FetchLargeValue {
 
         // Verify chunk.
         if Sha256::hash(&chunk_content) != content_sha256 {
-            return Err(format!(" DO NOT MERGE "));
+            let len = chunk_content.len();
+            let snippet_len = 20.min(len);
+            return Err(format!(
+                "Chunk content hash does not match: len={}, head={:?}, tail={:?} SHA256={:?}", // DO NOT MERGE - Test this case.
+                len,
+                &chunk_content[..snippet_len],
+                &chunk_content[len - snippet_len..len],
+                content_sha256,
+            ));
         }
 
         Ok(chunk_content)
