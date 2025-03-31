@@ -1,7 +1,12 @@
 use crate::canister::NodeRewardsCanister;
 use crate::storage::RegistryStoreStableMemoryBorrower;
-use ic_nervous_system_canisters::registry::{FakeRegistry, RegistryCanister};
-use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
+use ic_nervous_system_canisters::registry::{
+    FakeRegistry, FakeRegistryResponses, RegistryCanister,
+};
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+    NodeProvidersMonthlyXdrRewards,
+};
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
@@ -13,7 +18,7 @@ use ic_registry_node_provider_rewards::logs::RewardsPerNodeProviderLog;
 use ic_registry_node_provider_rewards::RewardsPerNodeProvider;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
-use ic_types::PrincipalId;
+use ic_types::{PrincipalId, RegistryVersion};
 use maplit::btreemap;
 use std::cell::RefCell;
 use std::str::FromStr;
@@ -30,12 +35,18 @@ thread_local! {
 
 registry_data_stable_memory_impl!(TestState, STATE);
 
-fn setup_canister_for_test() -> (
+fn setup_canister_for_test(
+    fake_registry_version: u64,
+    fake_registry_responses: FakeRegistryResponses,
+) -> (
     NodeRewardsCanister,
     Arc<StableCanisterRegistryClient<TestState>>,
     Arc<FakeRegistry>,
 ) {
-    let fake_registry = Arc::new(FakeRegistry::new(Default::default(), Default::default()));
+    let fake_registry = Arc::new(FakeRegistry::new(
+        RegistryVersion::new(fake_registry_version),
+        fake_registry_responses,
+    ));
     let registry_client = Arc::new(StableCanisterRegistryClient::<TestState>::new(
         fake_registry.clone(),
     ));
@@ -46,9 +57,84 @@ fn setup_canister_for_test() -> (
     (canister, registry_client, fake_registry)
 }
 
+fn fake_registry_responses_for_rewards_calculation_test() -> FakeRegistryResponses {
+    let rewards_table = NodeRewardsTable {
+        table: btreemap! {
+            "Africa,ZA".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    "type3".to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 27491250,
+                        reward_coefficient_percent: Some(98),
+                    }
+                }
+            },
+            "Europe,CH".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    "type1".to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 0,
+                        reward_coefficient_percent: None,
+                    }
+                }
+            }
+        },
+    };
+
+    let node_operator_a_id = PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap();
+    let node_operator_b_id = PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap();
+
+    let node_operators = [
+        (
+            "node_operator_a".to_string(),
+            NodeOperatorRecord {
+                node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
+                node_allowance: 0,
+                node_provider_principal_id: node_operator_a_id.to_vec(),
+                dc_id: "dc1".to_string(),
+                rewardable_nodes: btreemap! {
+                    "type3".to_string() => 3,
+                },
+                ipv6: None,
+            },
+        ),
+        (
+            "node_operator_b".to_string(),
+            NodeOperatorRecord {
+                node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
+                node_allowance: 0,
+                node_provider_principal_id: node_operator_b_id.to_vec(),
+                dc_id: "dc2".to_string(),
+                rewardable_nodes: btreemap! {
+                    "type1".to_string() => 2,
+                },
+                ipv6: None,
+            },
+        ),
+    ];
+
+    let data_centers = btreemap! {
+        "dc1".to_string() => DataCenterRecord {
+            id: "dc1".to_string(),
+            region: "Africa,ZA".to_string(),
+            owner: "David Bowie".to_string(),
+            gps: None,
+        },
+        "dc2".to_string() => DataCenterRecord {
+            id: "dc2".to_string(),
+            region: "Europe,CH".to_string(),
+            owner: "Taylor Swift".to_string(),
+            gps: None,
+        },
+    };
+
+    let fake_registry_responses = FakeRegistryResponses::new();
+    fake_registry_responses.insert()
+}
+
 #[test]
 fn test_rewards_calculation() {
-    let (canister, client, fake_registry) = setup_canister_for_test();
+    let fake_registry_responses = fake_registry_responses_for_rewards_calculation_test();
+
+    let (canister, client, fake_registry) = setup_canister_for_test(5, fake_registry_responses);
     thread_local! {
         static CANISTER: RefCell<NodeRewardsCanister> = RefCell::new(canister);
     }
@@ -60,6 +146,16 @@ fn test_rewards_calculation() {
         client.clone(),
         request,
     );
+
+    let expected_result = GetNodeProvidersMonthlyXdrRewardsResponse {
+        rewards: Some(NodeProvidersMonthlyXdrRewards {
+            rewards: Default::default(),
+            registry_version: None,
+        }),
+        error: None,
+    };
+
+    assert_eq!(result, expected_result);
 
     // First populate our registry with enough data to run the rewards
 

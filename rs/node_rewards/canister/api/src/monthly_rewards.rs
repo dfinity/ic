@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 #[derive(CandidType, Deserialize)]
 pub struct GetNodeProvidersMonthlyXdrRewardsRequest {}
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub struct GetNodeProvidersMonthlyXdrRewardsResponse {
     pub rewards: Option<NodeProvidersMonthlyXdrRewards>,
     pub error: Option<String>,
@@ -14,7 +14,7 @@ pub struct GetNodeProvidersMonthlyXdrRewardsResponse {
 // We redefine it so that it can change independently of the Registry's definition, and we can
 // remove the Registry's definition eventually.  But it must be compatible until Node Rewards Canister
 // is calculating rewards
-#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, Debug)]
 pub struct NodeProvidersMonthlyXdrRewards {
     pub rewards: BTreeMap<Principal, u64>,
     /// Registry version at which rewards were calculated
