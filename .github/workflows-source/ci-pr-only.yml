@@ -21,7 +21,7 @@ anchors:
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
-      labels: dind-small
+      labels: ${{ (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name && 'dind-small') || 'ubuntu-latest' }}
     container:
       <<: *image
       options: >-
@@ -29,7 +29,7 @@ anchors:
   dind-large-setup: &dind-large-setup
     timeout-minutes: 90
     runs-on:
-      labels: dind-large
+      labels: ${{ (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
     container:
       <<: *image
       options: >-
@@ -117,8 +117,8 @@ jobs:
       CI_PIPELINE_ID: ${{ github.run_id }}
       CI_COMMIT_SHA: ${{ github.sha }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+      #JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      #SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
       REPO_NAME: ${{ github.repository }}
     steps:
       - <<: *checkout
