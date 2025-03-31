@@ -37,7 +37,7 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: ${{ (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
     container:
       <<: *image
       options: >-
@@ -47,7 +47,7 @@ anchors:
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
     runs-on:
-      labels: dind-small
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-small') || 'ubuntu-latest' }}
     container:
       <<: *image
     timeout-minutes: 30
@@ -163,7 +163,6 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     <<: *dind-large-setup
-    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers
@@ -176,7 +175,6 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     <<: *dind-large-setup
-    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Run Bazel Build Fuzzers AFL
@@ -211,7 +209,6 @@ jobs:
 
   build-ic:
     name: Build IC
-    runs-on: ubuntu-24-large
     container:
       <<: *image
       options: >-
@@ -284,7 +281,6 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-small-setup
-    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -314,7 +310,6 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-small-setup
-    runs-on: ubuntu-24-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
