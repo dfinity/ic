@@ -1,7 +1,7 @@
 name: PR Title Validation
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
 
 # Copied & adapted (job name, version label) from
@@ -10,7 +10,6 @@ on:
 
 permissions:
   pull-requests: write
-  statuses: write
 
 jobs:
   validate-pr-title:
