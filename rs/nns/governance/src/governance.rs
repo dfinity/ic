@@ -5268,7 +5268,8 @@ impl Governance {
         if validated.neurons_fund_participation.unwrap_or_default() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed.",
+                "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed \
+                as decided by motion proposal 135970: https://dashboard.internetcomputer.org/proposal/135970.",
             ));
         }
 
