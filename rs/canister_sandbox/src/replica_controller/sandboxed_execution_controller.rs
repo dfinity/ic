@@ -1822,7 +1822,7 @@ fn open_wasm(
     }
 
     let wasm_id = WasmId::new();
-    match compilation_cache.get(&wasm_binary.binary) {
+    let compilation = match compilation_cache.get(&wasm_binary.binary) {
         None => {
             metrics.inc_cache_lookup(CACHE_MISS);
             let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
@@ -1844,36 +1844,32 @@ fn open_wasm(
 
             match result {
                 Ok((compilation_result, serialized_module)) => {
-                    sandbox_process
-                        .history
-                        .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
-                    sandbox_process
-                        .sandbox_service
-                        .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
-                            wasm_id,
-                            serialized_module: Arc::clone(&serialized_module.bytes),
-                        })
-                        .on_completion(|_| ());
-                    cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
-                    observe_metrics(metrics, &serialized_module.imports_details);
-                    compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
-                    Ok((wasm_id, Some(compilation_result)))
+                    let serialized_module =
+                        compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
+                    Ok((serialized_module, Some(compilation_result)))
                 }
                 Err(err) => {
                     compilation_cache.insert_err(&wasm_binary.binary, err.clone());
-                    cache_errored_wasm(&mut embedder_cache, err.clone());
                     Err(err)
                 }
             }
         }
         Some(Err(err)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
-            cache_errored_wasm(&mut embedder_cache, err.clone());
             Err(err)
         }
         Some(Ok(serialized_module)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
-            observe_metrics(metrics, &serialized_module.imports_details);
+            Ok((serialized_module, None))
+        }
+    };
+    match compilation {
+        Err(err) => {
+            cache_errored_wasm(&mut embedder_cache, err.clone());
+            Err(err)
+        }
+        Ok((serialized_module, compilation_result)) => {
+            observe_metrics(metrics, &serialized_module.imports_details());
             sandbox_process
                 .history
                 .record(format!("OpenWasmViaFile(wasm_id={})", wasm_id));
@@ -1891,10 +1887,11 @@ fn open_wasm(
                 })
                 .on_completion(move |_| drop(copy));
             cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
-            Ok((wasm_id, None))
+            Ok((wasm_id, compilation_result))
         }
     }
 }
+
 // Returns the id of the remote memory after making sure that the remote memory
 // is in sync with the local memory.
 fn open_remote_memory(
