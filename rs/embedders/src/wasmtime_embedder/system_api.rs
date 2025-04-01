@@ -155,42 +155,6 @@ fn charge_for_cpu_and_mem(
     charge_for_system_api_call(caller, overhead, num_bytes).map_err(|e| process_err(caller, e))
 }
 
-/// Charge for system api call that involves writing/reading stable memory
-// TODO: RUN-841: Cover with tests
-#[inline(always)]
-fn charge_for_stable_write(
-    caller: &mut Caller<'_, StoreData>,
-    mut overhead: NumInstructions,
-    offset: u64,
-    size: u64,
-    dirty_page_limit: StableMemoryPageLimit,
-) -> HypervisorResult<()> {
-    let system_api = caller.data().system_api()?;
-    let (new_stable_dirty_pages, dirty_page_cost) =
-        system_api.dirty_pages_from_stable_write(offset, size)?;
-
-    let dirty_page_limit = system_api.get_page_limit(&dirty_page_limit);
-
-    overhead = overhead.saturating_add(&dirty_page_cost);
-
-    let stable_dirty_pages = &mut caller
-        .data_mut()
-        .num_stable_dirty_pages_from_non_native_writes;
-    let total_pages = stable_dirty_pages.saturating_add(&new_stable_dirty_pages);
-
-    if total_pages > dirty_page_limit {
-        let error = HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                            dirty_page_limit * (PAGE_SIZE as u64 / 1024),
-                            ),
-                        );
-        return Err(error);
-    }
-    *stable_dirty_pages = total_pages;
-
-    charge_for_system_api_call(caller, overhead, size as usize)
-}
-
 /// Charges a canister (in instructions) for system API call overhead (exit,
 /// accessing state, etc) and for using `num_bytes` bytes of memory. If
 /// the canister has run out instructions or there are unexpected bugs, return
@@ -755,76 +719,6 @@ pub fn syscalls<
         .unwrap();
 
     linker
-        .func_wrap("ic0", "stable_size", {
-            move |mut caller: Caller<'_, StoreData>| {
-                charge_for_cpu(&mut caller, overhead::STABLE_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_size())
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable_grow", {
-            move |mut caller: Caller<'_, StoreData>, additional_pages: u32| {
-                charge_for_cpu(&mut caller, overhead::STABLE_GROW)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_grow(additional_pages))
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable_read", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::STABLE_READ, size as usize)?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable_read(dst, offset, size, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
-                } else {
-                    Ok(())
-                }
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable_write", {
-            move |mut caller: Caller<'_, StoreData>, offset: u32, src: u32, size: u32| {
-                charge_for_stable_write(
-                    &mut caller,
-                    overhead::STABLE_WRITE,
-                    offset as u64,
-                    size as u64,
-                    stable_memory_dirty_page_limit,
-                )
-                .map_err(|e| process_err(&mut caller, e))?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable_write(offset, src, size, memory)
-                })
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_size", {
-            move |mut caller: Caller<'_, StoreData>| {
-                charge_for_cpu(&mut caller, overhead::STABLE64_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_size())
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_grow", {
-            move |mut caller: Caller<'_, StoreData>, additional_pages: u64| {
-                charge_for_cpu(&mut caller, overhead::STABLE64_GROW)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_grow(additional_pages))
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("__", "stable_read_first_access", {
             move |mut caller: Caller<'_, StoreData>, dst: u64, offset: u64, size: u64| {
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -835,40 +729,6 @@ pub fn syscalls<
                 } else {
                     Ok(())
                 }
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_read", {
-            move |mut caller: Caller<'_, StoreData>, dst: u64, offset: u64, size: u64| {
-                charge_for_cpu_and_mem(&mut caller, overhead::STABLE64_READ, size as usize)?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable64_read(dst, offset, size, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
-                } else {
-                    Ok(())
-                }
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "stable64_write", {
-            move |mut caller: Caller<'_, StoreData>, offset: u64, src: u64, size: u64| {
-                charge_for_stable_write(
-                    &mut caller,
-                    overhead::STABLE64_WRITE,
-                    offset,
-                    size,
-                    stable_memory_dirty_page_limit,
-                )
-                .map_err(|e| process_err(&mut caller, e))?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable64_write(offset, src, size, memory)
-                })
             }
         })
         .unwrap();
@@ -1373,6 +1233,140 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_DEADLINE)?;
                 with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
+            }
+        })
+        .unwrap();
+
+    // Stable memory APIs are implemented natively in Wasm. Link the functions here to dummy
+    // versions that will trap if ever called to satisfy the Wasm module requirements (the alternative
+    // would be to change the imports in the Wasm to link to a dummy function but this approach here
+    // seemed simpler).
+    //
+    // This code should be unreachable unless the Wasm module is modified to call these functions.
+    linker
+        .func_wrap("ic0", "stable_size", {
+            move |mut caller: Caller<'_, StoreData>| -> Result<u32, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_size is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable_grow", {
+            move |mut caller: Caller<'_, StoreData>, _pages: u32| -> Result<u32, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_grow is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable_read", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _dst: u32,
+                  _offset: u32,
+                  _size: u32|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_read is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable_write", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _offset: u32,
+                  _src: u32,
+                  _size: u32|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable_write is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_size", {
+            move |mut caller: Caller<'_, StoreData>| -> Result<u64, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_size is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_grow", {
+            move |mut caller: Caller<'_, StoreData>, _pages: u64| -> Result<u64, _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_grow is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_read", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _dst: u64,
+                  _offset: u64,
+                  _size: u64|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_read is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "stable64_write", {
+            move |mut caller: Caller<'_, StoreData>,
+                  _offset: u64,
+                  _src: u64,
+                  _size: u64|
+                  -> Result<(), _> {
+                Err(process_err(
+                    &mut caller,
+                    HypervisorError::CalledTrap {
+                        message: "ic0.stable64_write is implemented natively in Wasm".to_string(),
+                        backtrace: None,
+                    },
+                ))
             }
         })
         .unwrap();
