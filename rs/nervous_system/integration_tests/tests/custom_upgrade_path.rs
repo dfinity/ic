@@ -1,6 +1,7 @@
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::{
+    helpers::await_with_timeout,
     nns::{
         governance::{add_sns_wasm, insert_sns_wasm_upgrade_path_entries},
         sns_wasm::get_next_sns_version,
@@ -8,14 +9,11 @@ use ic_nervous_system_agent::{
     pocketic_impl::PocketIcAgent,
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    await_with_timeout,
-    sns::{
-        self,
-        governance::{
-            redact_human_readable, set_automatically_advance_target_version_flag,
-            EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
-        },
+use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::{
+    self,
+    governance::{
+        redact_human_readable, set_automatically_advance_target_version_flag,
+        EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
     },
 };
 use ic_nervous_system_integration_tests::{
