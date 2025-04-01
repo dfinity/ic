@@ -2628,7 +2628,7 @@ fn wasm64_root_key() {
       (func $test (export "canister_update test")
         (call $ic0_root_key_size)
         global.set $g1
-        (call $ic0_root_key_copy (i64.const 0) (i64.const 0) (call $ic0_root_key_size))
+        (call $ic0_root_key_copy (i64.const 0) (i64.const 0) (global.get $g1))
       )
 
       (memory (export "memory") i64 1)
