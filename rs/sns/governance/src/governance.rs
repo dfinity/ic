@@ -42,7 +42,7 @@ use crate::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees, FolloweesForTopic, TopicFollowees},
+            neuron::{DissolveState, Followees, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
@@ -51,7 +51,7 @@ use crate::{
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, Followee,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
@@ -62,7 +62,7 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
@@ -642,16 +642,6 @@ pub struct Governance {
     /// Topic -> (followee's neuron ID) -> set of followers' neuron IDs.
     pub topic_follower_index: FollowerIndex,
 
-    /// Cached data structure that (for each topic) maps a followee to
-    /// the set of its followers. It is the inverse of the mapping from follower
-    /// to followees that is stored in each (follower) neuron.
-    ///
-    /// This is a cached index and will be removed and recreated when the state
-    /// is saved and restored.
-    ///
-    /// Topic -> (followee's neuron ID) -> set of followers' neuron IDs.
-    pub topic_following_index: BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>>,
-
     /// Maps Principals to the Neuron IDs of all Neurons for which this principal
     /// has some permissions, i.e., all neurons that have this principal associated
     /// with a NeuronPermissionType for the Neuron.
@@ -1010,11 +1000,6 @@ impl Governance {
         remove_neuron_from_function_followee_index(&mut self.function_followee_index, &neuron);
 
         remove_neuron_from_follower_index(&mut self.topic_follower_index, &neuron);
-
-        GovernanceProto::remove_neuron_from_following_index(
-            &mut self.topic_following_index,
-            &neuron,
-        );
 
         self.proto.neurons.remove(&neuron_id.to_string());
 
