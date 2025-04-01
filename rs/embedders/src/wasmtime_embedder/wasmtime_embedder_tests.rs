@@ -2,8 +2,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use super::{
+    linker,
     system_api::{
-        linker, sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
         DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
     },
     StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME,

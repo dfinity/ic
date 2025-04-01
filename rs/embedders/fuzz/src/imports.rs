@@ -8,7 +8,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
-        system_api::{linker, ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
+        linker,
+        system_api::{ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
         StoreData, WasmtimeEmbedder,
     },
 };

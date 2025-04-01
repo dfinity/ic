@@ -46,11 +46,14 @@ use super::InstanceRunResult;
 use self::host_memory::{MemoryPageSize, MemoryStart};
 
 pub mod host_memory;
+/// pub for usage in fuzzing
+#[doc(hidden)]
+pub mod linker;
 mod signal_stack;
 pub mod system_api;
 pub mod system_api_complexity;
 
-use system_api::{linker, ModificationTracking, SystemApiImpl};
+use system_api::{ModificationTracking, SystemApiImpl};
 
 #[cfg(test)]
 mod wasmtime_embedder_tests;
