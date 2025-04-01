@@ -15,7 +15,7 @@ pub struct UpgradeArgs {
     upgrade_args: String,
     encoded_upgrade_args: Vec<u8>,
     args_sha256: ArgsHash,
-    candid_file: String,
+    candid_file_path: String,
 }
 
 impl UpgradeArgs {
@@ -31,7 +31,7 @@ impl UpgradeArgs {
         if self.upgrade_args != EMPTY_UPGRADE_ARGS {
             format!(
                 "didc encode -d {} -t '{}' '{}'",
-                self.candid_file,
+                self.candid_file_path,
                 format_types(&self.constructor_types),
                 self.upgrade_args
             )
@@ -63,7 +63,7 @@ pub fn encode_upgrade_args<F: Into<String>>(
         upgrade_args,
         encoded_upgrade_args,
         args_sha256,
-        candid_file: repo_candid_file,
+        candid_file_path: repo_candid_file,
     }
 }
 
