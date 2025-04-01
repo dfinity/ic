@@ -9,8 +9,9 @@ use ic_management_canister_types_private::{
     CanisterSnapshotDataKind, CanisterSnapshotResponse, ClearChunkStoreArgs,
     DeleteCanisterSnapshotArgs, GlobalTimer, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -2273,11 +2274,25 @@ fn read_canister_snapshot_data_succeeds() {
         wasm_chunk_store,
         ..
     } = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    // tests:
     let args_module = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::WasmModule { offset: 0, size: 0 },
+        CanisterSnapshotDataKind::WasmModule {
+            offset: 0,
+            size: wasm_module_size,
+        },
     );
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_data", args_module.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let ReadCanisterSnapshotDataResponse { chunk } =
+        Decode!(&bytes, ReadCanisterSnapshotDataResponse).unwrap();
+    assert_eq!(chunk, uni_canister_wasm);
+
     let args_main = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
