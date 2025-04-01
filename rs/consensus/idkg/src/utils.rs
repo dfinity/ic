@@ -1,6 +1,6 @@
 //! Common utils for the IDKG implementation.
 
-use crate::idkg::{
+use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::IDkgPayloadMetrics,
 };
@@ -22,13 +22,15 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
 use ic_types::{
+    batch::ConsensusResponse,
     consensus::{
         idkg::{
             common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef},
             ecdsa::ThresholdEcdsaSigInputsRef,
             schnorr::ThresholdSchnorrSigInputsRef,
-            HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage,
-            IDkgTranscriptParamsRef, PreSigId, RequestId, TranscriptLookupError, TranscriptRef,
+            CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
+            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
+            TranscriptLookupError, TranscriptRef,
         },
         Block, HasHeight,
     },
@@ -54,7 +56,7 @@ use std::{
 };
 
 #[derive(Clone, PartialEq, Debug)]
-pub(crate) struct InvalidChainCacheError(String);
+pub struct InvalidChainCacheError(String);
 
 impl Display for InvalidChainCacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -235,7 +237,7 @@ pub(super) fn block_chain_cache(
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) enum BuildSignatureInputsError {
+pub enum BuildSignatureInputsError {
     /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
     ContextIncomplete,
     /// The context was matched to a pre-signature which cannot be found in the latest block payload
@@ -401,7 +403,7 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 
 /// Inspect chain_key_initializations field in the CUPContent.
 /// Return key_id and dealings.
-pub(crate) fn inspect_idkg_chain_key_initializations(
+pub fn inspect_idkg_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
     chain_key_initializations: &[pb::ChainKeyInitialization],
 ) -> Result<BTreeMap<IDkgMasterPublicKeyId, InitialIDkgDealings>, String> {
@@ -482,7 +484,7 @@ pub(crate) fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmI
     }
 }
 
-pub(crate) fn get_idkg_chain_key_config_if_enabled(
+pub fn get_idkg_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
@@ -511,7 +513,7 @@ pub(crate) fn get_idkg_chain_key_config_if_enabled(
 
 /// Return the set of pre-signature IDs to be delivered in the batch of this block.
 /// We deliver IDs of all available pre-signatures that were created using the current key transcript.
-pub(crate) fn get_pre_signature_ids_to_deliver(
+pub fn get_pre_signature_ids_to_deliver(
     block: &Block,
 ) -> BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> {
     let Some(idkg) = block.payload.as_ref().as_idkg() else {
@@ -542,6 +544,20 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
     pre_sig_ids
 }
 
+/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
+/// signature.
+pub fn generate_responses_to_signature_request_contexts(
+    idkg_payload: &IDkgPayload,
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
+    for completed in idkg_payload.signature_agreements.values() {
+        if let CompletedSignature::Unreported(response) = completed {
+            consensus_responses.push(response.clone());
+        }
+    }
+    consensus_responses
+}
+
 /// This function returns the subnet master public keys to be added to the batch, if required.
 /// We return the keys, if
 /// - The block contains an IDKG payload with current key transcript ref, and
@@ -549,7 +565,7 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// - we can extract the threshold master public key from the transcript.
 ///
 /// Otherwise no keys are returned.
-pub(crate) fn get_idkg_subnet_public_keys(
+pub fn get_idkg_subnet_public_keys(
     current_block: &Block,
     last_dkg_summary_block: &Block,
     pool: &PoolReader<'_>,
@@ -621,10 +637,9 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::idkg::test_utils::{
-        create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
-        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
+    use super::{algorithm_for_key_id, *};
+    use crate::test_utils::{
+        create_available_pre_signature_with_key_transcript, set_up_idkg_payload,
         IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -638,7 +653,7 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
-    use ic_test_utilities_consensus::fake::Fake;
+    use ic_test_utilities_consensus::{fake::Fake, idkg::*};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
