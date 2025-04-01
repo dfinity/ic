@@ -43,6 +43,7 @@ ic-nns-gtc = { path = "../gtc" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 ic-nns-handler-lifeline-interface = { path = "../handlers/lifeline/interface" }
 ic-nns-handler-root = { path = "../handlers/root/impl" }
+ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-registry-keys = { path = "../../registry/keys" }

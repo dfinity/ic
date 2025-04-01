@@ -20,6 +20,7 @@ const FOLLOWEES_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(5);
 const RECENT_BALLOTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(6);
 const KNOWN_NEURON_DATA_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(7);
 const TRANSFER_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(8);
+const MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(18);
 
 const NEURON_SUBACCOUNT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(9);
 const NEURON_PRINCIPAL_INDEX_MEMORY_ID: MemoryId = MemoryId::new(10);
@@ -99,6 +100,8 @@ impl State {
                 hot_keys: memory_manager.get(HOT_KEYS_NEURONS_MEMORY_ID),
                 followees: memory_manager.get(FOLLOWEES_NEURONS_MEMORY_ID),
                 recent_ballots: memory_manager.get(RECENT_BALLOTS_NEURONS_MEMORY_ID),
+                maturity_disbursements: memory_manager
+                    .get(MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID),
 
                 // Singletons
                 known_neuron_data: memory_manager.get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),

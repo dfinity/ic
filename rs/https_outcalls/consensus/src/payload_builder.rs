@@ -684,7 +684,8 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
         let divergece_responses = messages
             .divergence_responses
             .iter()
-            .filter_map(divergence_response_into_reject);
+            .filter_map(divergence_response_into_reject)
+            .inspect(|_| stats.divergence_responses += 1);
 
         let responses = responses
             .chain(timeouts)

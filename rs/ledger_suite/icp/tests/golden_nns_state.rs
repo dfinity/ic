@@ -259,7 +259,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
     // stable structures, but master also has blocks in stable structures, `ledger_is_downgradable`
     // should be set to `false`, otherwise `true`.
-    setup.downgrade_to_mainnet(false, false);
+    setup.downgrade_to_mainnet(true, true);
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
@@ -321,7 +321,7 @@ impl Setup {
         }
         self.check_ledger_metrics(expect_migration);
         let upgrade_args = BTreeMap::from([(
-            CanisterId::from_str("q4eej-kyaaa-aaaaa-aaaha-cai").unwrap(),
+            CanisterId::from_str("q3fc5-haaaa-aaaaa-aaahq-cai").unwrap(),
             2 * LARGE_ARCHIVE_CAPACITY,
         )]);
         self.upgrade_archive_canisters(&self.master_wasms.archive, true, upgrade_args);
