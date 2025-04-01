@@ -403,3 +403,42 @@ fn private_derivation_also_works_for_derived_keys() {
         );
     }
 }
+
+#[test]
+fn should_reject_secp256k1_private_key() {
+    let secp256k1 = "-----BEGIN PRIVATE KEY-----
+MIGEAgEAMBAGByqGSM49AgEGBSuBBAAKBG0wawIBAQQgtyNDLgx0SPJ/4ME90KL3
+ZkhZuYpPCWyb1DS6ogQaIpChRANCAAS1xlnnfevnaVSeVScuD7U4AIuN9DftUQIh
+SRX0gAHGwZEgbRHaxgEPtpUyCnHhHL/VUmSB6GgerMzD6LzDY6qt
+-----END PRIVATE KEY-----";
+
+    match PrivateKey::deserialize_pkcs8_pem(secp256k1) {
+        Ok(_) => panic!("Unexpectedly accepted a secp256k1 private key as secp256r1"),
+        Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
+            assert_eq!(
+                format!("{:?}", e),
+                "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.2.840.10045.3.1.7) })\""
+            );
+        }
+        Err(e) => panic!("Unexpected error {:?}", e),
+    }
+}
+
+#[test]
+fn should_reject_secp256k1_public_key() {
+    let secp256k1 = "-----BEGIN PUBLIC KEY-----
+MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAECQoUIgCFbhoM8kE2zNL0g2pWr42QlK41
+KZh4l7SeYvLtL818ibSx/IXoUHNp4/gMp+x2sxwA/mtWO5PdPg7ksg==
+-----END PUBLIC KEY-----";
+
+    match PublicKey::deserialize_pem(secp256k1) {
+        Ok(_) => panic!("Unexpectedly accepted a secp256k1 public key as secp256r1"),
+        Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
+            assert_eq!(
+                format!("{:?}", e),
+                "\"OidUnknown { oid: ObjectIdentifier(1.2.840.10045.3.1.7) }\""
+            );
+        }
+        Err(e) => panic!("Unexpected error {:?}", e),
+    }
+}

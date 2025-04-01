@@ -7,28 +7,43 @@ With PocketIC Rust, testing canisters is as simple as calling Rust functions.
 Here is a simple example:
 
 ```rust
-use candid::encode_one;
+use candid::{Principal, encode_one};
 use pocket_ic::PocketIc;
 
- #[test]
- fn test_counter_canister() {
-    let pic = PocketIc::new();
-    // Create an empty canister as the anonymous principal and add cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, 2_000_000_000_000);
-    
-    let wasm_bytes = load_counter_wasm(...);
-    pic.install_canister(canister_id, wasm_bytes, vec![], None);
-    // 'inc' is a counter canister method.
-    call_counter_canister(&pic, canister_id, "inc");
-    // Check if it had the desired effect.
-    let reply = call_counter_canister(&pic, canister_id, "read");
-    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
- }
+// 2T cycles
+const INIT_CYCLES: u128 = 2_000_000_000_000;
 
-fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) -> WasmResult {
-    pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
-        .expect("Failed to call counter canister")
+#[test]
+fn test_counter_canister() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+
+    // Install the counter canister wasm file on the canister.
+    let counter_wasm = todo!();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    // Make some calls to the canister.
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, vec![0, 0, 0, 0]);
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, vec![1, 0, 0, 0]);
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, vec![2, 0, 0, 0]);
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, vec![2, 0, 0, 0]);
+}
+
+fn call_counter_can(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
+    pic.update_call(
+        canister_id,
+        Principal::anonymous(),
+        method,
+        encode_one(()).unwrap(),
+    )
+    .expect("Failed to call counter canister")
 }
 ```
 
@@ -36,7 +51,9 @@ fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) 
 
 ### Quickstart
 * Download the latest **PocketIC server** from the [PocketIC repo](https://github.com/dfinity/pocketic) that is [compatible](https://docs.google.com/document/d/1VYmHUTjrgbzRHtsAyRrI5cj-gWGs7ktTnutPvUMJioU) with the library version you're using.
-* Leave the binary in your current working directory, or specify the path to the binary by setting the `POCKET_IC_BIN` environment variable before running your tests.
+* Ungzip the downloaded file.
+* On UNIX: make the downloaded file executable.
+* Specify the path to the binary by using the function `PocketIcBuilder::with_server_binary` or the environment variable `POCKET_IC_BIN`.
 * Add PocketIC Rust to your project with `cargo add pocket-ic`.
 * Import PocketIC with `use pocket_ic::PocketIc`, and create a new PocketIC instance with `let pic = PocketIc::new()` in your Rust code and start testing!
 

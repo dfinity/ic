@@ -6,7 +6,7 @@ pub use errors::{
     doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
     WasmValidationError,
 };
-use ic_types::CountBytes;
+use ic_types::MemoryDiskBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -174,9 +174,13 @@ impl TryFrom<Vec<u8>> for WasmHash {
     }
 }
 
-impl CountBytes for WasmHash {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for WasmHash {
+    fn memory_bytes(&self) -> usize {
         self.0.len()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 

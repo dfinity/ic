@@ -9,9 +9,9 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
-use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,
@@ -34,6 +34,7 @@ pub struct WasmtimeInstanceBuilder {
     network_topology: NetworkTopology,
     config: ic_config::embedders::Config,
     canister_memory_limit: NumBytes,
+    memory_usage: NumBytes,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -48,6 +49,7 @@ impl Default for WasmtimeInstanceBuilder {
             network_topology: NetworkTopology::default(),
             config: ic_config::embedders::Config::default(),
             canister_memory_limit: NumBytes::from(4 << 30), // Set to 4 GiB by default
+            memory_usage: NumBytes::from(0),
         }
     }
 }
@@ -104,6 +106,13 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_memory_usage(self, memory_usage: NumBytes) -> Self {
+        Self {
+            memory_usage,
+            ..self
+        }
+    }
+
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
@@ -146,8 +155,8 @@ impl WasmtimeInstanceBuilder {
         let api = ic_system_api::SystemApiImpl::new(
             self.api_type,
             sandbox_safe_system_state,
-            ic_types::NumBytes::from(0),
-            ic_types::NumBytes::from(0),
+            self.memory_usage,
+            ic_replicated_state::MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
                     FlagStatus::Disabled,
@@ -168,9 +177,7 @@ impl WasmtimeInstanceBuilder {
                 subnet_memory_capacity,
                 subnet_memory_capacity,
             ),
-            embedder.config().feature_flags.wasm_native_stable_memory,
-            embedder.config().feature_flags.canister_backtrace,
-            embedder.config().max_sum_exported_function_name_lengths,
+            embedder.config(),
             Memory::new_for_testing(),
             NumWasmPages::from(0),
             Rc::new(ic_system_api::DefaultOutOfInstructionsHandler::new(

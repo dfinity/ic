@@ -1,5 +1,6 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
+use crate::reward::distribution::RewardsDistributionStateMachine;
 use crate::{pb::v1::ArchivedMonthlyNodeProviderRewards, voting::VotingStateMachines};
 use ic_cdk::println;
 use ic_stable_structures::{
@@ -19,6 +20,7 @@ const FOLLOWEES_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(5);
 const RECENT_BALLOTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(6);
 const KNOWN_NEURON_DATA_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(7);
 const TRANSFER_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(8);
+const MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(18);
 
 const NEURON_SUBACCOUNT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(9);
 const NEURON_PRINCIPAL_INDEX_MEMORY_ID: MemoryId = MemoryId::new(10);
@@ -30,6 +32,8 @@ const NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
 const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
 
 const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
+
+const REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID: MemoryId = MemoryId::new(17);
 
 pub mod neuron_indexes;
 pub mod neurons;
@@ -49,7 +53,14 @@ thread_local! {
             let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
             VotingStateMachines::new(memory)
         })
-    })
+    });
+
+    static REWARDS_DISTRIBUTION_STATE_MACHINE: RefCell<RewardsDistributionStateMachine<VM>> = RefCell::new({
+        MEMORY_MANAGER.with(|memory_manager| {
+            let memory = memory_manager.borrow().get(REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID);
+            RewardsDistributionStateMachine::new(memory)
+        })
+    });
 }
 
 struct State {
@@ -89,6 +100,8 @@ impl State {
                 hot_keys: memory_manager.get(HOT_KEYS_NEURONS_MEMORY_ID),
                 followees: memory_manager.get(FOLLOWEES_NEURONS_MEMORY_ID),
                 recent_ballots: memory_manager.get(RECENT_BALLOTS_NEURONS_MEMORY_ID),
+                maturity_disbursements: memory_manager
+                    .get(MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID),
 
                 // Singletons
                 known_neuron_data: memory_manager.get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),
@@ -202,6 +215,16 @@ pub(crate) fn with_voting_state_machines_mut<R>(
     VOTING_STATE_MACHINES.with(|voting_state_machines| {
         let voting_state_machines = &mut voting_state_machines.borrow_mut();
         f(voting_state_machines)
+    })
+}
+
+pub(crate) fn with_rewards_distribution_state_machine_mut<R>(
+    f: impl FnOnce(&mut RewardsDistributionStateMachine<VM>) -> R,
+) -> R {
+    REWARDS_DISTRIBUTION_STATE_MACHINE.with(|rewards_distribution_state_machine| {
+        let rewards_distribution_state_machine =
+            &mut rewards_distribution_state_machine.borrow_mut();
+        f(rewards_distribution_state_machine)
     })
 }
 

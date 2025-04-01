@@ -4,7 +4,6 @@ pub mod logs;
 pub mod memory;
 pub mod neurons_fund;
 pub mod pb;
-mod request_impls;
 pub mod swap;
 pub mod swap_builder;
 pub mod types;

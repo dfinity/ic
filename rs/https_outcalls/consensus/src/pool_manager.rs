@@ -14,12 +14,15 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
     replica_config::ReplicaConfig, Height,
 };
+use rand::Rng;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -30,6 +33,10 @@ use std::{
 
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+
+//TODO(SOCKS_PROXY_DL): Make this 100.
+/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
+const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 10;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -49,6 +56,14 @@ pub struct CanisterHttpPoolManagerImpl {
     requested_id_cache: RefCell<BTreeSet<CallbackId>>,
     metrics: CanisterHttpPoolManagerMetrics,
     log: ReplicaLogger,
+}
+
+//TODO(SOCKS_PROXY_DL): Remove this function.
+fn should_dl_socks_proxy() -> bool {
+    let mut rng = rand::thread_rng();
+    let random_number: u32 = rng.gen_range(0..100);
+    // This is a dark launch feature. We want to test the SOCKS proxy with some percentage of requests.
+    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 impl CanisterHttpPoolManagerImpl {
@@ -144,6 +159,43 @@ impl CanisterHttpPoolManagerImpl {
             .collect()
     }
 
+    fn get_socks_proxy_addrs(&self) -> Vec<String> {
+        let latest_registry_version = self.registry_client.get_latest_version();
+
+        self.registry_client
+            .get_api_boundary_node_ids(latest_registry_version)
+            .unwrap_or_else(|e| {
+                warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
+                Vec::new()
+            })
+            .into_iter()
+            .filter_map(|id| {
+                self.registry_client
+                    .get_node_record(id, latest_registry_version)
+                    .map_err(|e| {
+                        warn!(
+                            self.log,
+                            "Failed to get node record for node ID {:?}: {:?}", id, e
+                        );
+                    })
+                    .ok()
+                    .and_then(|opt_record| {
+                        opt_record.or_else(|| {
+                            warn!(self.log, "No node record found for node ID {:?}", id);
+                            None
+                        })
+                    })
+                    .and_then(|record| {
+                        record.http.or_else(|| {
+                            warn!(self.log, "HTTP information missing for node ID {:?}", id);
+                            None
+                        })
+                    })
+                    .map(|http_info| format!("socks5h://[{0}]:1080", http_info.ip_addr))
+            })
+            .collect::<Vec<String>>()
+    }
+
     /// Inform the HttpAdapterShim of any new requests that must be made.
     fn make_new_requests(&self, canister_http_pool: &dyn CanisterHttpPool) {
         let _time = self
@@ -181,6 +233,12 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
+        let socks_proxy_addrs = if should_dl_socks_proxy() {
+            self.get_socks_proxy_addrs()
+        } else {
+            Vec::new()
+        };
+
         for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
@@ -192,6 +250,7 @@ impl CanisterHttpPoolManagerImpl {
                         id,
                         timeout,
                         context,
+                        socks_proxy_addrs: socks_proxy_addrs.clone(),
                     })
                 {
                     warn!(
@@ -902,6 +961,7 @@ pub mod test {
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10)
                             + Duration::from_secs(60 * 5),
                         context: request.clone(),
+                        socks_proxy_addrs: vec![],
                     }))
                     .times(1)
                     .return_const(Ok(()));

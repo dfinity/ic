@@ -2,6 +2,7 @@ use batch::BatchPayload;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::{
@@ -145,7 +146,7 @@ fn dkg_payload_builder_fn(
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
 ) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload> {
     Box::new(move |cons_pool, parent, validation_context| {
-        ic_consensus::dkg::create_payload(
+        ic_consensus_dkg::create_payload(
             subnet_id,
             &*registry_client,
             &*crypto,
@@ -188,7 +189,18 @@ impl TestConsensusPool {
                 ))
             }),
         ));
-        let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
+
+        let cup_contents = registry_client
+            .get_cup_contents(subnet_id, registry_client.get_latest_version())
+            .expect("Failed to retreive the DKG transcripts from registry");
+        let summary = get_dkg_summary_from_cup_contents(
+            cup_contents.value.expect("Missing CUP contents"),
+            subnet_id,
+            &*registry_client,
+            cup_contents.version,
+        )
+        .expect("Failed to get DKG summary from CUP contents");
+
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
@@ -406,6 +418,15 @@ impl TestConsensusPool {
         height
     }
 
+    pub fn advance_round_normal_operation_no_finalization_n(&mut self, steps: u64) -> Height {
+        assert!(steps > 0, "Cannot advance for 0 steps.");
+        let mut height = Height::from(0);
+        for _ in 0..steps {
+            height = self.advance_round_normal_operation_no_finalization();
+        }
+        height
+    }
+
     // Advances the pool mimicking an idealized situation: 1 notarized and finalized
     // block in every round, and creating a CUP for summary heights.
     pub fn advance_round_normal_operation(&mut self) -> Height {
@@ -440,6 +461,33 @@ impl TestConsensusPool {
         let new_blocks = 1;
         let blocks_to_notarize = 1;
         let should_finalize = true;
+        let add_catch_up_package_if_needed = false;
+        let should_add_random_tape = true;
+        let n_shares = 0;
+        let rb_shares = 0;
+        let f_shares = 0;
+        let certified_height = None;
+        self.advance_round(
+            max_replicas,
+            new_blocks,
+            blocks_to_notarize,
+            add_catch_up_package_if_needed,
+            should_finalize,
+            should_add_random_tape,
+            n_shares,
+            rb_shares,
+            f_shares,
+            certified_height,
+        )
+    }
+
+    // Advances the pool mimicking an idealized situation: 1 notarized
+    // block in every round. However, no CUPs or finalizations are created.
+    pub fn advance_round_normal_operation_no_finalization(&mut self) -> Height {
+        let max_replicas = 10;
+        let new_blocks = 1;
+        let blocks_to_notarize = 1;
+        let should_finalize = false;
         let add_catch_up_package_if_needed = false;
         let should_add_random_tape = true;
         let n_shares = 0;

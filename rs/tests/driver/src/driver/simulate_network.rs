@@ -192,7 +192,7 @@ impl ProductionSubnetTopology {
 
 /// Query:
 /// https://victoria.ch1-obs1.dfinity.network/select/0/vmui/#/?g0.expr=sum+by+%28ic_node%2Cpeer%29+%28quic_transport_quinn_path_rtt_seconds%7Bic_subnet%3D%22uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe%22%7D%29&g0.range_input=21h24m51s870ms&g0.end_input=2024-08-20T08%3A22%3A07&g0.relative_time=none&g0.tenantID=0
-pub const UZR_34_RTT: [(u64, u64, f64); 756] = [
+pub static UZR_34_RTT: [(u64, u64, f64); 756] = [
     (1, 2, 0.15598),
     (1, 3, 0.37478),
     (1, 4, 0.13583),
@@ -952,7 +952,7 @@ pub const UZR_34_RTT: [(u64, u64, f64); 756] = [
 ];
 /// Query:
 /// https://victoria.ch1-obs1.dfinity.network/select/0/vmui/#/?g0.expr=sum+by+%28ic_node%2Cpeer%29+%28%0A++rate%28quic_transport_quinn_path_lost_packets%7Bic_subnet%3D%22uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe%22%7D%5B7d%5D%29+%2F%0A++rate%28quic_transport_quinn_path_sent_packets%7Bic_subnet%3D%22uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe%22%7D%5B7d%5D%29%0A%29&g0.range_input=13d14h36m59s549ms&g0.end_input=2024-06-23T20%3A59%3A19&g0.tab=1&g0.relative_time=none&g0.tenantID=0
-pub const UZR_34_PACKET_LOSS: [(u64, u64, f64); 756] = [
+pub static UZR_34_PACKET_LOSS: [(u64, u64, f64); 756] = [
     (1, 2, 0.0015710290841178466),
     (1, 3, 0.000604650481546998),
     (1, 4, 0.0014703598418393934),

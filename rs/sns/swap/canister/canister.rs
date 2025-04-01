@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};

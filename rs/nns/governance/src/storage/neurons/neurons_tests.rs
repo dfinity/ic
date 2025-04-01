@@ -94,7 +94,9 @@ fn new_red_herring_neuron(seed: u64) -> Neuron {
         vote: Vote::No as i32,
     });
 
-    result.known_neuron_data.as_mut().unwrap().name = format!("Red Herring {}", seed,);
+    let mut new_known_neuron_data = result.known_neuron_data().unwrap().clone();
+    new_known_neuron_data.name = format!("Red Herring {}", seed);
+    result.set_known_neuron_data(new_known_neuron_data);
 
     result.transfer.as_mut().unwrap().memo = seed;
 
@@ -233,8 +235,8 @@ fn test_store_simplest_nontrivial_case() {
             vote: Vote::Yes as i32,
         });
 
-        let mut known_neuron_data = neuron_1.known_neuron_data.clone();
-        known_neuron_data.as_mut().unwrap().name = "I changed my mind".to_string();
+        let mut known_neuron_data = neuron_1.known_neuron_data().unwrap().clone();
+        known_neuron_data.name = "I changed my mind".to_string();
 
         let mut transfer = neuron_1.transfer.clone();
         transfer.as_mut().unwrap().memo = 405_405;
@@ -246,7 +248,7 @@ fn test_store_simplest_nontrivial_case() {
         neuron.followees = followees;
         neuron.recent_ballots = recent_ballots;
 
-        neuron.known_neuron_data = known_neuron_data;
+        neuron.set_known_neuron_data(known_neuron_data);
         neuron.transfer = transfer;
 
         neuron
@@ -296,7 +298,7 @@ fn test_store_simplest_nontrivial_case() {
 
     // 9. Update again.
     let mut neuron_9 = neuron_5.clone();
-    neuron_9.known_neuron_data = None;
+    neuron_9.clear_known_neuron_data();
     neuron_9.transfer = None;
     assert_eq!(store.update(&neuron_5, neuron_9.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
@@ -441,11 +443,11 @@ fn test_partial_read() {
 
         if sections.known_neuron_data {
             assert_eq!(
-                neuron_read_result.known_neuron_data,
-                neuron.known_neuron_data,
+                neuron_read_result.known_neuron_data(),
+                neuron.known_neuron_data(),
             );
         } else {
-            assert_eq!(neuron_read_result.known_neuron_data, None);
+            assert_eq!(neuron_read_result.known_neuron_data(), None);
         }
 
         if sections.transfer {
@@ -589,7 +591,7 @@ fn test_range_neurons_not_all_neuron_sections() {
                 neuron.hot_keys.clear();
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -604,7 +606,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -618,7 +620,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.hot_keys.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -632,7 +634,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.hot_keys.clear();
                 neuron.recent_ballots.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -661,7 +663,7 @@ fn test_range_neurons_not_all_neuron_sections() {
                 neuron.hot_keys.clear();
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
 
                 neuron
             }),
@@ -676,7 +678,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
 
                 neuron
             }),

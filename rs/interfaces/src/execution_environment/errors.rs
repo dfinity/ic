@@ -1,6 +1,6 @@
 use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
+use ic_types::{methods::WasmMethod, CanisterId, Cycles, MemoryDiskBytes, NumInstructions};
 use ic_wasm_types::{
     doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
 };
@@ -264,7 +264,7 @@ impl std::fmt::Display for HypervisorError {
                 }
             }
             Self::CalledTrap { message, backtrace } => {
-                write!(f, "Canister called `ic0.trap` with message: {}", message)?;
+                write!(f, "Canister called `ic0.trap` with message: '{}'", message)?;
                 if let Some(bt) = backtrace {
                     write!(f, "\n{}", bt)
                 } else {
@@ -385,9 +385,13 @@ impl std::fmt::Display for HypervisorError {
     }
 }
 
-impl CountBytes for HypervisorError {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for HypervisorError {
+    fn memory_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 

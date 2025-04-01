@@ -1,5 +1,6 @@
 use crate::config::Config;
-use bitcoin::network::{constants::ServiceFlags, Address};
+use bitcoin::p2p::Address;
+use bitcoin::p2p::ServiceFlags;
 use ic_logger::{info, ReplicaLogger};
 use rand::{
     prelude::{IteratorRandom, SliceRandom, StdRng},

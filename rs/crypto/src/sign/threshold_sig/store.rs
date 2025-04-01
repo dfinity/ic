@@ -26,6 +26,7 @@ pub trait ThresholdSigDataStore {
         dkg_id: &NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
+        registry_version: RegistryVersion,
     );
 
     /// Inserts an individual public key for a given `dkg_id` and a given
@@ -56,6 +57,7 @@ pub trait ThresholdSigDataStore {
 pub struct TranscriptData {
     public_coeffs: CspPublicCoefficients,
     indices: BTreeMap<NodeId, NodeIndex>,
+    registry_version: RegistryVersion,
 }
 
 impl TranscriptData {
@@ -67,6 +69,14 @@ impl TranscriptData {
     /// Returns a reference to the index of the node with ID `node_id`.
     pub fn index(&self, node_id: NodeId) -> Option<&NodeIndex> {
         self.indices.get(&node_id)
+    }
+
+    /// Returns a reference to the registry version.
+    /////////////////////////////////////////
+    // TODO(CRP-2599): remove allow(unused) once this method is used
+    #[allow(unused)]
+    pub fn registry_version(&self) -> RegistryVersion {
+        self.registry_version
     }
 }
 
@@ -215,11 +225,13 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
         dkg_id: &NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
+        registry_version: RegistryVersion,
     ) {
         let data = self.entry_for(dkg_id);
         data.transcript_data = Some(TranscriptData {
             public_coeffs: public_coefficients,
             indices,
+            registry_version,
         });
 
         self.purge_entry_for_oldest_dkg_id_if_necessary(&dkg_id.dkg_tag);

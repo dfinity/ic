@@ -94,7 +94,7 @@ pub struct IcAdminTemplate {
     pub args: IcAdminArgs,
 
     /// The mode to use when updating the canister.
-    // We could use CanisterInstallMode instead, but it lives in the `ic-management-canister-types` crate
+    // We could use CanisterInstallMode instead, but it lives in the `ic-management-canister-types-private` crate
     // which has a somewhat large number of dependencies for what we need here, which is
     // just a simple enum with 2 variants.
     mode: String,

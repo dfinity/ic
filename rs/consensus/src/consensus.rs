@@ -22,16 +22,13 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-use crate::{
-    consensus::{
-        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
-        metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
-        priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
-        random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator,
-        validator::Validator,
-    },
-    dkg::DkgKeyManager,
+use crate::consensus::{
+    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
+    metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
+    priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
+    random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
 };
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
     bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
     membership::Membership, pool_reader::PoolReader, RoundRobin,
@@ -82,10 +79,6 @@ enum ConsensusSubcomponent {
     Aggregator,
     Purger,
 }
-
-/// When purging consensus or certification artifacts, we always keep a
-/// minimum chain length below the catch-up height.
-pub(crate) const MINIMUM_CHAIN_LENGTH: u64 = 50;
 
 /// Describe expected version and artifact version when there is a mismatch.
 #[derive(Debug)]
@@ -146,6 +139,7 @@ impl ConsensusImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -174,6 +168,7 @@ impl ConsensusImpl {
             self_validating_payload_builder,
             canister_http_payload_builder,
             query_stats_payload_builder,
+            vetkd_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -684,6 +679,7 @@ mod tests {
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
             idkg_pool,

@@ -1,10 +1,11 @@
-#![warn(missing_docs)]
+#![cfg_attr(not(test), warn(missing_docs))]
 
 //! The Bitcoin adapter interacts with the Bitcoin P2P network to obtain blocks
 //! and publish transactions. Moreover, it interacts with the Bitcoin system
 //! component to provide blocks and collect outgoing transactions.
 
-use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
+use bitcoin::p2p::message::NetworkMessage;
+use bitcoin::{block::Header as BlockHeader, BlockHash};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::{
@@ -24,8 +25,6 @@ mod addressbook;
 mod blockchainmanager;
 /// This module contains the data structure for storing the current state of the Bitcoin ledger
 mod blockchainstate;
-/// This module contains command line arguments parser.
-pub mod cli;
 /// This module contains constants and types that are shared by many modules.
 mod common;
 /// This module contains the basic configuration struct used to start up an
@@ -51,6 +50,8 @@ mod transaction_store;
 // For security reasons, it expects the returned blocks to be in a BFS order (for example, a
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
+
+pub use config::{address_limits, Config, IncomingSource};
 
 use crate::{
     blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,

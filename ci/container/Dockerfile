@@ -10,10 +10,6 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-ARG buildevents_version=0.6.0
-RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
-    chmod +x /usr/bin/buildevents
-
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     curl -fsSL "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/devel_kubic_libcontainers_stable.gpg > /dev/null && \
@@ -56,13 +52,13 @@ RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert
     echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
     chmod +x /usr/local/bin/mkcert
 
-ARG bazelisk_sha=d28b588ac0916abd6bf02defb5433f6eddf7cba35ffa808eabb65a44aab226f7
-RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
+ARG bazelisk_sha=fd8fdff418a1758887520fa42da7e6ae39aefc788cf5e7f7bb8db6934d279fc4
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
 ARG nvm_version=v0.39.1
-ARG dependency_mgmt_nns_dapp_node_version=18.17.1
+ARG dependency_mgmt_nns_dapp_node_version=18.20.5
 ARG dependency_mgmt_default_node_version=20
 ARG dependency_mgmt_oisy_wallet_node_version=22.11.0
 ENV NVM_DIR=/opt/nvm

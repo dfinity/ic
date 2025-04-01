@@ -26,8 +26,6 @@ use ic_sns_wasm::{
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_types::ids::canister_test_id;
-use maplit::btreeset;
-use std::collections::BTreeSet;
 
 pub mod common;
 
@@ -133,12 +131,8 @@ fn test_canisters_are_created_and_installed() {
     // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-canister_info:
     // The order of controllers stored in the canister history may vary depending on the implementation.
     assert_eq!(
-        swap_canister_summary
-            .status()
-            .controllers()
-            .into_iter()
-            .collect::<BTreeSet<_>>(),
-        btreeset! { root_canister_id, ROOT_CANISTER_ID.get() }
+        swap_canister_summary.status().controllers(),
+        vec![root_canister_id]
     );
     assert_eq!(
         swap_canister_summary.status().module_hash().unwrap(),
@@ -205,11 +199,14 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
     let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
     let error_message = response.error.clone().unwrap().message;
-    let expected_error = "Error installing Governance WASM: Failed to install WASM on canister \
-        qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Error from Canister qsgjb-riaaa-aaaaa-aaaga-cai: \
-        Canister called `ic0.trap` with message: did not find blob on stack";
+    let expected_error = format!(
+        "Error installing Governance WASM: Failed to install WASM on canister \
+        {}: error code 5: Error from Canister {}: \
+        Canister called `ic0.trap` with message: 'did not find blob on stack",
+        governance, governance
+    );
     assert!(
-        error_message.contains(expected_error),
+        error_message.contains(&expected_error),
         "Response error \"{error_message}\" does not contain expected error \"{expected_error}\""
     );
 

@@ -471,7 +471,7 @@ pub fn socket_read_messages<
                     // updating the socket timeout.
                     loop {
                         if let Some(bytes) = reader.receive_message(&mut buf, &mut fds, 0, None) {
-                            break (bytes);
+                            break bytes;
                         }
                     }
                 }

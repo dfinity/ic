@@ -1,0 +1,28 @@
+[package]
+name = "ic-nervous-system-timer-task"
+version = "0.0.1"
+edition = "2021"
+
+[[bin]]
+name = "timer-task-canister"
+path = "tests/test_canisters/timer_task_canister.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-metrics-encoder = "1.1.1"
+ic-nervous-system-time-helpers = { path = "../time_helpers" }
+ic-nervous-system-timers = { path = "../timers" }
+futures = { workspace = true }
+serde = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+ic-config = { path = "../../config" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-types = { path = "../../types/types" }

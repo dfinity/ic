@@ -946,7 +946,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            19000006,
+            519000006,
         ),
         common::Benchmark(
             "wasm64/ic0_cycles_burn128()".into(),
@@ -956,7 +956,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            19000006,
+            519000006,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_deadline()".into(),
@@ -967,6 +967,126 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "wasm64/ic0_msg_deadline()".into(),
             Module::Test.from_ic0("msg_deadline", NoParams, Result::I64, Wasm64::Enabled),
             517000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_call()".into(),
+            Module::Test.from_ic0(
+                "cost_call",
+                Params3(1_i64, 2_i64, 3_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            519001006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_call()".into(),
+            Module::Test.from_ic0(
+                "cost_call",
+                Params3(1_i64, 2_i64, 3_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            519004006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_create_canister()".into(),
+            Module::Test.from_ic0(
+                "cost_create_canister",
+                Param1(1_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            517001006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_create_canister()".into(),
+            Module::Test.from_ic0(
+                "cost_create_canister",
+                Param1(1_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            517004006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_http_request()".into(),
+            Module::Test.from_ic0(
+                "cost_http_request",
+                Params3(1_i64, 2_i64, 3_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            519001006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_http_request()".into(),
+            Module::Test.from_ic0(
+                "cost_http_request",
+                Params3(1_i64, 2_i64, 3_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            519004006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_sign_with_ecdsa()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_ecdsa",
+                Params4(1_i32, 2_i32, 3_i32, 3_i32),
+                Result::I32,
+                Wasm64::Disabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_sign_with_ecdsa()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_ecdsa",
+                Params4(1_i64, 2_i64, 3_i32, 3_i64),
+                Result::I32,
+                Wasm64::Enabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_sign_with_schnorr()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_schnorr",
+                Params4(1_i32, 2_i32, 3_i32, 3_i32),
+                Result::I32,
+                Wasm64::Disabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_sign_with_schnorr()".into(),
+            Module::Test.from_ic0(
+                "cost_sign_with_schnorr",
+                Params4(1_i64, 2_i64, 3_i32, 3_i64),
+                Result::I32,
+                Wasm64::Enabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_cost_vetkd_derive_key()".into(),
+            Module::Test.from_ic0(
+                "cost_vetkd_derive_key",
+                Params4(1_i32, 2_i32, 3_i32, 3_i32),
+                Result::I32,
+                Wasm64::Disabled,
+            ),
+            523000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_cost_vetkd_derive_key()".into(),
+            Module::Test.from_ic0(
+                "cost_vetkd_derive_key",
+                Params4(1_i64, 2_i64, 3_i32, 3_i64),
+                Result::I32,
+                Wasm64::Enabled,
+            ),
+            523000006,
         ),
     ];
 

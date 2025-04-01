@@ -7,13 +7,14 @@ use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
 use ic_embedders::{SerializedModule, SerializedModuleBytes};
 use ic_interfaces::execution_environment::HypervisorResult;
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     page_map::{
         BaseFileSerialization, CheckpointSerialization, MappingSerialization,
         OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
         StorageSerialization,
     },
-    Global, NumWasmPages,
+    NumWasmPages,
 };
 use ic_types::CanisterId;
 use ic_utils;
@@ -377,7 +378,7 @@ mod tests {
     use ic_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Global, Memory, NetworkTopology, NumWasmPages, PageMap, SystemState,
+        Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
     };
     use ic_system_api::{
         sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
@@ -536,7 +537,10 @@ mod tests {
                     Global::V128(123),
                 ],
                 canister_current_memory_usage: NumBytes::new(100),
-                canister_current_message_memory_usage: NumBytes::new(123),
+                canister_current_message_memory_usage: MessageMemoryUsage {
+                    guaranteed_response: NumBytes::new(123),
+                    best_effort: NumBytes::new(123),
+                },
                 execution_parameters: ExecutionParameters {
                     instruction_limits: InstructionLimits::new(
                         FlagStatus::Enabled,

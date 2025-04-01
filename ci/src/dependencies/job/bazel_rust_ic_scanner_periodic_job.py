@@ -25,7 +25,7 @@ REPOS_TO_SCAN = [
     Repository(
         "internet-identity",
         "https://github.com/dfinity/internet-identity",
-        [Project(name="internet-identity", path="internet-identity", owner=Team.GIX_TEAM)],
+        [Project(name="internet-identity", path="internet-identity", owner=Team.IDENTITY_TEAM)],
     ),
     Repository(
         "response-verification",
@@ -56,6 +56,16 @@ REPOS_TO_SCAN = [
         "papi",
         "https://github.com/dfinity/papi",
         [Project(name="papi", path="papi", owner=Team.GIX_TEAM)],
+    ),
+    Repository(
+        "oisy-wallet",
+        "https://github.com/dfinity/oisy-wallet",
+        [Project(name="oisy-wallet", path="oisy-wallet", owner=Team.GIX_TEAM)],
+    ),
+    Repository(
+        "chain-fusion-signer",
+        "https://github.com/dfinity/chain-fusion-signer",
+        [Project(name="chain-fusion-signer", path="chain-fusion-signer", owner=Team.GIX_TEAM)],
     ),
 ]
 

@@ -3,9 +3,11 @@ use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::fs::write;
+use std::time::Duration;
+use tempfile::tempdir;
 
 #[test]
-fn should_compare_f64() {
+fn compare_f64() {
     assert!(f64_approx_eq(f64::NAN, f64::NAN));
     assert!(f64_approx_eq(f64::INFINITY, f64::INFINITY));
     assert!(f64_approx_eq(f64::INFINITY + 1f64, f64::INFINITY));
@@ -16,8 +18,8 @@ fn should_compare_f64() {
 }
 
 #[test]
-fn should_parse_valid_metrics_file() {
-    let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+fn parse_valid_metrics_file() {
+    let temp_dir = tempdir().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     let metrics_file_content =
         "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
@@ -30,18 +32,22 @@ fn should_parse_valid_metrics_file() {
         # TYPE fstrim_runs_total counter\n\
         fstrim_runs_total 1\n";
     write(&test_file, metrics_file_content).expect("error writing to file");
+
     let parsed_metrics = parse_existing_metrics_from_file(&test_file.to_string_lossy()).unwrap();
     let expected_metrics = FsTrimMetrics {
         last_duration_milliseconds: 6.0,
         last_run_success: true,
         total_runs: 1.0,
+        last_duration_milliseconds_datadir: 0.0,
+        last_run_success_datadir: true,
+        total_runs_datadir: 0.0,
     };
     assert_eq!(parsed_metrics, Some(expected_metrics));
 }
 
 #[test]
-fn should_only_consider_first_parsed_value_when_parsing_metrics_file() {
-    let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+fn ignore_subsequent_values_for_same_metric() {
+    let temp_dir = tempdir().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     let metrics_file_content =
         "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
@@ -57,17 +63,21 @@ fn should_only_consider_first_parsed_value_when_parsing_metrics_file() {
         fstrim_runs_total 12\n\
         fstrim_runs_total 1\n";
     write(&test_file, metrics_file_content).expect("error writing to file");
+
     let parsed_metrics = parse_existing_metrics_from_file(&test_file.to_string_lossy()).unwrap();
     let expected_metrics = FsTrimMetrics {
         last_duration_milliseconds: 6.0,
         last_run_success: true,
         total_runs: 12.0,
+        last_duration_milliseconds_datadir: 0.0,
+        last_run_success_datadir: true,
+        total_runs_datadir: 0.0,
     };
     assert_eq!(parsed_metrics, Some(expected_metrics));
 }
 
 #[test]
-fn should_return_error_when_parsing_empty_metrics_file() {
+fn should_error_on_empty_metrics_file() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, "").expect("error writing to file");
@@ -76,7 +86,7 @@ fn should_return_error_when_parsing_empty_metrics_file() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_too_many_tokens() {
+fn should_error_when_metrics_file_has_too_many_tokens() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, "pineapple on pizza is delicious").expect("error writing to file");
@@ -87,7 +97,7 @@ fn should_return_error_for_metrics_file_with_too_many_tokens() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_unknown_metric_name() {
+fn should_error_when_unknown_metric_name() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, "pineapple pizza").expect("error writing to file");
@@ -98,7 +108,7 @@ fn should_return_error_for_metrics_file_with_unknown_metric_name() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_timestamp() {
+fn should_error_when_metrics_file_has_timestamp() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(
@@ -113,7 +123,7 @@ fn should_return_error_for_metrics_file_with_timestamp() {
 }
 
 #[test]
-fn should_return_error_for_metrics_file_with_non_numeric_value() {
+fn should_error_when_metrics_file_has_non_numeric_value() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     write(&test_file, format!("{} pizza", METRICS_RUNS_TOTAL).as_str())
@@ -125,7 +135,7 @@ fn should_return_error_for_metrics_file_with_non_numeric_value() {
 }
 
 #[test]
-fn should_return_none_when_parsing_if_metrics_file_does_not_exist() {
+fn file_does_not_exist() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
     let parsed_metrics = parse_existing_metrics_from_file(&test_file.to_string_lossy()).unwrap();
@@ -133,7 +143,7 @@ fn should_return_none_when_parsing_if_metrics_file_does_not_exist() {
 }
 
 #[test]
-fn should_set_metrics() {
+fn set_metrics() {
     let mut existing_metrics = FsTrimMetrics::default();
     existing_metrics
         .update(true, Duration::from_millis(110))
@@ -142,12 +152,13 @@ fn should_set_metrics() {
         last_duration_milliseconds: 110.0,
         last_run_success: true,
         total_runs: 1.0,
+        ..FsTrimMetrics::default()
     };
     assert_eq!(existing_metrics, expected_metrics);
 }
 
 #[test]
-fn should_update_metrics() {
+fn update_metrics() {
     let mut rng = reproducible_rng();
     for _ in 0..100 {
         let total_runs: u64 = rng.gen_range(0..10000000);
@@ -162,7 +173,7 @@ fn should_update_metrics() {
         for _ in 0..100 {
             let success = rng.gen_bool(0.5);
             let duration = Duration::from_millis(rng.gen_range(0..15000));
-            update_metrics(&mut expected_metrics, success, duration);
+            update_metrics_locally(&mut expected_metrics, success, duration);
             updated_metrics
                 .update(success, duration)
                 .expect("should update metrics successfully");
@@ -177,14 +188,15 @@ fn should_update_metrics() {
     }
 }
 
-fn update_metrics(metrics: &mut FsTrimMetrics, success: bool, duration: Duration) {
+// Simple local "update" for the test reference
+fn update_metrics_locally(metrics: &mut FsTrimMetrics, success: bool, duration: Duration) {
     metrics.total_runs += 1f64;
     metrics.last_run_success = success;
     metrics.last_duration_milliseconds = duration.as_millis() as f64;
 }
 
 #[test]
-fn should_update_metric_with_infinite_values() {
+fn update_metrics_with_infinite_values() {
     let mut existing_metrics = FsTrimMetrics {
         total_runs: f64::INFINITY,
         ..FsTrimMetrics::default()
@@ -198,13 +210,14 @@ fn should_update_metric_with_infinite_values() {
         last_duration_milliseconds: duration.as_millis() as f64,
         last_run_success: success,
         total_runs: f64::INFINITY,
+        ..FsTrimMetrics::default()
     };
 
     assert_eq!(existing_metrics, expected_metrics);
 }
 
 #[test]
-fn should_update_metric_with_nan_values() {
+fn update_metrics_with_nan_values() {
     let mut existing_metrics = FsTrimMetrics {
         total_runs: f64::NAN,
         ..FsTrimMetrics::default()
@@ -218,6 +231,7 @@ fn should_update_metric_with_nan_values() {
         last_duration_milliseconds: duration.as_millis() as f64,
         last_run_success: success,
         total_runs: f64::NAN,
+        ..FsTrimMetrics::default()
     };
 
     assert_eq!(existing_metrics, expected_metrics);
@@ -230,7 +244,7 @@ fn verify_invariants(i: f64, existing_metrics: &FsTrimMetrics) {
 }
 
 #[test]
-fn should_maintain_invariants() {
+fn maintain_invariants() {
     let mut existing_metrics = FsTrimMetrics::default();
     let rng = &mut reproducible_rng();
     for i in 0..100 {
@@ -241,4 +255,61 @@ fn should_maintain_invariants() {
             .expect("should update metrics successfully");
         verify_invariants(i as f64, &existing_metrics);
     }
+}
+
+#[test]
+fn update_datadir_metrics() {
+    let mut metrics = FsTrimMetrics::default();
+    assert_eq!(metrics.total_runs_datadir, 0.0);
+    assert_eq!(metrics.last_duration_milliseconds_datadir, 0.0);
+    assert!(metrics.last_run_success_datadir);
+
+    metrics
+        .update_datadir(false, Duration::from_millis(123))
+        .expect("should update datadir metrics");
+
+    assert_eq!(metrics.total_runs_datadir, 1.0);
+    assert_eq!(metrics.last_duration_milliseconds_datadir, 123.0);
+    assert!(!metrics.last_run_success_datadir);
+
+    // Check that normal fields remain untouched
+    assert_eq!(metrics.total_runs, 0.0);
+    assert_eq!(metrics.last_duration_milliseconds, 0.0);
+    assert!(metrics.last_run_success);
+}
+
+#[test]
+fn format_metrics_output() {
+    let metrics = FsTrimMetrics {
+        last_duration_milliseconds: 123.45,
+        last_run_success: true,
+        total_runs: 6.0,
+        last_duration_milliseconds_datadir: 678.9,
+        last_run_success_datadir: false,
+        total_runs_datadir: 4.0,
+    };
+
+    let metrics_str = metrics.to_p8s_metrics_string();
+    let expected_str = "\
+# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds
+# TYPE fstrim_last_run_duration_milliseconds gauge
+fstrim_last_run_duration_milliseconds 123.45
+# HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)
+# TYPE fstrim_last_run_success gauge
+fstrim_last_run_success 1
+# HELP fstrim_runs_total Total number of runs of fstrim
+# TYPE fstrim_runs_total counter
+fstrim_runs_total 6
+# HELP fstrim_datadir_last_run_duration_milliseconds Duration of last run of fstrim on datadir in milliseconds
+# TYPE fstrim_datadir_last_run_duration_milliseconds gauge
+fstrim_datadir_last_run_duration_milliseconds 678.9
+# HELP fstrim_datadir_last_run_success Success status of last run of fstrim on datadir (success: 1, failure: 0)
+# TYPE fstrim_datadir_last_run_success gauge
+fstrim_datadir_last_run_success 0
+# HELP fstrim_datadir_runs_total Total number of runs of fstrim on datadir
+# TYPE fstrim_datadir_runs_total counter
+fstrim_datadir_runs_total 4
+";
+
+    assert_eq!(metrics_str, expected_str);
 }

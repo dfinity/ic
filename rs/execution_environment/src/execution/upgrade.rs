@@ -4,7 +4,7 @@
 //! and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
 
 use crate::as_round_instructions;
-use crate::canister_manager::{
+use crate::canister_manager::types::{
     CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
@@ -19,7 +19,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
 };
 use ic_replicated_state::{
@@ -209,7 +209,7 @@ pub(crate) fn execute_upgrade(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_1_process_pre_upgrade_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     output: WasmExecutionOutput,
     context: InstallCodeContext,
     clean_canister: CanisterState,
@@ -413,7 +413,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_3b_process_start_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     output: WasmExecutionOutput,
     context_sender: PrincipalId,
     context_arg: Vec<u8>,
@@ -531,7 +531,7 @@ fn upgrade_stage_4a_call_post_upgrade(
 
 #[allow(clippy::too_many_arguments)]
 fn upgrade_stage_4b_process_post_upgrade_result(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     output: WasmExecutionOutput,
     clean_canister: CanisterState,
     mut helper: InstallCodeHelper,
@@ -884,7 +884,7 @@ fn determine_main_memory_handling(
     let old_state_uses_orthogonal_persistence = || {
         old_state
             .as_ref()
-            .map_or(false, expects_enhanced_orthogonal_persistence)
+            .is_some_and(expects_enhanced_orthogonal_persistence)
     };
     let new_state_uses_classical_persistence = || {
         new_state_candidate.is_ok()

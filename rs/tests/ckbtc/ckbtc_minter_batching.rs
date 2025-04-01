@@ -61,7 +61,10 @@ pub fn test_batching(env: TestEnv) {
     let btc_rpc = get_btc_client(&env);
     ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    let default_btc_address = btc_rpc
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
@@ -163,7 +166,10 @@ pub fn test_batching(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+        let destination_btc_address = btc_rpc
+            .get_new_address(None, None)
+            .unwrap()
+            .assume_checked();
 
         info!(&logger, "Call retrieve_btc");
 
@@ -239,7 +245,7 @@ pub fn test_batching(env: TestEnv) {
         // Let's wait for the transaction to appear on the mempool
         let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         let txid = mempool_txids[0];
-        let btc_txid = Txid::from_hash(Hash::from_slice(&txid).unwrap());
+        let btc_txid = Txid::from_raw_hash(Hash::from_slice(&txid[..]).unwrap());
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),
@@ -262,7 +268,7 @@ pub fn test_batching(env: TestEnv) {
         // Hence, we expect the fee to be 3650
         // By checking the fee we know that we have the right amount of inputs and outputs
         const EXPECTED_FEE: u64 = 3650;
-        assert_eq!(get_tx_infos.fees.base.as_sat(), EXPECTED_FEE);
+        assert_eq!(get_tx_infos.fees.base.to_sat(), EXPECTED_FEE);
 
         // Check that we can modify the fee
         assert!(get_tx_infos.bip125_replaceable);
@@ -278,7 +284,7 @@ pub fn test_batching(env: TestEnv) {
         let finalized_txid =
             wait_for_finalization_no_new_blocks(&minter_agent, block_indexes[0]).await;
         // We don't need to check which input has been used as there is only one input in the possession of the minter
-        let txid_array: [u8; 32] = txid.as_hash().to_vec().try_into().unwrap();
+        let txid_array: [u8; 32] = txid[..].to_vec().try_into().unwrap();
         assert_eq!(ic_btc_interface::Txid::from(txid_array), finalized_txid);
 
         // We can now check that the destination_btc_address received some utxos
@@ -293,7 +299,7 @@ pub fn test_batching(env: TestEnv) {
             .expect("failed to get tx infos");
         let destination_balance = unspent_result
             .iter()
-            .map(|entry| entry.amount.as_sat())
+            .map(|entry| entry.amount.to_sat())
             .sum::<u64>();
 
         // We have 1 input and 21 outputs (20 requests and the minter's address)

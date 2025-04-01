@@ -140,7 +140,6 @@ const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
-const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(0);
 
 /// Accumulated priority reset interval, rounds.
 ///
@@ -341,7 +340,7 @@ impl SchedulerConfig {
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
-            dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
+            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
@@ -512,6 +511,32 @@ impl CyclesAccountManagerConfig {
             // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
+        }
+    }
+
+    pub fn zero_cost(subnet_size: usize) -> Self {
+        Self {
+            reference_subnet_size: subnet_size,
+            canister_creation_fee: Cycles::zero(),
+            update_message_execution_fee: Cycles::zero(),
+            ten_update_instructions_execution_fee: Cycles::zero(),
+            ten_update_instructions_execution_fee_wasm64: Cycles::zero(),
+            xnet_call_fee: Cycles::zero(),
+            xnet_byte_transmission_fee: Cycles::zero(),
+            ingress_message_reception_fee: Cycles::zero(),
+            ingress_byte_reception_fee: Cycles::zero(),
+            gib_storage_per_second_fee: Cycles::zero(),
+            compute_percent_allocated_per_second_fee: Cycles::zero(),
+            duration_between_allocation_charges: Duration::from_secs(u64::MAX),
+            ecdsa_signature_fee: Cycles::zero(),
+            schnorr_signature_fee: Cycles::zero(),
+            vetkd_fee: Cycles::zero(),
+            http_request_linear_baseline_fee: Cycles::zero(),
+            http_request_quadratic_baseline_fee: Cycles::zero(),
+            http_request_per_byte_fee: Cycles::zero(),
+            http_response_per_byte_fee: Cycles::zero(),
+            max_storage_reservation_period: Duration::from_secs(u64::MAX),
+            default_reserved_balance_limit: Cycles::zero(),
         }
     }
 }

@@ -511,14 +511,10 @@ async fn assert_api_bns_present_in_state_tree(
                 .sorted_by(|a, b| Ord::cmp(&a.domain, &b.domain))
                 .collect::<Vec<_>>();
 
-            let are_expected_bns = api_bns_sorted
-                .iter()
-                .enumerate()
-                .map(|(idx, bn)| {
-                    bn.domain == expected_api_bns[idx].domain
-                        && bn.ipv6_address == expected_api_bns[idx].ipv6_address
-                })
-                .all(|is_match| is_match);
+            let are_expected_bns = api_bns_sorted.iter().enumerate().all(|(idx, bn)| {
+                bn.domain == expected_api_bns[idx].domain
+                    && bn.ipv6_address == expected_api_bns[idx].ipv6_address
+            });
 
             if !are_expected_bns {
                 bail!("Expected API BNs haven't yet appeared in the state tree ...");

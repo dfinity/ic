@@ -550,7 +550,7 @@ pub(crate) fn is_time_to_rotate_in_subnet(
     let now = SystemTime::now();
     timestamps
         .iter()
-        .all(|ts| now.duration_since(*ts).map_or(false, |d| d >= gamma))
+        .all(|ts| now.duration_since(*ts).is_ok_and(|d| d >= gamma))
 }
 
 pub(crate) fn http_config_to_endpoint(

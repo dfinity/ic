@@ -6,7 +6,7 @@ use crate::{
 
 use candid::{CandidType, Deserialize, Encode};
 use ic_base_types::CanisterId;
-use ic_management_canister_types::CanisterInstallMode as RootCanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use serde::Serialize;
@@ -110,6 +110,7 @@ impl InstallCode {
             arg,
             compute_allocation,
             memory_allocation,
+            chunked_canister_wasm: None,
         })
         .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
     }
@@ -172,6 +173,7 @@ mod tests {
 
     use candid::Decode;
     use ic_base_types::CanisterId;
+    use ic_crypto_sha2::Sha256;
     use ic_nns_constants::{REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 
     #[test]
@@ -182,6 +184,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
@@ -283,6 +287,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -307,6 +313,7 @@ mod tests {
                 arg: vec![4, 5, 6],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
@@ -319,6 +326,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -351,6 +360,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Reinstall as i32),
             arg: Some(vec![]),
             skip_stopping_before_installing: Some(true),
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -375,6 +386,7 @@ mod tests {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
@@ -397,6 +409,8 @@ mod tests {
                 install_mode: Some(CanisterInstallMode::Upgrade as i32),
                 arg: Some(vec![4, 5, 6]),
                 skip_stopping_before_installing: None,
+                wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
             };
 
             assert_eq!(install_code.validate(), Ok(()));

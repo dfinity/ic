@@ -14,7 +14,7 @@ use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory}
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{Memory, NetworkTopology, SystemState};
+use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
@@ -68,7 +68,7 @@ fn test_wasmtime_system_api() {
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
-    let canister_current_message_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -92,11 +92,7 @@ fn test_wasmtime_system_api() {
             subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory,
-        EmbeddersConfig::default().feature_flags.canister_backtrace,
-        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        &EmbeddersConfig::default(),
         Memory::new_for_testing(),
         NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -168,7 +164,6 @@ fn test_wasmtime_system_api() {
         .expect("call failed");
 }
 
-#[ignore]
 #[test]
 fn test_initial_wasmtime_config() {
     // The following proposals should be disabled: simd, relaxed_simd,
@@ -237,20 +232,4 @@ fn test_initial_wasmtime_config() {
             "Error expecting `{expected_err_msg}`, but got `{err_msg}`"
         );
     }
-}
-
-#[test]
-fn test_wasmtime_validation_error_is_ignored() {
-    let wat = r#"(module (import "env" "memory" (memory 1 1 shared)))"#;
-    let wasm_binary = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
-    let err = validate_and_instrument_for_testing(
-        &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
-        &wasm_binary,
-    )
-    .err()
-    .unwrap();
-    assert_eq!(
-        format!("{:?}", err),
-        r#"InvalidWasm(WasmtimeValidation("wasmtime::Module::validate() failed"))"#
-    );
 }

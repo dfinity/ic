@@ -345,7 +345,7 @@ Coverage:: asset Canisters behave as expected
 
 end::catalog[] */
 
-pub fn asset_canister_test(env: TestEnv) {
+pub fn legacy_asset_canister_test(env: TestEnv) {
     let logger_orig = env.logger();
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -357,7 +357,7 @@ pub fn asset_canister_test(env: TestEnv) {
 
     info!(&logger_orig, "Creating asset canister");
     let asset_canister_orig = rt
-        .block_on(env.deploy_asset_canister())
+        .block_on(env.deploy_legacy_asset_canister())
         .expect("Could not install asset canister");
 
     let http_client_builder = ClientBuilder::new();
@@ -453,7 +453,7 @@ pub fn asset_canister_test(env: TestEnv) {
                 .to_vec();
 
             if res != hello_world_gzip {
-                bail!("gzipped hello world response did not match uploaded content")
+                bail!("gzipped hello world response did not match uploaded content (got {res:?}, expected {hello_world_gzip:?}")
             }
 
             Ok(())
@@ -674,7 +674,7 @@ pub fn asset_canister_test(env: TestEnv) {
                     .send()
                     .await.context("unable to request asset")?;
 
-                if res.status() != StatusCode::SERVICE_UNAVAILABLE {
+                if res.status() != StatusCode::BAD_GATEWAY {
                     bail!("invalid 4mb asset did not fail verification")
                 }
 
@@ -724,6 +724,150 @@ pub fn asset_canister_test(env: TestEnv) {
                 }
 
                 Ok(())
+        }
+    }));
+
+    let logger = logger_orig.clone();
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test panicked: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+}
+
+// Constants copied from long asset canister:
+const ASSET_CHUNK_SIZE: usize = 2_000_000;
+
+const ONE_CHUNK_ASSET_LEN: usize = ASSET_CHUNK_SIZE;
+const TWO_CHUNKS_ASSET_LEN: usize = ASSET_CHUNK_SIZE + 1;
+const SIX_CHUNKS_ASSET_LEN: usize = 5 * ASSET_CHUNK_SIZE + 12;
+
+pub fn long_asset_canister_test(env: TestEnv) {
+    let logger_orig = env.logger();
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = runtime();
+
+    info!(&logger_orig, "Creating asset canister");
+    let asset_canister_orig = rt
+        .block_on(env.deploy_long_asset_canister())
+        .expect("Could not install asset canister");
+
+    let http_client_builder = ClientBuilder::new();
+    let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
+        (
+            http_client_builder,
+            format!("{0}.{playnet}", asset_canister_orig.canister_id),
+        )
+    } else {
+        let host = format!("{0}.ic0.app", asset_canister_orig.canister_id);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
+        let client_builder = http_client_builder
+            .danger_accept_invalid_certs(true)
+            .resolve(&host, bn_addr);
+        (client_builder, host)
+    };
+    let http_client = client_builder.build().unwrap();
+
+    let futs = FuturesUnordered::new();
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a single chunk asset";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "Requesting /long_asset_one_chunk ...");
+            let res = http_client
+                .get(format!("https://{host}/long_asset_one_chunk"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res.len() != ONE_CHUNK_ASSET_LEN {
+                bail!("/long_asset_one_chunk response did not match uploaded content")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a two chunk asset";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "Requesting /long_asset_two_chunks ...");
+            let res = http_client
+                .get(format!("https://{host}/long_asset_two_chunks"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res.len() != TWO_CHUNKS_ASSET_LEN {
+                bail!("/long_asset_two_chunks response did not match uploaded content")
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a six chunk asset";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "Requesting /long_asset_six_chunks ...");
+            let res = http_client
+                .get(format!("https://{host}/long_asset_six_chunks"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res.len() != SIX_CHUNKS_ASSET_LEN {
+                bail!("/long_asset_six_chunks response did not match uploaded content")
+            }
+
+            Ok(())
         }
     }));
 
@@ -1325,7 +1469,7 @@ pub fn http_endpoints_test(env: TestEnv) {
     let rt = runtime();
 
     info!(&logger_orig, "Creating asset canister");
-    let asset_canister_orig = rt.block_on(env.deploy_asset_canister()).unwrap();
+    let asset_canister_orig = rt.block_on(env.deploy_legacy_asset_canister()).unwrap();
 
     info!(&logger_orig, "Uploading static assets");
     #[derive(Clone)]
@@ -1624,7 +1768,7 @@ pub fn http_endpoints_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::SERVICE_UNAVAILABLE {
+            if res.status() != StatusCode::BAD_GATEWAY {
                 bail!("{name} failed: {}", res.status())
             }
 

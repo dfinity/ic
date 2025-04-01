@@ -72,4 +72,10 @@ impl XNetPayload {
             })
             .sum()
     }
+
+    /// Returns true if the payload is empty
+    pub fn is_empty(&self) -> bool {
+        let XNetPayload { stream_slices } = &self;
+        stream_slices.is_empty()
+    }
 }

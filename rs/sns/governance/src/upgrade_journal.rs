@@ -5,6 +5,7 @@ use crate::pb::v1::{
     Empty, GetUpgradeJournalRequest, GetUpgradeJournalResponse, ProposalId, UpgradeJournal,
     UpgradeJournalEntry,
 };
+use ic_sns_governance_api::serialize_journal_entries;
 
 impl upgrade_journal_entry::UpgradeStepsRefreshed {
     /// Creates a new UpgradeStepsRefreshed event with the given versions
@@ -27,10 +28,15 @@ impl upgrade_journal_entry::UpgradeStepsReset {
 
 impl upgrade_journal_entry::TargetVersionSet {
     /// Creates a new TargetVersionSet event with old and new versions
-    pub fn new(old_version: Option<Version>, new_version: Option<Version>) -> Self {
+    pub fn new(
+        old_version: Option<Version>,
+        new_version: Version,
+        is_advanced_automatically: bool,
+    ) -> Self {
         Self {
             old_target_version: old_version,
-            new_target_version: new_version,
+            new_target_version: Some(new_version),
+            is_advanced_automatically: Some(is_advanced_automatically),
         }
     }
 }
@@ -211,30 +217,18 @@ impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::
     }
 }
 
-impl upgrade_journal_entry::Event {
-    /// Useful for specifying expected states of the SNS upgrade journal in a way that isn't
-    /// overly fragile.
-    pub fn redact_human_readable(self) -> Self {
-        match self {
-            Self::UpgradeOutcome(upgrade_outcome) => {
-                Self::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: None,
-                    ..upgrade_outcome
-                })
-            }
-            Self::UpgradeStepsReset(upgrade_steps_reset) => {
-                Self::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
-                    human_readable: None,
-                    ..upgrade_steps_reset
-                })
-            }
-            Self::TargetVersionReset(target_version_reset) => {
-                Self::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
-                    human_readable: None,
-                    ..target_version_reset
-                })
-            }
-            event => event,
+pub fn serve_journal(journal: UpgradeJournal) -> ic_canisters_http_types::HttpResponse {
+    use ic_canisters_http_types::HttpResponseBuilder;
+
+    let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal);
+
+    match serialize_journal_entries(&journal) {
+        Err(err) => {
+            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
         }
+        Ok(body) => HttpResponseBuilder::ok()
+            .header("Content-Type", "application/json")
+            .with_body_and_content_length(body)
+            .build(),
     }
 }

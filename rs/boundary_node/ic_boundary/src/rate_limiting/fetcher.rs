@@ -86,7 +86,7 @@ impl FetchesConfig for CanisterConfigFetcherUpdate {
     }
 }
 
-pub struct CanisterFetcher(pub Arc<dyn FetchesConfig>, pub CanisterId);
+pub struct CanisterFetcher(pub Arc<dyn FetchesConfig>);
 
 #[async_trait]
 impl FetchesRules for CanisterFetcher {
@@ -115,14 +115,7 @@ impl FetchesRules for CanisterFetcher {
             ));
         }
 
-        // Create an explicit allow rule that excludes the ratelimit canister
-        // from being affected by any of the following rules.
-        let mut allowlist = vec![RateLimitRule {
-            canister_id: Some(self.1.get().0),
-            ..Default::default()
-        }];
-
-        let mut rules = response
+        let rules = response
             .config
             .rules
             .into_iter()
@@ -142,14 +135,13 @@ impl FetchesRules for CanisterFetcher {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        allowlist.append(&mut rules);
-        Ok(allowlist)
+        Ok(rules)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, time::Duration};
+    use std::time::Duration;
 
     use candid::Encode;
     use indoc::indoc;
@@ -256,28 +248,21 @@ mod test {
 
     #[tokio::test]
     async fn test_canister_fetcher() {
-        let canister_id = CanisterId::from_str("pawub-syaaa-aaaam-qb7zq-cai").unwrap();
-
         // Check bad schema
-        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherBadSchema), canister_id);
+        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherBadSchema));
         assert!(canister_fetcher.fetch_rules().await.is_err());
 
         // Check missing rule
-        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherNoneRule), canister_id);
+        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherNoneRule));
         assert!(canister_fetcher.fetch_rules().await.is_err());
 
         // Check correct rules parsing
-        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherOk), canister_id);
+        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherOk));
         let rules = canister_fetcher.fetch_rules().await.unwrap();
 
         assert_eq!(
             rules,
             vec![
-                // Make sure there's an explicit allow rule
-                RateLimitRule {
-                    canister_id: Some(canister_id.get().0),
-                    ..Default::default()
-                },
                 RateLimitRule {
                     canister_id: Some(principal!("aaaaa-aa")),
                     subnet_id: Some(principal!(

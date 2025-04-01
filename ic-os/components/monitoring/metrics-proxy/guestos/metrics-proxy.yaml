@@ -20,6 +20,12 @@ proxies:
       - regex: artifact_pool_consensus_height_stat
         actions:
           - keep
+      - regex: mr_blocks_proposed_total
+        actions:
+          - keep
+      - regex: mr_blocks_not_proposed_total
+        actions:
+          - keep
   # Expose the GuestOS version to chainloaded HostOS metrics proxy.
   - listen_on:
       url: https://[::]:42372/metrics/guestos_node_exporter

@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use pocket_ic::{PocketIc, PocketIcBuilder, UserError, WasmResult};
+use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
 use std::time::Duration;
 
 // 200T cycles
@@ -15,7 +15,7 @@ fn execute_many_instructions(
     instructions: u64,
     dts_rounds: u64,
     system_subnet: bool,
-) -> Result<WasmResult, UserError> {
+) -> Result<Vec<u8>, RejectResponse> {
     // Create a canister.
     let t0 = pic.get_time();
     let can_id = pic.create_canister();
@@ -90,7 +90,7 @@ fn instruction_limit_exceeded() {
     let instructions = 42_000_000_000_u64;
     let dts_rounds = 20; // instruction limit exceeded after 20 rounds
     let res = execute_many_instructions(&pic, instructions, dts_rounds, false).unwrap_err();
-    assert!(res.description.contains(
+    assert!(res.reject_message.contains(
         "Canister exceeded the limit of 40000000000 instructions for single message execution."
     ));
 }

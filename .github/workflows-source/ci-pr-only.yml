@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+    image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -53,7 +53,7 @@ jobs:
         with:
           filters: |
             fuzzers:
-              - '.github/workflows/pr-only.yml'
+              - '.github/workflows/ci-pr-only.yml'
               - 'bin/build-all-fuzzers.sh'
               - 'bazel/fuzz_testing.bzl'
       - name: Run Bazel Build Fuzzers Archives
@@ -64,17 +64,6 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
-      - name: Upload bazel-bep
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
 
   lock-generate:
     name: Lock Generate
@@ -100,7 +89,7 @@ jobs:
         with:
           filters: |
             lock-generate:
-              - '.github/workflows/pr-only.yml'
+              - '.github/workflows/ci-pr-only.yml'
               - '.bazelrc'
               - '.bazelversion'
               - '**/*.bazel'
@@ -135,18 +124,31 @@ jobs:
       - <<: *checkout
         with:
           fetch-depth: 256
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            depcheck:
+              - '.github/workflows/ci-pr-only.yml'
+              - 'bazel/external_crates.bzl'
+              - '**/*.lock'
+              - '**/*.toml'
       - name: Set up Python
         uses: actions/setup-python@v5
+        if: steps.filter.outputs.depcheck == 'true'
         with:
           python-version: "3.12"
       - name: Setup python deps
         id: setup-python-deps
+        if: steps.filter.outputs.depcheck == 'true'
         shell: bash
         run: |
           # Ignore externally-managed-environment pip error, install packages system-wide.
           PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       - name: Dependency Scan for Pull Request
         id: dependencies-check
+        if: steps.filter.outputs.depcheck == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -160,6 +162,9 @@ jobs:
     <<: *dind-large-setup
     <<: *skip-merge-group
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - <<: *checkout
       - name: Run Bazel Test Coverage
@@ -167,6 +172,12 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
           ./ci/scripts/bazel-coverage.sh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Upload bazel-coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-coverage
+          retention-days: 1
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            cov_html.zip

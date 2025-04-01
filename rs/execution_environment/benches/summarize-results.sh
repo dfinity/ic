@@ -20,12 +20,18 @@ if [ ! -s "${MIN_FILE}" ]; then
 fi
 BASELINE_FILE="${BASELINE_DIR}/${MIN_FILE##*/}"
 if [ ! -s "${BASELINE_FILE}" ]; then
-    echo "    No baseline found in ${BASELINE_FILE}" >&2 && exit 0
+    # Return an error, so the calling script can retry.
+    echo "    No baseline found in ${BASELINE_FILE}" >&2 && exit 1
 fi
 
 echo_diff() {
-    diff=$(((${2} - ${1}) * 100 * 10 / ${1}))
-    awk "BEGIN { print (${diff})^2 <= (2 * 10)^2 ? 0 : ${diff} / 10 }"
+    # The baseline file exists, but none of the benchmarks matched it.
+    if [ "${1}" -gt "0" ]; then
+        diff=$(((${2} - ${1}) * 100 * 10 / ${1}))
+        awk "BEGIN { print (${diff})^2 <= (2 * 10)^2 ? 0 : ${diff} / 10 }"
+    else
+        echo "0"
+    fi
 }
 
 # Compare the `MIN_FILE` to `BASELINE_FILE`.
@@ -65,10 +71,13 @@ esac
 # Produce top regressed/improved details.
 if [ "${total_diff}" != "0" ]; then
     cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -5 | while read diff name; do
-        echo "+ ${name} time regressed by ${diff}%"
+        echo "  + ${name} time regressed by ${diff}%"
     done
     cat "${TMP_FILE}" | sort -n | rg '^-' | head -5 | while read diff name; do
-        echo "- ${name} time improved by ${diff}%"
+        echo "  - ${name} time improved by ${diff}%"
     done
 fi
-# rm -f "${TMP_FILE}"
+rm -f "${TMP_FILE}"
+
+# Return an error if there are changes, so the calling script might retry or report an error.
+[ "${total_diff}" == "0" ]
