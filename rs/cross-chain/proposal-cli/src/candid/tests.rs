@@ -11,7 +11,7 @@ fn should_encode_default_upgrade_args() {
         let path = repository_root().join(canister.candid_file());
         let expected = "4449444c0000";
 
-        let upgrade_args = encode_upgrade_args(&path, canister.default_upgrade_args());
+        let upgrade_args = encode_upgrade_args(&canister, &path, canister.default_upgrade_args());
 
         assert_eq!(
             hex::encode(upgrade_args.upgrade_args_bin()),
@@ -27,7 +27,7 @@ fn should_encode_non_empty_ledger_upgrade_args() {
     let canister = TargetCanister::CkEthLedger;
     let path = repository_root().join(canister.candid_file());
 
-    let upgrade_args = encode_upgrade_args(&path, "(variant {Upgrade})");
+    let upgrade_args = encode_upgrade_args(&canister, &path, "(variant {Upgrade})");
 
     assert!(hex::encode(upgrade_args.upgrade_args_bin()).starts_with("4449444c"));
 }
@@ -77,8 +77,8 @@ fn should_parse_constructor_parameters() {
 #[test]
 fn should_render_correct_didc_encode_command() {
     let canister = TargetCanister::CkEthMinter;
-    let path = canister.candid_file();
-    let upgrade_args = encode_upgrade_args(&path, "(variant {UpgradeArg = record {} })");
+    let path = repository_root().join(canister.candid_file());
+    let upgrade_args = encode_upgrade_args(&canister, &path, "(variant {UpgradeArg = record {} })");
 
     let didc_encode_cmd = upgrade_args.didc_encode_cmd();
 
