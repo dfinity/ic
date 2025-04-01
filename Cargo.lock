@@ -7163,6 +7163,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-certification",
  "ic-consensus-dkg",
+ "ic-consensus-idkg",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-consensus-vetkd",
@@ -7287,6 +7288,48 @@ dependencies = [
  "prost 0.13.4",
  "rayon",
  "slog",
+]
+
+[[package]]
+name = "ic-consensus-idkg"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "ic-artifact-pool",
+ "ic-config",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-crypto",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-tree-hash",
+ "ic-error-types",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-management-canister-types-private",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-subnet-features",
+ "ic-replicated-state",
+ "ic-test-artifact-pool",
+ "ic-test-utilities",
+ "ic-test-utilities-consensus",
+ "ic-test-utilities-logger",
+ "ic-test-utilities-registry",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-types-test-utils",
+ "phantom_newtype",
+ "prometheus",
+ "rand 0.8.5",
+ "slog",
+ "strum",
 ]
 
 [[package]]
@@ -10344,6 +10387,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-registry-canister-api",
  "ic-sns-governance-api",
  "ic-sns-root",
  "ic-sns-swap",
@@ -10351,6 +10395,7 @@ dependencies = [
  "ic-state-machine-tests",
  "itertools 0.12.1",
  "pocket-ic",
+ "pretty_assertions",
  "registry-canister",
  "serde",
  "serde_cbor",
@@ -12149,6 +12194,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-certification",
  "ic-consensus-dkg",
+ "ic-consensus-idkg",
  "ic-consensus-manager",
  "ic-consensus-utils",
  "ic-consensus-vetkd",
@@ -13702,14 +13748,20 @@ dependencies = [
  "bincode",
  "ic-base-types",
  "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-tree-hash",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
+ "ic-management-canister-types-private",
  "ic-protobuf",
+ "ic-replicated-state",
+ "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
  "mockall",
  "phantom_newtype",
  "prost 0.13.4",
  "serde",
+ "strum",
 ]
 
 [[package]]
@@ -14236,6 +14288,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
+ "getrandom 0.2.15",
  "hex",
  "ic-canister-client-sender",
  "ic-cdk 0.17.1",
@@ -14254,6 +14307,7 @@ dependencies = [
  "ic-validator-http-request-test-utils",
  "rand 0.8.5",
  "strum",
+ "time",
 ]
 
 [[package]]
@@ -22143,6 +22197,7 @@ checksum = "35e7868883861bd0e56d9ac6efcaaca0d6d5d82a2a7ec8209ff492c07cf37b21"
 dependencies = [
  "deranged",
  "itoa",
+ "js-sys",
  "libc",
  "num-conv",
  "num_threads",
