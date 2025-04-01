@@ -107,6 +107,7 @@ function assemble_config_media() {
 function generate_guestos_config() {
     RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
     MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
+    RESOURCES_NR_OF_VCPUS="$(jq -r ".resources.nr_of_vcpus" ${DEPLOYMENT})"
     # NOTE: `fetch-property` will error if the target is not found. Here we
     # only want to act when the field is set.
     CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})
@@ -121,6 +122,7 @@ function generate_guestos_config() {
     if [ ! -f "${OUTPUT}" ]; then
         mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
+            -e "s@{{ nr_of_vcpus }}@${RESOURCES_NR_OF_VCPUS:-64}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \

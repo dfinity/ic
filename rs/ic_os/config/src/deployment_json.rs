@@ -40,6 +40,11 @@ pub struct Resources {
     #[serde(skip_serializing_if = "Option::is_none")]
     /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     pub cpu: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Maximum number of virtual CPUs allocated for the guest OS,
+    /// which must be between 1 and the maximum supported by the hypervisor.
+    /// If None, defaults to 64.
+    pub nr_of_vcpus: Option<u32>,
 }
 
 pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
@@ -96,7 +101,8 @@ mod test {
               },
               "resources": {
                 "memory": "490",
-                "cpu": "kvm"
+                "cpu": "kvm",
+                "nr_of_vcpus": 64
               }
             }
         )
@@ -115,7 +121,8 @@ mod test {
   },
   "resources": {
     "memory": "490",
-    "cpu": "kvm"
+    "cpu": "kvm",
+    "nr_of_vcpus": 64
   }
 }"#;
 
@@ -139,6 +146,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
+                nr_of_vcpus: Some(64),
             },
         }
     });
@@ -155,7 +163,8 @@ mod test {
   },
   "resources": {
     "memory": "490",
-    "cpu": "kvm"
+    "cpu": "kvm",
+    "nr_of_vcpus": 64
   }
 }"#;
 
@@ -179,6 +188,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
+                nr_of_vcpus: Some(64),
             },
         }
     });
@@ -218,6 +228,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: None,
+                nr_of_vcpus: None,
             },
         }
     });
@@ -234,7 +245,8 @@ mod test {
   },
   "resources": {
     "memory": "490",
-    "cpu": "qemu"
+    "cpu": "qemu",
+    "nr_of_vcpus": 64
   }
 }"#;
 
@@ -258,6 +270,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("qemu".to_string()),
+                nr_of_vcpus: Some(64),
             },
         }
     });
@@ -316,6 +329,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: None,
+                nr_of_vcpus: None,
             },
         }
     });
@@ -333,7 +347,8 @@ mod test {
       },
       "resources": {
         "memory": "490",
-        "cpu": "kvm"
+        "cpu": "kvm",
+        "nr_of_vcpus": 64
       }
     }"#;
 
@@ -352,6 +367,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
+                nr_of_vcpus: Some(64),
             },
         });
 
