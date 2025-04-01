@@ -73,8 +73,8 @@ async fn send_requests_in_parallel(
 pub async fn start_continuous_requests(
     request: RemoteHttpRequest,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
-    // This request establishes the session to the target server. 
-    let _  = send_request(request.clone()).await;
+    // This request establishes the session to the target server.
+    let _ = send_request(request.clone()).await;
 
     spawn(async move {
         run_continuous_request_loop(request).await;
