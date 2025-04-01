@@ -459,21 +459,19 @@ impl TopicFollowees {
         topic_followees: Option<Self>,
         set_following: ValidatedSetFollowing,
     ) -> Result<Self, SetFollowingError> {
-        let mut topic_followees = if let Some(topic_followees) = topic_followees {
+        let topic_followees = if let Some(topic_followees) = topic_followees {
             topic_followees
         } else {
             TopicFollowees::with_default_values()
         };
 
-        topic_followees.set_following(set_following)?;
-
-        Ok(topic_followees)
+        topic_followees.set_following(set_following)
     }
 
     fn set_following(
-        &mut self,
+        mut self,
         set_following: ValidatedSetFollowing,
-    ) -> Result<(), SetFollowingError> {
+    ) -> Result<Self, SetFollowingError> {
         let ValidatedSetFollowing {
             topic_following: mut new_topic_following,
         } = set_following;
@@ -507,16 +505,15 @@ impl TopicFollowees {
                 continue;
             }
 
-            self.topic_id_to_followees
+            let followees_per_topic = self
+                .topic_id_to_followees
                 .entry(topic as u64)
-                .and_modify(|followees_for_topic| {
-                    followees_for_topic.followees =
-                        followees.iter().cloned().map(Followee::from).collect();
-                })
                 .or_insert_with(|| FolloweesForTopic {
-                    followees: followees.into_iter().map(Followee::from).collect(),
                     topic: Some(i32::from(topic)),
+                    followees: vec![],
                 });
+
+            followees_per_topic.followees = followees.iter().cloned().map(Followee::from).collect();
         }
 
         // Check that after updating `topic_followees` aliases are still unique for each neuron ID.
@@ -528,7 +525,7 @@ impl TopicFollowees {
             ));
         }
 
-        Ok(())
+        Ok(self)
     }
 }
 
