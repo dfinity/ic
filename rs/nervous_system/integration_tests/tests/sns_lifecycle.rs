@@ -5,6 +5,9 @@ use canister_test::Wasm;
 use futures::{stream, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_agent::{
+    helpers::sns::SnsProposalError, sns::governance::ProposalSubmissionError,
+};
 use ic_nervous_system_common::{
     assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
 };
@@ -486,22 +489,28 @@ async fn test_sns_lifecycle(
         )
         .await
         .unwrap_err();
-        let sns_pb::GovernanceError {
-            error_type,
-            error_message,
-        } = &err;
-        use sns_pb::governance_error::ErrorType;
-        assert_eq!(
-            ErrorType::try_from(*error_type).unwrap(),
-            ErrorType::PreconditionFailed,
-            "{:#?}",
-            err
-        );
-        assert!(
-            error_message.contains("PreInitializationSwap"),
-            "{:#?}",
-            err
-        );
+        if let SnsProposalError::ProposalSubmissionError(
+            ProposalSubmissionError::GovernanceError(sns_pb::GovernanceError {
+                error_type,
+                error_message,
+            }),
+        ) = &err
+        {
+            use sns_pb::governance_error::ErrorType;
+            assert_eq!(
+                ErrorType::try_from(*error_type).unwrap(),
+                ErrorType::PreconditionFailed,
+                "{:#?}",
+                err
+            );
+            assert!(
+                error_message.contains("PreInitializationSwap"),
+                "{:#?}",
+                err
+            );
+        } else {
+            panic!("Unexpected error: {:?}", err);
+        }
     }
 
     // Check that the dapp canisters are now controlled by SNS Root and NNS Root.
@@ -1176,22 +1185,28 @@ async fn test_sns_lifecycle(
         .await;
         if swap_finalization_status == SwapFinalizationStatus::Aborted {
             let err = proposal_result.unwrap_err();
-            let sns_pb::GovernanceError {
-                error_type,
-                error_message,
-            } = &err;
-            use sns_pb::governance_error::ErrorType;
-            assert_eq!(
-                ErrorType::try_from(*error_type).unwrap(),
-                ErrorType::PreconditionFailed,
-                "{:#?}",
-                err
-            );
-            assert!(
-                error_message.contains("PreInitializationSwap"),
-                "{:#?}",
-                err
-            );
+            if let SnsProposalError::ProposalSubmissionError(
+                ProposalSubmissionError::GovernanceError(sns_pb::GovernanceError {
+                    error_type,
+                    error_message,
+                }),
+            ) = &err
+            {
+                use sns_pb::governance_error::ErrorType;
+                assert_eq!(
+                    ErrorType::try_from(*error_type).unwrap(),
+                    ErrorType::PreconditionFailed,
+                    "{:#?}",
+                    err
+                );
+                assert!(
+                    error_message.contains("PreInitializationSwap"),
+                    "{:#?}",
+                    err
+                );
+            } else {
+                panic!("Unexpected error: {:?}", err);
+            }
         } else {
             assert_is_ok!(proposal_result);
         }
@@ -1726,9 +1741,7 @@ async fn test_sns_lifecycle(
     // to a function in the `rs/sns/audit` crate.
     {
         let sns_neuron_recipes =
-            sns::swap::list_sns_neuron_recipes(&pocket_ic, sns.swap.canister_id)
-                .await
-                .sns_neuron_recipes;
+            sns::swap::list_sns_neuron_recipes(&pocket_ic, sns.swap.canister_id).await;
         use ic_sns_swap::pb::v1::sns_neuron_recipe::Investor;
         {
             let direct_participant_sns_neuron_recipes: Vec<_> = sns_neuron_recipes
