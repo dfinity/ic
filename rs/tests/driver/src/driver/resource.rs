@@ -405,12 +405,9 @@ fn vm_spec_from_nested_node(
 ) -> VmSpec {
     VmSpec {
         name: node.name.clone(),
-        vcpus: default_vm_resources
-            .and_then(|vm_resources| vm_resources.vcpus)
-            .unwrap_or(DEFAULT_VCPUS_PER_VM),
-        memory_kibibytes: default_vm_resources
-            .and_then(|vm_resources| vm_resources.memory_kibibytes)
-            .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
+        // Note that the nested GuestOS VM also uses 64 vCPUs so we match that in the host:
+        vcpus: NrOfVCPUs::new(64),
+        memory_kibibytes: AmountOfMemoryKiB::new(480 << 20),
         boot_image: BootImage::GroupDefault,
         boot_image_minimal_size_gibibytes: default_vm_resources
             .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes),

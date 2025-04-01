@@ -617,7 +617,7 @@ pub fn configure_setupos_image(
 
     let mac = nested_vm.get_vm()?.mac6;
     let memory = "16";
-    let cpu = "qemu";
+    let cpu = "kvm";
 
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let admin_keys: Vec<_> = std::fs::read_to_string(ssh_authorized_pub_keys_dir.join("admin"))

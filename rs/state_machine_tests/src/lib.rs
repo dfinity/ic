@@ -198,7 +198,7 @@ pub enum SubmitIngressError {
     UserError(UserError),
 }
 
-struct FakeVerifier;
+pub struct FakeVerifier;
 
 impl Verifier for FakeVerifier {
     fn validate(
@@ -211,15 +211,26 @@ impl Verifier for FakeVerifier {
     }
 }
 
-/// Adds root subnet ID, routing table, subnet list,
-/// and provisional whitelist to the registry.
-pub fn finalize_registry(
+/// Adds global registry records to the registry managed by the registry data provider:
+/// - root subnet record;
+/// - routing table record;
+/// - subnet list record;
+/// - chain key records;
+pub fn add_global_registry_records(
     nns_subnet_id: SubnetId,
     routing_table: RoutingTable,
     subnet_list: Vec<SubnetId>,
+    chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) {
-    let registry_version = INITIAL_REGISTRY_VERSION;
+    let registry_version = if registry_data_provider.is_empty() {
+        INITIAL_REGISTRY_VERSION
+    } else {
+        let latest_registry_version = registry_data_provider.latest_version();
+        RegistryVersion::from(latest_registry_version.get() + 1)
+    };
+
+    // root subnet record
     let root_subnet_id_proto = SubnetIdProto {
         principal_id: Some(PrincipalIdIdProto {
             raw: nns_subnet_id.get_ref().to_vec(),
@@ -232,6 +243,8 @@ pub fn finalize_registry(
             Some(root_subnet_id_proto),
         )
         .unwrap();
+
+    // routing table record
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
     registry_data_provider
         .add(
@@ -240,7 +253,38 @@ pub fn finalize_registry(
             Some(pb_routing_table),
         )
         .unwrap();
+
+    // subnet list record
     add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_list);
+
+    // chain key records
+    for (key_id, subnets) in chain_keys {
+        let subnets = subnets
+            .into_iter()
+            .map(|subnet_id| SubnetIdProto {
+                principal_id: Some(PrincipalIdIdProto {
+                    raw: subnet_id.get_ref().to_vec(),
+                }),
+            })
+            .collect();
+        registry_data_provider
+            .add(
+                &make_chain_key_signing_subnet_list_key(&key_id),
+                registry_version,
+                Some(ChainKeySigningSubnetList { subnets }),
+            )
+            .unwrap();
+    }
+}
+
+/// Adds initial registry records to the registry managed by the registry data provider:
+/// - provisional whitelist record;
+/// - blessed replica versions record;
+/// - replica version record.
+pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDataProvider>) {
+    let registry_version = INITIAL_REGISTRY_VERSION;
+
+    // provisional whitelist record
     let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);
     registry_data_provider
         .add(
@@ -249,6 +293,8 @@ pub fn finalize_registry(
             Some(pb_whitelist),
         )
         .unwrap();
+
+    // blessed replica versions record
     let replica_version = ReplicaVersion::default();
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version.clone().into()],
@@ -260,6 +306,8 @@ pub fn finalize_registry(
             Some(blessed_replica_version),
         )
         .unwrap();
+
+    // replica version record
     let replica_version_record = ReplicaVersionRecord {
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
@@ -274,19 +322,26 @@ pub fn finalize_registry(
         .unwrap();
 }
 
-/// Adds subnet-related records to registry.
-/// Note: `finalize_registry` must be called with `routing_table` containing `subnet_id`
-/// before any other public method of the `StateMachine` (except for `get_subnet_id`) is invoked.
-fn make_nodes_registry(
+/// Adds subnet local registry records to the registry managed by the registry data provider:
+/// - node records;
+/// - node signing key records;
+/// - node TLS key records;
+/// - subnet CUP record;
+/// - subnet record;
+/// - subnet threshold key record.
+///
+/// Note: initial and global registry records must be added to the registry
+/// (using the fuctions `add_initial_registry_records` and `add_global_registry_records`)
+/// before any messages are executed on the `StateMachine`.
+fn add_subnet_local_registry_records(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     features: SubnetFeatures,
-    registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
-    is_root_subnet: bool,
     public_key: ThresholdSigPublicKey,
+    chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     ni_dkg_transcript: NiDkgTranscript,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> FakeRegistryClient {
     let registry_version = if registry_data_provider.is_empty() {
         INITIAL_REGISTRY_VERSION
@@ -294,27 +349,6 @@ fn make_nodes_registry(
         let latest_registry_version = registry_data_provider.latest_version();
         RegistryVersion::from(latest_registry_version.get() + 1)
     };
-    // subnet_id must be different from nns_subnet_id, otherwise
-    // the IC00 call won't be charged.
-    let subnet_id_proto = SubnetIdProto {
-        principal_id: Some(PrincipalIdIdProto {
-            raw: subnet_id.get_ref().to_vec(),
-        }),
-    };
-    for (key_id, is_enabled) in chain_keys_enabled_status {
-        if !*is_enabled {
-            continue;
-        }
-        registry_data_provider
-            .add(
-                &make_chain_key_signing_subnet_list_key(key_id),
-                registry_version,
-                Some(ChainKeySigningSubnetList {
-                    subnets: vec![subnet_id_proto.clone()],
-                }),
-            )
-            .unwrap();
-    }
 
     for node in nodes {
         let node_record = NodeRecord {
@@ -398,7 +432,7 @@ fn make_nodes_registry(
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
-    let max_ingress_messages_per_block = if is_root_subnet { 400 } else { 1000 };
+    let max_ingress_messages_per_block = 1000;
     let max_block_payload_size = 4 * 1024 * 1024;
 
     let node_ids: Vec<_> = nodes.iter().map(|n| n.node_id).collect();
@@ -923,7 +957,6 @@ pub struct StateMachineBuilder {
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     lsmt_override: Option<LsmtConfig>,
-    is_root_subnet: bool,
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
@@ -958,7 +991,6 @@ impl StateMachineBuilder {
             runtime: None,
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
             lsmt_override: None,
-            is_root_subnet: false,
             seed: [42; 32],
             with_extra_canister_range: None,
             log_level: Some(Level::Warning),
@@ -1126,13 +1158,6 @@ impl StateMachineBuilder {
         Self { seed, ..self }
     }
 
-    pub fn with_root_subnet_config(self) -> Self {
-        Self {
-            is_root_subnet: true,
-            ..self
-        }
-    }
-
     pub fn with_ecdsa_signing_enabled(self, is_ecdsa_signing_enabled: bool) -> Self {
         Self {
             is_ecdsa_signing_enabled,
@@ -1191,7 +1216,6 @@ impl StateMachineBuilder {
             }),
             self.registry_data_provider,
             self.lsmt_override,
-            self.is_root_subnet,
             self.seed,
             self.log_level,
             self.remove_old_states,
@@ -1203,6 +1227,7 @@ impl StateMachineBuilder {
         let mut routing_table = self.routing_table.clone();
         let registry_data_provider = self.registry_data_provider.clone();
         let extra_canister_range = self.with_extra_canister_range.clone();
+        let chain_keys_enabled_status = self.chain_keys_enabled_status.clone();
         let sm = self.build_internal();
         let subnet_id = sm.get_subnet_id();
         if routing_table.is_empty() {
@@ -1221,10 +1246,22 @@ impl StateMachineBuilder {
                 .expect("failed to assign a canister range");
         }
         let subnet_list = vec![sm.get_subnet_id()];
-        finalize_registry(
+        let chain_keys = chain_keys_enabled_status
+            .into_iter()
+            .filter_map(|(key_id, is_enabled)| {
+                if is_enabled {
+                    Some((key_id, vec![subnet_id]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        add_initial_registry_records(registry_data_provider.clone());
+        add_global_registry_records(
             nns_subnet_id.unwrap_or(subnet_id),
             routing_table,
             subnet_list,
+            chain_keys,
             registry_data_provider,
         );
         sm.reload_registry();
@@ -1515,7 +1552,6 @@ impl StateMachine {
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<LsmtConfig>,
-        is_root_subnet: bool,
         seed: [u8; 32],
         log_level: Option<Level>,
         remove_old_states: bool,
@@ -1576,16 +1612,15 @@ impl StateMachine {
             malicious_flags.clone(),
         ));
 
-        let registry_client = make_nodes_registry(
+        let registry_client = add_subnet_local_registry_records(
             subnet_id,
             subnet_type,
-            &chain_keys_enabled_status,
             features,
-            registry_data_provider.clone(),
             &nodes,
-            is_root_subnet,
             public_key,
+            &chain_keys_enabled_status,
             ni_dkg_transcript,
+            registry_data_provider.clone(),
         );
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
