@@ -2,18 +2,18 @@ use canister_test::Canister;
 use canister_test::Runtime;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::boundary_node::BoundaryNode;
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
+use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
+use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
+use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
 use ic_system_test_driver::driver::test_setup::InfraProvider;
-use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
-use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
-use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
-use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
-use ic_system_test_driver::driver::boundary_node::BoundaryNode;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
@@ -177,13 +177,11 @@ pub fn stress_setup(env: TestEnv) {
 
     env.topology_snapshot()
         .subnets()
-        .filter(|s| s.subnet_type() == SubnetType::Application) 
-        .for_each(|s| {
-            match s.nodes().count() {
-                28 => s.apply_network_settings(ProductionSubnetTopology::UZR34),
-                13 => s.apply_network_settings(ProductionSubnetTopology::IO67),
-                _ => {  }
-            }
+        .filter(|s| s.subnet_type() == SubnetType::Application)
+        .for_each(|s| match s.nodes().count() {
+            28 => s.apply_network_settings(ProductionSubnetTopology::UZR34),
+            13 => s.apply_network_settings(ProductionSubnetTopology::IO67),
+            _ => {}
         });
 }
 
