@@ -21,9 +21,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
-    NumWasmPages, PageIndex,
+    NumWasmPages,
 };
-use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
@@ -59,10 +58,6 @@ const CERTIFIED_DATA_MAX_LENGTH: usize = 32;
 
 // Enables tracing of system calls for local debugging.
 const TRACE_SYSCALLS: bool = false;
-
-/// This error should be displayed if stable memory is used through the system
-/// API when Wasm-native stable memory is enabled.
-const WASM_NATIVE_STABLE_MEMORY_ERROR: &str = "Stable memory cannot be accessed through the System API when Wasm-native stable memory is enabled.";
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 
@@ -1055,11 +1050,6 @@ pub struct SystemApiImpl {
 
     execution_parameters: ExecutionParameters,
 
-    /// Wasm-native stable memory is enabled. This means that stable memory
-    /// should not be accessed through the public stable memory APIs. It can
-    /// still be read through the hidden read API for speed on the first access.
-    wasm_native_stable_memory: FlagStatus,
-
     /// Canister backtraces are enabled. This means we should attempt to collect
     /// a backtrace if the canister calls the trap API.
     #[allow(unused)]
@@ -1147,7 +1137,6 @@ impl SystemApiImpl {
             api_type,
             memory_usage,
             execution_parameters,
-            wasm_native_stable_memory: embedders_config.feature_flags.wasm_native_stable_memory,
             canister_backtrace: embedders_config.feature_flags.canister_backtrace,
             best_effort_responses: embedders_config.feature_flags.best_effort_responses.clone(),
             max_sum_exported_function_name_lengths: embedders_config
@@ -1681,10 +1670,6 @@ impl SystemApiImpl {
         }
     }
 
-    pub fn stable_memory_size(&self) -> NumWasmPages {
-        self.stable_memory().stable_memory_size
-    }
-
     /// Wrapper around `self.sandbox_safe_system_state.push_output_request()` that
     /// tries to allocate memory for the `Request` before pushing it.
     ///
@@ -1736,22 +1721,6 @@ impl SystemApiImpl {
                 abort(request, &mut self.sandbox_safe_system_state);
                 Ok(RejectCode::SysTransient as i32)
             }
-        }
-    }
-
-    fn stable_memory(&self) -> &StableMemory {
-        if self.wasm_native_stable_memory == FlagStatus::Disabled {
-            &self.stable_memory
-        } else {
-            panic!("{}", WASM_NATIVE_STABLE_MEMORY_ERROR)
-        }
-    }
-
-    fn stable_memory_mut(&mut self) -> &mut StableMemory {
-        if self.wasm_native_stable_memory == FlagStatus::Disabled {
-            &mut self.stable_memory
-        } else {
-            panic!("{}", WASM_NATIVE_STABLE_MEMORY_ERROR)
         }
     }
 
@@ -1838,17 +1807,6 @@ impl SystemApi for SystemApiImpl {
 
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions {
         NumInstructions::from(num_bytes.get())
-    }
-
-    fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
-        self.stable_memory()
-            .stable_memory_buffer
-            .dirty_pages()
-            .collect()
-    }
-
-    fn stable_memory_size(&self) -> usize {
-        self.stable_memory().stable_memory_size.get()
     }
 
     fn subnet_type(&self) -> SubnetType {
@@ -2654,134 +2612,6 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_stable_size(&self) -> HypervisorResult<u32> {
-        let result = match &self.api_type {
-            ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. }
-            | ApiType::Start { .. } => self.stable_memory().stable_size(),
-        };
-        trace_syscall!(self, StableSize, result);
-        result
-    }
-
-    fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
-        let old_size = self.stable_memory().stable_memory_size;
-        let result = match self.try_grow_stable_memory(
-            old_size.get() as u64,
-            additional_pages as u64,
-            StableMemoryApi::Stable32,
-        ) {
-            Err(err) => Err(err),
-            Ok(StableGrowOutcome::Failure) => Ok(-1),
-            Ok(StableGrowOutcome::Success) => {
-                self.stable_memory_mut().stable_memory_size =
-                    old_size + NumWasmPages::new(additional_pages as usize);
-                // This conversion must succeed due to the checks performed in
-                // `try_grow_stable_memory()`.
-                Ok(old_size.get().try_into().unwrap())
-            }
-        };
-        trace_syscall!(self, StableGrow, result, additional_pages);
-        result
-    }
-
-    fn ic0_stable_read(
-        &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()> {
-        let result = self.stable_memory().stable_read(dst, offset, size, heap);
-        trace_syscall!(
-            self,
-            StableRead,
-            result,
-            dst,
-            offset,
-            size,
-            summarize(heap, dst as usize, size as usize)
-        );
-        result
-    }
-
-    fn ic0_stable_write(
-        &mut self,
-        offset: u32,
-        src: u32,
-        size: u32,
-        heap: &[u8],
-    ) -> HypervisorResult<()> {
-        let result = self
-            .stable_memory_mut()
-            .stable_write(offset, src, size, heap);
-        trace_syscall!(
-            self,
-            StableWrite,
-            result,
-            offset,
-            src,
-            size,
-            summarize(heap, src as usize, size as usize)
-        );
-        result
-    }
-
-    fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
-        let result = self.stable_memory().stable_memory_size.get() as u64;
-        trace_syscall!(self, Stable64Size, result);
-        Ok(result)
-    }
-
-    fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
-        let old_size = self.stable_memory().stable_memory_size;
-        let result = match self.try_grow_stable_memory(
-            old_size.get() as u64,
-            additional_pages,
-            StableMemoryApi::Stable64,
-        ) {
-            Err(err) => Err(err),
-            Ok(StableGrowOutcome::Failure) => Ok(-1),
-            Ok(StableGrowOutcome::Success) => {
-                self.stable_memory_mut().stable_memory_size =
-                    old_size + NumWasmPages::new(additional_pages as usize);
-                // This conversion must succeed due to the checks performed in
-                // `try_grow_stable_memory()`.
-                Ok(old_size.get().try_into().unwrap())
-            }
-        };
-        trace_syscall!(self, Stable64Grow, result, additional_pages);
-        result
-    }
-
-    fn ic0_stable64_read(
-        &self,
-        dst: u64,
-        offset: u64,
-        size: u64,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()> {
-        let result = self.stable_memory().stable64_read(dst, offset, size, heap);
-        trace_syscall!(
-            self,
-            Stable64Read,
-            result,
-            dst,
-            offset,
-            size,
-            summarize(heap, dst as usize, size as usize)
-        );
-        result
-    }
-
     fn stable_read_without_bounds_checks(
         &self,
         dst: u64,
@@ -2791,40 +2621,6 @@ impl SystemApi for SystemApiImpl {
     ) -> HypervisorResult<()> {
         self.stable_memory
             .stable_read_without_bounds_checks(dst, offset, size, heap)
-    }
-
-    fn ic0_stable64_write(
-        &mut self,
-        offset: u64,
-        src: u64,
-        size: u64,
-        heap: &[u8],
-    ) -> HypervisorResult<()> {
-        let result = self
-            .stable_memory_mut()
-            .stable64_write(offset, src, size, heap);
-        trace_syscall!(
-            self,
-            Stable64Write,
-            result,
-            offset,
-            src,
-            size,
-            summarize(heap, src as usize, size as usize)
-        );
-        result
-    }
-
-    fn dirty_pages_from_stable_write(
-        &self,
-        offset: u64,
-        size: u64,
-    ) -> HypervisorResult<(NumOsPages, NumInstructions)> {
-        let dirty_pages = self.stable_memory().dirty_pages_from_write(offset, size);
-        let cost = self
-            .sandbox_safe_system_state
-            .dirty_page_cost(dirty_pages)?;
-        Ok((dirty_pages, cost))
     }
 
     fn ic0_time(&mut self) -> HypervisorResult<Time> {

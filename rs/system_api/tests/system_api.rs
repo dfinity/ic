@@ -1,7 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{
     embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags},
-    flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -39,12 +38,7 @@ use ic_types::{
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
-use std::{
-    collections::BTreeSet,
-    convert::From,
-    panic::{catch_unwind, UnwindSafe},
-    rc::Rc,
-};
+use std::{collections::BTreeSet, convert::From, rc::Rc};
 use strum::IntoEnumIterator;
 
 mod common;
@@ -101,66 +95,6 @@ fn assert_api_availability<T, F>(
         assert_api_supported(res)
     } else {
         assert_api_not_supported(res)
-    }
-}
-
-/// This struct is used in the following tests to move a `&mut SystemApiImpl`
-/// into a closure executed in `catch_unwind` so that we can assert certain
-/// system APIs panic. `SystemApiImpl` may not actually be `UnwindSafe`, but all
-/// the panicking APIs should panic immediately without modifying or reading any
-/// mutable state of the `SystemApiImpl`. So it's fine to pretend it's
-/// `UnwindSafe` for the purposes of this test.
-struct ForcedUnwindSafe<T>(T);
-impl<T> ForcedUnwindSafe<T> {
-    fn inner(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-impl<T> UnwindSafe for ForcedUnwindSafe<T> {}
-
-fn assert_stable_apis_panic(mut api: SystemApiImpl) {
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable_size())
-        .expect_err("Stable API should panic");
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable_grow(1))
-        .expect_err("Stable API should panic");
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable_read(0, 0, 0, &mut []))
-        .expect_err("Stable API should panic");
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable_write(0, 0, 0, &[]))
-        .expect_err("Stable API should panic");
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable64_size())
-        .expect_err("Stable API should panic");
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable64_grow(1))
-        .expect_err("Stable API should panic");
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable64_read(0, 0, 0, &mut []))
-        .expect_err("Stable API should panic");
-    let mut unwind_api = ForcedUnwindSafe(&mut api);
-    catch_unwind(move || unwind_api.inner().ic0_stable64_write(0, 0, 0, &[]))
-        .expect_err("Stable API should panic");
-}
-
-fn check_stable_apis_support(mut api: SystemApiImpl) {
-    match EmbeddersConfig::default()
-        .feature_flags
-        .wasm_native_stable_memory
-    {
-        FlagStatus::Enabled => assert_stable_apis_panic(api),
-        FlagStatus::Disabled => {
-            assert_api_supported(api.ic0_stable_size());
-            assert_api_supported(api.ic0_stable_grow(1));
-            assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
-            assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-            assert_api_supported(api.ic0_stable64_size());
-            assert_api_supported(api.ic0_stable64_grow(1));
-            assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
-            assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
-        }
     }
 }
 
@@ -895,13 +829,9 @@ fn system_api_availability() {
             ("F", inspect_message_api()),
             ("T", system_task_api()),
         ] {
-            // check stable API availability
-            let system_state = get_system_state();
             let cycles_account_manager = CyclesAccountManagerBuilder::new()
                 .with_subnet_type(subnet_type)
                 .build();
-            let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
-            check_stable_apis_support(api);
 
             // check ic0.mint_cycles, ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
@@ -1478,7 +1408,7 @@ fn helper_test_on_low_wasm_memory(
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
         .wasm_memory_limit(wasm_memory_limit)
-        .on_low_wasm_memory_hook_status(start_status)
+        .empty_task_queue_with_on_low_wasm_memory_hook_status(start_status)
         .initial_cycles(Cycles::from(10_000_000_000_000_000u128));
 
     if let Some(memory_allocation) = memory_allocation {

@@ -9,8 +9,9 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Global, Memory, NetworkTopology, NumWasmPages, PageMap};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,

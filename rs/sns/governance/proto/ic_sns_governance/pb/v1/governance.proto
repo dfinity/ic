@@ -68,6 +68,13 @@ message NeuronId {
   bytes id = 1;
 }
 
+// Neuron whose voting decisions are being followed.
+message Followee {
+  NeuronId neuron_id = 1;
+  // Human-readable alias that helps identify this followee among other neurons.
+  optional string alias = 2;
+}
+
 // A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
 message NeuronIds {
   repeated NeuronId neuron_ids = 1;
@@ -166,13 +173,13 @@ message Neuron {
 
   // A list of a neuron's followees, possibly associated with a given topic.
   message FolloweesForTopic {
-    repeated NeuronId followees = 1;
+    repeated Followee followees = 1;
     optional Topic topic = 2;
   }
 
   // A collection of a neuron's followees (per topic).
   message TopicFollowees {
-    map<uint64, FolloweesForTopic> topic_id_to_followees = 1;
+    map<int32, FolloweesForTopic> topic_id_to_followees = 1;
   }
 
   // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
@@ -1324,6 +1331,7 @@ message Governance {
       ManageNeuron.RemoveNeuronPermissions remove_neuron_permissions = 8;
       ManageNeuron.Configure configure = 9;
       ManageNeuron.Follow follow = 10;
+      ManageNeuron.SetFollowing set_following = 14;
       Proposal make_proposal = 11;
       ManageNeuron.RegisterVote register_vote = 12;
       ManageNeuron.FinalizeDisburseMaturity finalize_disburse_maturity = 13;
@@ -1783,6 +1791,11 @@ message ManageNeuron {
     repeated NeuronId followees = 2;
   }
 
+  message SetFollowing {
+    // The neuron's topic-based following, specified as a sequence of `FolloweesForTopic`.
+    repeated Neuron.FolloweesForTopic topic_following = 1;
+  }
+
   // The operation that registers a given vote from the neuron for a given
   // proposal (a directly cast vote as opposed to a vote that is cast as
   // a result of a follow relation).
@@ -1853,6 +1866,7 @@ message ManageNeuron {
     Configure configure = 2;
     Disburse disburse = 3;
     Follow follow = 4;
+    SetFollowing set_following = 14;
     // Making a proposal is defined by a proposal, which contains the proposer neuron.
     // Making a proposal will implicitly cast a yes vote for the proposing neuron.
     Proposal make_proposal = 5;
@@ -1908,8 +1922,12 @@ message ManageNeuronResponse {
     uint64 maturity_e8s = 1;
     uint64 staked_maturity_e8s = 2;
   }
+
   // The response to the ManageNeuron command 'follow'.
   message FollowResponse {}
+
+  // The response to the ManageNeuron command 'set_following'.
+  message SetFollowingResponse {}
 
   // The response to the ManageNeuron command 'make_proposal'.
   message MakeProposalResponse {
@@ -1944,6 +1962,7 @@ message ManageNeuronResponse {
     ConfigureResponse configure = 2;
     DisburseResponse disburse = 3;
     FollowResponse follow = 4;
+    SetFollowingResponse set_following = 14;
     MakeProposalResponse make_proposal = 5;
     RegisterVoteResponse register_vote = 6;
     SplitResponse split = 7;
