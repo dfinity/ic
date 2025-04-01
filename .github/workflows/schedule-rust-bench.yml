@@ -44,7 +44,6 @@ jobs:
         env:
           RUST_BACKTRACE: "full"
         with:
-          BUILDBUDDY_LINKS: "[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           run: |
             while IFS= read -r tgt; do
                 bazel run --config=ci "$tgt"

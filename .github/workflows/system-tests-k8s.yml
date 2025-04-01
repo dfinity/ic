@@ -87,6 +87,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         env:
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         with:
           BAZEL_COMMAND: >-
             test
