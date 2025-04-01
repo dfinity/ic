@@ -22,10 +22,11 @@ use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailable
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method, StoredChunksReply,
-    UploadChunkReply,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method,
+    ReadCanisterSnapshotMetadataResponse, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{
@@ -1981,6 +1982,54 @@ impl CanisterManager {
             WasmExecutionMode::Wasm32 => self.config.max_canister_memory_size_wasm32,
             WasmExecutionMode::Wasm64 => self.config.max_canister_memory_size_wasm64,
         }
+    }
+
+    pub(crate) fn read_snapshot_metadata(
+        &self,
+        sender: PrincipalId,
+        snapshot_id: SnapshotId,
+        canister: &CanisterState,
+        state: &ReplicatedState,
+    ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+        // If not found, the operation fails due to invalid parameters.
+        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
+            return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                canister_id: canister.canister_id(),
+                snapshot_id,
+            });
+        };
+        // Verify the provided `snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister.canister_id() {
+            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                canister_id: canister.canister_id(),
+                snapshot_id,
+            });
+        }
+
+        Ok(ReadCanisterSnapshotMetadataResponse {
+            source: snapshot.source(),
+            taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+            wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
+            exported_globals: snapshot.exported_globals().clone(),
+            wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
+                * WASM_PAGE_SIZE_IN_BYTES as u64,
+            stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
+                * WASM_PAGE_SIZE_IN_BYTES as u64,
+            wasm_chunk_store: snapshot
+                .chunk_store()
+                .keys()
+                .cloned()
+                .map(|x| ChunkHash { hash: x.to_vec() })
+                .collect(),
+            canister_version: snapshot.canister_version(),
+            certified_data: snapshot.certified_data().clone(),
+            global_timer: snapshot.execution_snapshot().global_timer.into(),
+            on_low_wasm_memory_hook_status: snapshot
+                .execution_snapshot()
+                .on_low_wasm_memory_hook_status,
+        })
     }
 }
 

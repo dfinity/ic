@@ -246,10 +246,8 @@ pub fn create_canister_with_one_controller(env: TestEnv) {
             let canister_b = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(vec![canister_a.canister_id()]),
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(vec![canister_a.canister_id()]),
                     ),
                 )
                 .await
@@ -301,9 +299,9 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             // A creates C
             info!(logger, "Canister A attempts to create canister C.");
             let canister_c = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
+                .update(wasm().call(management::create_canister(Cycles::from(
+                    2_000_000_000_000u64,
+                ))))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -446,10 +444,8 @@ pub fn create_canister_with_no_controllers(env: TestEnv) {
             let canister_b = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(Vec::<Principal>::new()), // No controllers
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(Vec::<Principal>::new()), // No controllers
                     ),
                 )
                 .await
@@ -490,10 +486,8 @@ pub fn create_canister_with_multiple_controllers(env: TestEnv) {
             let canister_c = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(controllers.clone()),
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(controllers.clone()),
                     ),
                 )
                 .await
@@ -579,10 +573,8 @@ pub fn create_canister_with_too_many_controllers_fails(env: TestEnv) {
             let response = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(controllers),
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(controllers),
                     ),
                 )
                 .await;
@@ -832,9 +824,9 @@ pub fn canister_can_manage_other_canister(env: TestEnv) {
             .await;
 
             let canister_b = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
+                .update(wasm().call(management::create_canister(Cycles::from(
+                    2_000_000_000_000u64,
+                ))))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -882,9 +874,9 @@ pub fn canister_can_manage_other_canister_batched(env: TestEnv) {
             )
             .await;
             let canister_b = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
+                .update(wasm().call(management::create_canister(Cycles::from(
+                    2_000_000_000_000u64,
+                ))))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -1184,10 +1176,8 @@ pub fn create_canister_with_invalid_freezing_threshold_fails(env: TestEnv) {
                     canister
                         .update(
                             wasm().call(
-                                management::create_canister(
-                                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                                )
-                                .with_freezing_threshold(invalid_value.clone()),
+                                management::create_canister(Cycles::from(2_000_000_000_000u64))
+                                    .with_freezing_threshold(invalid_value.clone()),
                             ),
                         )
                         .await,

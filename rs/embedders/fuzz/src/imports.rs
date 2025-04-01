@@ -8,7 +8,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
-        system_api::{self, ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
+        system_api::{linker, ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
         StoreData, WasmtimeEmbedder,
     },
 };
@@ -65,7 +65,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
 
     match config.feature_flags.wasm64 {
         FlagStatus::Enabled => {
-            system_api::linker::syscalls::<u64>(
+            linker::syscalls::<u64>(
                 &mut linker,
                 config.feature_flags,
                 config.stable_memory_dirty_page_limit,
@@ -74,7 +74,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
             );
         }
         FlagStatus::Disabled => {
-            system_api::linker::syscalls::<u32>(
+            linker::syscalls::<u32>(
                 &mut linker,
                 config.feature_flags,
                 config.stable_memory_dirty_page_limit,

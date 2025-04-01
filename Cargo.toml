@@ -67,6 +67,7 @@ members = [
     "rs/consensus",
     "rs/consensus/certification",
     "rs/consensus/dkg",
+    "rs/consensus/idkg",
     "rs/consensus/mocks",
     "rs/consensus/utils",
     "rs/criterion_time",
