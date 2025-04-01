@@ -59,7 +59,9 @@ impl crate::certification::FetchLargeValue for AgentBasedFetchLargeValue<'_> {
         let Chunk { content } = Decode!(&get_chunk_response, Result<Chunk, String>)
             .map_err(new_err)? // unable to decode
             .map_err(new_err)?; // Registry canister returned Err.
-        content.ok_or_else(|| new_err("get_chunk response has no content (not even empty)"))
+        content.ok_or_else(|| {
+            new_err("content in get_chunk response is null (not even an empty string)")
+        })
     }
 }
 

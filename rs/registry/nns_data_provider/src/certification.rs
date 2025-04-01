@@ -124,7 +124,8 @@ fn validate_version_range(
 /// Converts LargeValueChunkKeys into a blob by (repeatedly) calling Registry
 /// canister's get_chunk method.
 ///
-/// Although this is pub, this should only be used in tests.
+/// This is made pub so that it can be used in an integration test. Otherwise,
+/// it is preferred that this not be used outside this package.
 #[automock]
 #[async_trait]
 pub trait FetchLargeValue {
@@ -153,8 +154,12 @@ pub trait FetchLargeValue {
         Ok(chunk_content)
     }
 
+    /// Returns concatenation of chunks.
+    ///
+    /// Fetches each chunk using get_chunk_with_validation.
     async fn fetch_large_value(&self, keys: &LargeValueChunkKeys) -> Result<Vec<u8>, String> {
         let mut result = vec![];
+        // Chunks could instead be fetched in parallel.
         for key in &keys.chunk_content_sha256s {
             let mut chunk_content = self.get_chunk_with_validation(key).await?;
             result.append(&mut chunk_content);
@@ -163,19 +168,19 @@ pub trait FetchLargeValue {
     }
 }
 
-// Returns a blob.
-//
-// If the mutation was a delete, returns None.
-//
-// If the content has the blob inline, returns that.
-//
-// Otherwise, content uses LargeValueChunkKeys. In this case, fetches the
-// chunks, concatenates them, and returns the resulting monolithic blob.
-//
-// Possible reasons for returning Err:
-//
-//   1. get_chunk call fail.
-//   2. content does not have value
+/// Returns a blob.
+///
+/// If the mutation was a delete, returns None.
+///
+/// If the content has the blob inline, returns that.
+///
+/// Otherwise, content uses LargeValueChunkKeys. In this case, fetches the
+/// chunks, concatenates them, and returns the resulting monolithic blob.
+///
+/// Possible reasons for returning Err:
+///
+///   1. get_chunk call fail.
+///   2. content does not have value
 async fn get_monolithic_value(
     mutation: HighCapacityRegistryMutation,
     fetch_large_value: &(impl FetchLargeValue + Sync),
