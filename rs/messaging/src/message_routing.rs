@@ -1263,7 +1263,9 @@ impl BatchProcessor for BatchProcessorImpl {
         }
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
+        debug!(self.log, "Processing batch {}", batch.batch_number);
         info!(
+            every_n_seconds => 10,
             self.log,
             "Processing batch {} @ time {}", batch.batch_number, batch.time
         );
