@@ -1,5 +1,6 @@
 pub mod batch;
 pub mod fake;
+pub mod idkg;
 
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
