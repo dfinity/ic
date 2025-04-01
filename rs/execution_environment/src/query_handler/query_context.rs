@@ -20,7 +20,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -32,8 +32,8 @@ use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, Query, RejectContext, Request, RequestOrResponse,
-        Response, NO_DEADLINE,
+        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
+        RequestOrResponse, Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
     CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
@@ -217,6 +217,17 @@ impl<'a> QueryContext<'a> {
             }
         };
 
+        if let QuerySource::Anonymous = query.source {
+            if let WasmMethod::CompositeQuery(_) = &method {
+                info!(
+                    self.log,
+                    "Running composite canister http transform on canister {}.", query.receiver
+                );
+            }
+        }
+
+        let instructions_before = self.round_limits.instructions;
+
         let (mut canister, result) = {
             let measurement_scope =
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
@@ -229,7 +240,7 @@ impl<'a> QueryContext<'a> {
             )
         };
 
-        match result {
+        let result = match result {
             // If the canister produced a result or if execution failed then it
             // does not matter whether or not it produced any outgoing requests.
             // We can simply return the response we have.
@@ -261,7 +272,21 @@ impl<'a> QueryContext<'a> {
                     }
                 }
             }
+        };
+
+        if let QuerySource::Anonymous = query.source {
+            let instructions_consumed = instructions_before - self.round_limits.instructions;
+            if instructions_consumed >= RoundInstructions::from(100_000_000) {
+                info!(
+                    self.log,
+                    "Canister http transform on canister {} consumed {} instructions.",
+                    canister_id,
+                    instructions_consumed
+                );
+            }
         }
+
+        result
     }
 
     // A helper function that extracts the query calls of the given canister and
