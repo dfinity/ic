@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::nns::ledger::icrc1_transfer;
 use crate::sns::governance::{GovernanceCanister, ProposalSubmissionError, SubmittedProposal};
 use crate::sns::swap::SwapCanister;
-use crate::{CallCanisters, ProgressNetwork};
+use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 use candid::Nat;
 use ic_sns_governance_api::pb::v1::{
     get_proposal_response, ListNeurons, NeuronId, Proposal, ProposalData, ProposalId,
@@ -42,7 +42,7 @@ pub async fn propose<C: CallCanisters + ProgressNetwork>(
     Ok(proposal_id)
 }
 
-pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
+pub async fn propose_and_wait<C: CallCanistersWithStoppedCanisterError + ProgressNetwork>(
     agent: &C,
     neuron_id: NeuronId,
     sns_governance_canister: GovernanceCanister,
@@ -53,7 +53,9 @@ pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
     wait_for_proposal_execution(agent, sns_governance_canister, proposal_id).await
 }
 
-pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
+pub async fn wait_for_proposal_execution<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     sns_governance_canister: GovernanceCanister,
     proposal_id: ProposalId,

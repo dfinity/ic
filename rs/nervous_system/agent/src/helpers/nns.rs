@@ -14,11 +14,11 @@ use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TransferArgs};
 use crate::nns::governance::{get_proposal_info, manage_neuron};
 use crate::nns::sns_wasm::get_deployed_sns_by_proposal_id;
 use crate::sns::Sns;
-use crate::{CallCanisters, ProgressNetwork};
+use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 
 // TODO @rvem: we probably need more meaningful error type rather than just 'String'
 
-pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
+pub async fn propose_and_wait<C: CallCanistersWithStoppedCanisterError + ProgressNetwork>(
     agent: &C,
     neuron_id: NeuronId,
     proposal: MakeProposalRequest,
@@ -40,7 +40,9 @@ pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
     }
 }
 
-pub async fn propose_to_deploy_sns_and_wait<C: CallCanisters + ProgressNetwork>(
+pub async fn propose_to_deploy_sns_and_wait<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     neuron_id: NeuronId,
     create_service_nervous_system: CreateServiceNervousSystem,
@@ -73,7 +75,9 @@ pub async fn propose_to_deploy_sns_and_wait<C: CallCanisters + ProgressNetwork>(
     Ok((sns, nns_proposal_id))
 }
 
-pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
+pub async fn wait_for_proposal_execution<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     proposal_id: ProposalId,
 ) -> Result<ProposalInfo, String> {
