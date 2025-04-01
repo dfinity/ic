@@ -191,6 +191,7 @@ def compute_sha256(file_path: Path) -> str:
 
 
 progress_hidden: collections.deque[None] = collections.deque()
+interrupted = False
 
 
 def progress(
@@ -257,6 +258,9 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
                     out_file.write(chunk)
                     if length is not None:
                         progressbar(sofar / length)
+                    if interrupted:
+                        tmp_file.unlink()
+                        return Path
         if length is not None and length != sofar:
             raise RuntimeError(
                 "Error downloading %s -> %s. File is supposed to be %s bytes, is %s bytes.",
@@ -881,6 +885,8 @@ def main() -> None:
         sys.exit(2)
     except KeyboardInterrupt:
         logger.info("Received interrupt signal.")
+        global interrupted
+        interrupted = True
         raise
     finally:
         verifier.download_executor.shutdown(cancel_futures=True)
