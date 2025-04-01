@@ -114,32 +114,40 @@ impl Registry {
             mutations.push(update(node_key, updated_node_record.encode_to_vec()));
         }
 
+        // Nothing should be done.
+        if mutations.is_empty() {
+            return Ok(());
+        }
+
         if required_node_allowance > new_operator_record.node_allowance {
             return Err(format!("{}do_replace_operator: Adding {} nodes would overflow node allowance for node operator {} who has {} remaining", LOG_PREFIX, required_node_allowance, payload.new_operator_id, new_operator_record.node_allowance));
         }
 
         // Update new node operator record to decrease node allowance
         let new_node_operator_key = make_node_operator_record_key(payload.new_operator_id);
-        let updated_node_operator_record = NodeOperatorRecord {
+        let updated_new_operator_record = NodeOperatorRecord {
             node_allowance: new_operator_record.node_allowance - required_node_allowance,
             ..new_operator_record.clone()
         };
         mutations.push(update(
             new_node_operator_key,
-            updated_node_operator_record.encode_to_vec(),
+            updated_new_operator_record.encode_to_vec(),
         ));
 
         // Update old node operator record to increase node allowance
         let old_node_operator_key = make_node_operator_record_key(payload.old_operator_id);
-        let updated_current_node_operator_record = NodeOperatorRecord {
+        let updated_old_operator_record = NodeOperatorRecord {
             node_allowance: old_operator_record.node_allowance + required_node_allowance,
             ..old_operator_record.clone()
         };
         mutations.push(update(
             old_node_operator_key,
-            updated_current_node_operator_record.encode_to_vec(),
+            updated_old_operator_record.encode_to_vec(),
         ));
 
+        #[cfg(test)]
+        self.apply_mutations_for_test(mutations);
+        #[cfg(not(test))]
         self.maybe_apply_mutation_internal(mutations);
 
         println!(
@@ -169,17 +177,33 @@ fn find_node_operator_record_for_provider<'a>(
 
 #[cfg(test)]
 mod tests {
-    use ic_protobuf::registry::{
-        dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord,
+    use ic_config::crypto::CryptoConfig;
+    use ic_crypto_node_key_generation::generate_node_keys_once;
+    use ic_crypto_node_key_validation::ValidNodePublicKeys;
+    use ic_protobuf::{
+        registry::{
+            crypto::v1::{AlgorithmId, PublicKey, X509PublicKeyCert},
+            dc::v1::DataCenterRecord,
+            node::v1::NodeRecord,
+            node_operator::v1::NodeOperatorRecord,
+            replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+            routing_table::v1::{routing_table::Entry, CanisterIdRange, RoutingTable},
+            subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
+        },
+        types::v1::SubnetId,
     };
     use ic_registry_canister_api::ReplaceNodeOperatorPayload;
     use ic_registry_keys::{
+        make_blessed_replica_versions_key, make_crypto_node_key, make_crypto_tls_cert_key,
         make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
+        make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
+        make_subnet_record_key,
     };
     use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
-    use ic_types::{NodeId, PrincipalId};
+    use ic_stable_structures::Storable;
+    use ic_types::{crypto::KeyPurpose, CanisterId, NodeId, PrincipalId};
 
-    use crate::registry::Registry;
+    use crate::{common::test_helpers::invariant_compliant_registry, registry::Registry};
     use prost::Message;
 
     fn operator(n: u64) -> PrincipalId {
@@ -213,12 +237,15 @@ mod tests {
         }
     }
 
-    trait AssertErrContains {
+    trait AssertHelpers {
         #[track_caller]
         fn assert_err_contains(self, expected: &str);
+
+        #[track_caller]
+        fn assert_ok(self);
     }
 
-    impl<T> AssertErrContains for Result<T, String> {
+    impl<T> AssertHelpers for Result<T, String> {
         #[track_caller]
         fn assert_err_contains(self, expected: &str) {
             match self {
@@ -228,6 +255,15 @@ mod tests {
                     "Expected error containing '{expected}', but got '{e}'"
                 ),
             }
+        }
+
+        #[track_caller]
+        fn assert_ok(self) {
+            assert!(
+                self.is_ok(),
+                "Expected Ok, but got Err: {}",
+                self.err().unwrap()
+            )
         }
     }
 
@@ -280,6 +316,105 @@ mod tests {
         mutation(
             make_data_center_record_key(dc_id).as_bytes().to_vec(),
             dc_record.encode_to_vec(),
+        )
+    }
+
+    fn routing_table_mutation() -> RegistryMutation {
+        let routing_table = RoutingTable {
+            entries: vec![Entry {
+                range: Some(CanisterIdRange {
+                    start_canister_id: Some(CanisterId::from(0).into()),
+                    end_canister_id: Some(CanisterId::from(100).into()),
+                }),
+                subnet_id: Some(SubnetId {
+                    principal_id: Some(PrincipalId::new_subnet_test_id(0).into()),
+                }),
+            }],
+        };
+
+        mutation(
+            make_routing_table_record_key().as_bytes().to_vec(),
+            routing_table.encode_to_vec(),
+        )
+    }
+
+    fn generate_valid_node_id() -> ValidNodePublicKeys {
+        let (config, _tmp_dir) = CryptoConfig::new_in_temp_dir();
+        generate_node_keys_once(&config, None).unwrap()
+    }
+
+    fn key_mutation(node: NodeId, key: Vec<u8>, purpose: KeyPurpose) -> RegistryMutation {
+        let key = PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: key,
+            proof_data: None,
+            timestamp: Some(42),
+        };
+
+        mutation(
+            make_crypto_node_key(node, purpose).as_bytes().to_vec(),
+            key.encode_to_vec(),
+        )
+    }
+
+    fn certificate_mutation(node_id: NodeId, certificate: X509PublicKeyCert) -> RegistryMutation {
+        mutation(
+            make_crypto_tls_cert_key(node_id).as_bytes().to_vec(),
+            certificate.encode_to_vec(),
+        )
+    }
+
+    fn nns() -> RegistryMutation {
+        let subnet_record = SubnetRecord {
+            start_as_nns: true,
+            subnet_type: SubnetType::System as i32,
+            membership: vec![PrincipalId::new_node_test_id(0).to_vec()],
+            replica_version_id: "123".to_string(),
+            ..Default::default()
+        };
+
+        mutation(
+            make_subnet_record_key(PrincipalId::new_subnet_test_id(0).into())
+                .as_bytes()
+                .to_vec(),
+            subnet_record.encode_to_vec(),
+        )
+    }
+
+    fn replica_version_mutation() -> RegistryMutation {
+        let replica_version_record = ReplicaVersionRecord {
+            release_package_sha256_hex:
+                "1816ff15e4f9a4937b246699ba9e72e59494eb6e29a71ee1757fb63f9f4ca3bd".to_string(),
+            release_package_urls: vec!["https://package.download".to_string()],
+            guest_launch_measurement_sha256_hex: None,
+        };
+
+        mutation(
+            make_replica_version_key("123").to_bytes().to_vec(),
+            replica_version_record.encode_to_vec(),
+        )
+    }
+
+    fn blessed_replica_versions_mutation() -> RegistryMutation {
+        let blessed_versions_record = BlessedReplicaVersions {
+            blessed_version_ids: vec!["123".to_string()],
+        };
+
+        mutation(
+            make_blessed_replica_versions_key().to_bytes().to_vec(),
+            blessed_versions_record.encode_to_vec(),
+        )
+    }
+
+    fn subnet_list_record() -> RegistryMutation {
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![PrincipalId::new_subnet_test_id(0).as_slice().to_vec()],
+        };
+
+        mutation(
+            make_subnet_list_record_key().as_bytes().to_vec(),
+            subnet_list_record.encode_to_vec(),
         )
     }
 
@@ -368,5 +503,149 @@ mod tests {
                 operator(2),
                 "dc2"
         ));
+    }
+
+    #[test]
+    fn disallow_unknown_nodes() {
+        let mut registry = Registry::new();
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 10, "dc1"),
+            node_mutation(node(1), operator(1)),
+        ]);
+
+        registry
+            .do_replace_operator_(
+                payload(operator(1), operator(2), &[node(1), node(2)]),
+                caller(1),
+            )
+            .assert_err_contains(&format!("Node not found: {}", node(2)));
+    }
+
+    #[test]
+    fn all_nodes_already_on_new_operator() {
+        let mut registry = Registry::new();
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 10, "dc1"),
+            node_mutation(node(1), operator(2)),
+            node_mutation(node(2), operator(2)),
+            node_mutation(node(3), operator(2)),
+        ]);
+
+        let version_before_replacement = registry.latest_version();
+        registry
+            .do_replace_operator_(
+                payload(operator(1), operator(2), &[node(1), node(2), node(3)]),
+                caller(1),
+            )
+            .assert_ok();
+
+        assert_eq!(registry.latest_version(), version_before_replacement);
+    }
+
+    #[test]
+    fn disallow_node_not_belonging_to_either_operator() {
+        let mut registry = Registry::new();
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 10, "dc1"),
+            operator_mutation(operator(3), provider(1), 10, "dc1"),
+            node_mutation(node(1), operator(1)),
+            node_mutation(node(2), operator(3)),
+        ]);
+
+        registry
+            .do_replace_operator_(
+                payload(operator(1), operator(2), &[node(1), node(2)]),
+                caller(1),
+            )
+            .assert_err_contains(&format!(
+                "Node {} does not belong to node operator {}",
+                node(2),
+                operator(1)
+            ));
+    }
+
+    #[test]
+    fn insufficient_node_allowance() {
+        let mut registry = Registry::new();
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 2, "dc1"),
+            node_mutation(node(1), operator(1)),
+            node_mutation(node(2), operator(1)),
+            node_mutation(node(3), operator(1)),
+        ]);
+
+        registry
+            .do_replace_operator_(
+                payload(operator(1), operator(2), &[node(1), node(2), node(3)]),
+                caller(1),
+            )
+            .assert_err_contains(&format!("Adding 3 nodes would overflow node allowance for node operator {} who has 2 remaining", operator(2)));
+    }
+
+    #[test]
+    fn update_all_records_correctly() {
+        let mut registry = invariant_compliant_registry(0);
+
+        registry.apply_mutations_for_test(vec![
+            dc_mutation("dc1"),
+            operator_mutation(operator(1), provider(1), 10, "dc1"),
+            operator_mutation(operator(2), provider(1), 10, "dc1"),
+            node_mutation(node(1), operator(1)),
+            node_mutation(node(2), operator(1)),
+            node_mutation(node(3), operator(1)),
+        ]);
+
+        let version_before = registry.latest_version();
+        registry
+            .do_replace_operator_(
+                payload(operator(1), operator(2), &[node(1), node(2), node(3)]),
+                caller(1),
+            )
+            .assert_ok();
+
+        assert!(
+            registry.latest_version() == version_before + 1,
+            "Expected registry version to increase. Before execution: {}, after execution: {}",
+            version_before,
+            registry.latest_version()
+        );
+
+        for node_id in &[node(1), node(2), node(3)] {
+            let node = registry
+                .get(
+                    make_node_record_key(*node_id).as_bytes(),
+                    registry.latest_version(),
+                )
+                .unwrap();
+
+            let decoded = NodeRecord::decode(node.value.as_slice()).unwrap();
+            assert_eq!(node.version, version_before + 1);
+            assert_eq!(decoded.node_operator_id, operator(2).as_slice())
+        }
+
+        for (operator, allowance) in &[(operator(1), 13), (operator(2), 7)] {
+            let operator_record = registry
+                .get(
+                    make_node_operator_record_key(operator.clone()).as_bytes(),
+                    registry.latest_version(),
+                )
+                .unwrap();
+
+            let decoded = NodeOperatorRecord::decode(operator_record.value.as_slice()).unwrap();
+            assert_eq!(operator_record.version, version_before + 1);
+            assert_eq!(decoded.node_allowance, *allowance);
+        }
     }
 }
