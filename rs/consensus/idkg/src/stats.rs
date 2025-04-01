@@ -1,8 +1,6 @@
 //! IDKG specific stats.
 
-use crate::idkg::metrics::{
-    IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
-};
+use crate::metrics::{IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{IDkgBlockReader, IDkgStats, PreSigId, RequestId},
