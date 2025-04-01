@@ -484,7 +484,7 @@ impl TopicFollowees {
             else {
                 // Nothing to update for this topic, just keep track of what we had before for
                 // analyzing the aliases later on.
-                let followees_for_topic = self.topic_id_to_followees.get(&(topic as u64));
+                let followees_for_topic = self.topic_id_to_followees.get(&i32::from(topic));
 
                 if let Some(followees_for_topic) = followees_for_topic {
                     let followees_for_topic =
@@ -497,21 +497,23 @@ impl TopicFollowees {
                 continue;
             };
 
+            let topic = i32::from(topic);
+
             all_followees.extend(followees.iter().cloned());
 
             if followees.is_empty() {
                 // Special case: Remove following for this topic.
-                self.topic_id_to_followees.remove(&(topic as u64));
+                self.topic_id_to_followees.remove(&topic);
                 continue;
             }
 
-            let followees_per_topic = self
-                .topic_id_to_followees
-                .entry(topic as u64)
-                .or_insert_with(|| FolloweesForTopic {
-                    topic: Some(i32::from(topic)),
-                    followees: vec![],
-                });
+            let followees_per_topic =
+                self.topic_id_to_followees
+                    .entry(topic)
+                    .or_insert_with(|| FolloweesForTopic {
+                        topic: Some(topic),
+                        followees: vec![],
+                    });
 
             followees_per_topic.followees = followees.iter().cloned().map(Followee::from).collect();
         }

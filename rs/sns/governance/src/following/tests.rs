@@ -720,7 +720,7 @@ fn compose_topic_followees() {
             },
             Ok(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::DappCanisterManagement as u64 => FolloweesForTopic {
+                    Topic::DappCanisterManagement as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                             Followee { neuron_id: Some(nid(42)), alias: None },
@@ -752,7 +752,7 @@ fn compose_topic_followees() {
             },
             Ok(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::DappCanisterManagement as u64 => FolloweesForTopic {
+                    Topic::DappCanisterManagement as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                             Followee { neuron_id: Some(nid(42)), alias: None },
@@ -766,7 +766,7 @@ fn compose_topic_followees() {
             "Set following for a topic that was not present before.",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                         ],
@@ -785,13 +785,13 @@ fn compose_topic_followees() {
             },
             Ok(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                         ],
                         topic: Some(Topic::CriticalDappOperations as i32),
                     },
-                    Topic::DappCanisterManagement as u64 => FolloweesForTopic {
+                    Topic::DappCanisterManagement as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(42)), alias: Some("Bob".to_string()) },
                         ],
@@ -804,7 +804,7 @@ fn compose_topic_followees() {
             "Unset following for a topic.",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                         ],
@@ -826,7 +826,7 @@ fn compose_topic_followees() {
             "Modify following for a topic.",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                             Followee { neuron_id: Some(nid(42)), alias: Some("Bob".to_string()) },
@@ -846,7 +846,7 @@ fn compose_topic_followees() {
             },
             Ok(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(43)), alias: Some("Carol".to_string()) },
                         ],
@@ -859,13 +859,13 @@ fn compose_topic_followees() {
             "Complex scenarios: modifying some, but not all topics.",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                         ],
                         topic: Some(Topic::CriticalDappOperations as i32),
                     },
-                    Topic::ApplicationBusinessLogic as u64 => FolloweesForTopic {
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(42)), alias: Some("Bob".to_string()) },
                         ],
@@ -884,13 +884,13 @@ fn compose_topic_followees() {
             },
             Ok(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(43)), alias: Some("Carol".to_string()) },
                         ],
                         topic: Some(Topic::CriticalDappOperations as i32),
                     },
-                    Topic::ApplicationBusinessLogic as u64 => FolloweesForTopic {
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(42)), alias: Some("Bob".to_string()) },
                         ],
@@ -903,14 +903,14 @@ fn compose_topic_followees() {
             "Change, set, unset, and rotate aliases",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                             Followee { neuron_id: Some(nid(42)), alias: None },
                         ],
                         topic: Some(Topic::CriticalDappOperations as i32),
                     },
-                    Topic::ApplicationBusinessLogic as u64 => FolloweesForTopic {
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(43)), alias: Some("Alice".to_string()) },
                             Followee { neuron_id: Some(nid(44)), alias: Some("Bob".to_string()) },
@@ -960,14 +960,14 @@ fn compose_topic_followees() {
             },
             Ok(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Bob".to_string()) },
                             Followee { neuron_id: Some(nid(42)), alias: Some("Carol".to_string()) },
                         ],
                         topic: Some(Topic::CriticalDappOperations as i32),
                     },
-                    Topic::ApplicationBusinessLogic as u64 => FolloweesForTopic {
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(43)), alias: Some("Bob".to_string()) },
                             Followee { neuron_id: Some(nid(44)), alias: Some("Alice".to_string()) },
@@ -982,7 +982,7 @@ fn compose_topic_followees() {
             "Problem I: Some aliases are inconsistent in the resulting TopicFollowees.",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                         ],
@@ -1010,7 +1010,7 @@ fn compose_topic_followees() {
             "Problem II: Existing followees that are going to stay are invalid.",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             // Invalid: no neuron ID specified.
                             Followee { neuron_id: None, alias: Some("Alice".to_string()) },
@@ -1038,7 +1038,7 @@ fn compose_topic_followees() {
             "Existing invalid followees are being fixed.",
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             // Invalid: no neuron ID specified.
                             Followee { neuron_id: None, alias: Some("Alice".to_string()) },
@@ -1061,7 +1061,7 @@ fn compose_topic_followees() {
             },
             Ok(TopicFollowees {
                 topic_id_to_followees: btreemap! {
-                    Topic::CriticalDappOperations as u64 => FolloweesForTopic {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                         followees: vec![
                             Followee { neuron_id: Some(nid(41)), alias: Some("Alice".to_string()) },
                         ],
