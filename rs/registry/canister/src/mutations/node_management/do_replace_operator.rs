@@ -304,7 +304,7 @@ mod tests {
         /// Needed for invariant checks of each node
         /// because each node has to have unique xnet
         /// and http endpoints
-        static NODE_NUM: RefCell<u8> = RefCell::new(0);
+        static NODE_NUM: RefCell<u8> = const { RefCell::new(0) };
     }
 
     fn node_mutation(node_id: NodeId, operator: PrincipalId) -> RegistryMutation {
@@ -588,7 +588,7 @@ mod tests {
         for (operator, allowance) in &[(operator(1), 13), (operator(2), 7)] {
             let operator_record = registry
                 .get(
-                    make_node_operator_record_key(operator.clone()).as_bytes(),
+                    make_node_operator_record_key(*operator).as_bytes(),
                     registry.latest_version(),
                 )
                 .unwrap();
@@ -638,7 +638,7 @@ mod tests {
         for (operator, allowance) in &[(operator(1), 11), (operator(2), 9)] {
             let operator_record = registry
                 .get(
-                    make_node_operator_record_key(operator.clone()).as_bytes(),
+                    make_node_operator_record_key(*operator).as_bytes(),
                     registry.latest_version(),
                 )
                 .unwrap();
@@ -782,7 +782,7 @@ mod tests {
         let replica_version = ReplicaVersion::default();
 
         mutation(
-            make_replica_version_key(replica_version.to_string())
+            make_replica_version_key(&replica_version)
                 .to_bytes()
                 .to_vec(),
             replica_version_record.encode_to_vec(),
