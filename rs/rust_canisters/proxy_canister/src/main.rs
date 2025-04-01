@@ -19,6 +19,7 @@ use proxy_canister::{
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::time::Duration;
 
 thread_local! {
     #[allow(clippy::type_complexity)]
@@ -62,14 +63,17 @@ async fn send_requests_in_parallel(
     let duration_ns = time() - start;
     Ok(RemoteHttpStressResponse {
         response: response.unwrap(),
-        duration_ns,
+        duration: Duration::from_nanos(duration_ns),
     })
 }
 
 #[update]
-pub fn start_continuous_requests(
+pub async fn start_continuous_requests(
     request: RemoteHttpRequest,
 ) -> Result<RemoteHttpResponse, (RejectionCode, String)> {
+    // This request establishes the session to the target server. 
+    let _  = send_request(request.clone()).await;
+
     spawn(async move {
         run_continuous_request_loop(request).await;
     });

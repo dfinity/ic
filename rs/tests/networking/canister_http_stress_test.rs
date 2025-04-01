@@ -3,24 +3,26 @@ Title:: Stress test for the http_requests feature
 
 Goal:: Measure the qps of http_requests originating from one canister. The test shuold be run with the following command:
 ```
-ict testnet create canister_http_stress_test --lifetime-mins=180 --output-dir=./canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
+ict test //rs/tests/networking:canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
 ```
 
 Runbook::
 0. Instantiate a universal VM with a webserver
 1. Instantiate a Prometheus VM to track the evolving qps in grafana
-2. Instantiate an IC with two application subnets (containing 13 and 40 ndoes respectively), both with the HTTP feature enabled.
-3. Install NNS canisters
-4. Install the proxy canister on both application subnets
-5. Make a few update calls to the proxy canisters, on update call for each concurrency level.
-6. For each update call, the canister tries to send multiple (up to 500) concurrent http requests to the webserver, and measures the observed time the requests took.
+2. Instantiate an IC with two application subnets (containing 13, 28 and 40 nodes respectively), both with the HTTP feature enabled.
+3. Apply prod network settings to the 13 and 28 node subnets (packet drop rate, rount trip time, etc)
+4. Install NNS canisters
+5. Install the proxy canister on all 3 application subnets
+6. Make a few update calls to the proxy canisters, one update call for each concurrency level.
+7. For each update call, the canister tries to send multiple (up to 500) concurrent http requests to the webserver, and measures the observed time the requests took.
 
 Success::
 1. All http responses with status 200.
-2. The proxy canister is left sending requests in batches of 500 to track the qps in grafana.
-3. The results are written to a json file (in benchmark/benchmark.json).
+2. The results are written to a json file (in benchmark/benchmark.json).
 
 end::catalog[] */
+
+use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::bail;
@@ -30,19 +32,8 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
-use ic_registry_subnet_features::SubnetFeatures;
-use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::boundary_node::BoundaryNode;
-use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
-use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
-use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
-use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, IcNodeContainer,
-};
-use ic_system_test_driver::driver::universal_vm::UniversalVm;
+use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF},
@@ -56,13 +47,7 @@ use proxy_canister::{RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStres
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 
-const NS_IN_1_MS: u64 = 1_000_000;
-const MS_IN_1_SEC: u64 = 1_000;
-const NS_IN_1_SEC: u64 = NS_IN_1_MS * MS_IN_1_SEC;
-const BN_NAME: &str = "bn-1";
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
-const APP_SUBNET_SIZES: [usize; 2] = [13, 40];
-const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
 
 #[derive(Serialize, Deserialize, Debug)]
 struct BenchmarkResult {
@@ -74,80 +59,11 @@ struct BenchmarkResult {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_setup(stress_setup)
         .add_test(systest!(test))
         .execute_from_args()?;
 
     Ok(())
-}
-
-pub fn setup(env: TestEnv) {
-    let logger = env.logger();
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
-    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-        ))
-        .start(&env)
-        .expect("failed to set up universal VM");
-
-    start_httpbin_on_uvm(&env);
-    info!(&logger, "Started Universal VM!");
-
-    let bn_vm = BoundaryNode::new(BN_NAME.to_string())
-        .allocate_vm(&env)
-        .unwrap();
-    let bn_ipv6 = bn_vm.ipv6();
-
-    info!(&logger, "Created raw BN with IP {}!", bn_ipv6);
-
-    let mut ic = InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(1),
-        );
-    for subnet_size in APP_SUBNET_SIZES.iter() {
-        ic = ic.add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(*subnet_size),
-        );
-    }
-    ic.with_api_boundary_nodes(1)
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-
-    await_nodes_healthy(&env);
-    install_nns_canisters(&env);
-
-    bn_vm
-        .for_ic(&env, "")
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-
-    env.sync_with_prometheus_by_name("", env.get_playnet_url(BN_NAME));
-
-    let boundary_node_vm = env
-        .get_deployed_boundary_node(BN_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-
-    boundary_node_vm
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
 }
 
 pub fn test(env: TestEnv) {
@@ -185,20 +101,20 @@ pub fn test(env: TestEnv) {
             // Make an http_outcall once, to establish the session between the adapter and the target server.
             // This is necessary in order to avoid the server potentially being overloaded by 40 * 500 TCP/TLS handshake requests.
             test_proxy_canister(&proxy_canister, url.clone(), logger.clone(), 1).await;
-            for concurrent_requests in CONCURRENCY_LEVELS.iter() {
+            for concurrent_requests in CONCURRENCY_LEVELS {
                 // For each concurrency level in this subnet, we run the stress test.
-                let (qps, duration_s) = test_proxy_canister(
+                let (qps, duration) = test_proxy_canister(
                     &proxy_canister,
                     url.clone(),
                     logger.clone(),
-                    *concurrent_requests,
+                    concurrent_requests,
                 )
                 .await;
                 all_results.push(BenchmarkResult {
                     subnet_size,
-                    concurrent_requests: *concurrent_requests,
+                    concurrent_requests,
                     qps,
-                    average_latency_s: duration_s,
+                    average_latency_s: duration.as_secs_f64(),
                 });
             }
             leave_proxy_canister_running(&proxy_canister, url.clone(), logger.clone()).await;
@@ -272,7 +188,7 @@ async fn do_request(
     url: String,
     logger: &Logger,
     concurrent_requests: u64,
-) -> Result<u64, anyhow::Error> {
+) -> Result<Duration, anyhow::Error> {
     let proxy_canister = proxy_canister.clone();
     let url = url.clone();
 
@@ -317,8 +233,7 @@ async fn do_request(
         "All {} concurrent requests succeeded!", concurrent_requests
     );
 
-    let duration_ns = res.duration_ns;
-    Ok(duration_ns)
+    Ok(res.duration)
 }
 
 // Returns the average qps and average latency of a single request.
@@ -327,16 +242,16 @@ pub async fn test_proxy_canister(
     url: String,
     logger: Logger,
     concurrent_requests: u64,
-) -> (f64, f64) {
+) -> (f64, Duration) {
     let mut experiments = 0;
-    let max_experiments = 3;
-    let mut total_duration_ns = 0;
+    let max_experiments = 2;
+    let mut total_duration = Duration::from_secs(0);
 
     // We don't leave the experiment running for much longer than 60 seconds.
-    while total_duration_ns < 60 * NS_IN_1_SEC && experiments < max_experiments {
+    while total_duration < Duration::from_secs(60) && experiments < max_experiments {
         experiments += 1;
 
-        let single_call_duration_ns = ic_system_test_driver::retry_with_msg_async!(
+        let single_call_duration = ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "calling send_requests_in_parallel of proxy canister {} with URL {}",
                 proxy_canister.canister_id(),
@@ -352,10 +267,10 @@ pub async fn test_proxy_canister(
         .await
         .expect("Timeout or repeated failure on canister HTTP calls");
 
-        total_duration_ns += single_call_duration_ns;
+        total_duration += single_call_duration;
     }
 
-    let elapsed_seconds = total_duration_ns as f64 / NS_IN_1_SEC as f64;
+    let elapsed_seconds = total_duration.as_secs_f64();
     let qps = (concurrent_requests * experiments) as f64 / elapsed_seconds;
     info!(
         logger,
@@ -364,5 +279,5 @@ pub async fn test_proxy_canister(
         experiments,
         qps
     );
-    (qps, elapsed_seconds / experiments as f64)
+    (qps, total_duration.checked_div(experiments as u32).unwrap())
 }

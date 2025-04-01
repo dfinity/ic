@@ -5,6 +5,8 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
+use std::time::Duration;
+
 use candid::{CandidType, Deserialize};
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, HttpHeader, HttpMethod, Payload, TransformContext,
@@ -62,7 +64,7 @@ pub struct RemoteHttpResponse {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpStressResponse {
     pub response: RemoteHttpResponse,
-    pub duration_ns: u64,
+    pub duration: Duration,
 }
 
 impl RemoteHttpResponse {

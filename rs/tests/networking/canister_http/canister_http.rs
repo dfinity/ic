@@ -7,6 +7,13 @@ use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
 use ic_system_test_driver::driver::test_setup::InfraProvider;
+use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
+use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
+use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
+use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
+use ic_system_test_driver::driver::boundary_node::BoundaryNode;
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
@@ -23,6 +30,9 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
+const APP_SUBNET_SIZES: [usize; 3] = [13, 28, 40];
+pub const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
+const BN_NAME: &str = "bn-1";
 const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
 
 pub enum PemType {
@@ -95,6 +105,86 @@ pub fn setup(env: TestEnv) {
             start_httpbin_on_uvm(&env);
         });
     });
+}
+
+pub fn stress_setup(env: TestEnv) {
+    let logger = env.logger();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("Failed to start prometheus VM");
+
+    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+        .with_config_img(get_dependency_path(
+            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+        ))
+        .start(&env)
+        .expect("failed to set up universal VM");
+
+    start_httpbin_on_uvm(&env);
+    info!(&logger, "Started Universal VM!");
+
+    let bn_vm = BoundaryNode::new(BN_NAME.to_string())
+        .allocate_vm(&env)
+        .unwrap();
+    let bn_ipv6 = bn_vm.ipv6();
+
+    info!(&logger, "Created raw BN with IP {}!", bn_ipv6);
+
+    let mut ic = InternetComputer::new()
+        .with_required_host_features(vec![HostFeature::Performance])
+        .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(1),
+        );
+    for subnet_size in APP_SUBNET_SIZES {
+        ic = ic.add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(subnet_size),
+        );
+    }
+    ic.with_api_boundary_nodes(1)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+
+    await_nodes_healthy(&env);
+    install_nns_canisters(&env);
+
+    bn_vm
+        .for_ic(&env, "")
+        .start(&env)
+        .expect("failed to setup BoundaryNode VM");
+
+    env.sync_with_prometheus_by_name("", env.get_playnet_url(BN_NAME));
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BN_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    boundary_node_vm
+        .await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
+
+    env.topology_snapshot()
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::Application) 
+        .for_each(|s| {
+            match s.nodes().count() {
+                28 => s.apply_network_settings(ProductionSubnetTopology::UZR34),
+                13 => s.apply_network_settings(ProductionSubnetTopology::IO67),
+                _ => {  }
+            }
+        });
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
