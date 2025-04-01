@@ -123,9 +123,12 @@ check_ic_repo() {
     fi
 }
 
-
+log_warning ""
+log_warning "************************************************"
 log_warning "This script is deprecated and will be removed in the near future."
 log_warning "Please use the new script ci/tools/repro-check instead."
+log_warning "************************************************"
+log_warning ""
 
 #################### Set-up
 if [ "${DEBUG:-}" == "2" ]; then
