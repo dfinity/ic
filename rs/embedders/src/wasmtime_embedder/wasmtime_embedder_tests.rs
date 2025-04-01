@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
+use super::{linker, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
@@ -136,7 +136,7 @@ fn test_wasmtime_system_api() {
 
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
 
-    system_api::syscalls::<u32>(
+    linker::syscalls::<u32>(
         &mut linker,
         config.feature_flags,
         config.stable_memory_dirty_page_limit,
