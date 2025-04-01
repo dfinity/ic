@@ -1,6 +1,5 @@
 //! The complaint handling
-
-use crate::idkg::{
+use crate::{
     metrics::{timed_call, IDkgComplaintMetrics},
     utils::{update_purge_height, IDkgBlockReaderImpl},
 };
@@ -978,12 +977,13 @@ impl<'a> Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::{test_utils::*, utils::algorithm_for_key_id};
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
