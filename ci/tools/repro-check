@@ -686,7 +686,7 @@ class ReproducibilityVerifier:
         if not self.proposal_id:
             return
         if guest_os_hash:
-            [f.result() for f in guest_os_downloads]
+            [f.result() for f in concurrent.futures.as_completed(guest_os_downloads)]
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
             if cdn_hash != guest_os_hash:
                 raise VerificationError(
@@ -697,7 +697,7 @@ class ReproducibilityVerifier:
             else:
                 logger.info("The GuestOS sha256sum from the proposal and remote match.")
         if host_os_hash:
-            [f.result() for f in host_os_downloads]
+            [f.result() for f in concurrent.futures.as_completed(host_os_downloads)]
             cdn_hash = self.compare_cdn_hash("host-os", storage)
             if cdn_hash != host_os_hash:
                 raise VerificationError(
@@ -801,21 +801,21 @@ class ReproducibilityVerifier:
         compile_future.result()
         logger.info("Verifying locally built artifacts against remote CDN artifacts.")
         if guest_os_downloads:
-            [f.result() for f in guest_os_downloads]
+            [f.result() for f in concurrent.futures.as_completed(guest_os_downloads)]
             local_path = storage.dev_out / "guestos" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
             compare_hashes(local_hash, cdn_hash, "GuestOS")
 
         if host_os_downloads:
-            [f.result() for f in host_os_downloads]
+            [f.result() for f in concurrent.futures.as_completed(host_os_downloads)]
             local_path = storage.dev_out / "hostos" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("host-os", storage)
             compare_hashes(local_hash, cdn_hash, "HostOS")
 
         if setup_os_downloads:
-            [f.result() for f in setup_os_downloads]
+            [f.result() for f in concurrent.futures.as_completed(setup_os_downloads)]
             local_path = storage.dev_out / "setupos" / "disk-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("setup-os", storage)
