@@ -1,8 +1,8 @@
 use candid::{CandidType, Principal};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
-use std::{fmt::Display, future::Future};
 use std::time::Duration;
+use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
 pub mod helpers;
