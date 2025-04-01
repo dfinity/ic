@@ -1,4 +1,4 @@
-use crate::idkg::{metrics::IDkgPayloadMetrics, signer::ThresholdSignatureBuilder};
+use crate::{metrics::IDkgPayloadMetrics, signer::ThresholdSignatureBuilder};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
@@ -161,17 +161,15 @@ pub(crate) fn update_signature_agreements(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::test_utils::{
-        create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
-        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_idkg_algorithms,
-        fake_signature_request_context, fake_signature_request_context_from_id,
-        fake_signature_request_context_with_pre_sig, fake_vetkd_master_public_key_id,
-        into_idkg_contexts, request_id, set_up_idkg_payload, TestThresholdSignatureBuilder,
+    use crate::test_utils::{
+        create_available_pre_signature, into_idkg_contexts, set_up_idkg_payload,
+        TestThresholdSignatureBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
+    use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::IDkgPayload,
