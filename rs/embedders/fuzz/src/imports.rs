@@ -6,7 +6,7 @@ use crate::wasm_executor::{
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_embedders::wasmtime_embedder::{system_api, StoreData};
+use ic_embedders::wasmtime_embedder::{linker, StoreData};
 use ic_embedders::WasmtimeEmbedder;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NumWasmPages};
@@ -62,7 +62,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
 
     match config.feature_flags.wasm64 {
         FlagStatus::Enabled => {
-            system_api::syscalls::<u64>(
+            linker::syscalls::<u64>(
                 &mut linker,
                 config.feature_flags,
                 config.stable_memory_dirty_page_limit,
@@ -71,7 +71,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
             );
         }
         FlagStatus::Disabled => {
-            system_api::syscalls::<u32>(
+            linker::syscalls::<u32>(
                 &mut linker,
                 config.feature_flags,
                 config.stable_memory_dirty_page_limit,
