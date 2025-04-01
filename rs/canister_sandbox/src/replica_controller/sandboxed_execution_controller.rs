@@ -40,6 +40,7 @@ use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::collections::{HashMap, VecDeque};
 #[cfg(target_os = "linux")]
 use std::convert::TryInto;
+use std::hash::Hash;
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::process::ExitStatus;
@@ -1049,6 +1050,22 @@ impl WasmExecutor for SandboxedExecutionController {
             match compilation_cache.get(&wasm_binary.binary) {
                 None => {
                     self.metrics.inc_cache_lookup(CACHE_MISS);
+                    let is_wasm_in_file = wasm_binary.binary.file().is_some();
+                    if is_wasm_in_file {
+                        self.metrics.inc_cache_lookup("cache_miss_fallback_file");
+                        eprintln!(
+                            "create_execution_state: cache_miss_fallback_file for wasm module {:?} for canister {:?}",
+                            &wasm_binary.binary.module_hash(),
+                            canister_id,
+                        );
+                    } else {
+                        self.metrics.inc_cache_lookup("cache_miss_fallback_memory");
+                        eprintln!(
+                            "create_execution_state: cache_miss_fallback_memory for wasm module {:?} for canister {:?}",
+                            &wasm_binary.binary.module_hash(),
+                            canister_id,
+                        );
+                    }
                     let _compilation_timer = self
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_compile_duration
@@ -1879,6 +1896,21 @@ fn open_wasm(
     let compilation = match compilation_cache.get(&wasm_binary.binary) {
         None => {
             metrics.inc_cache_lookup(CACHE_MISS);
+            let is_wasm_in_file = wasm_binary.binary.file().is_some();
+            if is_wasm_in_file {
+                metrics.inc_cache_lookup("cache_miss_fallback_file");
+                eprintln!(
+                    "open_wasm: cache_miss_fallback_file for wasm module {:?}",
+                    &wasm_binary.binary.module_hash(),
+                );
+            } else {
+                metrics.inc_cache_lookup("cache_miss_fallback_memory");
+                eprintln!(
+                    "open_wasm: cache_miss_fallback_memory for wasm module {:?}",
+                    &wasm_binary.binary.module_hash(),
+                );
+            }
+
             let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
                 HypervisorError::WasmEngineError(ic_wasm_types::WasmEngineError::Unexpected(
                     "Couldn't find compiler binary".to_string(),
