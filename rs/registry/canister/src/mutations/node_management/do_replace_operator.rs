@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 #[cfg(target_arch = "wasm32")]
@@ -80,7 +82,9 @@ impl Registry {
         let mut required_node_allowance = 0;
         let mut mutations = vec![];
 
-        for node_id in &payload.node_ids {
+        // To ensure unique node id entries
+        let node_set: BTreeSet<_> = payload.node_ids.iter().collect();
+        for node_id in node_set {
             // 1. Check that the node exists in the registry
             let node_record = self.get_node(*node_id).ok_or_else(|| {
                 format!(
@@ -516,12 +520,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn disallow_duplicate_node_ids() {
-        todo!()
-    }
-
-    #[test]
     fn update_all_records_correctly() {
         let mut registry = Registry::new();
 
@@ -588,6 +586,56 @@ mod tests {
         }
 
         for (operator, allowance) in &[(operator(1), 13), (operator(2), 7)] {
+            let operator_record = registry
+                .get(
+                    make_node_operator_record_key(operator.clone()).as_bytes(),
+                    registry.latest_version(),
+                )
+                .unwrap();
+
+            let decoded = NodeOperatorRecord::decode(operator_record.value.as_slice()).unwrap();
+            assert_eq!(operator_record.version, version_before + 1);
+            assert_eq!(decoded.node_allowance, *allowance);
+        }
+    }
+
+    #[test]
+    fn allow_duplicate_correct_records() {
+        let mut registry = Registry::new();
+
+        let first_node = generate_valid_node_id();
+        registry.apply_mutations_for_test(
+            vec![
+                dc_mutation("dc1"),
+                operator_mutation(operator(1), provider(1), 10, "dc1"),
+                operator_mutation(operator(2), provider(1), 10, "dc1"),
+                node_mutation(first_node.node_id(), operator(1)),
+            ]
+            .into_iter()
+            // These are the mutations required to have a compliant registry
+            .chain(get_mutations_to_achieve_invariancy(&[&first_node]))
+            .collect(),
+        );
+
+        let version_before = registry.latest_version();
+        registry
+            .do_replace_operator_(
+                payload(
+                    operator(1),
+                    operator(2),
+                    &[first_node.node_id(), first_node.node_id()],
+                ),
+                caller(1),
+            )
+            .assert_ok();
+
+        assert!(
+            registry.latest_version() == version_before + 1,
+            "Expected registry version to increase. Before execution: {}, after execution: {}",
+            version_before,
+            registry.latest_version()
+        );
+        for (operator, allowance) in &[(operator(1), 11), (operator(2), 9)] {
             let operator_record = registry
                 .get(
                     make_node_operator_record_key(operator.clone()).as_bytes(),
