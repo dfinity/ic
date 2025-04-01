@@ -22,7 +22,9 @@ message CanisterSnapshotBits {
   uint64 wasm_memory_size = 9;
   uint64 total_size = 10;
   repeated canister_state_bits.v1.Global exported_globals = 11;
-  optional uint64 global_timer_nanos = 12;
-  canister_state_bits.v1.OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 13;
+  // This double optional represents either an unknown timer state (None), or Some(CanisterTimer), 
+  // where CanisterTimer is itself either Inactive (None) or Some(timestamp). 
+  optional optional uint64 global_timer_nanos = 12;
+  optional canister_state_bits.v1.OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 13;
   SnapshotSource source = 14;
 }
