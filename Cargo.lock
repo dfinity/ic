@@ -11920,16 +11920,23 @@ version = "0.9.0"
 name = "ic-registry-nns-data-provider"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
+ "candid",
  "chrono",
+ "futures-util",
  "ic-canister-client",
  "ic-certification 0.9.0",
  "ic-certification-test-utils",
+ "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-interfaces-registry",
  "ic-nns-constants",
+ "ic-registry-canister-api",
  "ic-registry-transport",
  "ic-types",
  "leb128",
+ "mockall",
+ "pretty_assertions",
  "prost 0.13.4",
  "rand 0.8.5",
  "serde",
