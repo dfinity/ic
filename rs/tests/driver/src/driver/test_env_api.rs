@@ -1665,7 +1665,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         let mut count = 0;
         retry_with_msg!(
             &format!(
-                "await_orchestrator_dashboard_available for {}",
+                "await_orchestrator_dashboard_accessible for {}",
                 self.get_public_addr().ip()
             ),
             self.test_env().logger(),
