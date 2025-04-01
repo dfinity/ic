@@ -376,7 +376,7 @@ class ReproducibilityVerifier:
         # Cache
         if base_cache_dir is not None:
             if clean_base_cache_dir:
-                raise RuntimeError(f"Refusing to cleaning manually specified base cache directory {base_cache_dir}")
+                raise RuntimeError(f"Refusing to clean manually specified base cache directory {base_cache_dir}")
             self.base_cache_dir = base_cache_dir
         else:
             self.base_cache_dir = base_cache_dir or Path(os.path.expanduser("~/.cache/repro-check"))
