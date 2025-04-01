@@ -1,10 +1,11 @@
 use candid::{CandidType, Principal};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
-use std::fmt::Display;
+use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
 pub mod management_canister;
+pub mod mock;
 pub mod nns;
 mod null_request;
 pub mod pocketic_impl;
@@ -27,7 +28,7 @@ pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
     fn payload(&self) -> Result<Vec<u8>, candid::Error>;
-    type Response: CandidType + DeserializeOwned;
+    type Response: CandidType + DeserializeOwned + Send;
 }
 
 pub struct CanisterInfo {
@@ -44,10 +45,10 @@ pub trait CallCanisters: sealed::Sealed {
         &self,
         canister_id: impl Into<Principal> + Send,
         request: R,
-    ) -> impl std::future::Future<Output = Result<R::Response, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<R::Response, Self::Error>> + Send;
 
     fn canister_info(
         &self,
         canister_id: impl Into<Principal> + Send,
-    ) -> impl std::future::Future<Output = Result<CanisterInfo, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<CanisterInfo, Self::Error>> + Send;
 }

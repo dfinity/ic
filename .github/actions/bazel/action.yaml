@@ -6,12 +6,9 @@ inputs:
     required: true
     description: |
       The commands to run. Will be evaluated with bash.
-  BUILDBUDDY_LINKS:
-    required: false
-    description: Extra build metadata for buildbuddy
   GPG_PASSPHRASE:
-    required: false
-    description: "GPG key to encrypt build events. If the key is not set, events won't be uploaded."
+    required: true
+    description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
 
 runs:
   using: "composite"
@@ -28,6 +25,9 @@ runs:
     # Run the specified commands
     - name: Run bazel commands
       shell: bash
+      env:
+        # Used by the bazel wrapper
+        BUILDBUDDY_LINKS: '[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
       run: |
         set -euo pipefail
 
@@ -39,8 +39,7 @@ runs:
         PATH="$PWD/.github/actions/bazel/bin:$BAZEL_ACTION_OLDPATH"
         hash -r
 
-        # Some exports used by the bazel wrapper
-        export BUILDBUDDY_LINKS='${{ inputs.BUILDBUDDY_LINKS }}'
+        # Used by the bazel wrapper
         export BAZEL_ACTION_METRICS_OUT='${{ steps.metrics-tmpdir.outputs.dir }}'
 
         ${{ inputs.run }}
