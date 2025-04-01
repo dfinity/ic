@@ -1,8 +1,8 @@
 pub mod host_memory;
-mod signal_stack;
 /// pub for usage in fuzzing
 #[doc(hidden)]
-pub mod system_api;
+pub mod linker;
+mod signal_stack;
 pub mod system_api_complexity;
 
 use std::{
@@ -259,7 +259,7 @@ impl WasmtimeEmbedder {
 
         match main_memory_type {
             WasmMemoryType::Wasm32 => {
-                system_api::syscalls::<u32>(
+                linker::syscalls::<u32>(
                     &mut linker,
                     self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
@@ -268,7 +268,7 @@ impl WasmtimeEmbedder {
                 );
             }
             WasmMemoryType::Wasm64 => {
-                system_api::syscalls::<u64>(
+                linker::syscalls::<u64>(
                     &mut linker,
                     self.config.feature_flags.clone(),
                     self.config.stable_memory_dirty_page_limit,
