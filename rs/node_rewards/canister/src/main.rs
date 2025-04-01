@@ -1,4 +1,6 @@
-use ic_cdk::{init, post_upgrade, pre_upgrade, query, spawn};
+#[cfg(any(test, feature = "test"))]
+use ic_cdk::query;
+use ic_cdk::{init, post_upgrade, pre_upgrade, spawn};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
