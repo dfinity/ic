@@ -118,10 +118,15 @@ impl Registry for FakeRegistry {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryDelta>, NervousSystemError> {
+        println!(
+            "changes_since: {}, responses: {:?}",
+            version, self.responses
+        );
         self.responses
             .lock()
             .unwrap()
-            .remove(&version.get())
+            .get(&version.get())
+            .cloned()
             .unwrap_or(Err(Error::UnknownError(format!(
                 "No response in test fixture for version {}",
                 version

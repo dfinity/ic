@@ -1,5 +1,6 @@
 use crate::canister::NodeRewardsCanister;
 use crate::storage::RegistryStoreStableMemoryBorrower;
+use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::{
     FakeRegistry, FakeRegistryResponses, RegistryCanister,
 };
@@ -90,7 +91,7 @@ fn reg_delta(key: impl AsRef<[u8]>, values: Vec<RegistryValue>) -> RegistryDelta
 }
 
 fn fake_registry_responses_for_rewards_calculation_test(
-    fake_registry_version: u64,
+    version_of_records: u64,
 ) -> FakeRegistryResponses {
     // This is what we are creating, so that we can mock registry
     let mut deltas = vec![];
@@ -118,7 +119,7 @@ fn fake_registry_responses_for_rewards_calculation_test(
 
     deltas.push(reg_delta(
         NODE_REWARDS_TABLE_KEY,
-        vec![reg_value(fake_registry_version, Some(rewards_table))],
+        vec![reg_value(version_of_records, Some(rewards_table))],
     ));
 
     // Node Operators
@@ -128,7 +129,7 @@ fn fake_registry_responses_for_rewards_calculation_test(
     deltas.push(reg_delta(
         make_node_operator_record_key(node_operator_a_id),
         vec![reg_value(
-            fake_registry_version,
+            version_of_records,
             Some(NodeOperatorRecord {
                 node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
                 node_allowance: 0,
@@ -145,7 +146,7 @@ fn fake_registry_responses_for_rewards_calculation_test(
     deltas.push(reg_delta(
         make_node_operator_record_key(node_operator_b_id),
         vec![reg_value(
-            fake_registry_version,
+            version_of_records,
             Some(NodeOperatorRecord {
                 node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
                 node_allowance: 0,
@@ -164,7 +165,7 @@ fn fake_registry_responses_for_rewards_calculation_test(
     deltas.push(reg_delta(
         make_data_center_record_key("dc1"),
         vec![reg_value(
-            fake_registry_version,
+            version_of_records,
             Some(DataCenterRecord {
                 id: "dc1".to_string(),
                 region: "Africa,ZA".to_string(),
@@ -177,7 +178,7 @@ fn fake_registry_responses_for_rewards_calculation_test(
     deltas.push(reg_delta(
         make_data_center_record_key("dc2"),
         vec![reg_value(
-            fake_registry_version,
+            version_of_records,
             Some(DataCenterRecord {
                 id: "dc2".to_string(),
                 region: "Europe,CH".to_string(),
@@ -188,7 +189,7 @@ fn fake_registry_responses_for_rewards_calculation_test(
     ));
 
     let mut fake_registry_responses = FakeRegistryResponses::new();
-    fake_registry_responses.insert(fake_registry_version, Ok(deltas));
+    fake_registry_responses.insert(0, Ok(deltas));
 
     fake_registry_responses
 }
@@ -215,7 +216,9 @@ fn test_rewards_calculation() {
         &CANISTER,
         client.clone(),
         request,
-    );
+    )
+    .now_or_never()
+    .unwrap();
 
     let expected_result = GetNodeProvidersMonthlyXdrRewardsResponse {
         rewards: Some(NodeProvidersMonthlyXdrRewards {
