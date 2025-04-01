@@ -1213,20 +1213,20 @@ fn test_block_transformation() {
 
 #[test]
 fn test_upgrade_serialization_from_mainnet() {
-    test_upgrade_serialization(ledger_wasm_mainnet());
+    test_upgrade_serialization(ledger_wasm_mainnet(), false);
 }
 
 #[test]
 fn test_upgrade_serialization_from_v3() {
-    test_upgrade_serialization(ledger_wasm_mainnet_v3());
+    test_upgrade_serialization(ledger_wasm_mainnet_v3(), true);
 }
 
 #[test]
 fn test_upgrade_serialization_from_v2() {
-    test_upgrade_serialization(ledger_wasm_mainnet_v2());
+    test_upgrade_serialization(ledger_wasm_mainnet_v2(), true);
 }
 
-fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
+fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>, mainnet_on_prev_version: bool) {
     let ledger_wasm_current = ledger_wasm();
 
     let minter = Arc::new(minter_identity());
@@ -1248,7 +1248,7 @@ fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
         upgrade_args,
         minter,
         false,
-        true,
+        mainnet_on_prev_version,
     );
 }
 
@@ -1295,16 +1295,6 @@ fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<En
 }
 
 #[test]
-fn test_multi_step_migration_from_mainnet() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
-        ledger_wasm_mainnet(),
-        ledger_wasm_low_instruction_limits(),
-        encode_init_args,
-        get_all_blocks,
-    );
-}
-
-#[test]
 fn test_multi_step_migration_from_v3() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_wasm_mainnet_v3(),
@@ -1331,13 +1321,8 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        false,
+        true,
     );
-}
-
-#[test]
-fn test_stable_migration_endpoints_disabled_from_mainnet() {
-    test_stable_migration_endpoints_disabled(ledger_wasm_mainnet());
 }
 
 #[test]
