@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+##################################################################################
+# NOTE: This script is deprecated and will be removed in the future.
+#       Please use the new script ci/tools/repro-check instead.
+##################################################################################
+
 # This script verifies a specific commit hash or a proposal for reproducibility.
 # If it's a proposal, we need to make sure that proposal_hash == CDN_hash == build_hash.
 # Otherwise, we only need to make sure that CDN_hash == build_hash.
