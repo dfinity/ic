@@ -430,6 +430,46 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "stable_read_v128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
+                    return_type: vec![ValType::V128],
+                },
+            )],
+        ),
+        (
+            "unsafe_stable_read_v128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
+                    return_type: vec![ValType::V128],
+                },
+            )],
+        ),
+        (
+            "stable_write_i32",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "stable_prefetch",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "time",
             vec![(
                 API_VERSION_IC0,

@@ -62,6 +62,130 @@ pub(super) fn replacement_functions(
 
     vec![
         (
+            SystemApiFunc::StableLoadV128,
+            (
+                FuncType::new([ValType::I64], [ValType::V128]),
+                Body {
+                    locals: vec![(1, ValType::I32)],
+                    instructions: vec![
+                        // Calculate bytemap index
+                        LocalGet { local_index: 0 },
+                        I64Const {
+                            value: page_size_shift as i64,
+                        },
+                        I64ShrU,
+                        I32WrapI64,
+                        LocalSet { local_index: 1 },
+                        LocalGet { local_index: 1 }, // address for store later
+                        LocalGet { local_index: 1 },
+                        I32Load8U {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                // We assume the bytemap for stable memory is always
+                                // inserted directly after the stable memory.
+                                memory: special_indices.stable_memory_index + 1,
+                            },
+                        },
+                        I32Const { value: 2 }, // READ_BIT
+                        I32Or,
+                        I32Store8 {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                // We assume the bytemap for stable memory is always
+                                // inserted directly after the stable memory.
+                                memory: special_indices.stable_memory_index + 1,
+                            },
+                        },
+                        LocalGet { local_index: 0 },
+                        V128Load {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                memory: special_indices.stable_memory_index,
+                            },
+                        },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
+            SystemApiFunc::UnsafeStableLoadV128,
+            (
+                FuncType::new([ValType::I64], [ValType::V128]),
+                Body {
+                    locals: vec![],
+                    instructions: vec![
+                        LocalGet { local_index: 0 },
+                        V128Load {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                memory: special_indices.stable_memory_index,
+                            },
+                        },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
+            SystemApiFunc::StableStoreI32,
+            (
+                FuncType::new([ValType::I64, ValType::I32], []),
+                Body {
+                    locals: vec![],
+                    instructions: vec![
+                        // Calculate bytemap index
+                        LocalGet { local_index: 0 },
+                        I64Const {
+                            value: page_size_shift as i64,
+                        },
+                        I64ShrU,
+                        I32WrapI64,
+                        I32Const { value: 3 }, // Value for accessed and dirty
+                        I32Store8 {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                // We assume the bytemap for stable memory is always
+                                // inserted directly after the stable memory.
+                                memory: special_indices.stable_memory_index + 1,
+                            },
+                        },
+                        LocalGet { local_index: 0 },
+                        LocalGet { local_index: 1 },
+                        I32Store {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                memory: special_indices.stable_memory_index,
+                            },
+                        },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
+            // Assume the function does the data prefetching, noop for now...
+            SystemApiFunc::StablePrefetch,
+            (FuncType::new([ValType::I64, ValType::I64], []), {
+                Body {
+                    locals: vec![],
+                    instructions: vec![End],
+                }
+            }),
+        ),
+        (
             SystemApiFunc::StableSize,
             (
                 FuncType::new([], [ValType::I32]),

@@ -162,6 +162,10 @@ enum SystemApiFunc {
     Stable64Read,
     StableWrite,
     Stable64Write,
+    StableLoadV128,
+    UnsafeStableLoadV128,
+    StableStoreI32,
+    StablePrefetch,
 }
 
 impl SystemApiFunc {
@@ -175,6 +179,10 @@ impl SystemApiFunc {
             "stable64_read" => Some(Self::Stable64Read),
             "stable_write" => Some(Self::StableWrite),
             "stable64_write" => Some(Self::Stable64Write),
+            "stable_read_v128" => Some(Self::StableLoadV128),
+            "unsafe_stable_read_v128" => Some(Self::UnsafeStableLoadV128),
+            "stable_write_i32" => Some(Self::StableStoreI32),
+            "stable_prefetch" => Some(Self::StablePrefetch),
             _ => None,
         }
     }
