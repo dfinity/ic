@@ -589,6 +589,11 @@ impl PocketIcSubnets {
             mut time,
         } = subnet_config_info;
 
+        // All subnets must eventually have the same time and time can only advance =>
+        // advance time of the new subnet if other subnets have higher time;
+        // the maximum time must be determined before adding a `StateMachine`
+        // for the new subnet to `self.subnets` because `self.time()`
+        // is only sound if all subnets in `self.subnets` have the same time.
         let current_time = self.time();
         if current_time > time {
             time = current_time;
@@ -603,6 +608,7 @@ impl PocketIcSubnets {
                 Box::new(TempDir::new().unwrap())
             };
 
+        // We copy the subnet state (if applicable) since the subnet state is read-only.
         if let Some(subnet_state_dir) = subnet_state_dir {
             copy_dir(subnet_state_dir, state_machine_state_dir.path())
                 .expect("Failed to copy state directory");
@@ -658,12 +664,16 @@ impl PocketIcSubnets {
 
         let sm = builder.build_with_subnets(self.subnets.clone());
 
+        // The actual subnet ID (matching the subnet ID in the input `SubnetConfigInfo`
+        // if one was provided).
         let subnet_id = sm.get_subnet_id();
 
+        // The subnet created first is marked as the NNS subnet.
         if self.nns_subnet.is_none() {
             self.nns_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
         }
 
+        // We need the actual subnet ID to update the chain keys.
         for chain_key in subnet_chain_keys {
             self.chain_keys
                 .entry(chain_key)
@@ -671,6 +681,8 @@ impl PocketIcSubnets {
                 .push(subnet_id);
         }
 
+        // We need `StateMachine` components (metrics/logger)
+        // to create a bitcoin adapter (if applicable).
         if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
             self._bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
                 self.bitcoind_addr.clone().unwrap(),
@@ -682,14 +694,18 @@ impl PocketIcSubnets {
             ));
         }
 
-        // Insert ranges and allocation range into routing table
+        // Update the routing table.
         for range in &ranges {
             self.routing_table.insert(*range, subnet_id).unwrap();
         }
+        // The allocation range must be added last because
+        // canister IDs are allocated from the last available range
+        // (replica implementation).
         if let Some(alloc_range) = alloc_range {
             self.routing_table.insert(alloc_range, subnet_id).unwrap();
         }
 
+        // Update global registry records.
         let subnet_list = self
             .subnets
             .get_all()
@@ -704,12 +720,6 @@ impl PocketIcSubnets {
             self.registry_data_provider.clone(),
         );
 
-        for subnet in self.subnets.get_all() {
-            // Reload registry on the state machines to make sure
-            // all the state machines have a consistent view of the registry.
-            subnet.state_machine.reload_registry();
-        }
-
         // Update the registry file on disk.
         if let Some(ref state_dir) = self.state_dir {
             let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
@@ -717,14 +727,26 @@ impl PocketIcSubnets {
                 .write_to_file(registry_proto_path);
         }
 
+        // Reload registry on every `StateMachine` in `self.subnets` to make sure
+        // they have a consistent view of the (latest) registry.
+        for subnet in self.subnets.get_all() {
+            subnet.state_machine.reload_registry();
+        }
+
         // Make sure time is strictly monotone.
         time += Duration::from_nanos(1);
 
+        // Make sure that all subnets in `self.subnets` have the same time
+        // and execute a round so that their latest certified state
+        // reflects the registry changes from above.
         for subnet in self.subnets.get_all() {
             subnet.state_machine.set_time(time);
             subnet.state_machine.execute_round();
         }
 
+        // Fetch the NNS delegation for the newly created subnet.
+        // This can only be done after updating the registry and executing
+        // a round on the NNS subnet (above).
         let nns_subnet = self.get_nns().unwrap();
         if subnet_id != nns_subnet.get_subnet_id() {
             let delegation = nns_subnet.get_delegation_for_subnet(subnet_id).unwrap();
