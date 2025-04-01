@@ -77,7 +77,7 @@ impl TokenDef {
 
         let principal_id = PrincipalId::from_str(parts[0])
             .context(format!("Failed to parse PrincipalId from {}", parts[0]))?;
-        let ledger_id = CanisterId::unchecked_from_principal(principal_id);
+        let ledger_id = CanisterId::try_from_principal_id(principal_id)?;
 
         let mut icrc1_symbol: Option<String> = None;
         let mut icrc1_decimals: Option<u8> = None;

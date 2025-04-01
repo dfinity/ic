@@ -54,7 +54,7 @@ pub struct RosettaOptions {
 impl Default for RosettaOptions {
     fn default() -> Self {
         RosettaOptions {
-            ledger_id: Principal::anonymous(),
+            ledger_id: Principal::from_str("3jkp5-oyaaa-aaaaj-azwqa-cai").unwrap(),
             store_type: "in-memory".to_owned(),
             network_type: "testnet".to_owned(),
             network_url: None,

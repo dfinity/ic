@@ -32,19 +32,10 @@ pub fn get_state_from_network_id(
     {
         Some(state) => state.clone(),
         None => {
-            if multitoken_state.token_states.len() != 1 {
-                bail!(
-                    "Network Identifier {} not being tracked",
-                    network_identifier.blockchain
-                );
-            } else {
-                multitoken_state
-                    .token_states
-                    .values()
-                    .next()
-                    .unwrap()
-                    .clone()
-            }
+            bail!(
+                "Network Identifier {} not being tracked",
+                network_identifier.blockchain
+            );
         }
     };
 

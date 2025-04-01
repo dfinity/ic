@@ -30,6 +30,7 @@ pub struct WatchdogThread {
     tracing_span: Option<tracing::Span>,
 }
 
+/// A thread watchdog implementation that monitors a task and restarts it if it becomes unresponsive.
 impl WatchdogThread {
     /// Creates a new `WatchdogThread` with the specified `heartbeat_timeout` and `skip_first_heartbeat` mode.
     ///
@@ -37,7 +38,8 @@ impl WatchdogThread {
     ///
     /// * `heartbeat_timeout` - Duration that the watchdog will wait before considering the monitored task stalled.
     /// * `on_restart` - Optional callback function that is called when the watchdog restarts the task.
-    /// * `skip_first_heartbeat` - If true, the watchdog will not trigger a restart if no heartbeat is received before the first heartbeat.
+    /// * `skip_first_heartbeat_check` - If true, the watchdog will not trigger a restart if no heartbeat is received before the first heartbeat.
+    /// * `tracing_span` - Optional tracing span to associate with the watchdog thread for logging purposes.
     pub fn new(
         heartbeat_timeout: Duration,
         on_restart: Option<Arc<dyn Fn() + Send + Sync>>,

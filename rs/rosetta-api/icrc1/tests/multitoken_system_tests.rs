@@ -38,8 +38,6 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use proptest::prelude::ProptestConfig;
-use proptest::proptest;
 use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
@@ -509,264 +507,429 @@ async fn assert_rosetta_balance(
     assert_eq!(rosetta_balance, balance.to_string());
 }
 
-proptest! {
-#![proptest_config(ProptestConfig::with_cases(*NUM_TEST_CASES))]
 #[test]
-fn test_multi_tokens_mode(args_with_caller in valid_transactions_strategy(
-            (*MINTING_IDENTITY).clone(),
-            DEFAULT_TRANSFER_FEE,
-            *MAX_NUM_GENERATED_BLOCKS,
-            SystemTime::now(),
-        )) {
-    let rt = Runtime::new().unwrap();
-    let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
-        //.with_initial_balance(TEST_ACCOUNT.clone(), 1_000_000_000_000u64)
-        .with_symbol("SYM1")
-        .with_decimals(6);
+fn test_multi_tokens_mode() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
 
-    let icrc1_ledger_2_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER)
-        //.with_initial_balance(TEST_ACCOUNT.clone(), 1_000_000_000_000u64)
-        .with_symbol("SYM2");
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                *MAX_NUM_GENERATED_BLOCKS,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+                    .with_symbol("SYM1")
+                    .with_decimals(6);
 
-    let setup = Setup::builder()
-        .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
-        .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
-        .build(&rt);
+                let icrc1_ledger_2_builder =
+                    Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER).with_symbol("SYM2");
 
-    let rosetta_ledger_setup_1_builder = RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
-        .with_args_with_caller(args_with_caller.clone())
-        .with_icrc1_symbol("SYM1".to_string());
+                let setup = Setup::builder()
+                    .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+                    .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
+                    .build(&rt);
 
-        let rosetta_ledger_setup_2_builder = RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[1], setup.port)
-        .with_args_with_caller(args_with_caller.clone())
-        .with_icrc1_symbol("SYM2".to_string());
+                let rosetta_ledger_setup_1_builder = RosettaLedgerTestingEnvironmentBuilder::new(
+                    &setup.icrc1_ledgers[0],
+                    setup.port,
+                )
+                .with_args_with_caller(args_with_caller.clone())
+                .with_icrc1_symbol("SYM1".to_string());
 
-    let rosetta_env = rt.block_on(RosettaTestingEnvironmentBuilder::new(false, setup.port)
-        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
-        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder)
-        .build());
+                let rosetta_ledger_setup_2_builder = RosettaLedgerTestingEnvironmentBuilder::new(
+                    &setup.icrc1_ledgers[1],
+                    setup.port,
+                )
+                .with_args_with_caller(args_with_caller.clone())
+                .with_icrc1_symbol("SYM2".to_string());
 
-    let rosetta_client = rosetta_env.rosetta_client.clone();
+                let rosetta_env = rt.block_on(
+                    RosettaTestingEnvironmentBuilder::new(false, setup.port)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder)
+                        .build(),
+                );
 
-    // Call /network/list endpoint.
-    let network_list = rt.block_on(rosetta_client.network_list())
-        .expect("unable to call network_list")
-        .network_identifiers;
-    // Expect two network identifiers.
-    let network_id1 = NetworkIdentifier::new("Internet Computer".to_string(), TEST_LEDGER_CANISTER_ID.to_string());
-    let network_id2 = NetworkIdentifier::new("Internet Computer".to_string(), TEST_LEDGER_CANISTER_ID_OTHER.to_string());
-    assert_eq!(network_list.len(), 2);
-    assert!(network_list.contains(&network_id1));
-    assert!(network_list.contains(&network_id2));
+                let rosetta_client = rosetta_env.rosetta_client.clone();
 
-    for net in network_list {
-        let status = rt.block_on(rosetta_client.network_status(net.clone()))
-            .expect("unable to call network_status");
-        // We must have a valid current block identifier.
-        assert_eq!(status.current_block_identifier.index, *MAX_NUM_GENERATED_BLOCKS as u64);
-    }
-}
-}
+                // Call /network/list endpoint.
+                let network_list = rt
+                    .block_on(rosetta_client.network_list())
+                    .expect("unable to call network_list")
+                    .network_identifiers;
+                // Expect two network identifiers.
+                let network_id1 = NetworkIdentifier::new(
+                    "Internet Computer".to_string(),
+                    TEST_LEDGER_CANISTER_ID.to_string(),
+                );
+                let network_id2 = NetworkIdentifier::new(
+                    "Internet Computer".to_string(),
+                    TEST_LEDGER_CANISTER_ID_OTHER.to_string(),
+                );
+                assert_eq!(network_list.len(), 2);
+                assert!(network_list.contains(&network_id1));
+                assert!(network_list.contains(&network_id2));
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(*NUM_TEST_CASES))]
-    #[test]
-    fn test_blocks(args_with_caller in valid_transactions_strategy(
-        (*MINTING_IDENTITY).clone(),
-        DEFAULT_TRANSFER_FEE,
-        *MAX_NUM_GENERATED_BLOCKS,
-        SystemTime::now(),
-    )) {
-        let rt = Runtime::new().unwrap();
-        let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
-        .with_symbol("SYM1")
-            .with_decimals(6);
-
-        let icrc1_ledger_2_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER)
-            .with_symbol("SYM2");
-
-        let setup = Setup::builder()
-            .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
-            .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
-            .build(&rt);
-
-        let icrc1_ledgers = setup.icrc1_ledgers.clone();
-
-        let rosetta_ledger_setup_1_builder = RosettaLedgerTestingEnvironmentBuilder::new(&icrc1_ledgers[0], setup.port)
-            .with_args_with_caller(args_with_caller.clone())
-            .with_icrc1_symbol("SYM1".to_string());
-
-            let rosetta_ledger_setup_2_builder = RosettaLedgerTestingEnvironmentBuilder::new(&icrc1_ledgers[1], setup.port)
-            .with_args_with_caller(args_with_caller.clone())
-            .with_icrc1_symbol("SYM2".to_string());
-
-        let rosetta_env = rt.block_on(RosettaTestingEnvironmentBuilder::new(false, setup.port)
-            .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
-            .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder)
-            .build());
-
-        let rosetta_client = rosetta_env.rosetta_client.clone();
-        rt.block_on(async move {
-
-        if !args_with_caller.is_empty(){
-
-
-    for block in get_rosetta_blocks_from_icrc1_ledger(icrc1_ledgers[0].agent.clone(), 0, *MAX_BLOCKS_PER_REQUEST).await.into_iter(){
-        let mut expected_block_response = BlockResponse::new(
-            Some(
-                icrc1_rosetta_block_to_rosetta_core_block(block.clone(), Currency {
-                    symbol: icrc1_ledgers[0].init_args.token_symbol.clone(),
-                    decimals: icrc1_ledgers[0].init_args
-                    .decimals
-                    .unwrap_or(DEFAULT_DECIMAL_PLACES) as u32,
-                    ..Default::default()
-                }).unwrap(),
-            ));
-            expected_block_response.block.iter_mut().for_each(|block| block.transactions.iter_mut().for_each(|tx| {
-                tx.operations.iter_mut().for_each(|op| {
-                    op.status = Some(STATUS_COMPLETED.to_string());
-                })
-            }));
-
-        assert_eq!(hex::encode(block.clone().get_block_hash().clone()),expected_block_response.clone().block.unwrap().block_identifier.hash);
-                // Rosetta should be able to handle blockidentifieres with both the hash and the block index set
-        let actual_block_response = rosetta_client.block(icrc1_ledgers[0].network_identifier().clone(), PartialBlockIdentifier{
-            hash:Some(hex::encode(block.clone().get_block_hash().clone())),
-            index:Some(block.index)
-        })
-        .await
-        .expect("Failed to find block in Rosetta");
-        assert_eq!(expected_block_response,actual_block_response);
-
-        // Rosetta should be able to handle blockidentifieres with only the hash set
-        let actual_block_response = rosetta_client.block(icrc1_ledgers[0].network_identifier().clone(), PartialBlockIdentifier{
-            hash:Some(hex::encode(block.clone().get_block_hash())),
-            index:None
-        })
-        .await
-        .expect("Failed to find block in Rosetta");
-        assert_eq!(expected_block_response,actual_block_response);
-
-        // Rosetta should be able to handle blockidentifieres with only the index set
-        let actual_block_response = rosetta_client.block(icrc1_ledgers[0].network_identifier().clone(), PartialBlockIdentifier{
-            hash:None,
-            index:Some(block.index)
-        })
-        .await
-        .expect("Failed to find block in Rosetta");
-        assert_eq!(expected_block_response,actual_block_response);
-    }}
-
-    // If no hash or index was provided rosetta should return the last block
-    let last_block = rosetta_client.block(icrc1_ledgers[0].network_identifier().clone(), PartialBlockIdentifier{
-        hash:None,
-        index:None
-    }).await.expect("failed to get last block");
-    assert_eq!(last_block.block.unwrap().block_identifier.index as usize, args_with_caller.len());
-});
+                for net in network_list {
+                    let status = rt
+                        .block_on(rosetta_client.network_status(net.clone()))
+                        .expect("unable to call network_status");
+                    // We must have a valid current block identifier.
+                    assert_eq!(
+                        status.current_block_identifier.index,
+                        *MAX_NUM_GENERATED_BLOCKS as u64
+                    );
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
 }
 
-}
+#[test]
+fn test_blocks() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(*NUM_TEST_CASES))]
-    #[test]
-fn test_block_transaction(args_with_caller in valid_transactions_strategy(
-    (*MINTING_IDENTITY).clone(),
-    DEFAULT_TRANSFER_FEE,
-    *MAX_NUM_GENERATED_BLOCKS,
-    SystemTime::now(),
-)) {
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+                    .with_symbol("SYM1")
+                    .with_decimals(6);
 
-        let rt = Runtime::new().unwrap();
-        let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
-        .with_symbol("SYM1")
-            .with_decimals(6);
+                let icrc1_ledger_2_builder =
+                    Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER).with_symbol("SYM2");
 
-        let icrc1_ledger_2_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER)
-            .with_symbol("SYM2");
+                let setup = Setup::builder()
+                    .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+                    .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
+                    .build(&rt);
 
-        let setup = Setup::builder()
-            .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
-            .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
-            .build(&rt);
+                let icrc1_ledgers = setup.icrc1_ledgers.clone();
 
-        let icrc1_ledgers = setup.icrc1_ledgers.clone();
+                let rosetta_ledger_setup_1_builder =
+                    RosettaLedgerTestingEnvironmentBuilder::new(&icrc1_ledgers[0], setup.port)
+                        .with_args_with_caller(args_with_caller.clone())
+                        .with_icrc1_symbol("SYM1".to_string());
 
-        let rosetta_ledger_setup_1_builder = RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
-            .with_icrc1_symbol("SYM1".to_string());
+                let rosetta_ledger_setup_2_builder =
+                    RosettaLedgerTestingEnvironmentBuilder::new(&icrc1_ledgers[1], setup.port)
+                        .with_args_with_caller(args_with_caller.clone())
+                        .with_icrc1_symbol("SYM2".to_string());
 
-            let rosetta_ledger_setup_2_builder = RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[1], setup.port)
-            .with_icrc1_symbol("SYM2".to_string());
+                let rosetta_env = rt.block_on(
+                    RosettaTestingEnvironmentBuilder::new(false, setup.port)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder)
+                        .build(),
+                );
 
-        let rosetta_env = rt.block_on(RosettaTestingEnvironmentBuilder::new(false, setup.port)
-            .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
-            .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder)
-            .build());
+                let rosetta_client = rosetta_env.rosetta_client.clone();
+                rt.block_on(async move {
+                    if !args_with_caller.is_empty() {
+                        for block in get_rosetta_blocks_from_icrc1_ledger(
+                            icrc1_ledgers[0].agent.clone(),
+                            0,
+                            *MAX_BLOCKS_PER_REQUEST,
+                        )
+                        .await
+                        .into_iter()
+                        {
+                            let mut expected_block_response = BlockResponse::new(Some(
+                                icrc1_rosetta_block_to_rosetta_core_block(
+                                    block.clone(),
+                                    Currency {
+                                        symbol: icrc1_ledgers[0].init_args.token_symbol.clone(),
+                                        decimals: icrc1_ledgers[0]
+                                            .init_args
+                                            .decimals
+                                            .unwrap_or(DEFAULT_DECIMAL_PLACES)
+                                            as u32,
+                                        ..Default::default()
+                                    },
+                                )
+                                .unwrap(),
+                            ));
+                            expected_block_response.block.iter_mut().for_each(|block| {
+                                block.transactions.iter_mut().for_each(|tx| {
+                                    tx.operations.iter_mut().for_each(|op| {
+                                        op.status = Some(STATUS_COMPLETED.to_string());
+                                    })
+                                })
+                            });
 
-        let rosetta_client = rosetta_env.rosetta_client.clone();
+                            assert_eq!(
+                                hex::encode(block.clone().get_block_hash().clone()),
+                                expected_block_response
+                                    .clone()
+                                    .block
+                                    .unwrap()
+                                    .block_identifier
+                                    .hash
+                            );
+                            // Rosetta should be able to handle block identifieres with both the hash and the block index set
+                            let actual_block_response = rosetta_client
+                                .block(
+                                    icrc1_ledgers[0].network_identifier().clone(),
+                                    PartialBlockIdentifier {
+                                        hash: Some(hex::encode(
+                                            block.clone().get_block_hash().clone(),
+                                        )),
+                                        index: Some(block.index),
+                                    },
+                                )
+                                .await
+                                .expect("Failed to find block in Rosetta");
+                            assert_eq!(expected_block_response, actual_block_response);
 
-    // Wrap async calls in a blocking Block
-     rt.block_on(async {
-        if !args_with_caller.is_empty(){
+                            // Rosetta should be able to handle block identifieres with only the hash set
+                            let actual_block_response = rosetta_client
+                                .block(
+                                    icrc1_ledgers[0].network_identifier().clone(),
+                                    PartialBlockIdentifier {
+                                        hash: Some(hex::encode(block.clone().get_block_hash())),
+                                        index: None,
+                                    },
+                                )
+                                .await
+                                .expect("Failed to find block in Rosetta");
+                            assert_eq!(expected_block_response, actual_block_response);
 
-    for block in get_rosetta_blocks_from_icrc1_ledger(icrc1_ledgers[0].agent.clone(),0,*MAX_BLOCKS_PER_REQUEST).await.into_iter() {
-        let mut expected_block_transaction_response =   rosetta_core::response_types::BlockTransactionResponse {
-            transaction: icrc1_rosetta_block_to_rosetta_core_transaction(block.clone(), Currency {
-                symbol: icrc1_ledgers[0].init_args.token_symbol.clone(),
-                decimals: icrc1_ledgers[0].init_args
-                .decimals
-                .unwrap_or(DEFAULT_DECIMAL_PLACES) as u32,
-                ..Default::default()
-            }).unwrap()};
+                            // Rosetta should be able to handle block identifieres with only the index set
+                            let actual_block_response = rosetta_client
+                                .block(
+                                    icrc1_ledgers[0].network_identifier().clone(),
+                                    PartialBlockIdentifier {
+                                        hash: None,
+                                        index: Some(block.index),
+                                    },
+                                )
+                                .await
+                                .expect("Failed to find block in Rosetta");
+                            assert_eq!(expected_block_response, actual_block_response);
+                        }
+                    }
 
-            expected_block_transaction_response.transaction.operations.iter_mut().for_each(|op| {
-                    op.status = Some(STATUS_COMPLETED.to_string());
+                    // If no hash or index was provided rosetta should return the last block
+                    let last_block = rosetta_client
+                        .block(
+                            icrc1_ledgers[0].network_identifier().clone(),
+                            PartialBlockIdentifier {
+                                hash: None,
+                                index: None,
+                            },
+                        )
+                        .await
+                        .expect("failed to get last block");
+                    assert_eq!(
+                        last_block.block.unwrap().block_identifier.index as usize,
+                        args_with_caller.len()
+                    );
                 });
-
-        assert_eq!(hex::encode(block.clone().get_transaction_hash().clone()),expected_block_transaction_response.clone().transaction.transaction_identifier.hash);
-
-        // Wait for rosetta to catch up with the ledger
-        wait_for_rosetta_block(&rosetta_client, icrc1_ledgers[0].network_identifier().clone(), block.index)
-            .await;
-                // Rosetta should be able to handle blockidentifieres with both the hash and the block index set
-        let actual_block_transaction_response = rosetta_client.block_transaction(icrc1_ledgers[0].network_identifier(),
-            BlockIdentifier {
-                            index: block.index,
-                            hash: hex::encode(block.clone().get_block_hash().clone()),
-
-        }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash().clone()) })
-        .await
-        .expect("Failed to find block in Rosetta");
-        assert_eq!(expected_block_transaction_response,actual_block_transaction_response);
-
-        assert!(rosetta_client.block_transaction(icrc1_ledgers[0].network_identifier(),
-        BlockIdentifier {
-                        index: u64::MAX,
-                        hash: hex::encode(block.clone().get_block_hash().clone()),
-
-    }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash().clone()) })
-    .await.is_err());
-
-    assert!(rosetta_client.block_transaction(icrc1_ledgers[0].network_identifier().clone(),
-    BlockIdentifier {
-                    index: block.index,
-                    hash: hex::encode("wrong hash"),
-
-    }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash()) })
-    .await.is_err());
-
-    assert!(rosetta_client.block_transaction(icrc1_ledgers[0].network_identifier().clone(),
-        BlockIdentifier {
-                        index: block.index,
-                        hash: hex::encode(block.clone().get_block_hash()),
-
-}, TransactionIdentifier{ hash: hex::encode("wrong tx hash") })
-.await.is_err());
-    }
+                Ok(())
+            },
+        )
+        .unwrap();
 }
- });
- }
+
+#[test]
+fn test_block_transaction() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+                    .with_symbol("SYM1")
+                    .with_decimals(6);
+
+                let icrc1_ledger_2_builder =
+                    Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID_OTHER).with_symbol("SYM2");
+
+                let setup = Setup::builder()
+                    .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+                    .add_icrc1_ledger_builder(icrc1_ledger_2_builder)
+                    .build(&rt);
+
+                let icrc1_ledgers = setup.icrc1_ledgers.clone();
+
+                let rosetta_ledger_setup_1_builder = RosettaLedgerTestingEnvironmentBuilder::new(
+                    &setup.icrc1_ledgers[0],
+                    setup.port,
+                )
+                .with_icrc1_symbol("SYM1".to_string());
+
+                let rosetta_ledger_setup_2_builder = RosettaLedgerTestingEnvironmentBuilder::new(
+                    &setup.icrc1_ledgers[1],
+                    setup.port,
+                )
+                .with_icrc1_symbol("SYM2".to_string());
+
+                let rosetta_env = rt.block_on(
+                    RosettaTestingEnvironmentBuilder::new(false, setup.port)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_1_builder)
+                        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_2_builder)
+                        .build(),
+                );
+
+                let rosetta_client = rosetta_env.rosetta_client.clone();
+
+                // Wrap async calls in a blocking Block
+                rt.block_on(async {
+                    if !args_with_caller.is_empty() {
+                        for block in get_rosetta_blocks_from_icrc1_ledger(
+                            icrc1_ledgers[0].agent.clone(),
+                            0,
+                            *MAX_BLOCKS_PER_REQUEST,
+                        )
+                        .await
+                        .into_iter()
+                        {
+                            let mut expected_block_transaction_response =
+                                rosetta_core::response_types::BlockTransactionResponse {
+                                    transaction: icrc1_rosetta_block_to_rosetta_core_transaction(
+                                        block.clone(),
+                                        Currency {
+                                            symbol: icrc1_ledgers[0].init_args.token_symbol.clone(),
+                                            decimals: icrc1_ledgers[0]
+                                                .init_args
+                                                .decimals
+                                                .unwrap_or(DEFAULT_DECIMAL_PLACES)
+                                                as u32,
+                                            ..Default::default()
+                                        },
+                                    )
+                                    .unwrap(),
+                                };
+
+                            expected_block_transaction_response
+                                .transaction
+                                .operations
+                                .iter_mut()
+                                .for_each(|op| {
+                                    op.status = Some(STATUS_COMPLETED.to_string());
+                                });
+
+                            assert_eq!(
+                                hex::encode(block.clone().get_transaction_hash().clone()),
+                                expected_block_transaction_response
+                                    .clone()
+                                    .transaction
+                                    .transaction_identifier
+                                    .hash
+                            );
+
+                            // Wait for rosetta to catch up with the ledger
+                            wait_for_rosetta_block(
+                                &rosetta_client,
+                                icrc1_ledgers[0].network_identifier().clone(),
+                                block.index,
+                            )
+                            .await;
+                            // Rosetta should be able to handle block identifieres with both the hash and the block index set
+                            let actual_block_transaction_response = rosetta_client
+                                .block_transaction(
+                                    icrc1_ledgers[0].network_identifier(),
+                                    BlockIdentifier {
+                                        index: block.index,
+                                        hash: hex::encode(block.clone().get_block_hash().clone()),
+                                    },
+                                    TransactionIdentifier {
+                                        hash: hex::encode(
+                                            block.clone().get_transaction_hash().clone(),
+                                        ),
+                                    },
+                                )
+                                .await
+                                .expect("Failed to find block in Rosetta");
+                            assert_eq!(
+                                expected_block_transaction_response,
+                                actual_block_transaction_response
+                            );
+
+                            assert!(rosetta_client
+                                .block_transaction(
+                                    icrc1_ledgers[0].network_identifier(),
+                                    BlockIdentifier {
+                                        index: u64::MAX,
+                                        hash: hex::encode(block.clone().get_block_hash().clone()),
+                                    },
+                                    TransactionIdentifier {
+                                        hash: hex::encode(
+                                            block.clone().get_transaction_hash().clone()
+                                        )
+                                    }
+                                )
+                                .await
+                                .is_err());
+
+                            assert!(rosetta_client
+                                .block_transaction(
+                                    icrc1_ledgers[0].network_identifier().clone(),
+                                    BlockIdentifier {
+                                        index: block.index,
+                                        hash: hex::encode("wrong hash"),
+                                    },
+                                    TransactionIdentifier {
+                                        hash: hex::encode(block.clone().get_transaction_hash())
+                                    }
+                                )
+                                .await
+                                .is_err());
+
+                            assert!(rosetta_client
+                                .block_transaction(
+                                    icrc1_ledgers[0].network_identifier().clone(),
+                                    BlockIdentifier {
+                                        index: block.index,
+                                        hash: hex::encode(block.clone().get_block_hash()),
+                                    },
+                                    TransactionIdentifier {
+                                        hash: hex::encode("wrong tx hash")
+                                    }
+                                )
+                                .await
+                                .is_err());
+                        }
+                    }
+                });
+                Ok(())
+            },
+        )
+        .unwrap();
 }
 
 #[test]
@@ -844,83 +1007,142 @@ fn test_network_options() {
     });
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(*NUM_TEST_CASES))]
-    #[test]
-fn test_network_status(args_with_caller in valid_transactions_strategy(
-        (*MINTING_IDENTITY).clone(),
-        DEFAULT_TRANSFER_FEE,
-        *MAX_NUM_GENERATED_BLOCKS,
-        SystemTime::now(),
-    )) {
-        let rt = Runtime::new().unwrap();
-        let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
-            .with_symbol("SYM1");
-
-        let setup = Setup::builder()
-            .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
-            .build(&rt);
-
-        let rosetta_ledger_setup_builder = RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
-        .with_args_with_caller(args_with_caller.clone())
-        .with_icrc1_symbol("SYM1".to_string())
-        .with_icrc1_decimals(8);
-
-    // Wrap async calls in a blocking Block
-    rt.block_on(async {
-        let env = RosettaTestingEnvironmentBuilder::new(false, setup.port)
-        .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_builder.clone())
-        .build()
-            .await;
-        wait_for_rosetta_block(&env.rosetta_client, env.rosetta_ledger_testing_envs[0].network_identifier.clone(), 0).await;
-
-        // Get the blocks from the ledger to compare against rosetta
-        let rosetta_blocks = get_rosetta_blocks_from_icrc1_ledger(env.rosetta_ledger_testing_envs[0].icrc1_ledger.agent.clone(),0,*MAX_BLOCKS_PER_REQUEST).await;
-
-        if !args_with_caller.is_empty(){
-        assert!(
-            !rosetta_blocks.is_empty(),
-            "there should be blocks in the ledger"
-        );
-
-        let rosetta_response = env.rosetta_client
-            .network_status(env.rosetta_ledger_testing_envs[0].network_identifier.clone())
-            .await
-            .expect("Unable to call network_status");
-
-        assert_eq!(
-            rosetta_blocks.last().unwrap().index,
-            rosetta_response.current_block_identifier.index,
-            "Chain length does not match"
-        );
-        assert_eq!(
-            rosetta_response.current_block_identifier.index, args_with_caller.len() as u64,
-            "current_block_identifier index should be args_with_caller.len()"
-        );
-
-        assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
-            rosetta_response.genesis_block_identifier.hash,
-            "Genesis block hashes do not match"
-        );
-        assert_eq!(
-            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash().clone()),
-            rosetta_response.current_block_identifier.hash,
-            "Current block hashes do not match"
-        );
-        assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
-            rosetta_response.oldest_block_identifier.unwrap().hash,
-            "Genesis block hashes do not match"
-        );
-        assert_eq!(
-            Duration::from_nanos(rosetta_blocks.last().unwrap().get_timestamp()).as_millis() as u64,
-            rosetta_response.current_block_timestamp
-        );
-    }
+#[test]
+fn test_network_status() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
     });
 
-}
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let icrc1_ledger_1_builder =
+                    Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID).with_symbol("SYM1");
+
+                let setup = Setup::builder()
+                    .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+                    .build(&rt);
+
+                let rosetta_ledger_setup_builder = RosettaLedgerTestingEnvironmentBuilder::new(
+                    &setup.icrc1_ledgers[0],
+                    setup.port,
+                )
+                .with_args_with_caller(args_with_caller.clone())
+                .with_icrc1_symbol("SYM1".to_string())
+                .with_icrc1_decimals(8);
+
+                // Wrap async calls in a blocking Block
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironmentBuilder::new(false, setup.port)
+                        .add_rosetta_ledger_testing_env_builder(
+                            rosetta_ledger_setup_builder.clone(),
+                        )
+                        .build()
+                        .await;
+                    wait_for_rosetta_block(
+                        &env.rosetta_client,
+                        env.rosetta_ledger_testing_envs[0]
+                            .network_identifier
+                            .clone(),
+                        0,
+                    )
+                    .await;
+
+                    // Get the blocks from the ledger to compare against rosetta
+                    let rosetta_blocks = get_rosetta_blocks_from_icrc1_ledger(
+                        env.rosetta_ledger_testing_envs[0]
+                            .icrc1_ledger
+                            .agent
+                            .clone(),
+                        0,
+                        *MAX_BLOCKS_PER_REQUEST,
+                    )
+                    .await;
+
+                    if !args_with_caller.is_empty() {
+                        assert!(
+                            !rosetta_blocks.is_empty(),
+                            "there should be blocks in the ledger"
+                        );
+
+                        let rosetta_response = env
+                            .rosetta_client
+                            .network_status(
+                                env.rosetta_ledger_testing_envs[0]
+                                    .network_identifier
+                                    .clone(),
+                            )
+                            .await
+                            .expect("Unable to call network_status");
+
+                        assert_eq!(
+                            rosetta_blocks.last().unwrap().index,
+                            rosetta_response.current_block_identifier.index,
+                            "Chain length does not match"
+                        );
+                        assert_eq!(
+                            rosetta_response.current_block_identifier.index,
+                            args_with_caller.len() as u64,
+                            "current_block_identifier index should be args_with_caller.len()"
+                        );
+
+                        assert_eq!(
+                            hex::encode(
+                                rosetta_blocks
+                                    .first()
+                                    .unwrap()
+                                    .clone()
+                                    .get_block_hash()
+                                    .clone()
+                            ),
+                            rosetta_response.genesis_block_identifier.hash,
+                            "Genesis block hashes do not match"
+                        );
+                        assert_eq!(
+                            hex::encode(
+                                rosetta_blocks
+                                    .last()
+                                    .unwrap()
+                                    .clone()
+                                    .get_block_hash()
+                                    .clone()
+                            ),
+                            rosetta_response.current_block_identifier.hash,
+                            "Current block hashes do not match"
+                        );
+                        assert_eq!(
+                            hex::encode(
+                                rosetta_blocks
+                                    .first()
+                                    .unwrap()
+                                    .clone()
+                                    .get_block_hash()
+                                    .clone()
+                            ),
+                            rosetta_response.oldest_block_identifier.unwrap().hash,
+                            "Genesis block hashes do not match"
+                        );
+                        assert_eq!(
+                            Duration::from_nanos(rosetta_blocks.last().unwrap().get_timestamp())
+                                .as_millis() as u64,
+                            rosetta_response.current_block_timestamp
+                        );
+                    }
+                });
+                Ok(())
+            },
+        )
+        .unwrap();
 }
 
 #[test]
@@ -1291,7 +1513,6 @@ fn test_continuous_block_sync() {
     });
 }
 
-// Fixed: test_construction_submit using the common env setup
 #[test]
 fn test_construction_submit() {
     let mut runner = TestRunner::new(TestRunnerConfig {
@@ -1473,7 +1694,6 @@ fn test_construction_submit() {
         .unwrap()
 }
 
-// Fixed: test_rosetta_client_construction_api_flow using common env setup
 #[test]
 fn test_rosetta_client_construction_api_flow() {
     let sender_keypair = Secp256k1KeyPair::generate(0);
@@ -1610,7 +1830,6 @@ fn test_rosetta_client_construction_api_flow() {
     });
 }
 
-// Fixed: test_rosetta_client_binary using common env setup and initial balance
 #[test]
 fn test_rosetta_client_binary() {
     let sender_keypair = EdKeypair::generate(0);
@@ -1710,7 +1929,6 @@ fn test_rosetta_client_binary() {
     });
 }
 
-// Fixed: test_rosetta_transfer_from using common env setup and initial balance
 #[test]
 fn test_rosetta_transfer_from() {
     let from_keypair = EdKeypair::generate(0);

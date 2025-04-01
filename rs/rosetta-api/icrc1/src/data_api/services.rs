@@ -270,15 +270,14 @@ pub fn search_transactions(
         .get_block_with_highest_block_idx()
         .map_err(|e| Error::unable_to_find_block(&e))?;
 
-    if rosetta_block_with_highest_block_index.is_none() {
+    let Some(rosetta_block_with_highest_block_index) = rosetta_block_with_highest_block_index
+    else {
         return Ok(SearchTransactionsResponse {
             total_count: 0,
             transactions: vec![],
             next_offset: None,
         });
-    }
-
-    let rosetta_block_with_highest_block_index = rosetta_block_with_highest_block_index.unwrap();
+    };
 
     let max_block: u64 = request
         .max_block

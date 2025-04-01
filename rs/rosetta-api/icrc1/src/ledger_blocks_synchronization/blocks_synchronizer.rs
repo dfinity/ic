@@ -12,6 +12,9 @@ use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc, time::Durat
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{error, info, warn};
 
+// Interval for reporting progress of the synchronization process for each token.
+const PROGRESS_REPORT_INTERVAL: Duration = Duration::from_secs(5);
+
 // The Range of indices to be synchronized.
 // Contains the hashes of the top and end of the index range, which is used to ensure the fetched block interval is valid.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -176,8 +179,9 @@ pub async fn start_synching_blocks(
         match recurrency_mode {
             RecurrencyMode::OneShot => break,
             RecurrencyMode::Recurrent(ref config) => {
-                let mut wait_time =
-                    config.min_recurrency_wait * config.backoff_factor.pow(current_failure_streak);
+                let mut wait_time = config
+                    .min_recurrency_wait
+                    .saturating_mul(config.backoff_factor.saturating_pow(current_failure_streak));
                 wait_time = cmp::min(wait_time, config.max_recurrency_wait);
                 tokio::time::sleep(wait_time).await;
             }
@@ -262,7 +266,7 @@ impl ProgressReport {
     pub fn update(&mut self, added_blocks: u64) {
         self.remaining_end = self.remaining_end.saturating_sub(added_blocks);
         let now = std::time::Instant::now();
-        if now.duration_since(self.last_update) > Duration::from_secs(5) {
+        if now.duration_since(self.last_update) > PROGRESS_REPORT_INTERVAL {
             let time_spent = now.duration_since(self.start_time).as_secs_f64();
             let current_rate = self.end.saturating_sub(self.remaining_end) as f64 / time_spent;
             let remaining_count = self.remaining_end.saturating_sub(self.start) as f64 + 1.0;
