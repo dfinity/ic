@@ -1,4 +1,4 @@
-use crate::idkg::{
+use crate::{
     payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
     utils::algorithm_for_key_id,
 };
@@ -213,11 +213,10 @@ pub(super) fn update_next_key_transcript(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::idkg::{
+    use crate::{
         test_utils::{
-            create_reshare_unmasked_transcript_param,
-            fake_master_public_key_ids_for_all_idkg_algorithms, set_up_idkg_payload,
-            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+            create_reshare_unmasked_transcript_param, set_up_idkg_payload, IDkgPayloadTestHelper,
+            TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
@@ -228,6 +227,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
+    use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId},
