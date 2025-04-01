@@ -1657,10 +1657,16 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
-                // TODO: EXC-1955
-                #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotMetadataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
+                    match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
+                                .map(|x| (x, Some(canister_id)))
+                        }
+                    }
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1670,8 +1676,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
                 // TODO: EXC-1957
                 #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotDataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res =
+                    ReadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
+                        match self.config.canister_snapshot_download {
+                            FlagStatus::Disabled => Ok((vec![], None)),
+                            FlagStatus::Enabled => Ok((vec![], None)),
+                        }
+                    });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1681,8 +1692,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
                 // TODO: EXC-1959
                 #[allow(clippy::bind_instead_of_map)]
-                let res = UploadCanisterSnapshotMetadataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res =
+                    UploadCanisterSnapshotMetadataArgs::decode(payload).and_then(
+                        |_args| match self.config.canister_snapshot_upload {
+                            FlagStatus::Disabled => Ok((vec![], None)),
+                            FlagStatus::Enabled => Ok((vec![], None)),
+                        },
+                    );
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -1692,8 +1708,12 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadCanisterSnapshotData) => {
                 // TODO: EXC-1960
                 #[allow(clippy::bind_instead_of_map)]
-                let res = UploadCanisterSnapshotDataArgs::decode(payload)
-                    .and_then(|_args| Ok((vec![], None)));
+                let res = UploadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
+                    match self.config.canister_snapshot_upload {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => Ok((vec![], None)),
+                    }
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -2428,6 +2448,20 @@ impl ExecutionEnvironment {
         result
     }
 
+    fn read_canister_snapshot_metadata(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        let snapshot_id = args.get_snapshot_id();
+        self.canister_manager
+            .read_snapshot_metadata(sender, snapshot_id, canister, state)
+            .map(|res| Encode!(&res).unwrap())
+            .map_err(|e| e.into())
+    }
+
     fn node_metrics_history(
         &self,
         state: &ReplicatedState,
@@ -2920,7 +2954,7 @@ impl ExecutionEnvironment {
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
                 key_id: args.key_id,
-                input: args.input,
+                input: Arc::new(args.input),
                 transport_public_key: args.transport_public_key.to_vec(),
                 ni_dkg_id: ni_dkg_id.clone(),
                 height: Height::new(current_round.get()),
@@ -3049,7 +3083,7 @@ impl ExecutionEnvironment {
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
-                derivation_path,
+                derivation_path: Arc::new(derivation_path),
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,
@@ -3089,8 +3123,6 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
-    // TODO(CON-1416: Remove this directive)
-    #[allow(unreachable_code, unused_variables)]
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
@@ -3110,12 +3142,6 @@ impl ExecutionEnvironment {
 
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
-
-        // TODO(CON-1416): Activate this endpoint
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "This key is not an idkg key",
-        ));
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {

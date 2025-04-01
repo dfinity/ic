@@ -14,6 +14,7 @@ ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
@@ -78,6 +79,8 @@ maplit = "1.0.2"
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 slog = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 wasmprinter = { workspace = true }
 wast = { workspace = true }
 wat = { workspace = true }

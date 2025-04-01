@@ -11,6 +11,33 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-03-21: Proposal 135935
+
+http://dashboard.internetcomputer.org/proposal/135935
+
+## Added
+
+* Added `Neuron.topic_followees` to support the upcoming [SNS topics](https://forum.dfinity.org/t/sns-topics-design) feature.
+
+## Changed
+
+- `SetTopcisForCustomProposals` proposal is now under the `CriticalDappOperations` topic.
+
+# 2025-03-17: Proposal 135852
+
+https://dashboard.internetcomputer.org/proposal/135852
+
+## Changed
+
+* Proposal criticality is now defined based on topics. This makes the following two native proposal
+  types critical:
+    * `AddGenericNervousSystemFunction`
+    * `RemoveGenericNervousSystemFunction`
+
+    For more details, please refer to
+    [PSA(SNS): Proposal criticality to be defined based on proposal topics](https://forum.dfinity.org/t/psa-sns-proposal-criticality-to-be-defined-based-on-proposal-topics/41685).
+
+
 # 2025-03-08: Proposal 135703
 
 http://dashboard.internetcomputer.org/proposal/135703

@@ -932,6 +932,30 @@ impl IcNodeSnapshot {
         self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
     }
 
+    pub fn install_canister_with_arg(
+        &self,
+        canister_id: Principal,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) {
+        let canister_bytes = load_wasm(name);
+        self.with_default_agent(move |agent| async move {
+            // Create a canister.
+            let mgr = ManagementCanister::create(&agent);
+
+            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+            if let Some(arg) = arg {
+                install_code = install_code.with_raw_arg(arg)
+            }
+            install_code
+                .call_and_wait()
+                .await
+                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+            Ok::<_, String>(canister_id)
+        })
+        .expect("Could not install canister");
+    }
+
     pub fn create_and_install_canister_with_arg_and_cycles(
         &self,
         name: &str,
@@ -1230,6 +1254,15 @@ pub fn get_hostos_update_img_test_url() -> Result<Url> {
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
+}
+
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);

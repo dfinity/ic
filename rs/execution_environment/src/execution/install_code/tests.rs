@@ -2327,6 +2327,9 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         initial_cycles - final_cycles
     };
 
+    // Clear `expected_compiled_wasms` so that the full execution cost is applied
+    test.state_mut().metadata.expected_compiled_wasms.clear();
+
     let canister_id = test.create_canister(CYCLES);
 
     let hash = UploadChunkReply::decode(&get_reply(

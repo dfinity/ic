@@ -161,7 +161,7 @@ impl SimulatedIngressHistory {
 }
 
 /// Helper to run a single test with dependency setup.
-fn run_test<T>(_test_name: &str, test: T)
+fn run_test<T>(test: T)
 where
     T: FnOnce(
         Arc<FastForwardTimeSource>,
@@ -322,16 +322,14 @@ fn handle_ingress(criterion: &mut Criterion) {
         let expiry_range = MAX_INGRESS_TTL + time_span;
         let total_messages = ingress_rate * expiry_range.as_secs();
         run_test(
-            "get_ingress_payload",
             |time_source: Arc<FastForwardTimeSource>,
              pool_config: ArtifactPoolConfig,
              log: ReplicaLogger,
              history: &SimulatedIngressHistory,
              manager: &mut IngressManager| {
-                let name = format!("handle_ingress({})", ingress_rate);
                 let messages = prepare(time_source.as_ref(), expiry_range, total_messages as usize);
                 let (pool, message_ids) = setup(time_source.as_ref(), pool_config, log, messages);
-                group.bench_function(&name, |bench| {
+                group.bench_function(format!("handle_ingress({})", ingress_rate), |bench| {
                     bench.iter_custom(|iters| {
                         let mut elapsed = Duration::from_secs(0);
                         for _ in 0..iters {

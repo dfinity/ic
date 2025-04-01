@@ -12,7 +12,7 @@ use crate::{
         governance_error::ErrorType,
         manage_neuron::{configure::Operation, Configure},
         neuron::{DissolveState as NeuronDissolveState, Followees},
-        AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
+        AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData, MaturityDisbursement,
         Neuron as NeuronProto, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Vote,
         VotingPowerEconomics,
     },
@@ -154,6 +154,8 @@ pub struct Neuron {
     /// `recent_ballots` circular buffer. This is used to optimize insertions
     /// into stable memory, to avoid rewriting all the data.
     pub recent_ballots_next_entry_index: Option<usize>,
+    /// The maturity disbursements that are in progress for this neuron.
+    pub maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 }
 
 impl Neuron {
@@ -1161,6 +1163,7 @@ impl From<Neuron> for NeuronProto {
             visibility: _,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         } = neuron;
 
         let id = Some(id);
@@ -1199,6 +1202,7 @@ impl From<Neuron> for NeuronProto {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         }
     }
 }
@@ -1232,6 +1236,7 @@ impl TryFrom<NeuronProto> for Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         } = proto;
 
         let id = id.ok_or("Neuron ID is missing")?;
@@ -1311,6 +1316,7 @@ impl TryFrom<NeuronProto> for Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         })
     }
 }
@@ -1358,6 +1364,7 @@ impl Neuron {
             known_neuron_data,
             neuron_type,
             voting_power_refreshed_timestamp_seconds,
+            maturity_disbursements_in_progress: _,
 
             // Not used.
             visibility: _,
@@ -1390,7 +1397,6 @@ impl Neuron {
             .into_iter()
             .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
             .collect();
-
         api::Neuron {
             id,
             account,
@@ -1478,6 +1484,7 @@ pub struct DecomposedNeuron {
     pub hot_keys: Vec<PrincipalId>,
     pub recent_ballots: Vec<BallotInfo>,
     pub followees: HashMap</* topic ID */ i32, Followees>,
+    pub maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 
     // Singletons
     pub known_neuron_data: Option<KnownNeuronData>,
@@ -1512,6 +1519,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         } = source;
 
         let account = subaccount.to_vec();
@@ -1562,6 +1570,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             // Singletons
             known_neuron_data,
@@ -1579,6 +1588,7 @@ impl From<DecomposedNeuron> for Neuron {
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             known_neuron_data,
             transfer,
@@ -1667,6 +1677,7 @@ impl From<DecomposedNeuron> for Neuron {
             voting_power_refreshed_timestamp_seconds,
             // usize is always at least u32, so this is safe.
             recent_ballots_next_entry_index: recent_ballots_next_entry_index.map(|x| x as usize),
+            maturity_disbursements_in_progress,
         }
     }
 }
@@ -1710,6 +1721,8 @@ pub struct NeuronBuilder {
     staked_maturity_e8s_equivalent: Option<u64>,
     #[cfg(test)]
     known_neuron_data: Option<KnownNeuronData>,
+    #[cfg(test)]
+    maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 }
 
 impl NeuronBuilder {
@@ -1752,6 +1765,8 @@ impl NeuronBuilder {
             staked_maturity_e8s_equivalent: None,
             #[cfg(test)]
             known_neuron_data: None,
+            #[cfg(test)]
+            maturity_disbursements_in_progress: Vec::new(),
         }
     }
 
@@ -1912,6 +1927,8 @@ impl NeuronBuilder {
             known_neuron_data,
             visibility,
             voting_power_refreshed_timestamp_seconds,
+            #[cfg(test)]
+            maturity_disbursements_in_progress,
         } = self;
 
         let auto_stake_maturity = if auto_stake_maturity {
@@ -1941,6 +1958,8 @@ impl NeuronBuilder {
         let staked_maturity_e8s_equivalent = None;
         #[cfg(not(test))]
         let known_neuron_data = None;
+        #[cfg(not(test))]
+        let maturity_disbursements_in_progress = Vec::new();
 
         Neuron {
             id,
@@ -1966,6 +1985,7 @@ impl NeuronBuilder {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
+            maturity_disbursements_in_progress,
         }
     }
 }

@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/sys",
     "//rs/system_api",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
@@ -60,26 +61,32 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/types",
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
+    "@crate_index//:candid",
     "@crate_index//:criterion",
     "@crate_index//:insta",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:strum",
     "@crate_index//:wast",
     "@crate_index//:wat",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 ALIASES = {}
 
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
+    "//rs/nns/governance:governance-bench-canister",
 ]
 
 ENV = {
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
+    "GOVERNANCE_BENCH_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-bench-canister)",
 }
 
 rust_library(
@@ -182,10 +189,7 @@ rust_library(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = [
-        # Keep sorted.
-        "@crate_index//:candid",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 UNIVERSAL_CANISTER_TEST_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
@@ -219,7 +223,6 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":embedders_bench",
-        "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -230,9 +233,9 @@ rust_ic_bench(
     compile_data = glob(["benches/test-data/*"]),
     data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
         ":embedders_bench",
-        "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

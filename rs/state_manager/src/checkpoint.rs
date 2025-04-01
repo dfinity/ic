@@ -983,12 +983,15 @@ pub fn load_snapshot(
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
         let exported_globals = canister_snapshot_bits.exported_globals.clone();
-
+        let global_timer = canister_snapshot_bits.global_timer;
+        let on_low_wasm_memory_hook_status = canister_snapshot_bits.on_low_wasm_memory_hook_status;
         ExecutionStateSnapshot {
             wasm_binary,
             exported_globals,
             stable_memory,
             wasm_memory,
+            global_timer,
+            on_low_wasm_memory_hook_status,
         }
     };
 
@@ -1007,6 +1010,7 @@ pub fn load_snapshot(
 
     let canister_snapshot = CanisterSnapshot::new(
         canister_snapshot_bits.canister_id,
+        canister_snapshot_bits.source,
         canister_snapshot_bits.taken_at_timestamp,
         canister_snapshot_bits.canister_version,
         canister_snapshot_bits.certified_data.clone(),
