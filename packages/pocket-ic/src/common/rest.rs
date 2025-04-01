@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use strum_macros::EnumIter;
 
 pub type InstanceId = usize;
 
@@ -435,7 +436,18 @@ pub mod base64 {
 // ================================================================================================================= //
 
 #[derive(
-    Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    EnumIter,
 )]
 pub enum SubnetKind {
     Application,

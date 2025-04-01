@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use serde::Serialize;
+
 pub mod topics;
 
 /// A principal with a particular set of permissions over a neuron.
@@ -202,7 +204,7 @@ pub mod neuron {
         candid::CandidType, candid::Deserialize, Clone, comparable::Comparable, Debug, PartialEq,
     )]
     pub struct TopicFollowees {
-        pub topic_id_to_followees: BTreeMap<u64, FolloweesForTopic>,
+        pub topic_id_to_followees: BTreeMap<i32, FolloweesForTopic>,
     }
 
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
@@ -252,7 +254,7 @@ pub mod neuron {
 ///
 /// Note that the target, validator and rendering methods can all coexist in
 /// the same canister or be on different canisters.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize)]
 pub struct NervousSystemFunction {
     /// The unique id of this function.
     ///
@@ -267,9 +269,13 @@ pub struct NervousSystemFunction {
 }
 /// Nested message and enum types in `NervousSystemFunction`.
 pub mod nervous_system_function {
+    use serde::Serialize;
+
     use super::*;
 
-    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    #[derive(
+        Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize,
+    )]
     pub struct GenericNervousSystemFunction {
         /// The id of the target canister that will be called to execute the proposal.
         pub target_canister_id: Option<::ic_base_types::PrincipalId>,
@@ -288,7 +294,7 @@ pub mod nervous_system_function {
         /// The topic this function belongs to
         pub topic: Option<topics::Topic>,
     }
-    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize)]
     pub enum FunctionType {
         /// Whether this is a native function (i.e. a Action::Motion or
         /// Action::UpgradeSnsControlledCanister) or one of user-defined
