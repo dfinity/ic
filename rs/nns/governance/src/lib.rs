@@ -205,8 +205,6 @@ thread_local! {
 
     static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
-    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
-
     static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 }
 
@@ -263,22 +261,6 @@ pub fn temporarily_enable_allow_active_neurons_in_stable_memory() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_allow_active_neurons_in_stable_memory() -> Temporary {
     Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, false)
-}
-
-pub fn use_stable_memory_following_index() -> bool {
-    USE_STABLE_MEMORY_FOLLOWING_INDEX.with(|ok| ok.get())
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_stable_memory_following_index() -> Temporary {
-    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_stable_memory_following_index() -> Temporary {
-    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, false)
 }
 
 pub fn migrate_active_neurons_to_stable_memory() -> bool {

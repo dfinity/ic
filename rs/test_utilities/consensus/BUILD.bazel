@@ -5,16 +5,22 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/tree_hash",
     "//rs/interfaces",
+    "//rs/interfaces/state_manager",
     "//rs/phantom_newtype",
     "//rs/protobuf",
+    "//rs/replicated_state",
+    "//rs/test_utilities/state",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:bincode",
     "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:serde",
+    "@crate_index//:strum",
 ]
 
 rust_library(
