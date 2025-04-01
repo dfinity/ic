@@ -1,4 +1,4 @@
-use crate::{CallCanisters, ProgressNetwork};
+use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 use crate::{CanisterInfo, Request};
 use candid::Principal;
 use ic_agent::agent::{RejectCode, RejectResponse};
@@ -141,7 +141,9 @@ impl CallCanisters for Agent {
     fn caller(&self) -> Result<Principal, Self::Error> {
         self.get_principal().map_err(Self::Error::Identity)
     }
+}
 
+impl CallCanistersWithStoppedCanisterError for Agent {
     fn is_canister_stopped_error(&self, err: &Self::Error) -> bool {
         match err {
             AgentCallError::Agent(AgentError::CertifiedReject(RejectResponse {

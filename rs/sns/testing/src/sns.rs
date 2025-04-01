@@ -15,7 +15,7 @@ use ic_nervous_system_agent::{
     },
     nns::{ledger::transfer, sns_wasm::list_deployed_snses},
     sns::{governance::GovernanceCanister, swap::SwapCanister, Sns},
-    CallCanisters, ProgressNetwork,
+    CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_integration_tests::{
@@ -51,17 +51,14 @@ pub const DEFAULT_SWAP_PARTICIPANTS_NUMBER: usize = 20;
 // Creates SNS using agents provided as arguments:
 // 1) neuron_agent - agent that controlls 'neuron_id'.
 // 2) neuron_id - ID of the neuron that has a sufficient amount of stake to propose the SNS creation and adopt the proposal.
-// 2) dev_participant_agent - Agent that will be used as an initial neuron in a newly created SNS. All other
+// 3) dev_participant_agent - Agent that will be used as an initial neuron in a newly created SNS. All other
 //    neurons will follow the dev neuron.
-// 3) swap_treasury_agent - Agent for the identity that has sufficient amout of ICP tokens to close the swap and
-//    pay for cycles needed canister upgrade as well as all associated costs.
-// 4) swap_participants_agents - Agents for the identities that will participate in the swap. The actual number of participants
-//    is determined by the swap parameters. So only some of these agents might be used. Each agent participates in the swap,
-//    follows the dev neuron for 'UpgradeSnsControlledCanister' proposals and increases its dissolve delay to be able to vote.
-// 5) dapp_canister_ids - Canister IDs of the DApps that will be added to the SNS.
+// 4) dapp_canister_ids - Canister IDs of the DApps that will be added to the SNS.
 //
 // Returns SNS canisters IDs.
-pub async fn create_sns<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent>(
+pub async fn create_sns<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork + BuildEphemeralAgent,
+>(
     neuron_agent: &C,
     neuron_id: NeuronId,
     dev_participant_agent: &C,
@@ -377,7 +374,9 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
     Ok(())
 }
 
-pub async fn sns_proposal_upvote<C: CallCanisters + BuildEphemeralAgent + ProgressNetwork>(
+pub async fn sns_proposal_upvote<
+    C: CallCanistersWithStoppedCanisterError + BuildEphemeralAgent + ProgressNetwork,
+>(
     agent: &C,
     governance_canister: GovernanceCanister,
     // Swap canister is needed to determine the number of direct participants.
@@ -529,7 +528,9 @@ pub async fn propose_sns_controlled_test_canister_upgrade<C: CallCanisters + Pro
 // 2) proposal_id - ID of the proposal that will be waited for.
 // 3) canister_id - ID of the canister that receives an upgrade.
 // 4) sns - SNS canisters.
-pub async fn wait_for_sns_controlled_canister_upgrade<C: CallCanisters + ProgressNetwork>(
+pub async fn wait_for_sns_controlled_canister_upgrade<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     proposal_id: ProposalId,
     canister_id: CanisterId,
