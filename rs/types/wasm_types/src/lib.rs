@@ -15,6 +15,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use std::sync::OnceLock;
 
 const WASM_HASH_LENGTH: usize = 32;
 
@@ -72,7 +73,7 @@ impl CanisterModule {
     }
 
     pub fn new_from_file(path: PathBuf, module_hash: Option<WasmHash>) -> std::io::Result<Self> {
-        let module = ModuleStorage::mmap_file(path)?;
+        let module = ModuleStorage::from_file(path);
         // It should only be necessary to compute the hash here when
         // loading checkpoints written by older replica versions
         let module_hash =
@@ -87,7 +88,7 @@ impl CanisterModule {
     pub fn file(&self) -> Option<&Path> {
         match &self.module {
             ModuleStorage::Memory(_) => None,
-            ModuleStorage::File(path, _) => Some(path),
+            ModuleStorage::File(file_storage) => Some(&file_storage.path),
         }
     }
 
@@ -106,7 +107,7 @@ impl CanisterModule {
     pub fn to_shared_vec(&self) -> Arc<Vec<u8>> {
         match &self.module {
             ModuleStorage::Memory(shared) => Arc::clone(shared),
-            ModuleStorage::File(_, _) => Arc::new(self.as_slice().to_vec()),
+            ModuleStorage::File(_) => Arc::new(self.as_slice().to_vec()),
         }
     }
 
@@ -212,11 +213,30 @@ fn wasmhash_display() {
 #[derive(Clone)]
 enum ModuleStorage {
     Memory(Arc<Vec<u8>>),
-    File(PathBuf, Arc<ic_sys::mmap::ScopedMmap>),
+    File(FileStorage),
 }
 
-impl ModuleStorage {
-    fn mmap_file(path: PathBuf) -> std::io::Result<Self> {
+#[derive(Clone)]
+struct FileStorage {
+    path: PathBuf,
+    mmap: Arc<OnceLock<ic_sys::mmap::ScopedMmap>>,
+}
+
+impl FileStorage {
+    fn from_file(path: PathBuf) -> Self {
+        Self {
+            path,
+            mmap: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn init_or_die(&self) -> &ic_sys::mmap::ScopedMmap {
+        self.mmap.get_or_init(|| Self::mmap_file(&self.path).expect("Failed to mmap file"))
+
+    }
+
+    // NB: call it in validation stage
+    fn mmap_file(path: &Path) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
         use std::io;
 
         let f = std::fs::File::open(&path)?;
@@ -228,23 +248,37 @@ impl ModuleStorage {
             ));
         }
         match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
-            Ok(mmap) => Ok(Self::File(path, Arc::new(mmap))),
+            Ok(mmap) => Ok(mmap),
             Err(_) => Err(io::Error::last_os_error()),
         }
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        self.init_or_die().as_slice()
+    }
+
+    fn len(&self) -> usize {
+        self.init_or_die().len()
+    }
+}
+
+impl ModuleStorage {
+    fn from_file(path: PathBuf) -> Self {
+        Self::File(FileStorage::from_file(path))
     }
 
     fn as_slice(&self) -> &[u8] {
         match &self {
             Self::Memory(arc) => arc.as_slice(),
             // This is safe because the file is read-only.
-            Self::File(_, mmap) => mmap.as_slice(),
+            Self::File(file_storage) => file_storage.as_slice(),
         }
     }
 
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
-            ModuleStorage::File(_, mmap) => mmap.len(),
+            ModuleStorage::File(file_storage) => file_storage.len(),
         }
     }
 }
