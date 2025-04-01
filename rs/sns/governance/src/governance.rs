@@ -6109,6 +6109,9 @@ fn get_neuron_id_from_memo_and_controller(
 mod assorted_governance_tests;
 
 #[cfg(test)]
+mod cast_vote_and_cascade_follow_tests;
+
+#[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
