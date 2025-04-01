@@ -1263,7 +1263,10 @@ impl BatchProcessor for BatchProcessorImpl {
         }
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
-        debug!(self.log, "Processing batch {}", batch.batch_number);
+        info!(
+            self.log,
+            "Processing batch {} @ time {}", batch.batch_number, batch.time
+        );
         let commit_height = Height::from(batch.batch_number.get());
 
         let certification_scope = if batch.requires_full_state_hash {
