@@ -52,7 +52,7 @@ pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F)
         .to_bytes_with_types(&env, &upgrade_types)
         .expect("failed to encode");
     let args_sha256 = ArgsHash::sha256(&encoded_upgrade_args);
-    let candid_file = candid_file.to_path_buf().to_string_lossy().to_string();
+    let candid_file = candid_file.to_string_lossy().to_string();
     UpgradeArgs {
         constructor_types: upgrade_types,
         upgrade_args,

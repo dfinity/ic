@@ -77,14 +77,14 @@ fn should_parse_constructor_parameters() {
 #[test]
 fn should_render_correct_didc_encode_command() {
     let canister = TargetCanister::CkEthMinter;
-    let path = repository_root().join(canister.candid_file());
+    let path = canister.candid_file();
     let upgrade_args = encode_upgrade_args(&path, "(variant {UpgradeArg = record {} })");
 
     let didc_encode_cmd = upgrade_args.didc_encode_cmd();
 
     assert_eq!(
         didc_encode_cmd,
-        "didc encode -d cketh_minter.did -t '(MinterArg)' '(variant {UpgradeArg = record {} })'"
+        "didc encode -d rs/ethereum/cketh/minter/cketh_minter.did -t '(MinterArg)' '(variant {UpgradeArg = record {} })'"
     );
 }
 
