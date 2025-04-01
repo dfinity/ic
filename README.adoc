@@ -12,7 +12,7 @@ ifdef::env-github[]
 endif::[]
 
 
-The Internet Computer is the world’s first blockchain that runs at web speed and can increase its capacity without bound. Like the Internet (which is composed of many machines adhering to TCP/IP protocol) and blockchain protocols (such as Bitcoin and Ethereum).
+The Internet Computer is the world’s first blockchain that runs at hyper web speed and can increase its capacity without bound. Like the Internet (which is composed of many machines adhering to TCP/IP protocol) and blockchain protocols (such as Bitcoin and Ethereum).
 
 :toc-title:
 toc::[]
