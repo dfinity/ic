@@ -3780,8 +3780,9 @@ impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
 pub enum SnapshotSource {
+    #[default]
     TakenFromCanister,
     UploadedManually,
 }
@@ -3807,10 +3808,7 @@ impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
             pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "SnapshotSource",
-                    err: format!(
-                        "Unexpected value of status of on low wasm memory hook: {:?}",
-                        value
-                    ),
+                    err: format!("Unexpected value of SnapshotSource: {:?}", value),
                 })
             }
             pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
