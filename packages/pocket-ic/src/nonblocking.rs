@@ -9,8 +9,7 @@ use crate::common::rest::{
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcStateDir,
-    RejectResponse,
+    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -36,10 +35,10 @@ use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::File;
+use std::fs::{remove_dir_all, File};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
 use tracing::{debug, instrument, warn};
@@ -133,7 +132,8 @@ impl PocketIc {
         server_url: Option<Url>,
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PocketIcStateDir>,
+        read_only_state_dir: Option<PathBuf>,
+        mut state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -146,30 +146,41 @@ impl PocketIc {
 
         let subnet_config_set = subnet_config_set.into();
 
-        if state_dir
+        // copy the read-only state dir to the state dir
+        // (creating an empty temp dir to serve as the state dir if no state dir is provided)
+        let mut temp_dir = None;
+        if let Some(read_only_state_dir) = read_only_state_dir {
+            let instance_state_dir = if let Some(ref state_dir) = state_dir {
+                // clear the state dir by removing the state dir and creating a new empty state dir afterwards
+                if Path::new(state_dir).exists() {
+                    remove_dir_all(state_dir).unwrap();
+                }
+                state_dir.clone()
+            } else {
+                // create an empty temp dir to serve as the state dir
+                let instance_temp_dir = TempDir::new().unwrap();
+                let instance_state_dir = instance_temp_dir.path().to_path_buf();
+                temp_dir = Some(instance_temp_dir);
+                state_dir = Some(instance_state_dir.clone());
+                instance_state_dir
+            };
+            copy_dir(read_only_state_dir, instance_state_dir)
+                .expect("Failed to copy state directory");
+        };
+
+        // now that we initialized the state dir, we check if it contains a topology file
+        let has_topology = state_dir
             .as_ref()
-            .map(|PocketIcStateDir { state_dir, .. }| {
-                File::open(state_dir.join("topology.json")).is_err()
-            })
-            .unwrap_or(true)
-        {
+            .map(|state_dir| File::open(state_dir.join("topology.json")).is_ok())
+            .unwrap_or_default();
+
+        // if there is no topology to fetch from the state dir,
+        // the topology will be derived from the provided subnet config set
+        // that we need to validate
+        if !has_topology {
             subnet_config_set.validate().unwrap();
         }
-        let (state_dir, temp_dir) = if let Some(PocketIcStateDir {
-            state_dir,
-            read_only,
-        }) = state_dir
-        {
-            if read_only {
-                let temp_dir = TempDir::new().unwrap();
-                copy_dir(state_dir, temp_dir.path()).expect("Failed to copy state directory");
-                (Some(temp_dir.path().to_path_buf()), Some(temp_dir))
-            } else {
-                (Some(state_dir), None)
-            }
-        } else {
-            (None, None)
-        };
+
         let instance_config = InstanceConfig {
             subnet_config_set,
             state_dir,

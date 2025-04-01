@@ -888,10 +888,16 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Start a new PocketIC server.
     let (new_server_url, child) = start_server_helper(None, None, false, false);
 
-    // Create a PocketIC instance mounting the (read-only) state created so far.
+    // Create a temporary state directory persisted throughout the rest of the test.
+    let write_state_dir = TempDir::new().unwrap();
+    let write_state_dir_path_buf = write_state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance mounting the (read-only) state created so far
+    // and persisting the state in a separate (write) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
         .with_read_only_state_dir(state_dir_path_buf.clone())
+        .with_state_dir(write_state_dir_path_buf.clone())
         .build();
 
     // Check that the topology has been properly restored.
@@ -933,6 +939,53 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     check_counter(&pic, nns_canister_id, 3);
     check_counter(&pic, app_canister_id, 2);
     check_counter(&pic, spec_canister_id, 4);
+
+    // Bump the counters on all subnets.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the (read-only) state created so far.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .build();
+
+    // Check that the canister states have been changed in the persisted state
+    // when loading that state from a read-only state.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the persisted state created so far.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state_dir(write_state_dir_path_buf.clone())
+        .build();
+
+    // Check that the canister states have been changed in the persisted state
+    // when loading that state from a read-only state.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
 
     send_signal_to_pic(pic, child, shutdown_signal);
 }

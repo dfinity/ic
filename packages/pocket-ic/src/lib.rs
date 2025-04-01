@@ -104,17 +104,13 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
 const LOCALHOST: &str = "127.0.0.1";
 
-pub(crate) struct PocketIcStateDir {
-    pub state_dir: PathBuf,
-    pub read_only: bool,
-}
-
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
-    state_dir: Option<PocketIcStateDir>,
+    read_only_state_dir: Option<PathBuf>,
+    state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -128,6 +124,7 @@ impl PocketIcBuilder {
             server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            read_only_state_dir: None,
             state_dir: None,
             nonmainnet_features: false,
             log_level: None,
@@ -147,6 +144,7 @@ impl PocketIcBuilder {
             self.server_url,
             self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
@@ -160,6 +158,7 @@ impl PocketIcBuilder {
             self.server_url,
             self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
@@ -186,18 +185,12 @@ impl PocketIcBuilder {
     }
 
     pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
-        self.state_dir = Some(PocketIcStateDir {
-            state_dir,
-            read_only: false,
-        });
+        self.state_dir = Some(state_dir);
         self
     }
 
-    pub fn with_read_only_state_dir(mut self, state_dir: PathBuf) -> Self {
-        self.state_dir = Some(PocketIcStateDir {
-            state_dir,
-            read_only: true,
-        });
+    pub fn with_read_only_state_dir(mut self, read_only_state_dir: PathBuf) -> Self {
+        self.read_only_state_dir = Some(read_only_state_dir);
         self
     }
 
@@ -408,7 +401,8 @@ impl PocketIc {
         server_url: Option<Url>,
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PocketIcStateDir>,
+        read_only_state_dir: Option<PathBuf>,
+        state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -429,6 +423,7 @@ impl PocketIc {
                 server_url,
                 server_binary,
                 max_request_time_ms,
+                read_only_state_dir,
                 state_dir,
                 nonmainnet_features,
                 log_level,
