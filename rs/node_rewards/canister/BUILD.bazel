@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [
@@ -23,6 +24,7 @@ DEV_DEPENDENCIES = [
     "//rs/nns/test_utils",
     "//rs/protobuf",
     "//rs/registry/keys",
+    "//rs/registry/transport",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
     "@crate_index//:maplit",

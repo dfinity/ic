@@ -1,5 +1,20 @@
 
 type InitArgs = record { };
 
+type GetNodeProvidersMonthlyXdrRewardsRequest = record {};
+
+type GetNodeProvidersMonthlyXdrRewardsResponse = record {
+    rewards : opt NodeProvidersMonthlyXdrRewards;
+    error: opt text;
+};
+
+type NodeProvidersMonthlyXdrRewards = record {
+    rewards: vec record { principal; nat64 };
+    registry_version: opt nat64;
+};
+
 service : (InitArgs) -> {
+    get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
+        GetNodeProvidersMonthlyXdrRewardsResponse
+    );
 }

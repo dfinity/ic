@@ -21,9 +21,11 @@ ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
 ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
+ic-registry-transport = { path = "../../registry/transport" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 candid = { workspace = true }
+prost = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }

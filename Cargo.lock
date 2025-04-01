@@ -11399,10 +11399,12 @@ dependencies = [
  "ic-registry-canister-client",
  "ic-registry-keys",
  "ic-registry-node-provider-rewards",
+ "ic-registry-transport",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
  "maplit",
+ "prost 0.13.4",
 ]
 
 [[package]]

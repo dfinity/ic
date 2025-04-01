@@ -14,8 +14,13 @@ use ic_registry_canister_client::{registry_data_stable_memory_impl, StableCanist
 use ic_registry_canister_client::{
     CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
+use ic_registry_keys::{
+    make_api_boundary_node_record_key, make_data_center_record_key, make_node_operator_record_key,
+    NODE_REWARDS_TABLE_KEY,
+};
 use ic_registry_node_provider_rewards::logs::RewardsPerNodeProviderLog;
 use ic_registry_node_provider_rewards::RewardsPerNodeProvider;
+use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::{PrincipalId, RegistryVersion};
@@ -57,7 +62,39 @@ fn setup_canister_for_test(
     (canister, registry_client, fake_registry)
 }
 
-fn fake_registry_responses_for_rewards_calculation_test() -> FakeRegistryResponses {
+fn reg_value<T>(version: u64, value: Option<T>) -> RegistryValue
+where
+    T: prost::Message + Default,
+{
+    let deletion_marker = value.is_none();
+    let value = value
+        .map(|v| {
+            let mut buf = Vec::new();
+            v.encode(&mut buf).expect("Failed to encode value");
+            buf
+        })
+        .unwrap_or_default();
+
+    RegistryValue {
+        value,
+        version,
+        deletion_marker,
+    }
+}
+
+fn reg_delta(key: impl AsRef<[u8]>, values: Vec<RegistryValue>) -> RegistryDelta {
+    RegistryDelta {
+        key: key.as_ref().to_vec(),
+        values,
+    }
+}
+
+fn fake_registry_responses_for_rewards_calculation_test(
+    fake_registry_version: u64,
+) -> FakeRegistryResponses {
+    // This is what we are creating, so that we can mock registry
+    let mut deltas = vec![];
+
     let rewards_table = NodeRewardsTable {
         table: btreemap! {
             "Africa,ZA".to_string() => NodeRewardRates {
@@ -79,13 +116,20 @@ fn fake_registry_responses_for_rewards_calculation_test() -> FakeRegistryRespons
         },
     };
 
+    deltas.push(reg_delta(
+        NODE_REWARDS_TABLE_KEY,
+        vec![reg_value(fake_registry_version, Some(rewards_table))],
+    ));
+
+    // Node Operators
     let node_operator_a_id = PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap();
     let node_operator_b_id = PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap();
 
-    let node_operators = [
-        (
-            "node_operator_a".to_string(),
-            NodeOperatorRecord {
+    deltas.push(reg_delta(
+        make_node_operator_record_key(node_operator_a_id),
+        vec![reg_value(
+            fake_registry_version,
+            Some(NodeOperatorRecord {
                 node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
                 node_allowance: 0,
                 node_provider_principal_id: node_operator_a_id.to_vec(),
@@ -94,11 +138,15 @@ fn fake_registry_responses_for_rewards_calculation_test() -> FakeRegistryRespons
                     "type3".to_string() => 3,
                 },
                 ipv6: None,
-            },
-        ),
-        (
-            "node_operator_b".to_string(),
-            NodeOperatorRecord {
+            }),
+        )],
+    ));
+
+    deltas.push(reg_delta(
+        make_node_operator_record_key(node_operator_b_id),
+        vec![reg_value(
+            fake_registry_version,
+            Some(NodeOperatorRecord {
                 node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
                 node_allowance: 0,
                 node_provider_principal_id: node_operator_b_id.to_vec(),
@@ -107,37 +155,59 @@ fn fake_registry_responses_for_rewards_calculation_test() -> FakeRegistryRespons
                     "type1".to_string() => 2,
                 },
                 ipv6: None,
-            },
-        ),
-    ];
+            }),
+        )],
+    ));
 
-    let data_centers = btreemap! {
-        "dc1".to_string() => DataCenterRecord {
-            id: "dc1".to_string(),
-            region: "Africa,ZA".to_string(),
-            owner: "David Bowie".to_string(),
-            gps: None,
-        },
-        "dc2".to_string() => DataCenterRecord {
-            id: "dc2".to_string(),
-            region: "Europe,CH".to_string(),
-            owner: "Taylor Swift".to_string(),
-            gps: None,
-        },
-    };
+    // Data Centers
 
-    let fake_registry_responses = FakeRegistryResponses::new();
-    fake_registry_responses.insert()
+    deltas.push(reg_delta(
+        make_data_center_record_key("dc1"),
+        vec![reg_value(
+            fake_registry_version,
+            Some(DataCenterRecord {
+                id: "dc1".to_string(),
+                region: "Africa,ZA".to_string(),
+                owner: "David Bowie".to_string(),
+                gps: None,
+            }),
+        )],
+    ));
+
+    deltas.push(reg_delta(
+        make_data_center_record_key("dc2"),
+        vec![reg_value(
+            fake_registry_version,
+            Some(DataCenterRecord {
+                id: "dc2".to_string(),
+                region: "Europe,CH".to_string(),
+                owner: "Taylor Swift".to_string(),
+                gps: None,
+            }),
+        )],
+    ));
+
+    let mut fake_registry_responses = FakeRegistryResponses::new();
+    fake_registry_responses.insert(fake_registry_version, Ok(deltas));
+
+    fake_registry_responses
 }
 
 #[test]
 fn test_rewards_calculation() {
-    let fake_registry_responses = fake_registry_responses_for_rewards_calculation_test();
+    let latest_version = 5;
+    let fake_registry_responses =
+        fake_registry_responses_for_rewards_calculation_test(latest_version);
 
-    let (canister, client, fake_registry) = setup_canister_for_test(5, fake_registry_responses);
+    let (test_canister, client, fake_registry) =
+        setup_canister_for_test(latest_version, fake_registry_responses);
+
     thread_local! {
-        static CANISTER: RefCell<NodeRewardsCanister> = RefCell::new(canister);
+        static CANISTER: RefCell<NodeRewardsCanister> = RefCell::new(NodeRewardsCanister::new(
+                Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default()))),
+        ));
     }
+    CANISTER.with_borrow_mut(|canister| *canister = test_canister);
 
     let request = GetNodeProvidersMonthlyXdrRewardsRequest {};
 
@@ -163,138 +233,138 @@ fn test_rewards_calculation() {
 
     // Assert that the rewards are populated as expected.
 }
-/// Test type1 nodes because they are being deprecated, setting the corresponding rewards
-/// to zero is part of that process.
-/// Test type3 nodes because they involve more a complex calculation that all other types.
-fn run_rewards_table_with_type1_rewards_test(type1_xdr_permyriad_per_node_per_month: u64) {
-    let type3_xdr_permyriad_per_node_per_month = 27491250;
-
-    let rewards_table = NodeRewardsTable {
-        table: btreemap! {
-            "Africa,ZA".to_string() => NodeRewardRates {
-                rates: btreemap! {
-                    "type3".to_string() => NodeRewardRate {
-                        xdr_permyriad_per_node_per_month: type3_xdr_permyriad_per_node_per_month,
-                        reward_coefficient_percent: Some(98),
-                    }
-                }
-            },
-            "Europe,CH".to_string() => NodeRewardRates {
-                rates: btreemap! {
-                    "type1".to_string() => NodeRewardRate {
-                        xdr_permyriad_per_node_per_month: type1_xdr_permyriad_per_node_per_month,
-                        reward_coefficient_percent: None,
-                    }
-                }
-            }
-        },
-    };
-
-    let node_operator_a_id = PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap();
-    let node_operator_b_id = PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap();
-
-    let node_operators = [
-        (
-            "node_operator_a".to_string(),
-            NodeOperatorRecord {
-                node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
-                node_allowance: 0,
-                node_provider_principal_id: node_operator_a_id.to_vec(),
-                dc_id: "dc1".to_string(),
-                rewardable_nodes: btreemap! {
-                    "type3".to_string() => 3,
-                },
-                ipv6: None,
-            },
-        ),
-        (
-            "node_operator_b".to_string(),
-            NodeOperatorRecord {
-                node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
-                node_allowance: 0,
-                node_provider_principal_id: node_operator_b_id.to_vec(),
-                dc_id: "dc2".to_string(),
-                rewardable_nodes: btreemap! {
-                    "type1".to_string() => 2,
-                },
-                ipv6: None,
-            },
-        ),
-    ];
-
-    let data_centers = btreemap! {
-        "dc1".to_string() => DataCenterRecord {
-            id: "dc1".to_string(),
-            region: "Africa,ZA".to_string(),
-            owner: "David Bowie".to_string(),
-            gps: None,
-        },
-        "dc2".to_string() => DataCenterRecord {
-            id: "dc2".to_string(),
-            region: "Europe,CH".to_string(),
-            owner: "Taylor Swift".to_string(),
-            gps: None,
-        },
-    };
-
-    let expected_node_operator_a_rewards = 80835271;
-    // Smoke test - type3 adds fewer rewards to subsequent nodes.
-    assert!(expected_node_operator_a_rewards < 3 * type3_xdr_permyriad_per_node_per_month);
-
-    let expected_node_operator_b_rewards = 2 * type1_xdr_permyriad_per_node_per_month;
-
-    assert_eq!(
-        result,
-        Ok(RewardsPerNodeProvider {
-            rewards_per_node_provider: btreemap! {
-                node_operator_a_id => expected_node_operator_a_rewards,
-                node_operator_b_id => expected_node_operator_b_rewards,
-            },
-            computation_log: btreemap! {
-                node_operator_a_id => RewardsPerNodeProviderLog {
-                    node_provider_id: node_operator_a_id,
-                    entries: vec![
-                        LogEntry::NodeRewards {
-                            node_type: "type3".to_string(),
-                            node_idx: 0,
-                            dc_id: "dc1".to_string(),
-                            rewardable_count: 3,
-                            rewards_xdr_permyriad: 27491250,
-                        },
-                        LogEntry::NodeRewards {
-                            node_type: "type3".to_string(),
-                            node_idx: 1,
-                            dc_id: "dc1".to_string(),
-                            rewardable_count: 3,
-                            rewards_xdr_permyriad: 26941425,
-                        },
-                        LogEntry::NodeRewards {
-                            node_type: "type3".to_string(),
-                            node_idx: 2,
-                            dc_id: "dc1".to_string(),
-                            rewardable_count: 3,
-                            rewards_xdr_permyriad: 26402596,
-                        },
-                        LogEntry::DCRewards {
-                            dc_id: "dc1".to_string(),
-                            node_type: "type3".to_string(),
-                            rewardable_count: 3,
-                            rewards_xdr_permyriad: expected_node_operator_a_rewards,
-                        },
-                    ]
-                },
-                node_operator_b_id => RewardsPerNodeProviderLog {
-                    node_provider_id: node_operator_b_id,
-                    entries: vec![
-                        LogEntry::DCRewards {
-                            dc_id: "dc2".to_string(),
-                            node_type: "type1".to_string(),
-                            rewardable_count: 2,
-                            rewards_xdr_permyriad: expected_node_operator_b_rewards,
-                        },
-                    ]
-                },
-            }
-        })
-    );
-}
+// /// Test type1 nodes because they are being deprecated, setting the corresponding rewards
+// /// to zero is part of that process.
+// /// Test type3 nodes because they involve more a complex calculation that all other types.
+// fn run_rewards_table_with_type1_rewards_test(type1_xdr_permyriad_per_node_per_month: u64) {
+//     let type3_xdr_permyriad_per_node_per_month = 27491250;
+//
+//     let rewards_table = NodeRewardsTable {
+//         table: btreemap! {
+//             "Africa,ZA".to_string() => NodeRewardRates {
+//                 rates: btreemap! {
+//                     "type3".to_string() => NodeRewardRate {
+//                         xdr_permyriad_per_node_per_month: type3_xdr_permyriad_per_node_per_month,
+//                         reward_coefficient_percent: Some(98),
+//                     }
+//                 }
+//             },
+//             "Europe,CH".to_string() => NodeRewardRates {
+//                 rates: btreemap! {
+//                     "type1".to_string() => NodeRewardRate {
+//                         xdr_permyriad_per_node_per_month: type1_xdr_permyriad_per_node_per_month,
+//                         reward_coefficient_percent: None,
+//                     }
+//                 }
+//             }
+//         },
+//     };
+//
+//     let node_operator_a_id = PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap();
+//     let node_operator_b_id = PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap();
+//
+//     let node_operators = [
+//         (
+//             "node_operator_a".to_string(),
+//             NodeOperatorRecord {
+//                 node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
+//                 node_allowance: 0,
+//                 node_provider_principal_id: node_operator_a_id.to_vec(),
+//                 dc_id: "dc1".to_string(),
+//                 rewardable_nodes: btreemap! {
+//                     "type3".to_string() => 3,
+//                 },
+//                 ipv6: None,
+//             },
+//         ),
+//         (
+//             "node_operator_b".to_string(),
+//             NodeOperatorRecord {
+//                 node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
+//                 node_allowance: 0,
+//                 node_provider_principal_id: node_operator_b_id.to_vec(),
+//                 dc_id: "dc2".to_string(),
+//                 rewardable_nodes: btreemap! {
+//                     "type1".to_string() => 2,
+//                 },
+//                 ipv6: None,
+//             },
+//         ),
+//     ];
+//
+//     let data_centers = btreemap! {
+//         "dc1".to_string() => DataCenterRecord {
+//             id: "dc1".to_string(),
+//             region: "Africa,ZA".to_string(),
+//             owner: "David Bowie".to_string(),
+//             gps: None,
+//         },
+//         "dc2".to_string() => DataCenterRecord {
+//             id: "dc2".to_string(),
+//             region: "Europe,CH".to_string(),
+//             owner: "Taylor Swift".to_string(),
+//             gps: None,
+//         },
+//     };
+//
+//     let expected_node_operator_a_rewards = 80835271;
+//     // Smoke test - type3 adds fewer rewards to subsequent nodes.
+//     assert!(expected_node_operator_a_rewards < 3 * type3_xdr_permyriad_per_node_per_month);
+//
+//     let expected_node_operator_b_rewards = 2 * type1_xdr_permyriad_per_node_per_month;
+//
+//     assert_eq!(
+//         result,
+//         Ok(RewardsPerNodeProvider {
+//             rewards_per_node_provider: btreemap! {
+//                 node_operator_a_id => expected_node_operator_a_rewards,
+//                 node_operator_b_id => expected_node_operator_b_rewards,
+//             },
+//             computation_log: btreemap! {
+//                 node_operator_a_id => RewardsPerNodeProviderLog {
+//                     node_provider_id: node_operator_a_id,
+//                     entries: vec![
+//                         LogEntry::NodeRewards {
+//                             node_type: "type3".to_string(),
+//                             node_idx: 0,
+//                             dc_id: "dc1".to_string(),
+//                             rewardable_count: 3,
+//                             rewards_xdr_permyriad: 27491250,
+//                         },
+//                         LogEntry::NodeRewards {
+//                             node_type: "type3".to_string(),
+//                             node_idx: 1,
+//                             dc_id: "dc1".to_string(),
+//                             rewardable_count: 3,
+//                             rewards_xdr_permyriad: 26941425,
+//                         },
+//                         LogEntry::NodeRewards {
+//                             node_type: "type3".to_string(),
+//                             node_idx: 2,
+//                             dc_id: "dc1".to_string(),
+//                             rewardable_count: 3,
+//                             rewards_xdr_permyriad: 26402596,
+//                         },
+//                         LogEntry::DCRewards {
+//                             dc_id: "dc1".to_string(),
+//                             node_type: "type3".to_string(),
+//                             rewardable_count: 3,
+//                             rewards_xdr_permyriad: expected_node_operator_a_rewards,
+//                         },
+//                     ]
+//                 },
+//                 node_operator_b_id => RewardsPerNodeProviderLog {
+//                     node_provider_id: node_operator_b_id,
+//                     entries: vec![
+//                         LogEntry::DCRewards {
+//                             dc_id: "dc2".to_string(),
+//                             node_type: "type1".to_string(),
+//                             rewardable_count: 2,
+//                             rewards_xdr_permyriad: expected_node_operator_b_rewards,
+//                         },
+//                     ]
+//                 },
+//             }
+//         })
+//     );
+// }
