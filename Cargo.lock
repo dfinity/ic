@@ -9088,6 +9088,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-tracing",
  "ic-types",
+ "ic-utils 0.9.0",
  "ic-validator",
  "inferno 0.12.1",
  "maplit",

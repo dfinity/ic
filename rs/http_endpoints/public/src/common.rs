@@ -23,6 +23,7 @@ use ic_types::{
     messages::{HttpRequest, HttpRequestContent},
     RegistryVersion, SubnetId, Time,
 };
+use ic_utils::str::StrEllipsize;
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
@@ -252,13 +253,10 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
     match err {
         RequestValidationError::InvalidRequestExpiry(_)
         | RequestValidationError::InvalidSignature(_) => {
-            let request = format!("{:?}", request);
+            let request_ellipsized = format!("{:?}", request).ellipsize(1024, 90);
             info!(
                 log,
-                "msg_id: {}, err: {}, request: {}",
-                message_id,
-                err,
-                request.chars().take(1024).collect::<String>()
+                "msg_id: {}, err: {}, request: {}", message_id, err, request_ellipsized,
             )
         }
         _ => info!(log, "msg_id: {}, err: {}", message_id, err),
