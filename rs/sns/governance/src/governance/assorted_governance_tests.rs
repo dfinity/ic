@@ -4774,7 +4774,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
                 now_seconds,
                 &mut ballots,
                 proposal_criticality,
-                None,
+                Default::default(),
             );
 
             ballots

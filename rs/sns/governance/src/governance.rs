@@ -3514,7 +3514,7 @@ impl Governance {
             now_seconds,
             &mut proposal_data.ballots,
             proposal_criticality,
-            proposal_topic,
+            proposal_topic.unwrap_or_default(),
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3546,7 +3546,7 @@ impl Governance {
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
         proposal_criticality: ProposalCriticality,
-        topic: Option<Topic>,
+        topic: Topic,
     ) {
         let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
         assert!(function_id != fallback_pseudo_function_id);
@@ -3580,7 +3580,7 @@ impl Governance {
             UnionMultiMap::new(members)
         };
 
-        let topic_followers = topic.and_then(|topic| topic_follower_index.get(&topic));
+        let topic_followers = topic_follower_index.get(&topic);
 
         // Traverse the follow graph using breadth first search (BFS).
 
@@ -3597,16 +3597,9 @@ impl Governance {
         // not (directly or indirectly) voted yet). That is, once a neuron is swayed,
         // its vote is "locked in". IOW, swaying is "monotonic".
         while !induction_votes.is_empty() {
-            #[derive(Eq, Ord, PartialEq, PartialOrd)]
-            enum FollowingType {
-                TopicBased,
-                FunctionBased,
-            }
-
             // This will be populated with the followers of neurons in the
             // current BFS tier, who might be swayed to indirectly vote, thus
             // forming the next tier in the BFS.
-            // Each element is a pair `(neuron_id, FollowingType)`.
             let mut follower_neuron_ids = BTreeSet::new();
 
             // Process the current tier in the BFS.
@@ -3641,8 +3634,7 @@ impl Governance {
                     .and_then(|topic_followers| topic_followers.get(current_neuron_id))
                 {
                     for follower_neuron_id in new_follower_neuron_ids {
-                        follower_neuron_ids
-                            .insert((follower_neuron_id.clone(), FollowingType::TopicBased));
+                        follower_neuron_ids.insert(follower_neuron_id.clone());
                     }
                 }
 
@@ -3650,8 +3642,7 @@ impl Governance {
                     neuron_id_to_follower_neuron_ids.get(current_neuron_id)
                 {
                     for follower_neuron_id in new_follower_neuron_ids {
-                        follower_neuron_ids
-                            .insert((follower_neuron_id.clone(), FollowingType::FunctionBased));
+                        follower_neuron_ids.insert(follower_neuron_id.clone());
                     }
                 }
             }
@@ -3659,7 +3650,7 @@ impl Governance {
             // Prepare for the next iteration of the (outer most) loop by
             // constructing the next BFS tier (from follower_neuron_ids).
             induction_votes.clear();
-            for (follower_neuron_id, following_type) in follower_neuron_ids {
+            for follower_neuron_id in follower_neuron_ids {
                 let Some(follower_neuron) = neurons.get(&follower_neuron_id.to_string()) else {
                     // This is a highly suspicious, because currently, we do not
                     // delete neurons, which means that we have an invalid NeuronId
@@ -3676,36 +3667,12 @@ impl Governance {
                     continue;
                 };
 
-                // Supporting topic-based following with legacy (function-based) as fallback.
-                // The that end, filter out legacy followers that already set topic-based following.
-                if let (Some(topic), Some(topic_followees)) =
-                    (topic, &follower_neuron.topic_followees)
-                {
-                    if following_type == FollowingType::FunctionBased
-                        && topic_followees
-                            .topic_id_to_followees
-                            .contains_key(&i32::from(topic))
-                    {
-                        // This follower already has a topic-based followee for this topic, so
-                        // its legacy (function-based) following should be ignored.
-                        continue;
-                    }
-                }
-
-                let mut follower_vote = topic
-                    .map(|topic| {
-                        follower_neuron.would_topic_follow_ballots(topic, ballots, proposal_id)
-                    })
-                    .unwrap_or(Vote::Unspecified);
-
-                if follower_vote == Vote::Unspecified {
-                    // Fall back to function-based following.
-                    follower_vote = follower_neuron.would_follow_ballots(
-                        function_id,
-                        ballots,
-                        proposal_criticality,
-                    );
-                }
+                let follower_vote = follower_neuron.vote_from_ballots_following(
+                    function_id,
+                    topic,
+                    ballots,
+                    proposal_id,
+                );
 
                 if follower_vote != Vote::Unspecified {
                     // follower_neuron would be swayed by its followees!
@@ -3823,7 +3790,7 @@ impl Governance {
             now_seconds,
             &mut proposal.ballots,
             proposal_criticality,
-            proposal_topic,
+            proposal_topic.unwrap_or_default(),
         );
 
         self.process_proposal(proposal_id.id);
