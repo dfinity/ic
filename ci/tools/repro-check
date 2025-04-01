@@ -303,6 +303,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-c", "--commit", type=str, default="", help="Git revision/commit to use from the IC repository."
     )
+    parser.add_argument(
+        "--cache-dir", type=Path, default=None, help="Cache directory to use (defaults to ~/.cache/repro-check)."
+    )
     parser.add_argument("--clean", action="store_true", help="Clean up the download cache before running.")
     parser.add_argument("--debug", "--verbose", action="store_true", help="Enable debug mode output.")
     parser.add_argument(
@@ -356,6 +359,7 @@ class ReproducibilityVerifier:
         git_commit: str,
         clean: bool,
         download_source_mode: str,
+        base_cache_dir: Path | None,
     ):
         self.verify_guestos = verify_guestos
         self.verify_hostos = verify_hostos
@@ -371,9 +375,14 @@ class ReproducibilityVerifier:
         self.proposal_package_sha256_hex = ""
 
         # Cache
-        self.base_cache_dir = Path("/tmp/ic-repro-cache")
-        if clean and self.base_cache_dir.is_dir():
-            shutil.rmtree(self.base_cache_dir)
+        if base_cache_dir is not None:
+            if clean:
+                raise RuntimeError(f"Refusing to cleaning manually specified base cache directory {base_cache_dir}")
+            self.base_cache_dir = base_cache_dir
+        else:
+            self.base_cache_dir = base_cache_dir or Path(os.path.expanduser("~/.cache/repro-check"))
+            if clean and base_cache_dir.is_dir():
+                shutil.rmtree(base_cache_dir)
         self.cache_for_this_hash: Path = Path()
 
         self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=9)
@@ -861,6 +870,7 @@ def main() -> None:
         git_commit=args.commit,
         clean=args.clean,
         download_source_mode=args.download_source,
+        base_cache_dir=args.cache_dir,
     )
     try:
         verifier.run()
