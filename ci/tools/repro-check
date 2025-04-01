@@ -613,9 +613,10 @@ class ReproducibilityVerifier:
     @contextlib.contextmanager
     def storage(self) -> typing.Generator[Dirs, None, None]:
         """Prepares temporary and output directories."""
-        if os.getenv("DEBUG", ""):
+        keep_temp = os.getenv("DEBUG", "")
+        if keep_temp:
             logger.debug("DEBUG mode => not automatically removing the tempdir.")
-        _tmpdir_obj = tempfile.TemporaryDirectory(prefix="repro-check_", delete=bool(os.getenv("DEBUG", "")))
+        _tmpdir_obj = tempfile.TemporaryDirectory(prefix="repro-check_", delete=not keep_temp)
         tmpdir = Path(_tmpdir_obj.name)
 
         logger.info(f"Using temporary directory: {tmpdir}")
@@ -628,7 +629,7 @@ class ReproducibilityVerifier:
             out_dir / "dev-img",
             out_dir / "proposal-img",
         )
-        if not os.getenv("DEBUG", ""):
+        if not keep_temp:
             logger.debug("Cleaning up temporary directory.")
 
     # --------------------------------------------------------------------------
@@ -824,7 +825,6 @@ class ReproducibilityVerifier:
             guest_os_hash, host_os_hash = self.process_proposal()
             self.decide_git_hash()
             self.init_cache()
-            self.storage()
 
             downloads_for_proposal = self.start_proposal_download_if_needed(dirs)
             guest_os_downloads = self.start_cdn_downloads_for_os("guest-os", dirs) if self.verify_guestos else []
