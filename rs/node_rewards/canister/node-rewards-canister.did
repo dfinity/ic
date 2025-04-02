@@ -1,6 +1,3 @@
-
-type InitArgs = record { };
-
 type GetNodeProvidersMonthlyXdrRewardsRequest = record {
     registry_version: opt nat64;
 };
@@ -15,7 +12,7 @@ type NodeProvidersMonthlyXdrRewards = record {
     registry_version: opt nat64;
 };
 
-service : (InitArgs) -> {
+service : () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
         GetNodeProvidersMonthlyXdrRewardsResponse
     );

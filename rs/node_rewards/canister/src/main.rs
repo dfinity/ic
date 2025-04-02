@@ -1,4 +1,3 @@
-use candid::candid_method;
 #[cfg(any(test, feature = "test"))]
 use ic_cdk::query;
 use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};

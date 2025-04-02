@@ -1,9 +1,6 @@
 use crate::canister::NodeRewardsCanister;
-use crate::storage::RegistryStoreStableMemoryBorrower;
 use futures_util::FutureExt;
-use ic_nervous_system_canisters::registry::{
-    FakeRegistry, FakeRegistryResponses, RegistryCanister,
-};
+use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,
@@ -13,14 +10,11 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
 use ic_registry_canister_client::{registry_data_stable_memory_impl, StableCanisterRegistryClient};
 use ic_registry_canister_client::{
-    CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
+    RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_data_center_record_key, make_node_operator_record_key,
-    NODE_REWARDS_TABLE_KEY,
+    make_data_center_record_key, make_node_operator_record_key, NODE_REWARDS_TABLE_KEY,
 };
-use ic_registry_node_provider_rewards::logs::RewardsPerNodeProviderLog;
-use ic_registry_node_provider_rewards::RewardsPerNodeProvider;
 use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
