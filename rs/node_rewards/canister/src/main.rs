@@ -5,7 +5,6 @@ use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
-use ic_node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -31,7 +30,7 @@ thread_local! {
 }
 
 #[init]
-fn canister_init(_args: InitArgs) {
+fn canister_init() {
     schedule_timers();
 }
 
@@ -39,7 +38,7 @@ fn canister_init(_args: InitArgs) {
 fn pre_upgrade() {}
 
 #[post_upgrade]
-fn post_upgrade(_args: Option<UpgradeArgs>) {
+fn post_upgrade() {
     schedule_timers();
 }
 
