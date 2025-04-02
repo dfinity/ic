@@ -35,19 +35,12 @@ thread_local! {
 
 registry_data_stable_memory_impl!(TestState, STATE);
 
-fn setup_canister_for_test(
-    fake_registry_version: u64,
-    fake_registry_responses: FakeRegistryResponses,
-) -> (
+fn setup_canister_for_test() -> (
     NodeRewardsCanister,
     Arc<StableCanisterRegistryClient<TestState>>,
     Arc<FakeRegistry>,
 ) {
-    let mut fake_registry = FakeRegistry::new(RegistryVersion::new(fake_registry_version));
-    for (v, response) in fake_registry_responses {
-        fake_registry.add_fake_response_for_get_changes_since(v, response);
-    }
-    let fake_registry = Arc::new(fake_registry);
+    let fake_registry = Arc::new(FakeRegistry::new());
     let registry_client = Arc::new(StableCanisterRegistryClient::<TestState>::new(
         fake_registry.clone(),
     ));
@@ -85,12 +78,7 @@ fn reg_delta(key: impl AsRef<[u8]>, values: Vec<RegistryValue>) -> RegistryDelta
     }
 }
 
-fn fake_registry_responses_for_rewards_calculation_test(
-    version_of_records: u64,
-) -> FakeRegistryResponses {
-    // This is what we are creating, so that we can mock registry
-    let mut deltas = vec![];
-
+fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
     let rewards_table = NodeRewardsTable {
         table: btreemap! {
             "Africa,ZA".to_string() => NodeRewardRates {
@@ -112,94 +100,75 @@ fn fake_registry_responses_for_rewards_calculation_test(
         },
     };
 
-    deltas.push(reg_delta(
-        NODE_REWARDS_TABLE_KEY,
-        vec![reg_value(version_of_records, Some(rewards_table))],
-    ));
+    fake_registry.encode_value_at_version(NODE_REWARDS_TABLE_KEY, 5, Some(rewards_table));
 
     // Node Operators
     let node_operator_a_id = PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap();
     let node_operator_b_id = PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap();
 
-    deltas.push(reg_delta(
+    fake_registry.encode_value_at_version(
         make_node_operator_record_key(node_operator_a_id),
-        vec![reg_value(
-            version_of_records,
-            Some(NodeOperatorRecord {
-                node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
-                node_allowance: 0,
-                node_provider_principal_id: node_operator_a_id.to_vec(),
-                dc_id: "dc1".to_string(),
-                rewardable_nodes: btreemap! {
-                    "type3".to_string() => 3,
-                },
-                ipv6: None,
-            }),
-        )],
-    ));
+        5,
+        Some(NodeOperatorRecord {
+            node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
+            node_allowance: 0,
+            node_provider_principal_id: node_operator_a_id.to_vec(),
+            dc_id: "dc1".to_string(),
+            rewardable_nodes: btreemap! {
+                "type3".to_string() => 3,
+            },
+            ipv6: None,
+        }),
+    );
 
-    deltas.push(reg_delta(
+    fake_registry.encode_value_at_version(
         make_node_operator_record_key(node_operator_b_id),
-        vec![reg_value(
-            version_of_records,
-            Some(NodeOperatorRecord {
-                node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
-                node_allowance: 0,
-                node_provider_principal_id: node_operator_b_id.to_vec(),
-                dc_id: "dc2".to_string(),
-                rewardable_nodes: btreemap! {
-                    "type1".to_string() => 2,
-                },
-                ipv6: None,
-            }),
-        )],
-    ));
+        5,
+        Some(NodeOperatorRecord {
+            node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
+            node_allowance: 0,
+            node_provider_principal_id: node_operator_b_id.to_vec(),
+            dc_id: "dc2".to_string(),
+            rewardable_nodes: btreemap! {
+                "type1".to_string() => 2,
+            },
+            ipv6: None,
+        }),
+    );
 
     // Data Centers
 
-    deltas.push(reg_delta(
+    fake_registry.encode_value_at_version(
         make_data_center_record_key("dc1"),
-        vec![reg_value(
-            version_of_records,
-            Some(DataCenterRecord {
-                id: "dc1".to_string(),
-                region: "Africa,ZA".to_string(),
-                owner: "David Bowie".to_string(),
-                gps: None,
-            }),
-        )],
-    ));
+        5,
+        Some(DataCenterRecord {
+            id: "dc1".to_string(),
+            region: "Africa,ZA".to_string(),
+            owner: "David Bowie".to_string(),
+            gps: None,
+        }),
+    );
 
-    deltas.push(reg_delta(
+    fake_registry.encode_value_at_version(
         make_data_center_record_key("dc2"),
-        vec![reg_value(
-            version_of_records,
-            Some(DataCenterRecord {
-                id: "dc2".to_string(),
-                region: "Europe,CH".to_string(),
-                owner: "Taylor Swift".to_string(),
-                gps: None,
-            }),
-        )],
-    ));
-
-    let mut fake_registry_responses = FakeRegistryResponses::new();
-    fake_registry_responses.insert(0, Ok(deltas));
-
-    fake_registry_responses
+        5,
+        Some(DataCenterRecord {
+            id: "dc2".to_string(),
+            region: "Europe,CH".to_string(),
+            owner: "Taylor Swift".to_string(),
+            gps: None,
+        }),
+    );
 }
 
 #[test]
 fn test_rewards_calculation() {
     let latest_version = 5;
-    let fake_registry_responses =
-        fake_registry_responses_for_rewards_calculation_test(latest_version);
-
-    let (test_canister, client, _fake_registry) =
-        setup_canister_for_test(latest_version, fake_registry_responses);
+    let (test_canister, client, fake_registry) = setup_canister_for_test();
+    add_registry_data_to_fake_registry(fake_registry);
 
     thread_local! {
-        // Dummy value b/c we can't do direct assignment
+        // Dummy value b/c we can't do direct assignment using values defined above.
         static CANISTER: RefCell<NodeRewardsCanister> = RefCell::new(NodeRewardsCanister::new(
                 Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default()))),
         ));

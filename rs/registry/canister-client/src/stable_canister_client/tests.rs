@@ -65,11 +65,8 @@ fn v(v: u64) -> RegistryVersion {
     RegistryVersion::new(v)
 }
 
-fn client_for_tests(
-    latest_version: u64,
-    responses: FakeRegistryResponses,
-) -> StableCanisterRegistryClient<DummyState> {
-    let mut fake_registry = FakeRegistry::new(RegistryVersion::new(latest_version));
+fn client_for_tests(responses: FakeRegistryResponses) -> StableCanisterRegistryClient<DummyState> {
+    let mut fake_registry = FakeRegistry::new();
     for (i, response) in responses.iter() {
         fake_registry.add_fake_response_for_get_changes_since(*i, response.clone());
     }
@@ -78,7 +75,7 @@ fn client_for_tests(
 
 #[test]
 fn test_absent_after_delete() {
-    let client = client_for_tests(0, Default::default());
+    let client = client_for_tests(Default::default());
     add_dummy_data();
 
     // Version before it was deleted, it should show up.
@@ -109,14 +106,14 @@ fn test_absent_after_delete() {
 
 #[test]
 fn empty_registry_should_report_zero_as_latest_version() {
-    let client = client_for_tests(0, Default::default());
+    let client = client_for_tests(Default::default());
 
     assert_eq!(client.get_latest_version(), ZERO_REGISTRY_VERSION);
 }
 
 #[test]
 fn can_retrieve_entries_correctly() {
-    let client = client_for_tests(0, Default::default());
+    let client = client_for_tests(Default::default());
 
     let set = |key: &str, ver: u64| add_record_helper(key, ver, Some(ver));
     let rem = |key: &str, ver: u64| add_record_helper(key, ver, None);
@@ -288,7 +285,7 @@ fn test_sync_registry_stored() {
             },
         ]),
     );
-    let client = client_for_tests(5, responses);
+    let client = client_for_tests(responses);
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
@@ -333,7 +330,7 @@ fn test_error_on_local_too_large() {
             ],
         }]),
     );
-    let client = client_for_tests(1, responses);
+    let client = client_for_tests(responses);
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
@@ -365,7 +362,7 @@ fn test_caching_behavior_of_get_latest_version() {
             }],
         }]),
     );
-    let client = client_for_tests(4, responses);
+    let client = client_for_tests(responses);
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);

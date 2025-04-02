@@ -9,6 +9,7 @@ use ic_registry_transport::{
     serialize_get_changes_since_request, Error,
 };
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 #[async_trait]
@@ -102,16 +103,16 @@ pub type FakeRegistryMap = BTreeMap<Vec<u8>, Vec<RegistryValue>>;
 /// so that you can test errors.  Responses that are explicitly set are consumed.
 #[derive(Default)]
 pub struct FakeRegistry {
-    version: RegistryVersion,
-    store: FakeRegistryMap,
+    version: AtomicU64,
+    store: Arc<Mutex<FakeRegistryMap>>,
     override_responses: Arc<Mutex<FakeRegistryResponses>>,
 }
 
 impl FakeRegistry {
-    pub fn new(latest_version: RegistryVersion) -> Self {
+    pub fn new() -> Self {
         FakeRegistry {
-            version: latest_version,
-            store: BTreeMap::new(),
+            version: AtomicU64::new(0),
+            store: Default::default(),
             override_responses: Default::default(),
         }
     }
@@ -128,13 +129,15 @@ impl FakeRegistry {
     }
 
     pub fn encode_value_at_version<T: prost::Message + Default>(
-        &mut self,
+        &self,
         key: impl AsRef<str>,
         version: u64,
         value: Option<T>,
     ) {
         let key_bytes = key.as_ref().as_bytes().to_vec();
-        let entry = self.store.entry(key_bytes).or_default();
+        let mut binding = self.store.lock().unwrap();
+
+        let entry = binding.entry(key_bytes).or_default();
 
         match entry.binary_search_by_key(&version, |registry_value| registry_value.version) {
             Ok(_) => panic!(
@@ -160,13 +163,20 @@ impl FakeRegistry {
                 entry.insert(index, registry_value)
             }
         }
+        if version > self.version.load(std::sync::atomic::Ordering::SeqCst) {
+            self.version
+                .store(version, std::sync::atomic::Ordering::SeqCst);
+        }
     }
 }
 
 #[async_trait]
 impl Registry for FakeRegistry {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
-        Ok(self.version)
+        Ok(self
+            .version
+            .load(std::sync::atomic::Ordering::SeqCst)
+            .into())
     }
 
     /// Returns the changes since the given version.  This is a fake implementation that
@@ -192,6 +202,8 @@ impl Registry for FakeRegistry {
 
         let changes = self
             .store
+            .lock()
+            .unwrap()
             .iter()
             // For every key create a delta with values versioned `(version, max_version]`.
             .map(|(key, values)| RegistryDelta {
