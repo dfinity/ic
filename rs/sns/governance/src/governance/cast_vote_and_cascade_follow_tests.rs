@@ -274,6 +274,7 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
 
     let voting_neuron = neuron(nid(0), btreemap! {}, None);
 
+    #[allow(clippy::type_complexity)]
     let test_cases: &[(
         &str,
         Action,
@@ -971,7 +972,7 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
         let function_id = u64::from(action);
 
         let neurons = neurons
-            .into_iter()
+            .iter()
             .map(|neuron| (neuron.id.clone().unwrap().to_string(), neuron.clone()))
             .collect();
 
@@ -987,7 +988,6 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
             let mut ballots = neurons
                 .values()
                 .cloned()
-                .into_iter()
                 .map(|neuron| {
                     (
                         neuron.id.unwrap().to_string(),
