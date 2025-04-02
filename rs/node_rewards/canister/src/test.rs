@@ -211,7 +211,9 @@ fn test_rewards_calculation() {
     }
     CANISTER.with_borrow_mut(|canister| *canister = test_canister);
 
-    let request = GetNodeProvidersMonthlyXdrRewardsRequest {};
+    let request = GetNodeProvidersMonthlyXdrRewardsRequest {
+        registry_version: None,
+    };
 
     let result = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
         &CANISTER,

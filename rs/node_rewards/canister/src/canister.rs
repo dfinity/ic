@@ -11,9 +11,7 @@ use ic_registry_keys::{
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
 use ic_types::RegistryVersion;
-use prost::Message;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -30,18 +28,12 @@ impl NodeRewardsCanister {
 // Exposed API Methods
 impl NodeRewardsCanister {
     pub async fn get_node_providers_monthly_xdr_rewards(
-        canister: &LocalKey<RefCell<NodeRewardsCanister>>,
+        _canister: &LocalKey<RefCell<NodeRewardsCanister>>,
         registry_client: Arc<dyn CanisterRegistryClient>,
         request: GetNodeProvidersMonthlyXdrRewardsRequest,
     ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
         // Main impl below
-        return match inner_get_node_providers_monthly_xdr_rewards(
-            canister,
-            registry_client,
-            request,
-        )
-        .await
-        {
+        return match inner_get_node_providers_monthly_xdr_rewards(registry_client, request).await {
             Ok((rewards, latest_version)) => GetNodeProvidersMonthlyXdrRewardsResponse {
                 rewards: Some(NodeProvidersMonthlyXdrRewards {
                     rewards: rewards
@@ -60,7 +52,6 @@ impl NodeRewardsCanister {
         };
 
         async fn inner_get_node_providers_monthly_xdr_rewards(
-            canister: &LocalKey<RefCell<NodeRewardsCanister>>,
             registry_client: Arc<dyn CanisterRegistryClient>,
             request: GetNodeProvidersMonthlyXdrRewardsRequest,
         ) -> Result<(RewardsPerNodeProvider, RegistryVersion), String> {
@@ -72,11 +63,16 @@ impl NodeRewardsCanister {
                 )
             })?;
 
-            let latest_version = registry_client.get_latest_version();
+            // TODO DO NOT MERGE - make test for the version as a parameter
+            let version = request
+                .registry_version
+                .map(|v| RegistryVersion::new(v))
+                .unwrap_or_else(|| registry_client.get_latest_version());
+
             let rewards_table = get_decoded_value::<NodeRewardsTable>(
                 &*registry_client,
                 NODE_REWARDS_TABLE_KEY,
-                latest_version,
+                version,
             )
             .map_err(|e| format!("Could not find NodeRewardsTable: {e:?}"))?
             .ok_or_else(|| "NodeRewardsTable is missing".to_string())?;
@@ -86,24 +82,24 @@ impl NodeRewardsCanister {
             let node_operators = decoded_key_value_pairs_for_prefix::<NodeOperatorRecord>(
                 &*registry_client,
                 NODE_OPERATOR_RECORD_KEY_PREFIX,
-                latest_version,
+                version,
             )?;
 
             println!(
                 "Before processing, data centers: {:?}",
-                registry_client.get_key_family_with_values(DATA_CENTER_KEY_PREFIX, latest_version)
+                registry_client.get_key_family_with_values(DATA_CENTER_KEY_PREFIX, version)
             );
 
             let data_centers = decoded_key_value_pairs_for_prefix::<DataCenterRecord>(
                 &*registry_client,
                 DATA_CENTER_KEY_PREFIX,
-                latest_version,
+                version,
             )?
             .into_iter()
             .collect();
 
             calculate_rewards_v0(&rewards_table, &node_operators, &data_centers)
-                .map(|rewards| (rewards, latest_version))
+                .map(|rewards| (rewards, version))
         }
     }
 }
