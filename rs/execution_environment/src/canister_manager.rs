@@ -2024,7 +2024,7 @@ impl CanisterManager {
                 .collect(),
             canister_version: snapshot.canister_version(),
             certified_data: snapshot.certified_data().clone(),
-            global_timer: snapshot.execution_snapshot().global_timer.into(),
+            global_timer: snapshot.execution_snapshot().global_timer.map(|x| x.into()),
             on_low_wasm_memory_hook_status: snapshot
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,

@@ -2115,7 +2115,7 @@ fn read_canister_snapshot_metadata_succeeds() {
     assert_eq!(metadata.wasm_module_size, uni_canister_wasm.len() as u64);
     assert_eq!(metadata.wasm_chunk_store.len(), 1);
     assert_eq!(metadata.certified_data, cert_data);
-    assert_eq!(metadata.global_timer, GlobalTimer::Active(timestamp));
+    assert_eq!(metadata.global_timer, Some(GlobalTimer::Active(timestamp)));
     assert_eq!(metadata.canister_version, 4);
 }
 

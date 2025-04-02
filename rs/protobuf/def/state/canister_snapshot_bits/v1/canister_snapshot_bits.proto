@@ -10,6 +10,11 @@ enum SnapshotSource {
   SNAPSHOT_SOURCE_UPLOADED_MANUALLY = 2;
 }
 
+// This is a helper to encode an Opt<Opt<..>> in protobuf. 
+message CanisterTimer {
+  optional uint64 global_timer_nanos = 1;
+}
+
 message CanisterSnapshotBits {
   uint64 snapshot_id = 1;
   types.v1.CanisterId canister_id = 2;
@@ -22,9 +27,7 @@ message CanisterSnapshotBits {
   uint64 wasm_memory_size = 9;
   uint64 total_size = 10;
   repeated canister_state_bits.v1.Global exported_globals = 11;
-  // This double optional represents either an unknown timer state (None), or Some(CanisterTimer), 
-  // where CanisterTimer is itself either Inactive (None) or Some(timestamp). 
-  optional optional uint64 global_timer_nanos = 12;
+  optional CanisterTimer global_timer = 12;
   optional canister_state_bits.v1.OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 13;
   SnapshotSource source = 14;
 }
