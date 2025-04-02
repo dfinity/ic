@@ -438,7 +438,7 @@ impl TipHandler {
         let canisters_on_disk = tip.canister_ids()?;
         for id in canisters_on_disk {
             if !ids.contains(&id) {
-                let canister_path = tip.canister(&id)?.raw_path();
+                let canister_path = tip.canister_path(&id)?;
                 std::fs::remove_dir_all(&canister_path).map_err(|err| LayoutError::IoError {
                     path: canister_path,
                     message: "Cannot remove canister.".to_string(),
@@ -1515,19 +1515,6 @@ where
         collect_subdirs(states_dir.as_path(), 0, parse_canister_id)
     }
 
-    fn canister(
-        &self,
-        canister_id: &CanisterId,
-    ) -> Result<CanisterLayout<Permissions>, LayoutError> {
-        CanisterLayout::new(
-            self.0
-                .root
-                .join(CANISTER_STATES_DIR)
-                .join(hex::encode(canister_id.get_ref().as_slice())),
-            self,
-        )
-    }
-
     /// Lists all snapshots in the checkpoint.
     pub fn snapshot_ids(&self) -> Result<Vec<SnapshotId>, LayoutError> {
         let snapshots_dir = self.0.root.join(SNAPSHOTS_DIR);
@@ -1537,40 +1524,31 @@ where
 
     /// List all PageMaps with at least one file in the Checkpoint, including canister and snapshot
     /// ones.
-    pub fn all_existing_pagemaps<'a>(
-        &'a self,
-    ) -> Result<Vec<PageMapLayoutRef<'a, Permissions>>, LayoutError> {
+    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayoutRef<Permissions>>, LayoutError> {
         let mut res = Vec::new();
         for canister_id in self.canister_ids()? {
-            res.push(self.canister_vmemory_0(&canister_id)?);
-            res.push(self.canister_stable_memory(&canister_id)?);
-            res.push(self.canister_wasm_chunk_store(&canister_id)?);
+            for pm in [
+                self.canister_vmemory_0(&canister_id)?,
+                self.canister_stable_memory(&canister_id)?,
+                self.canister_wasm_chunk_store(&canister_id)?,
+            ] {
+                if pm.exists()? {
+                    res.push(pm)
+                }
+            }
         }
         for snapshot_id in self.snapshot_ids()? {
-            res.push(self.snapshot_vmemory_0(&snapshot_id)?);
-            res.push(self.snapshot_stable_memory(&snapshot_id)?);
-            res.push(self.snapshot_wasm_chunk_store(&snapshot_id)?);
+            for pm in [
+                self.snapshot_vmemory_0(&snapshot_id)?,
+                self.snapshot_stable_memory(&snapshot_id)?,
+                self.snapshot_wasm_chunk_store(&snapshot_id)?,
+            ] {
+                if pm.exists()? {
+                    res.push(pm)
+                }
+            }
         }
         Ok(res)
-    }
-
-    /// Directory where the snapshot for `snapshot_id` is stored.
-    /// Note that we store them by canister. This means we have the canister id in the path, which is
-    /// necessary in the context of subnet splitting. Also see [`canister_id_from_path`].
-    fn snapshot(
-        &self,
-        snapshot_id: &SnapshotId,
-    ) -> Result<SnapshotLayout<Permissions>, LayoutError> {
-        SnapshotLayout::new(
-            self.0
-                .root
-                .join(SNAPSHOTS_DIR)
-                .join(hex::encode(
-                    snapshot_id.get_canister_id().get_ref().as_slice(),
-                ))
-                .join(hex::encode(snapshot_id.as_slice())),
-            self,
-        )
     }
 
     pub fn canister_wasm(
@@ -1614,11 +1592,12 @@ where
         Permissions::check_dir(&snapshot_dir)?;
         Ok(snapshot_dir)
     }
+
     pub fn canister_queues(
         &self,
         canister_id: &CanisterId,
     ) -> Result<ProtoFileWith<pb_queues::CanisterQueues, Permissions>, LayoutError> {
-        Ok(self.canister(canister_id)?.queues())
+        Ok(self.canister_path(canister_id)?.join(QUEUES_FILE).into())
     }
 
     pub fn canister_state_bits(
@@ -1626,7 +1605,7 @@ where
         canister_id: &CanisterId,
     ) -> Result<ProtoFileWith<pb_canister_state_bits::CanisterStateBits, Permissions>, LayoutError>
     {
-        Ok(self.canister(canister_id)?.canister())
+        Ok(self.canister_path(canister_id)?.join(CANISTER_FILE).into())
     }
 
     pub fn snapshot_canister_bits(
@@ -1636,7 +1615,7 @@ where
         ProtoFileWith<pb_canister_snapshot_bits::CanisterSnapshotBits, Permissions>,
         LayoutError,
     > {
-        Ok(self.snapshot(snapshot_id)?.snapshot())
+        Ok(self.snapshot_path(snapshot_id)?.join(CANISTER_FILE).into())
     }
 
     /// Removes the unverified checkpoint marker.
@@ -1692,7 +1671,7 @@ where
             root: self.canister_path(canister_id)?,
             name_stem: "vmemory_0".into(),
             permissions_tag: PhantomData,
-            _checkpoint: &self,
+            _checkpoint: self,
         })
     }
 
@@ -1704,7 +1683,7 @@ where
             root: self.snapshot_path(snapshot_id)?,
             name_stem: "vmemory_0".into(),
             permissions_tag: PhantomData,
-            _checkpoint: &self,
+            _checkpoint: self,
         })
     }
 
@@ -1779,7 +1758,24 @@ where
         })
     }
     pub fn delete_snapshot(&self, snapshot_id: &SnapshotId) -> Result<(), LayoutError> {
-        self.snapshot(snapshot_id)?.delete_dir()
+        let path = self.snapshot_path(snapshot_id)?;
+        let map_error = |err| LayoutError::IoError {
+            path: path.clone(),
+            message: "Cannot remove snapshot.".to_string(),
+            io_err: err,
+        };
+
+        std::fs::remove_dir_all(&path).map_err(map_error)?;
+
+        // Remove the parent directory named after the canister if this was the last snapshot of that canister.
+        // Unwrap is safe as snapshots are not at located at `/`.
+        let parent = path.parent().unwrap().to_owned();
+
+        if parent.read_dir().map_err(map_error)?.next().is_none() {
+            std::fs::remove_dir(&parent).map_err(map_error)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -1809,11 +1805,8 @@ impl<P: AccessPolicy> PageMapLayout<P> {
     }
 }
 
-impl<'a, P: AccessPolicy> PageMapLayoutRef<'a, P>
-where
-    P: ReadPolicy,
-{
-    pub fn as_owned(&self) -> PageMapLayout<P> {
+impl PageMapLayoutRef<'_, ReadOnly> {
+    pub fn as_owned(&self) -> PageMapLayout<ReadOnly> {
         PageMapLayout {
             root: self.root.clone(),
             name_stem: self.name_stem.clone(),
@@ -1822,7 +1815,7 @@ where
         }
     }
 }
-impl<'a, P> PageMapLayoutRef<'a, P>
+impl<P> PageMapLayoutRef<'_, P>
 where
     P: ReadPolicy + WritePolicy,
 {
@@ -1849,7 +1842,7 @@ where
     }
 }
 
-impl<'a, P> PageMapLayoutRef<'a, P>
+impl<P> PageMapLayoutRef<'_, P>
 where
     P: ReadPolicy,
 {
@@ -1891,9 +1884,9 @@ where
     /// Helper function to copy the files from `PageMapsLayout` `src` to another `PageMapLayout` `dst`.
     /// This is used in the context of canister snapshots, where files need to be copied from a canister
     /// to a snaphsot or vice versa.
-    pub fn copy_or_hardlink_files_to<'b, RW>(
+    pub fn copy_or_hardlink_files_to<RW>(
         &self,
-        dst: &PageMapLayoutRef<'b, RW>,
+        dst: &PageMapLayoutRef<RW>,
         log: &ReplicaLogger,
     ) -> Result<(), LayoutError>
     where
@@ -1973,7 +1966,7 @@ where
     }
 }
 
-impl<'a, Permissions> StorageLayoutW for PageMapLayoutRef<'a, Permissions>
+impl<Permissions> StorageLayoutW for PageMapLayoutRef<'_, Permissions>
 where
     Permissions: WritePolicy,
 {
@@ -1998,7 +1991,7 @@ where
     }
 }
 
-impl<'a, P> StorageLayoutR for PageMapLayoutRef<'a, P>
+impl<P> StorageLayoutR for PageMapLayoutRef<'_, P>
 where
     P: ReadPolicy,
 {
@@ -2143,192 +2136,6 @@ where
                 message: format!("failed to get shard for overlay {}: {}", hex, err),
             }) as Box<dyn std::error::Error + Send>
         })
-    }
-}
-
-struct CanisterLayout<Permissions: AccessPolicy> {
-    canister_root: PathBuf,
-    permissions_tag: PhantomData<Permissions>,
-    checkpoint: CheckpointLayout<Permissions>,
-}
-
-impl<Permissions> CanisterLayout<Permissions>
-where
-    Permissions: ReadPolicy,
-{
-    fn new(
-        canister_root: PathBuf,
-        checkpoint: &CheckpointLayout<Permissions>,
-    ) -> Result<Self, LayoutError> {
-        Permissions::check_dir(&canister_root)?;
-        Ok(Self {
-            canister_root,
-            permissions_tag: PhantomData,
-            checkpoint: checkpoint.clone(),
-        })
-    }
-
-    fn raw_path(&self) -> PathBuf {
-        self.canister_root.clone()
-    }
-
-    fn queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
-        self.canister_root.join(QUEUES_FILE).into()
-    }
-
-    fn wasm(&self) -> WasmFile<Permissions> {
-        self.canister_root.join(WASM_FILE).into()
-    }
-
-    fn canister(&self) -> ProtoFileWith<pb_canister_state_bits::CanisterStateBits, Permissions> {
-        self.canister_root.join(CANISTER_FILE).into()
-    }
-
-    /// List all PageMaps with at least one file.
-    fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
-        let mut result = Vec::new();
-        for pagemap in [
-            self.vmemory_0(),
-            self.stable_memory(),
-            self.wasm_chunk_store(),
-        ]
-        .into_iter()
-        {
-            if pagemap.exists()? {
-                result.push(pagemap)
-            }
-        }
-        Ok(result)
-    }
-
-    fn vmemory_0(&self) -> PageMapLayout<Permissions> {
-        PageMapLayout {
-            root: self.canister_root.clone(),
-            name_stem: "vmemory_0".into(),
-            permissions_tag: PhantomData,
-            _checkpoint: self.checkpoint.clone(),
-        }
-    }
-
-    fn stable_memory(&self) -> PageMapLayout<Permissions> {
-        PageMapLayout {
-            root: self.canister_root.clone(),
-            name_stem: "stable_memory".into(),
-            permissions_tag: PhantomData,
-            _checkpoint: self.checkpoint.clone(),
-        }
-    }
-
-    fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
-        PageMapLayout {
-            root: self.canister_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
-            permissions_tag: PhantomData,
-            _checkpoint: self.checkpoint.clone(),
-        }
-    }
-}
-
-struct SnapshotLayout<Permissions: AccessPolicy> {
-    snapshot_root: PathBuf,
-    permissions_tag: PhantomData<Permissions>,
-    checkpoint: CheckpointLayout<Permissions>,
-}
-
-impl<Permissions> SnapshotLayout<Permissions>
-where
-    Permissions: ReadPolicy,
-{
-    fn new(
-        snapshot_root: PathBuf,
-        checkpoint: &CheckpointLayout<Permissions>,
-    ) -> Result<Self, LayoutError> {
-        Permissions::check_dir(&snapshot_root)?;
-        Ok(Self {
-            snapshot_root,
-            permissions_tag: PhantomData,
-            checkpoint: checkpoint.clone(),
-        })
-    }
-
-    fn raw_path(&self) -> PathBuf {
-        self.snapshot_root.clone()
-    }
-
-    fn snapshot(
-        &self,
-    ) -> ProtoFileWith<pb_canister_snapshot_bits::CanisterSnapshotBits, Permissions> {
-        self.snapshot_root.join(SNAPSHOT_FILE).into()
-    }
-
-    /// List all PageMaps with at least one file.
-    fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
-        let mut result = Vec::new();
-        for pagemap in [
-            self.vmemory_0(),
-            self.stable_memory(),
-            self.wasm_chunk_store(),
-        ]
-        .into_iter()
-        {
-            if pagemap.exists()? {
-                result.push(pagemap)
-            }
-        }
-        Ok(result)
-    }
-
-    fn vmemory_0(&self) -> PageMapLayout<Permissions> {
-        PageMapLayout {
-            root: self.snapshot_root.clone(),
-            name_stem: "vmemory_0".into(),
-            permissions_tag: PhantomData,
-            _checkpoint: self.checkpoint.clone(),
-        }
-    }
-
-    fn stable_memory(&self) -> PageMapLayout<Permissions> {
-        PageMapLayout {
-            root: self.snapshot_root.clone(),
-            name_stem: "stable_memory".into(),
-            permissions_tag: PhantomData,
-            _checkpoint: self.checkpoint.clone(),
-        }
-    }
-
-    fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
-        PageMapLayout {
-            root: self.snapshot_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
-            permissions_tag: PhantomData,
-            _checkpoint: self.checkpoint.clone(),
-        }
-    }
-}
-
-impl<P> SnapshotLayout<P>
-where
-    P: ReadPolicy + WritePolicy,
-{
-    /// Remove the entire directory for the snapshot.
-    fn delete_dir(&self) -> Result<(), LayoutError> {
-        let map_error = |err| LayoutError::IoError {
-            path: self.raw_path(),
-            message: "Cannot remove snapshot.".to_string(),
-            io_err: err,
-        };
-
-        std::fs::remove_dir_all(self.raw_path()).map_err(map_error)?;
-
-        // Remove the parent directory named after the canister if this was the last snapshot of that canister.
-        // Unwrap is safe as snapshots are not at located at `/`.
-        let parent = self.raw_path().parent().unwrap().to_owned();
-
-        if parent.read_dir().map_err(map_error)?.next().is_none() {
-            std::fs::remove_dir(&parent).map_err(map_error)?;
-        }
-
-        Ok(())
     }
 }
 

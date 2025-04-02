@@ -252,16 +252,14 @@ pub(crate) fn spawn_tip_thread(
                                         });
                                     eprintln!("PM: {:#?}", &page_map_type);
                                     if *truncate {
-                                        page_map_layout.as_ref().delete_files().unwrap_or_else(
-                                            |err| {
-                                                fatal!(
-                                                    log,
-                                                    "Failed to delete files for {:#?}: {}",
-                                                    page_map_type,
-                                                    err
-                                                )
-                                            },
-                                        );
+                                        page_map_layout.delete_files().unwrap_or_else(|err| {
+                                            fatal!(
+                                                log,
+                                                "Failed to delete files for {:#?}: {}",
+                                                page_map_type,
+                                                err
+                                            )
+                                        });
                                     }
                                     if page_map.is_some()
                                         && !page_map.as_ref().unwrap().unflushed_delta_is_empty()

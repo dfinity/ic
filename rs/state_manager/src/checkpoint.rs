@@ -15,7 +15,7 @@ use ic_replicated_state::{
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
     error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, PageMapLayout,
-    ReadOnly, ReadPolicy,
+    PageMapLayoutRef, ReadOnly, ReadPolicy,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -215,24 +215,20 @@ impl PageMapType {
     }
 
     /// The layout of the files on disk for this PageMap.
-    pub(crate) fn layout<Access>(
+    pub(crate) fn layout<'a, Access>(
         &self,
-        layout: &CheckpointLayout<Access>,
-    ) -> Result<PageMapLayout<Access>, LayoutError>
+        layout: &'a CheckpointLayout<Access>,
+    ) -> Result<PageMapLayoutRef<'a, Access>, LayoutError>
     where
         Access: ReadPolicy,
     {
         match &self {
-            PageMapType::WasmMemory(id) => Ok(layout.canister_vmemory_0(id)?.as_owned()),
-            PageMapType::StableMemory(id) => Ok(layout.canister_stable_memory(id)?.as_owned()),
-            PageMapType::WasmChunkStore(id) => Ok(layout.canister_wasm_chunk_store(id)?.as_owned()),
-            PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot_vmemory_0(id)?.as_owned()),
-            PageMapType::SnapshotStableMemory(id) => {
-                Ok(layout.snapshot_stable_memory(id)?.as_owned())
-            }
-            PageMapType::SnapshotWasmChunkStore(id) => {
-                Ok(layout.snapshot_wasm_chunk_store(id)?.as_owned())
-            }
+            PageMapType::WasmMemory(id) => Ok(layout.canister_vmemory_0(id)?),
+            PageMapType::StableMemory(id) => Ok(layout.canister_stable_memory(id)?),
+            PageMapType::WasmChunkStore(id) => Ok(layout.canister_wasm_chunk_store(id)?),
+            PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot_vmemory_0(id)?),
+            PageMapType::SnapshotStableMemory(id) => Ok(layout.snapshot_stable_memory(id)?),
+            PageMapType::SnapshotWasmChunkStore(id) => Ok(layout.snapshot_wasm_chunk_store(id)?),
         }
     }
 
