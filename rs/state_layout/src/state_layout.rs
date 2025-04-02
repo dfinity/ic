@@ -1572,36 +1572,34 @@ where
         )
     }
 
-    fn snapshot_root(&self, snapshot_id: &SnapshotId) -> Result<PathBuf, LayoutError> {
-        let path = self.0.root.join(SNAPSHOTS_DIR).join(hex::encode(
-            snapshot_id.get_canister_id().get_ref().as_slice(),
-        ));
-        Permissions::check_dir(&path)?;
-        Ok(path)
-    }
-
     pub fn canister_wasm(
         &self,
         canister_id: &CanisterId,
     ) -> Result<WasmFile<Permissions>, LayoutError> {
-        Ok(self.canister(canister_id)?.wasm())
+        Ok(self.canister_path(canister_id)?.join(WASM_FILE).into())
     }
 
     pub fn snapshot_wasm(
         &self,
         snapshot_id: &SnapshotId,
     ) -> Result<WasmFile<Permissions>, LayoutError> {
-        Ok(self.snapshot_root(snapshot_id)?.join(WASM_FILE).into())
+        Ok(self.snapshot_path(snapshot_id)?.join(WASM_FILE).into())
     }
 
-    pub fn canister_path(&self, canister_id: &CanisterId) -> PathBuf {
+    pub fn canister_path(&self, canister_id: &CanisterId) -> Result<PathBuf, LayoutError> {
+        let checkpoint_dir = self.canister_path_unchecked(canister_id);
+        Permissions::check_dir(&checkpoint_dir)?;
+        Ok(checkpoint_dir)
+    }
+
+    pub fn canister_path_unchecked(&self, canister_id: &CanisterId) -> PathBuf {
         self.0
             .root
             .join(CANISTER_STATES_DIR)
             .join(hex::encode(canister_id.get_ref().as_slice()))
     }
 
-    pub fn snapshot_path(&self, snapshot_id: &SnapshotId) -> PathBuf {
+    pub fn snapshot_path_unchecked(&self, snapshot_id: &SnapshotId) -> PathBuf {
         self.0
             .root
             .join(SNAPSHOTS_DIR)
@@ -1610,12 +1608,18 @@ where
             ))
             .join(hex::encode(snapshot_id.as_slice()))
     }
+    pub fn snapshot_path(&self, snapshot_id: &SnapshotId) -> Result<PathBuf, LayoutError> {
+        let snapshot_dir = self.snapshot_path_unchecked(snapshot_id);
+        Permissions::check_dir(&snapshot_dir)?;
+        Ok(snapshot_dir)
+    }
     pub fn canister_queues(
         &self,
         canister_id: &CanisterId,
     ) -> Result<ProtoFileWith<pb_queues::CanisterQueues, Permissions>, LayoutError> {
         Ok(self.canister(canister_id)?.queues())
     }
+
     pub fn canister_state_bits(
         &self,
         canister_id: &CanisterId,
@@ -1623,6 +1627,7 @@ where
     {
         Ok(self.canister(canister_id)?.canister())
     }
+
     pub fn snapshot_canister_bits(
         &self,
         snapshot_id: &SnapshotId,
@@ -1677,44 +1682,77 @@ where
         self.mark_files_readonly_and_sync(thread_pool)?;
         self.remove_unverified_checkpoint_marker()
     }
-    pub fn canister_vmemory_0(
-        &self,
+
+    pub fn canister_vmemory_0<'a>(
+        &'a self,
         canister_id: &CanisterId,
-    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
-        Ok(self.canister(canister_id)?.vmemory_0())
-    }
-    pub fn snapshot_vmemory_0(
-        &self,
-        snapshot_id: &SnapshotId,
-    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
-        Ok(self.snapshot(snapshot_id)?.vmemory_0())
+    ) -> Result<PageMapLayoutRef<'a, Permissions>, LayoutError> {
+        Ok(PageMapLayoutRef {
+            root: self.canister_path(canister_id)?,
+            name_stem: "vmemory_0".into(),
+            permissions_tag: PhantomData,
+            _checkpoint: &self,
+        })
     }
 
-    pub fn canister_stable_memory(
-        &self,
-        canister_id: &CanisterId,
-    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
-        Ok(self.canister(canister_id)?.stable_memory())
+    pub fn snapshot_vmemory_0<'a>(
+        &'a self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<PageMapLayoutRef<'a, Permissions>, LayoutError> {
+        Ok(PageMapLayoutRef {
+            root: self.snapshot_path(snapshot_id)?,
+            name_stem: "vmemory_0".into(),
+            permissions_tag: PhantomData,
+            _checkpoint: &self,
+        })
     }
 
-    pub fn snapshot_stable_memory(
-        &self,
-        snapshot_id: &SnapshotId,
-    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
-        Ok(self.snapshot(snapshot_id)?.stable_memory())
+    pub fn canister_stable_memory<'a>(
+        &'a self,
+        canister_id: &CanisterId,
+    ) -> Result<PageMapLayoutRef<'a, Permissions>, LayoutError> {
+        Ok(PageMapLayoutRef {
+            root: self.canister_path(canister_id)?,
+            name_stem: "stable_memory".into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self,
+        })
     }
 
-    pub fn canister_wasm_chunk_store(
-        &self,
-        canister_id: &CanisterId,
-    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
-        Ok(self.canister(canister_id)?.wasm_chunk_store())
-    }
-    pub fn snapshot_wasm_chunk_store(
-        &self,
+    pub fn snapshot_stable_memory<'a>(
+        &'a self,
         snapshot_id: &SnapshotId,
-    ) -> Result<PageMapLayout<Permissions>, LayoutError> {
-        Ok(self.snapshot(snapshot_id)?.wasm_chunk_store())
+    ) -> Result<PageMapLayoutRef<'a, Permissions>, LayoutError> {
+        Ok(PageMapLayoutRef {
+            root: self.snapshot_path(snapshot_id)?,
+            name_stem: "stable_memory".into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self,
+        })
+    }
+
+    pub fn canister_wasm_chunk_store<'a>(
+        &'a self,
+        canister_id: &CanisterId,
+    ) -> Result<PageMapLayoutRef<'a, Permissions>, LayoutError> {
+        Ok(PageMapLayoutRef {
+            root: self.canister_path(canister_id)?,
+            name_stem: "wasm_chunk_store".into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self,
+        })
+    }
+
+    pub fn snapshot_wasm_chunk_store<'a>(
+        &'a self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<PageMapLayoutRef<'a, Permissions>, LayoutError> {
+        Ok(PageMapLayoutRef {
+            root: self.snapshot_path(snapshot_id)?,
+            name_stem: "wasm_chunk_store".into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self,
+        })
     }
 }
 

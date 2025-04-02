@@ -223,12 +223,16 @@ impl PageMapType {
         Access: ReadPolicy,
     {
         match &self {
-            PageMapType::WasmMemory(id) => Ok(layout.canister_vmemory_0(id)?),
-            PageMapType::StableMemory(id) => Ok(layout.canister_stable_memory(id)?),
-            PageMapType::WasmChunkStore(id) => Ok(layout.canister_wasm_chunk_store(id)?),
-            PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot_vmemory_0(id)?),
-            PageMapType::SnapshotStableMemory(id) => Ok(layout.snapshot_stable_memory(id)?),
-            PageMapType::SnapshotWasmChunkStore(id) => Ok(layout.snapshot_wasm_chunk_store(id)?),
+            PageMapType::WasmMemory(id) => Ok(layout.canister_vmemory_0(id)?.as_owned()),
+            PageMapType::StableMemory(id) => Ok(layout.canister_stable_memory(id)?.as_owned()),
+            PageMapType::WasmChunkStore(id) => Ok(layout.canister_wasm_chunk_store(id)?.as_owned()),
+            PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot_vmemory_0(id)?.as_owned()),
+            PageMapType::SnapshotStableMemory(id) => {
+                Ok(layout.snapshot_stable_memory(id)?.as_owned())
+            }
+            PageMapType::SnapshotWasmChunkStore(id) => {
+                Ok(layout.snapshot_wasm_chunk_store(id)?.as_owned())
+            }
         }
     }
 
@@ -754,7 +758,7 @@ pub fn load_canister_state(
 
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
-            path: checkpoint_layout.canister_path(canister_id),
+            path: checkpoint_layout.canister_path_unchecked(canister_id),
             field,
             proto_err: err.to_string(),
         };
@@ -779,7 +783,7 @@ pub fn load_canister_state(
             let wasm_memory_layout = checkpoint_layout.canister_vmemory_0(canister_id)?;
             let wasm_memory = Memory::new(
                 PageMap::open(
-                    Box::new(wasm_memory_layout),
+                    Box::new(wasm_memory_layout.as_owned()),
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -791,7 +795,7 @@ pub fn load_canister_state(
             let stable_memory_layout = checkpoint_layout.canister_stable_memory(canister_id)?;
             let stable_memory = Memory::new(
                 PageMap::open(
-                    Box::new(stable_memory_layout),
+                    Box::new(stable_memory_layout.as_owned()),
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -809,7 +813,7 @@ pub fn load_canister_state(
 
             let canister_root =
                 CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
-                    .canister_path(canister_id);
+                    .canister_path_unchecked(canister_id);
             Some(ExecutionState {
                 canister_root,
                 wasm_binary,
@@ -855,7 +859,7 @@ pub fn load_canister_state(
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = checkpoint_layout.canister_wasm_chunk_store(canister_id)?;
     let wasm_chunk_store_data = PageMap::open(
-        Box::new(wasm_chunk_store_layout),
+        Box::new(wasm_chunk_store_layout.as_owned()),
         height,
         Arc::clone(&fd_factory),
     )?;
@@ -938,7 +942,7 @@ fn load_snapshot(
 
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
-            path: checkpoint_layout.snapshot_path(snapshot_id),
+            path: checkpoint_layout.snapshot_path_unchecked(snapshot_id),
             field,
             proto_err: err.to_string(),
         };
@@ -962,7 +966,7 @@ fn load_snapshot(
         let wasm_memory_layout = checkpoint_layout.snapshot_vmemory_0(snapshot_id)?;
         let wasm_memory = PageMemory {
             page_map: PageMap::open(
-                Box::new(wasm_memory_layout),
+                Box::new(wasm_memory_layout.as_owned()),
                 height,
                 Arc::clone(&fd_factory),
             )?,
@@ -974,7 +978,7 @@ fn load_snapshot(
         let stable_memory_layout = checkpoint_layout.snapshot_stable_memory(snapshot_id)?;
         let stable_memory = PageMemory {
             page_map: PageMap::open(
-                Box::new(stable_memory_layout),
+                Box::new(stable_memory_layout.as_owned()),
                 height,
                 Arc::clone(&fd_factory),
             )?,
@@ -1001,7 +1005,7 @@ fn load_snapshot(
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = checkpoint_layout.snapshot_wasm_chunk_store(&snapshot_id)?;
     let wasm_chunk_store_data = PageMap::open(
-        Box::new(wasm_chunk_store_layout),
+        Box::new(wasm_chunk_store_layout.as_owned()),
         height,
         Arc::clone(&fd_factory),
     )?;
