@@ -1707,16 +1707,31 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     }
 
     pub fn all_existing_wasm_files(&self) -> Result<Vec<WasmFile<Permissions>>, LayoutError> {
-        Ok(self
+        let canister_wasm_files = self
             .canister_ids()?
             .into_iter()
-            .map(|id| Ok(self.canister(&id)?.wasm()))
-            .chain(
-                self.snapshot_ids()?
-                    .into_iter()
-                    .map(|id| Ok(self.snapshot(&id)?.wasm())),
-            )
-            .collect::<Result<Vec<WasmFile<Permissions>>, LayoutError>>()?)
+            .map(|id| {
+                let canister = self.canister(&id)?;
+                Ok(canister.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let snapshot_wasm_files = self
+            .snapshot_ids()?
+            .into_iter()
+            .map(|id| {
+                let snapshot = self.snapshot(&id)?;
+                Ok(snapshot.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let wasm_files = canister_wasm_files
+            .into_iter()
+            .chain(snapshot_wasm_files)
+            .filter(|wasm| wasm.exists())
+            .collect();
+
+        Ok(wasm_files)
     }
 
     /// Directory where the snapshot for `snapshot_id` is stored.
