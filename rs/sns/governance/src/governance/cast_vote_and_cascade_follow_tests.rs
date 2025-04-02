@@ -1019,3 +1019,270 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
         }
     }
 }
+
+/// Unlike `test_cast_vote_and_cascade_follow_with_topic_and_proposal_following`, this test
+/// covers the scenario in which neurons have multiple followees that need to be taken into account
+/// for determining their following-based vote. In particular, this allows checking that topic-based
+/// following has higher priority, with function-based following being a fallback.
+#[test]
+fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
+    let voting_neuron_id = nid(0);
+    
+    // Boilerplate variables.
+    let now_seconds = 123_456_789;
+    let cast_timestamp_seconds = now_seconds;
+
+    let cached_neuron_stake_e8s = E8;
+    let voting_power = cached_neuron_stake_e8s;
+
+    let proposal_id = ProposalId { id: 42 };
+
+    let neuron = |id, followees, topic_followees| Neuron {
+        id: Some(id),
+        followees,
+        topic_followees,
+        cached_neuron_stake_e8s,
+        ..Default::default()
+    };
+
+    let test_cases = [
+        (
+            "Three neurons:  N0:YES -- function --> N2; \
+                             N1:YES -- topic    --> N2 (topic following has higher prio).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes),
+                (neuron(nid(1), btreemap! {}, None), Vote::Yes),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {
+                            u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                                followees: vec![nid(0)],
+                            },
+                        },
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            },
+        ),
+        (
+            "Three neurons:  N0:NO  -- function --> N2; \
+                             N1:YES -- topic    --> N2 (topic following has higher prio).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::No),
+                (neuron(nid(1), btreemap! {}, None), Vote::Yes),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {
+                            u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                                followees: vec![nid(0)],
+                            },
+                        },
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            },
+        ),
+        (
+            "Three neurons:  N0:YES -- function --> N2; \
+                             N1:NO  -- topic    --> N2 (topic following has higher prio).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes),
+                (neuron(nid(1), btreemap! {}, None), Vote::No),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {
+                            u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                                followees: vec![nid(0)],
+                            },
+                        },
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            },
+        ),
+        (
+            "Three neurons:  N0:NO -- function --> N2; \
+                             N1:NO -- topic    --> N2 (topic following has higher prio).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::No),
+                (neuron(nid(1), btreemap! {}, None), Vote::No),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {
+                            u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                                followees: vec![nid(0)],
+                            },
+                        },
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            },
+        ),
+    ];
+    
+    for (label, action, topic, neuron_votes, expected_ballots) in test_cases {
+        let function_id = u64::from(&action);
+
+        let neurons = neuron_votes
+            .iter()
+            .map(|(neuron, _)| (neuron.id.clone().unwrap().to_string(), neuron.clone()))
+            .collect();
+
+        let function_followee_index =
+            legacy::build_function_followee_index(&btreemap! {}, &neurons);
+
+        let topic_follower_index = build_follower_index(&neurons);
+
+        // Give all neurons a starting ballot.
+        let mut ballots = neuron_votes
+            .iter()
+            .map(|(neuron, vote)| {
+                let neuron_id = neuron.id.clone().unwrap().to_string();
+                (
+                    neuron_id,
+                    Ballot {
+                        vote: *vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                )
+            })
+            .collect();
+
+        let vote_of_neuron = neuron_votes.iter().find_map(|(neuron, vote)| {
+            let neuron_id = neuron.id.clone().unwrap();
+            if neuron_id == voting_neuron_id {
+                Some(*vote)
+            } else {
+                None
+            }
+        }).unwrap_or_else(|| panic!("Neuron with ID {} not found in neuron_votes for {}", voting_neuron_id, label));
+
+        Governance::cast_vote_and_cascade_follow(
+            &proposal_id,
+            &voting_neuron_id,
+            vote_of_neuron,
+            function_id,
+            &function_followee_index,
+            &topic_follower_index,
+            &neurons,
+            now_seconds,
+            &mut ballots,
+            topic,
+        );
+
+        assert_eq!(ballots, expected_ballots, "{}", label);
+    }
+}
