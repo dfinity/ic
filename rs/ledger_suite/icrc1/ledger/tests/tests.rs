@@ -571,6 +571,7 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_pre
         minter,
         true,
         mainnet_on_prev_version,
+        true,
     );
 }
 

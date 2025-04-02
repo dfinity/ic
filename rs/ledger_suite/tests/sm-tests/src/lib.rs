@@ -2409,6 +2409,7 @@ pub fn test_upgrade_serialization<Tokens>(
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
     mainnet_on_prev_version: bool,
+    test_stable_migration: bool,
 ) where
     Tokens: TokensType + Default + std::fmt::Display + From<u64>,
 {
@@ -2459,9 +2460,13 @@ pub fn test_upgrade_serialization<Tokens>(
                     env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
                         .unwrap();
                     wait_ledger_ready(&env, ledger_id, 10);
-                    let stable_upgrade_migration_steps =
-                        parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
-                    assert_eq!(stable_upgrade_migration_steps, expected_migration_steps);
+                    if test_stable_migration {
+                        let stable_upgrade_migration_steps =
+                            parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
+                        assert_eq!(stable_upgrade_migration_steps, expected_migration_steps);
+                    } else {
+                        assert_eq!(0, expected_migration_steps);
+                    }
                     add_tx_and_verify();
                 };
 

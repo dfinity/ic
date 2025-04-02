@@ -372,7 +372,6 @@ thread_local! {
     static NOTIFY_METHOD_CALLS: RefCell<u64> = const { RefCell::new(0) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
-    static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
 }
 
 /// You can notify a canister that you have made a payment to it. The
@@ -1405,11 +1404,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_total_upgrade_instructions_consumed",
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
-    )?;
-    w.encode_counter(
-        "ledger_stable_upgrade_migration_steps",
-        STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow()) as f64,
-        "Number of steps used to migrate data to stable structures.",
     )?;
     Ok(())
 }

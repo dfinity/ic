@@ -4,7 +4,7 @@ use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
-use ic_ledger_core::block::{BlockIndex, EncodedBlock};
+use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
@@ -14,12 +14,12 @@ use ic_ledger_suite_state_machine_tests::{
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveOptions,
-    ArchivedBlocksRange, Block, BlockArg, CandidBlock, CandidOperation, CandidTransaction,
-    FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
-    IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
-    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
+    GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs,
+    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
+    LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse,
+    TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
+    MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -1215,70 +1215,9 @@ fn test_upgrade_serialization() {
         minter,
         false,
         false,
+        false,
     );
 }
-
-// This function should only be used in small tests (<2000 blocks).
-// It only makes one query to ledger and archives and fails if it is not able
-// to get all blocks this way.
-fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
-    let p1 = PrincipalId::new_user_test_id(1);
-    let blocks_res = query_encoded_blocks(state_machine, p1.0, ledger_id, 0, u32::MAX.into());
-    let mut result = vec![];
-    for archived in blocks_res.archived_blocks {
-        let get_blocks_args = Encode!(&GetBlocksArgs {
-            start: archived.start,
-            length: archived.length,
-        })
-        .unwrap();
-        let archived_blocks = Decode!(
-            &state_machine
-                .query(
-                    CanisterId::unchecked_from_principal(archived.callback.canister_id.into()),
-                    "get_encoded_blocks",
-                    get_blocks_args.clone()
-                )
-                .unwrap()
-                .bytes(),
-            GetEncodedBlocksResult
-        )
-        .unwrap()
-        .unwrap();
-        result.extend(archived_blocks);
-    }
-
-    result.extend(blocks_res.blocks);
-    assert_eq!(result.len(), blocks_res.chain_length as usize);
-
-    let mut prev_hash = None;
-    for encoded_block in &result {
-        let block = Block::decode(encoded_block.clone()).expect("failed to decode block");
-        assert_eq!(block.parent_hash, prev_hash);
-        prev_hash = Some(Block::block_hash(encoded_block));
-    }
-
-    result
-}
-
-// #[test]
-// fn test_multi_step_migration_from_v3() {
-//     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
-//         ledger_wasm_mainnet_v3(),
-//         ledger_wasm_low_instruction_limits(),
-//         encode_init_args,
-//         get_all_blocks,
-//     );
-// }
-
-// #[test]
-// fn test_multi_step_migration_from_v2() {
-//     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
-//         ledger_wasm_mainnet_v2(),
-//         ledger_wasm_low_instruction_limits(),
-//         encode_init_args,
-//         get_all_blocks,
-//     );
-// }
 
 #[test]
 fn test_downgrade_from_incompatible_version() {
