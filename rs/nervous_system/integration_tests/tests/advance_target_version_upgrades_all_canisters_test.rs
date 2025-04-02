@@ -1,8 +1,9 @@
 use ic_nervous_system_agent::helpers::await_with_timeout;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, hash_sns_wasms, install_nns_canisters, nns,
+        add_wasms_to_sns_wasm, hash_sns_wasms, nns,
         sns::{
             self,
             governance::{
@@ -41,8 +42,9 @@ async fn test_advance_target_version_upgrades_all_canisters(
         .await;
 
     eprintln!("Install the (master) NNS canisters ...");
-    let with_mainnet_nns_canisters = false;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.install(&pocket_ic).await;
 
     eprintln!("Step 0.1: Publish (master) SNS Wasms to SNS-W ...");
     let with_mainnet_sns_canisters = false;
