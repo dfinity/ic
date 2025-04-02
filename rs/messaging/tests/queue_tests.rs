@@ -378,6 +378,13 @@ fn test_timeout_removes_requests_from_output_queues() {
         },
     );
 
+    let msg_id = subnets.pulse_on(subnets.local_canister(), 10);
+    for _ in 0..200 {
+        subnets.tick();
+    }
+    let status = subnets.pulse_status(&msg_id);
+    assert!(false, "{:#?}", status);
+
     // Send requests until there are messages in the output queue, then stop sending
     // requests and trigger a timeout. The queue should be empty afterwards.
     subnets.build_local_backpressure_until(1).unwrap();

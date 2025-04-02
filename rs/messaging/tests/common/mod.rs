@@ -71,10 +71,12 @@ impl Default for SubnetPairConfig {
     fn default() -> Self {
         Self {
             local_canisters_count: 2,
-            local_max_instructions_per_round: 1_000_000_000,
+            //local_max_instructions_per_round: 1_000_000_000,
+            local_max_instructions_per_round: 100_000_000,
             local_message_memory_capacity: 100 * MB,
             remote_canisters_count: 1,
-            remote_max_instructions_per_round: 1_000_000_000,
+            //remote_max_instructions_per_round: 1_000_000_000,
+            remote_max_instructions_per_round: 100_000_000,
             remote_message_memory_capacity: 50 * MB,
         }
     }
@@ -350,26 +352,32 @@ impl SubnetPair {
 
     /// Queries the status of a call to `pulse` with message ID, `msg_id`.
     pub fn pulse_status(&self, msg_id: &MessageId) -> PulseStatus {
-        match self.local_env.ingress_status(msg_id) {
-            IngressStatus::Known {
-                state: IngressState::Completed(result),
-                ..
-            } => match result {
-                WasmResult::Reply(bytes) => {
-                    PulseStatus::Completed(candid::Decode!(&bytes[..], u32).unwrap())
-                }
-                WasmResult::Reject(err) => panic!("pulse rejected with '{err}'"),
-            },
-            IngressStatus::Known {
-                state: IngressState::Failed(err),
-                ..
-            } => PulseStatus::Failed(err),
-            IngressStatus::Known {
-                state: IngressState::Received | IngressState::Processing,
-                ..
-            } => PulseStatus::Processing,
-            _ => panic!("no pulse for message ID {msg_id}"),
+        fn pulse_status(env: &StateMachine, msg_id: &MessageId) -> Option<PulseStatus> {
+            match env.ingress_status(msg_id) {
+                IngressStatus::Known {
+                    state: IngressState::Completed(result),
+                    ..
+                } => match result {
+                    WasmResult::Reply(bytes) => Some(PulseStatus::Completed(
+                        candid::Decode!(&bytes[..], u32).unwrap(),
+                    )),
+                    WasmResult::Reject(err) => panic!("pulse rejected with '{err}'"),
+                },
+                IngressStatus::Known {
+                    state: IngressState::Failed(err),
+                    ..
+                } => Some(PulseStatus::Failed(err)),
+                IngressStatus::Known {
+                    state: IngressState::Received | IngressState::Processing,
+                    ..
+                } => Some(PulseStatus::Processing),
+                _ => None,
+            }
         }
+
+        pulse_status(&self.local_env, msg_id)
+            .or(pulse_status(&self.remote_env, msg_id))
+            .expect(format!("no pulse for message ID {msg_id}").as_str())
     }
 
     /// Returns the latest state `canister` is located on.
