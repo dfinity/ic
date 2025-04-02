@@ -112,11 +112,23 @@ function generate_guestos_config() {
     # only want to act when the field is set.
     CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})
 
-    CPU_DOMAIN="kvm"
-    CPU_SPEC="/opt/ic/share/kvm-cpu.xml"
+    # Generate inline CPU spec based on mode
+    CPU_SPEC=$(mktemp)
     if [ "${CPU_MODE}" == "qemu" ]; then
         CPU_DOMAIN="qemu"
-        CPU_SPEC="/opt/ic/share/qemu-cpu.xml"
+        cat > "${CPU_SPEC}" <<EOF
+<cpu mode='host-model'/>
+EOF
+    else
+        CPU_DOMAIN="kvm"
+        CORE_COUNT=$((RESOURCES_NR_OF_VCPUS / 4))
+        cat > "${CPU_SPEC}" <<EOF
+<cpu mode='host-passthrough' migratable='off'>
+  <cache mode='passthrough'/>
+  <topology sockets='2' cores='${CORE_COUNT}' threads='2'/>
+  <feature policy="require" name="topoext"/>
+</cpu>
+EOF
     fi
 
     if [ ! -f "${OUTPUT}" ]; then
@@ -140,6 +152,8 @@ function generate_guestos_config() {
             "HostOS generate GuestOS config" \
             "gauge"
     fi
+
+    rm -f "${CPU_SPEC}"
 }
 
 function main() {
