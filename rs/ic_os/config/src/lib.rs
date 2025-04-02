@@ -168,7 +168,7 @@ mod tests {
         "hostos_settings": {
             "vm_memory": 490,
             "vm_cpu": "kvm",
-            "vm_nr_of_vcpus": "kvm",
+            "vm_nr_of_vcpus": 64,
             "verbose": false
         },
         "guestos_settings": {
