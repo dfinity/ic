@@ -131,6 +131,15 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     )
     .into_iter()
     .try_for_each(identity)?;
+
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_wasm_files()?.into_iter(),
+        |wasm_file| wasm_file.validate(),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
+
     if let Some(reference_state) = reference_state {
         validate_eq_checkpoint(
             checkpoint_layout,

@@ -10,12 +10,12 @@ use ic_types::MemoryDiskBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use std::sync::OnceLock;
 use std::{
     fmt,
     path::{Path, PathBuf},
     sync::Arc,
 };
-use std::sync::OnceLock;
 
 const WASM_HASH_LENGTH: usize = 32;
 
@@ -217,7 +217,7 @@ enum ModuleStorage {
 }
 
 #[derive(Clone)]
-struct FileStorage {
+pub struct FileStorage {
     path: PathBuf,
     mmap: Arc<OnceLock<ic_sys::mmap::ScopedMmap>>,
 }
@@ -231,12 +231,12 @@ impl FileStorage {
     }
 
     fn init_or_die(&self) -> &ic_sys::mmap::ScopedMmap {
-        self.mmap.get_or_init(|| Self::mmap_file(&self.path).expect("Failed to mmap file"))
-
+        self.mmap
+            .get_or_init(|| Self::mmap_file(&self.path).expect("Failed to mmap file"))
     }
 
     // NB: call it in validation stage
-    fn mmap_file(path: &Path) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
+    pub fn mmap_file(path: &Path) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
         use std::io;
 
         let f = std::fs::File::open(&path)?;

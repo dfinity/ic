@@ -29,7 +29,7 @@ use ic_types::{
     LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{CanisterModule, WasmHash};
+use ic_wasm_types::{CanisterModule, FileStorage, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
@@ -1706,6 +1706,19 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             .collect())
     }
 
+    pub fn all_existing_wasm_files(&self) -> Result<Vec<WasmFile<Permissions>>, LayoutError> {
+        Ok(self
+            .canister_ids()?
+            .into_iter()
+            .map(|id| self.canister(&id)?.wasm())
+            .chain(
+                self.snapshot_ids()?
+                    .into_iter()
+                    .map(|id| self.snapshot(&id)?.wasm()),
+            )
+            .collect()?)
+    }
+
     /// Directory where the snapshot for `snapshot_id` is stored.
     /// Note that we store them by canister. This means we have the canister id in the path, which is
     /// necessary in the context of subnet splitting. Also see [`canister_id_from_path`].
@@ -2457,6 +2470,15 @@ where
                 io_err: err,
             }
         })
+    }
+
+    pub fn validate(&self) -> Result<(), LayoutError> {
+        FileStorage::mmap_file(&self.path).map_err(|err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "Failed to validate wasm file".to_string(),
+            io_err: err,
+        })?;
+        Ok(())
     }
 
     /// Hardlink the (readonly) file from `src` to `dst`.
