@@ -80,6 +80,7 @@ go_deps.bzl               @dfinity/idx
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
+/ci/tools/repro-check                                                    @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
 /.mergify.yaml                                                           @dfinity/idx
@@ -229,7 +230,6 @@ go_deps.bzl               @dfinity/idx
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
 /rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/execution
-/rs/system_api/                                         @dfinity/execution
 /rs/test_utilities/                                     @dfinity/ic-interface-owners
 /rs/test_utilities/artifact_pool/                       @dfinity/consensus
 /rs/test_utilities/consensus/                           @dfinity/consensus
@@ -300,4 +300,4 @@ Cargo.toml
 .gitignore
 stackage_snapshot.json
 mainnet-canister-revisions.json # this file is auto-approved by github actions, therefore we remove codeowners
-mainnet-icos-revisions.json
+mainnet-icos-revisions.json     # same as above

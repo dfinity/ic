@@ -1,7 +1,7 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Duration as DurationPb, Tokens as TokensPb};
-use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
+use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
 use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
@@ -15,7 +15,7 @@ pub struct CreateServiceNervousSystemBuilder(CreateServiceNervousSystem);
 #[cfg(not(target_arch = "wasm32"))]
 impl Default for CreateServiceNervousSystemBuilder {
     fn default() -> Self {
-        let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+        let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
             .swap_parameters
             .clone()
             .map(|x| x.into())
@@ -36,9 +36,7 @@ impl Default for CreateServiceNervousSystemBuilder {
         CreateServiceNervousSystemBuilder(CreateServiceNervousSystem {
             dapp_canisters: vec![],
             swap_parameters: Some(swap_parameters),
-            ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-                .clone()
-                .into()
+            ..CREATE_SERVICE_NERVOUS_SYSTEM.clone().into()
         })
     }
 }
