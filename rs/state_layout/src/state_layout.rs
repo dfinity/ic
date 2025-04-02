@@ -1728,7 +1728,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         let wasm_files = canister_wasm_files
             .into_iter()
             .chain(snapshot_wasm_files)
-            .filter(|wasm| wasm.exists())
+            .filter(|wasm| wasm.raw_path().exists())
             .collect();
 
         Ok(wasm_files)
