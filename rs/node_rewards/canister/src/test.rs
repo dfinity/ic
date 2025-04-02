@@ -43,10 +43,11 @@ fn setup_canister_for_test(
     Arc<StableCanisterRegistryClient<TestState>>,
     Arc<FakeRegistry>,
 ) {
-    let fake_registry = Arc::new(FakeRegistry::new(
-        RegistryVersion::new(fake_registry_version),
-        fake_registry_responses,
-    ));
+    let mut fake_registry = FakeRegistry::new(RegistryVersion::new(fake_registry_version));
+    for (v, response) in fake_registry_responses {
+        fake_registry.add_fake_response_for_get_changes_since(v, response);
+    }
+    let fake_registry = Arc::new(fake_registry);
     let registry_client = Arc::new(StableCanisterRegistryClient::<TestState>::new(
         fake_registry.clone(),
     ));

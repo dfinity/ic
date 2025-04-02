@@ -69,10 +69,11 @@ fn client_for_tests(
     latest_version: u64,
     responses: FakeRegistryResponses,
 ) -> StableCanisterRegistryClient<DummyState> {
-    StableCanisterRegistryClient::<DummyState>::new(Arc::new(FakeRegistry::new(
-        RegistryVersion::new(latest_version),
-        responses,
-    )))
+    let mut fake_registry = FakeRegistry::new(RegistryVersion::new(latest_version));
+    for (i, response) in responses.iter() {
+        fake_registry.add_fake_response_for_get_changes_since(*i, response.clone());
+    }
+    StableCanisterRegistryClient::<DummyState>::new(Arc::new(fake_registry))
 }
 
 #[test]

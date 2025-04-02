@@ -10375,6 +10375,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "mockall",
+ "prost 0.13.4",
 ]
 
 [[package]]
