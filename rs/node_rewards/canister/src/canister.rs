@@ -42,14 +42,14 @@ impl NodeRewardsCanister {
         )
         .await
         {
-            Ok(ok) => GetNodeProvidersMonthlyXdrRewardsResponse {
+            Ok((rewards, latest_version)) => GetNodeProvidersMonthlyXdrRewardsResponse {
                 rewards: Some(NodeProvidersMonthlyXdrRewards {
-                    rewards: ok
+                    rewards: rewards
                         .rewards_per_node_provider
                         .into_iter()
                         .map(|(k, v)| (k.0, v))
                         .collect(),
-                    registry_version: None,
+                    registry_version: Some(latest_version.get()),
                 }),
                 error: None,
             },
@@ -63,7 +63,7 @@ impl NodeRewardsCanister {
             canister: &LocalKey<RefCell<NodeRewardsCanister>>,
             registry_client: Arc<dyn CanisterRegistryClient>,
             request: GetNodeProvidersMonthlyXdrRewardsRequest,
-        ) -> Result<RewardsPerNodeProvider, String> {
+        ) -> Result<(RewardsPerNodeProvider, RegistryVersion), String> {
             registry_client.sync_registry_stored().await.map_err(|e| {
                 format!(
                     "Could not sync registry store to latest version, \
@@ -80,6 +80,8 @@ impl NodeRewardsCanister {
             )
             .map_err(|e| format!("Could not find NodeRewardsTable: {e:?}"))?
             .ok_or_else(|| "NodeRewardsTable is missing".to_string())?;
+
+            println!("Rewards Table: {:?}", rewards_table);
 
             let node_operators = decoded_key_value_pairs_for_prefix::<NodeOperatorRecord>(
                 &*registry_client,
@@ -100,9 +102,8 @@ impl NodeRewardsCanister {
             .into_iter()
             .collect();
 
-            println!("Data centers: {data_centers:?}");
-
             calculate_rewards_v0(&rewards_table, &node_operators, &data_centers)
+                .map(|rewards| (rewards, latest_version))
         }
     }
 }

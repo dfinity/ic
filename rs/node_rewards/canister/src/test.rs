@@ -109,7 +109,7 @@ fn fake_registry_responses_for_rewards_calculation_test(
             "Europe,CH".to_string() => NodeRewardRates {
                 rates: btreemap! {
                     "type1".to_string() => NodeRewardRate {
-                        xdr_permyriad_per_node_per_month: 0,
+                        xdr_permyriad_per_node_per_month: 12345678,
                         reward_coefficient_percent: None,
                     }
                 }
@@ -200,10 +200,11 @@ fn test_rewards_calculation() {
     let fake_registry_responses =
         fake_registry_responses_for_rewards_calculation_test(latest_version);
 
-    let (test_canister, client, fake_registry) =
+    let (test_canister, client, _fake_registry) =
         setup_canister_for_test(latest_version, fake_registry_responses);
 
     thread_local! {
+        // Dummy value b/c we can't do direct assignment
         static CANISTER: RefCell<NodeRewardsCanister> = RefCell::new(NodeRewardsCanister::new(
                 Arc::new(StableCanisterRegistryClient::<TestState>::new(Arc::new(FakeRegistry::default()))),
         ));
@@ -222,19 +223,16 @@ fn test_rewards_calculation() {
 
     let expected_result = GetNodeProvidersMonthlyXdrRewardsResponse {
         rewards: Some(NodeProvidersMonthlyXdrRewards {
-            rewards: Default::default(),
-            registry_version: None,
+            rewards: btreemap! {
+                PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap().0 => 80835271,
+                PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap().0 => 24691356,
+            },
+            registry_version: Some(latest_version),
         }),
         error: None,
     };
 
     assert_eq!(result, expected_result);
-
-    // First populate our registry with enough data to run the rewards
-
-    // Then, call the function that will run the rewards
-
-    // Assert that the rewards are populated as expected.
 }
 // /// Test type1 nodes because they are being deprecated, setting the corresponding rewards
 // /// to zero is part of that process.
