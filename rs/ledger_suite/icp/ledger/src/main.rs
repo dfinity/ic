@@ -814,7 +814,6 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         if ledger.ledger_version < LEDGER_VERSION {
             panic!("Migration to stable structures not supported in this version, please upgrade to git revision 3ae3649a2366aaca83404b692fc58e4c6e604a25 first.");
         }
-        ledger.ledger_version = LEDGER_VERSION;
 
         if let Some(args) = args {
             match args {

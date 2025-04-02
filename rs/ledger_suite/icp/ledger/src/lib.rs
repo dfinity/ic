@@ -68,10 +68,6 @@ fn unknown_token() -> String {
     "???".to_string()
 }
 
-fn default_ledger_version() -> u64 {
-    LEDGER_VERSION
-}
-
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
@@ -171,10 +167,10 @@ pub enum LedgerField {
 #[cfg(not(any(feature = "next-ledger-version", feature = "prev-ledger-version")))]
 pub const LEDGER_VERSION: u64 = 3;
 
-#[cfg(feature = "next-ledger-version")]
+#[cfg(all(feature = "next-ledger-version", not(feature = "prev-ledger-version")))]
 pub const LEDGER_VERSION: u64 = 4;
 
-#[cfg(feature = "prev-ledger-version")]
+#[cfg(all(feature = "prev-ledger-version", not(feature = "next-ledger-version")))]
 pub const LEDGER_VERSION: u64 = 2;
 
 type StableLedgerBalances = Balances<StableBalances>;
@@ -228,7 +224,7 @@ pub struct Ledger {
     #[serde(default)]
     pub feature_flags: FeatureFlags,
 
-    #[serde(default = "default_ledger_version")]
+    #[serde(default)]
     pub ledger_version: u64,
 }
 
