@@ -151,13 +151,11 @@ impl PocketIc {
         let mut temp_dir = None;
         if let Some(read_only_state_dir) = read_only_state_dir {
             let instance_state_dir = if let Some(ref state_dir) = state_dir {
-                // clear the state dir by removing the state dir and creating a new empty state dir afterwards
                 if Path::new(state_dir).exists() {
                     remove_dir_all(state_dir).unwrap();
                 }
                 state_dir.clone()
             } else {
-                // create an empty temp dir to serve as the state dir
                 let instance_temp_dir = TempDir::new().unwrap();
                 let instance_state_dir = instance_temp_dir.path().to_path_buf();
                 temp_dir = Some(instance_temp_dir);
