@@ -252,14 +252,16 @@ pub(crate) fn spawn_tip_thread(
                                         });
                                     eprintln!("PM: {:#?}", &page_map_type);
                                     if *truncate {
-                                        page_map_layout.delete_files().unwrap_or_else(|err| {
-                                            fatal!(
-                                                log,
-                                                "Failed to delete files for {:#?}: {}",
-                                                page_map_type,
-                                                err
-                                            )
-                                        });
+                                        page_map_layout.as_ref().delete_files().unwrap_or_else(
+                                            |err| {
+                                                fatal!(
+                                                    log,
+                                                    "Failed to delete files for {:#?}: {}",
+                                                    page_map_type,
+                                                    err
+                                                )
+                                            },
+                                        );
                                     }
                                     if page_map.is_some()
                                         && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
@@ -463,22 +465,13 @@ fn backup<T>(
 ) -> Result<(), LayoutError> {
     layout
         .canister_vmemory_0(&canister_id)?
-        .as_owned()
-        .copy_or_hardlink_files_to(&layout.snapshot_vmemory_0(&snapshot_id)?.as_owned(), log)?;
+        .copy_or_hardlink_files_to(&layout.snapshot_vmemory_0(&snapshot_id)?, log)?;
     layout
         .canister_stable_memory(&canister_id)?
-        .as_owned()
-        .copy_or_hardlink_files_to(
-            &layout.snapshot_stable_memory(&snapshot_id)?.as_owned(),
-            log,
-        )?;
+        .copy_or_hardlink_files_to(&layout.snapshot_stable_memory(&snapshot_id)?, log)?;
     layout
         .canister_wasm_chunk_store(&canister_id)?
-        .as_owned()
-        .copy_or_hardlink_files_to(
-            &layout.snapshot_wasm_chunk_store(&snapshot_id)?.as_owned(),
-            log,
-        )?;
+        .copy_or_hardlink_files_to(&layout.snapshot_wasm_chunk_store(&snapshot_id)?, log)?;
 
     WasmFile::hardlink_file(
         &layout.canister_wasm(&canister_id)?,
@@ -498,36 +491,22 @@ fn restore<T>(
     canister_id: CanisterId,
     snapshot_id: SnapshotId,
 ) -> Result<(), LayoutError> {
-    layout
-        .canister_vmemory_0(&canister_id)?
-        .as_owned()
-        .delete_files()?;
+    layout.canister_vmemory_0(&canister_id)?.delete_files()?;
     layout
         .snapshot_vmemory_0(&snapshot_id)?
-        .as_owned()
-        .copy_or_hardlink_files_to(&layout.canister_vmemory_0(&canister_id)?.as_owned(), log)?;
+        .copy_or_hardlink_files_to(&layout.canister_vmemory_0(&canister_id)?, log)?;
     layout
         .canister_stable_memory(&canister_id)?
-        .as_owned()
         .delete_files()?;
     layout
         .snapshot_stable_memory(&snapshot_id)?
-        .as_owned()
-        .copy_or_hardlink_files_to(
-            &layout.canister_stable_memory(&canister_id)?.as_owned(),
-            log,
-        )?;
+        .copy_or_hardlink_files_to(&layout.canister_stable_memory(&canister_id)?, log)?;
     layout
         .canister_wasm_chunk_store(&canister_id)?
-        .as_owned()
         .delete_files()?;
     layout
         .snapshot_wasm_chunk_store(&snapshot_id)?
-        .as_owned()
-        .copy_or_hardlink_files_to(
-            &layout.canister_wasm_chunk_store(&canister_id)?.as_owned(),
-            log,
-        )?;
+        .copy_or_hardlink_files_to(&layout.canister_wasm_chunk_store(&canister_id)?, log)?;
 
     layout.canister_wasm(&canister_id)?.try_delete_file()?;
     WasmFile::hardlink_file(
@@ -912,12 +891,8 @@ fn serialize_canister_to_tip(
             })
         }
         None => {
-            tip.canister_vmemory_0(&canister_id)?
-                .as_owned()
-                .delete_files()?;
-            tip.canister_stable_memory(&canister_id)?
-                .as_owned()
-                .delete_files()?;
+            tip.canister_vmemory_0(&canister_id)?.delete_files()?;
+            tip.canister_stable_memory(&canister_id)?.delete_files()?;
             tip.canister_wasm(&canister_id)?.try_delete_file()?;
             None
         }

@@ -1537,20 +1537,21 @@ where
 
     /// List all PageMaps with at least one file in the Checkpoint, including canister and snapshot
     /// ones.
-    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
-        Ok(self
-            .canister_ids()?
-            .into_iter()
-            .map(|id| self.canister(&id)?.all_existing_pagemaps())
-            .chain(
-                self.snapshot_ids()?
-                    .into_iter()
-                    .map(|id| self.snapshot(&id)?.all_existing_pagemaps()),
-            )
-            .collect::<Result<Vec<Vec<PageMapLayout<Permissions>>>, LayoutError>>()?
-            .into_iter()
-            .flatten()
-            .collect())
+    pub fn all_existing_pagemaps<'a>(
+        &'a self,
+    ) -> Result<Vec<PageMapLayoutRef<'a, Permissions>>, LayoutError> {
+        let mut res = Vec::new();
+        for canister_id in self.canister_ids()? {
+            res.push(self.canister_vmemory_0(&canister_id)?);
+            res.push(self.canister_stable_memory(&canister_id)?);
+            res.push(self.canister_wasm_chunk_store(&canister_id)?);
+        }
+        for snapshot_id in self.snapshot_ids()? {
+            res.push(self.snapshot_vmemory_0(&snapshot_id)?);
+            res.push(self.snapshot_stable_memory(&snapshot_id)?);
+            res.push(self.snapshot_wasm_chunk_store(&snapshot_id)?);
+        }
+        Ok(res)
     }
 
     /// Directory where the snapshot for `snapshot_id` is stored.
@@ -1798,7 +1799,7 @@ pub struct PageMapLayoutRef<'a, Permissions: AccessPolicy> {
 }
 
 impl<P: AccessPolicy> PageMapLayout<P> {
-    fn as_ref(&self) -> PageMapLayoutRef<P> {
+    pub fn as_ref(&self) -> PageMapLayoutRef<P> {
         PageMapLayoutRef {
             root: self.root.clone(),
             name_stem: self.name_stem.clone(),
@@ -1821,7 +1822,7 @@ where
         }
     }
 }
-impl<P> PageMapLayout<P>
+impl<'a, P> PageMapLayoutRef<'a, P>
 where
     P: ReadPolicy + WritePolicy,
 {
