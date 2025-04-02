@@ -1,5 +1,5 @@
 use crate::{
-    decoder_config,
+    are_nf_fund_proposals_disabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -5251,10 +5251,21 @@ impl Governance {
         let conversion_result = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
             create_service_nervous_system.clone(),
         ));
-        if let Err(err) = conversion_result {
+
+        let validated = conversion_result.map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid CreateServiceNervousSystem: {}", e),
+            )
+        })?;
+
+        if are_nf_fund_proposals_disabled()
+            && validated.neurons_fund_participation.unwrap_or_default()
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Invalid CreateServiceNervousSystem: {}", err),
+                "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed \
+                as decided by motion proposal 135970: https://dashboard.internetcomputer.org/proposal/135970.",
             ));
         }
 
