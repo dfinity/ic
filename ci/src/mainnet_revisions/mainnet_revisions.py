@@ -259,6 +259,7 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             pr_description.format(
                 description="Update mainnet revisions file to include the latest version released on the mainnet."
             ),
+            enable_auto_merge=True,
         )
     elif args.command == Command.CANISTERS:
         branch = "ic-nervous-system-wasms"

@@ -6,13 +6,17 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/certification",
+    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
+    "//rs/registry/canister/api",
     "//rs/registry/transport",
     "//rs/tree_deserializer",
     "//rs/types/types",
+    "@crate_index//:candid",
     "@crate_index//:chrono",
+    "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:serde",
@@ -22,13 +26,25 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/certification/test-utils",
+    "@crate_index//:futures-util",
     "@crate_index//:leb128",
+    "@crate_index//:pretty_assertions",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
 ]
 
 rust_library(
     name = "nns_data_provider",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_nns_data_provider",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
@@ -36,5 +52,6 @@ rust_library(
 rust_test(
     name = "nns_data_provider_test",
     crate = ":nns_data_provider",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES,
 )
