@@ -118,13 +118,13 @@ function generate_guestos_config() {
     CPU_SPEC=$(mktemp)
     if [ "${CPU_MODE}" == "qemu" ]; then
         CPU_DOMAIN="qemu"
-        cat > "${CPU_SPEC}" <<EOF
+        cat >"${CPU_SPEC}" <<EOF
 <cpu mode='host-model'/>
 EOF
     else
         CPU_DOMAIN="kvm"
         CORE_COUNT=$((RESOURCES_NR_OF_VCPUS / 4))
-        cat > "${CPU_SPEC}" <<EOF
+        cat >"${CPU_SPEC}" <<EOF
 <cpu mode='host-passthrough' migratable='off'>
   <cache mode='passthrough'/>
   <topology sockets='2' cores='${CORE_COUNT}' threads='2'/>
