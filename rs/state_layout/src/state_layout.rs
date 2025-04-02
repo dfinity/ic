@@ -1710,13 +1710,13 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         Ok(self
             .canister_ids()?
             .into_iter()
-            .map(|id| self.canister(&id)?.wasm())
+            .map(|id| Ok(self.canister(&id)?.wasm()))
             .chain(
                 self.snapshot_ids()?
                     .into_iter()
-                    .map(|id| self.snapshot(&id)?.wasm()),
+                    .map(|id| Ok(self.snapshot(&id)?.wasm())),
             )
-            .collect()?)
+            .collect::<Result<Vec<WasmFile<Permissions>>, LayoutError>>()?)
     }
 
     /// Directory where the snapshot for `snapshot_id` is stored.
