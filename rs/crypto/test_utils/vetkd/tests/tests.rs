@@ -15,7 +15,13 @@ fn should_generate_valid_bls_signature() {
 
     let tsk = TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec()).unwrap();
 
-    let ek_bytes = pk.vetkd_protocol(&canister_id, &context, &input, &tsk.public_key(), &rng.gen::<[u8; 32]>());
+    let ek_bytes = pk.vetkd_protocol(
+        &canister_id,
+        &context,
+        &input,
+        &tsk.public_key(),
+        &rng.gen::<[u8; 32]>(),
+    );
 
     let ek = EncryptedVetKey::deserialize(&ek_bytes).unwrap();
 

@@ -49,8 +49,14 @@ impl PrivateKey {
 
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(*seed);
 
-        let eks =
-            EncryptedKeyShare::create(&mut rng, &self.public_point, &self.secret_key, &tpk, &dc, input);
+        let eks = EncryptedKeyShare::create(
+            &mut rng,
+            &self.public_point,
+            &self.secret_key,
+            &tpk,
+            &dc,
+            input,
+        );
 
         let ek = EncryptedKey::combine_all(&[(0, eks)], 1, &self.public_point, &tpk, &dc, input)
             .expect("Failed to combine single EncryptedKeyShare to an EncryptedKey");
