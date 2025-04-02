@@ -2,11 +2,11 @@ use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_canister, install_nns_canisters,
-        nns,
+        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_canister, nns,
         sns::{self, governance::set_automatically_advance_target_version_flag},
         upgrade_nns_canister_to_tip_of_master_or_panic,
     },
@@ -80,8 +80,9 @@ async fn test_upgrade_existing_sns() {
         }
 
         eprintln!("Install the (mainnet) NNS canisters ...");
-        let with_mainnet_nns_canisters = true;
-        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+        let mut nns_installer = NnsInstaller::default();
+        nns_installer.with_mainnet_nns_canister_versions();
+        nns_installer.install(&pocket_ic).await;
 
         eprintln!(" Publish (mainnet) SNS Wasms to SNS-W ...");
         let with_mainnet_sns_wasms = true;

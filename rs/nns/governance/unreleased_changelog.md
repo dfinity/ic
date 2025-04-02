@@ -4,7 +4,6 @@ In general, upcoming/unreleased behavior changes are described here. For details
 on the process that this file is part of, see
 `rs/nervous_system/changelog_process.md`.
 
-
 # Next Upgrade Proposal
 
 ## Added
@@ -16,6 +15,8 @@ on the process that this file is part of, see
 
 * Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
 * Increase the neurons limit to 500K now that neurons are stored in stable memory.
+* Disable Neuron's Funds for ongoing SNSs, as approved in
+  proposal [135970](https://dashboard.internetcomputer.org/proposal/135970).
 
 ## Deprecated
 
