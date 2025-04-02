@@ -168,8 +168,7 @@ pub enum LedgerField {
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
 ///   * 3 - the blocks are stored in stable structures.
-#[cfg(not(feature = "next-ledger-version"))]
-#[cfg(not(feature = "prev-ledger-version"))]
+#[cfg(not(any(feature = "next-ledger-version", feature = "prev-ledger-version")))]
 pub const LEDGER_VERSION: u64 = 3;
 
 #[cfg(feature = "next-ledger-version")]
