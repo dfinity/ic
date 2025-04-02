@@ -8,6 +8,7 @@ use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     install_canister_on_subnet, load_registry_mutations, NnsInstaller, STARTING_CYCLES_PER_CANISTER,
 };
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::sns::sns_proposal_upvote;
@@ -28,8 +29,13 @@ use pocket_ic::PocketIcBuilder;
 use tempfile::TempDir;
 
 const DEV_PARTICIPANT_ID: PrincipalId = PrincipalId::new_user_test_id(1000);
+const DEV_NEURON_ID: NeuronId = NeuronId { id: 1000u64 };
 
-async fn prepare_network_for_test(dev_participant_id: PrincipalId, state_dir: PathBuf) -> PocketIc {
+async fn prepare_network_for_test(
+    dev_participant_id: PrincipalId,
+    dev_neuron_id: NeuronId,
+    state_dir: PathBuf,
+) -> PocketIc {
     // Preparing the PocketIC-based network
 
     let pocket_ic = PocketIcBuilder::new()
@@ -52,7 +58,8 @@ async fn prepare_network_for_test(dev_participant_id: PrincipalId, state_dir: Pa
             treasury_principal_id.into(),
             Tokens::from_tokens(10_000_000).unwrap(),
         )],
-        vec![dev_participant_id],
+        dev_participant_id,
+        dev_neuron_id,
     )
     .await;
     assert!(validate_network(&pocket_ic).await.is_empty());
@@ -99,13 +106,21 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
     let state_dir = state_dir.path().to_path_buf();
 
     let dev_participant_id = DEV_PARTICIPANT_ID;
+    let dev_neuron_id = DEV_NEURON_ID;
 
-    let pocket_ic = prepare_network_for_test(dev_participant_id, state_dir).await;
+    let pocket_ic = prepare_network_for_test(dev_participant_id, dev_neuron_id, state_dir).await;
 
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
     // Creating an SNS
-    let sns = create_sns(&pocket_ic, dev_participant_id, vec![test_canister_id], true).await;
+    let sns = create_sns(
+        &pocket_ic,
+        dev_participant_id,
+        dev_neuron_id,
+        vec![test_canister_id],
+        true,
+    )
+    .await;
     let new_greeting = "Hi".to_string();
     // Upgrading the test canister via SNS voting
     let proposal_id = propose_sns_controlled_test_canister_upgrade(
@@ -129,8 +144,9 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     let state_dir = state_dir.path().to_path_buf();
 
     let dev_participant_id = DEV_PARTICIPANT_ID;
+    let dev_neuron_id = DEV_NEURON_ID;
 
-    let pocket_ic = prepare_network_for_test(dev_participant_id, state_dir).await;
+    let pocket_ic = prepare_network_for_test(dev_participant_id, dev_neuron_id, state_dir).await;
 
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
@@ -138,6 +154,7 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     let sns = create_sns(
         &pocket_ic,
         dev_participant_id,
+        dev_neuron_id,
         vec![test_canister_id],
         false,
     )
@@ -173,6 +190,8 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
 
 #[tokio::test]
 pub async fn test_missing_nns_canisters() {
+    let dev_participant_id = PrincipalId::new_user_test_id(1000);
+    let dev_neuron_id = NeuronId { id: 1000u64 };
     // Preparing the PocketIC-based network
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -182,7 +201,14 @@ pub async fn test_missing_nns_canisters() {
         .build_async()
         .await;
     // Installing NNS canisters
-    bootstrap_nns(&pocket_ic, vec![], vec![], vec![]).await;
+    bootstrap_nns(
+        &pocket_ic,
+        vec![],
+        vec![],
+        dev_participant_id,
+        dev_neuron_id,
+    )
+    .await;
 
     // Deleting the ledger-index canister
     pocket_ic

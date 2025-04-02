@@ -11,7 +11,6 @@ use ic_nervous_system_agent::nns::ledger::transfer;
 use ic_nervous_system_agent::nns::sns_wasm::{get_latest_sns_version_pretty, get_sns_subnet_ids};
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::CallCanisters;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     canister_id_to_nns_canister_name, CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
@@ -36,9 +35,8 @@ pub const ALL_SNS_TESTING_CANISTER_IDS: [&CanisterId; 9] = [
     &CYCLES_LEDGER_CANISTER_ID,
 ];
 
-pub const NNS_NEURON_ID: NeuronId = NeuronId {
-    id: TEST_NEURON_1_ID,
-};
+/// The default NNS neuron ID used during NNS bootstrap and NNS proposal submission.
+pub const NNS_NEURON_ID: NeuronId = NeuronId { id: 1 };
 
 // Predefined secret keys used in sns-testing
 lazy_static! {
@@ -110,6 +108,29 @@ pub async fn get_nns_neuron_hotkeys<C: CallCanisters>(
         .filter(|n| n.id == Some(neuron_id))
         .collect();
     Ok(neuron.iter().flat_map(|n| n.hot_keys.clone()).collect())
+}
+
+pub async fn get_nns_neuron_controller<C: CallCanisters>(
+    agent: &C,
+    neuron_id: NeuronId,
+) -> Result<Option<PrincipalId>> {
+    let request = ListNeurons {
+        neuron_ids: vec![neuron_id.id],
+        ..Default::default()
+    };
+    let response = list_neurons(agent, request)
+        .await
+        .map_err(|err| anyhow!("Failed to list neurons {}", err))?;
+    let neuron: Vec<Neuron> = response
+        .full_neurons
+        .into_iter()
+        .filter(|n| n.id == Some(neuron_id))
+        .collect();
+    let controller = neuron
+        .first()
+        .ok_or_else(|| anyhow!("Failed to get neuron {} full info", neuron_id.id))?
+        .controller;
+    Ok(controller)
 }
 
 pub fn get_identity_principal(identity_name: &str) -> Result<PrincipalId> {

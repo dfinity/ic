@@ -3,6 +3,7 @@ use std::process::exit;
 use clap::Parser;
 use ic_nervous_system_agent::helpers::sns::get_principal_neurons;
 use ic_nervous_system_agent::CallCanisters;
+use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_cli::utils::get_agent;
 use ic_sns_testing::sns::{
     complete_sns_swap, create_sns, find_sns_by_name, propose_sns_controlled_test_canister_upgrade,
@@ -10,8 +11,8 @@ use ic_sns_testing::sns::{
     TestCanisterInitArgs,
 };
 use ic_sns_testing::utils::{
-    get_nns_neuron_hotkeys, transfer_icp_from_treasury, validate_network as validate_network_impl,
-    validate_target_canister, NNS_NEURON_ID,
+    get_nns_neuron_controller, get_nns_neuron_hotkeys, transfer_icp_from_treasury,
+    validate_network as validate_network_impl, validate_target_canister, NNS_NEURON_ID,
 };
 use ic_sns_testing::{
     RunBasicScenarioArgs, SnsProposalUpvoteArgs, SnsTestingArgs, SnsTestingSubCommand,
@@ -20,7 +21,9 @@ use ic_sns_testing::{
 use icp_ledger::{AccountIdentifier, Subaccount};
 
 async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
-    let dev_agent = &get_agent(&network, args.dev_identity).await.unwrap();
+    let dev_agent = &get_agent(&network, args.dev_identity.clone())
+        .await
+        .unwrap();
 
     let target_canister_validation_errors =
         validate_target_canister(dev_agent, args.test_canister_id).await;
@@ -33,25 +36,49 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
         exit(1);
     }
 
-    match get_nns_neuron_hotkeys(dev_agent, NNS_NEURON_ID).await {
-        Ok(nns_neuron_hotkeys) => {
-            assert!(
-                nns_neuron_hotkeys.contains(&dev_agent.caller().unwrap().into()),
-                "Developer identity is not a hotkey for NNS neuron"
-            );
+    let nns_neuron_id = args
+        .nns_neuron_id
+        .map(|id| NeuronId { id })
+        .unwrap_or(NNS_NEURON_ID);
+
+    // Get neuron's controller and hotkeys to get the list of principals
+    // that can create proposals on behalf of the neuron.
+    let mut neuron_controllers = match get_nns_neuron_hotkeys(dev_agent, nns_neuron_id).await {
+        Ok(neurons) => neurons,
+        Err(err) => panic!(
+            "Failed to get NNS neuron {} hotkeys: {}",
+            nns_neuron_id.id, err
+        ),
+    };
+    match get_nns_neuron_controller(dev_agent, nns_neuron_id).await {
+        Ok(controller) => {
+            if let Some(controller) = controller {
+                neuron_controllers.push(controller)
+            }
         }
-        Err(err) => {
-            panic!(
-                "Failed to get NNS neuron {} hotkeys: {}",
-                NNS_NEURON_ID.id, err
-            );
-        }
+        Err(err) => panic!(
+            "Failed to get NNS neuron {} controller: {}",
+            nns_neuron_id.id, err
+        ),
+    };
+
+    // Check if provided identity is allowed to create proposals on behalf of the neuron.
+    if neuron_controllers
+        .iter()
+        .all(|&principal| principal != dev_agent.caller().unwrap().into())
+    {
+        eprintln!(
+            "Identity '{}' cannot create NNS proposals on behalf of NNS neuron '{}'",
+            args.dev_identity.unwrap_or("default".to_string()),
+            nns_neuron_id.id
+        );
+        exit(1);
     }
 
     println!("Creating SNS...");
     let sns = create_sns(
         dev_agent,
-        NNS_NEURON_ID,
+        nns_neuron_id,
         dev_agent,
         vec![args.test_canister_id],
         true,

@@ -1,5 +1,6 @@
 use clap::Parser;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
+use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::utils::{get_identity_principal, NNS_NEURON_ID, TREASURY_PRINCIPAL_ID};
 use ic_sns_testing::NnsInitArgs;
@@ -29,6 +30,11 @@ async fn nns_init(args: NnsInitArgs) {
         *TREASURY_PRINCIPAL_ID
     };
 
+    let deciding_nns_neuron_id = args
+        .deciding_nns_neuron_id
+        .map(|id| NeuronId { id })
+        .unwrap_or(NNS_NEURON_ID);
+
     bootstrap_nns(
         &pocket_ic,
         vec![initial_mutations],
@@ -39,13 +45,14 @@ async fn nns_init(args: NnsInitArgs) {
             ),
             (dev_principal_id.into(), Tokens::from_tokens(100).unwrap()),
         ],
-        vec![dev_principal_id],
+        dev_principal_id,
+        deciding_nns_neuron_id,
     )
     .await;
     println!("NNS initialized");
     println!(
         "Use the following Neuron ID for further testing: {}",
-        NNS_NEURON_ID.id
+        deciding_nns_neuron_id.id
     );
 }
 
