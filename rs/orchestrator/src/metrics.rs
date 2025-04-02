@@ -2,25 +2,27 @@ use prometheus::{IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 
-pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
+pub(crate) const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
 #[derive(Clone)]
-pub struct OrchestratorMetrics {
-    pub ssh_access_registry_version: IntGauge,
-    pub firewall_registry_version: IntGauge,
-    pub ipv4_registry_version: IntGauge,
-    pub reboot_duration: IntGauge,
-    pub orchestrator_info: IntGaugeVec,
-    pub key_rotation_status: IntGaugeVec,
-    pub master_public_key_changed_errors: IntCounterVec,
-    pub failed_consecutive_upgrade_checks: IntCounter,
-    pub critical_error_cup_deserialization_failed: IntCounter,
-    pub critical_error_state_removal_failed: IntCounter,
-    pub fstrim_duration: IntGauge,
+pub(crate) struct OrchestratorMetrics {
+    pub(crate) ssh_access_registry_version: IntGauge,
+    pub(crate) firewall_registry_version: IntGauge,
+    pub(crate) ipv4_registry_version: IntGauge,
+    pub(crate) reboot_duration: IntGauge,
+    pub(crate) orchestrator_info: IntGaugeVec,
+    pub(crate) key_rotation_status: IntGaugeVec,
+    pub(crate) master_public_key_changed_errors: IntCounterVec,
+    pub(crate) failed_consecutive_upgrade_checks: IntCounter,
+    pub(crate) critical_error_cup_deserialization_failed: IntCounter,
+    pub(crate) critical_error_state_removal_failed: IntCounter,
+    pub(crate) fstrim_duration: IntGauge,
+    pub(crate) critical_error_task_panicked: IntCounterVec,
+    pub(crate) task_status: IntGaugeVec,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
-pub enum KeyRotationStatus {
+pub(crate) enum KeyRotationStatus {
     Disabled,
     TooRecent,
     Rotating,
@@ -41,6 +43,8 @@ impl KeyRotationStatus {
         matches!(self, KeyRotationStatus::Error)
     }
 }
+
+const LABEL_TASK: &str = "task_name";
 
 impl OrchestratorMetrics {
     pub fn new(metrics_registry: &ic_metrics::MetricsRegistry) -> Self {
@@ -91,6 +95,16 @@ impl OrchestratorMetrics {
             fstrim_duration: metrics_registry.int_gauge(
                 "orchestrator_fstrim_duration_milliseconds",
                 "The duration of the last fstrim call, in milliseconds",
+            ),
+            critical_error_task_panicked: metrics_registry.int_counter_vec(
+                "orchestrator_task_panicked",
+                "Number of times a task panicked, grouped by the a task name",
+                &[LABEL_TASK],
+            ),
+            task_status: metrics_registry.int_gauge_vec(
+                "orchestrator_task_status",
+                "The status of an orchestrator task: 0 = not running, 1 = running",
+                &[LABEL_TASK],
             ),
         }
     }

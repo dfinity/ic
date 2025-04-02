@@ -82,6 +82,7 @@ rust_binary(
         ":lib",
         "//rs/http_endpoints/async_utils",
         "@crate_index//:clap",
+        "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )
