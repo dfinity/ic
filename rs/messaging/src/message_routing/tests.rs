@@ -652,11 +652,11 @@ impl StateMachine for FakeStateMachine {
 /// Generates an instance of `BatchProcessorImpl` along with an `Arc` to its metrics;
 /// an `Arc` to the underlying state manager; and an `Arc` to the registry settings
 /// which are stored by the fake state machine.
-fn make_batch_processor(
-    registry: Arc<impl RegistryClient + 'static>,
+fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
+    registry: Arc<RegistryClient_>,
     log: ReplicaLogger,
 ) -> (
-    BatchProcessorImpl,
+    BatchProcessorImpl<RegistryClient_>,
     MessageRoutingMetrics,
     Arc<FakeStateManager>,
     Arc<Mutex<RegistryExecutionSettings>>,
