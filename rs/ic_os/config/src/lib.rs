@@ -249,7 +249,7 @@ mod tests {
         let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0).unwrap();
         assert_eq!(config.config_version, "1.0.0");
         assert_eq!(config.hostos_settings.vm_cpu, "kvm");
-        assert_eq!(config.hostos_settings.vm_nr_of_vcpus, "64");
+        assert_eq!(config.hostos_settings.vm_nr_of_vcpus, 64);
     }
 
     #[test]
