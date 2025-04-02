@@ -572,11 +572,10 @@ pub mod pocket_ic {
     use ic_nervous_system_integration_tests::pocket_ic_helpers::{
         install_canister_on_subnet, nns::ledger::mint_icp,
     };
+    use ic_nns_common::pb::v1::NeuronId;
     use ic_nns_constants::ROOT_CANISTER_ID;
     use ic_sns_governance_api::pb::v1::ProposalId;
     use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
-
-    use crate::utils::NNS_NEURON_ID;
 
     pub async fn install_test_canister(
         pocket_ic: &PocketIc,
@@ -605,6 +604,7 @@ pub mod pocket_ic {
     pub async fn create_sns(
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
+        dev_neuron_id: NeuronId,
         dapp_canister_ids: Vec<CanisterId>,
         follow_dev_neuron: bool,
     ) -> Sns {
@@ -612,7 +612,7 @@ pub mod pocket_ic {
 
         super::create_sns(
             &dev_participant,
-            NNS_NEURON_ID,
+            dev_neuron_id,
             &dev_participant,
             dapp_canister_ids,
             follow_dev_neuron,

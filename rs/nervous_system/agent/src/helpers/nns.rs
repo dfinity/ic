@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use candid::Encode;
 use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -8,7 +9,9 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command, CreateServiceNervousSystem, MakeProposalRequest,
     ManageNeuronCommandRequest, ProposalActionRequest, ProposalInfo, Topic,
 };
+use ic_nns_governance_api::pb::v1::{ExecuteNnsFunction, NnsFunction};
 use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TransferArgs};
 
 use crate::nns::governance::{get_proposal_info, manage_neuron};
@@ -159,4 +162,30 @@ pub async fn convert_icp_to_cycles<C: CallCanisters>(benecificary_agent: &C, amo
         .await
         .unwrap()
         .unwrap();
+}
+
+pub async fn add_wasm_via_nns_proposal<C: CallCanistersWithStoppedCanisterError + ProgressNetwork>(
+    agent: &C,
+    neuron_id: NeuronId,
+    wasm: SnsWasm,
+) -> Result<ProposalInfo, String> {
+    let hash = wasm.sha256_hash();
+    let canister_type = wasm.canister_type;
+    let payload = AddWasmRequest {
+        hash: hash.to_vec(),
+        wasm: Some(wasm),
+    };
+
+    let proposal = MakeProposalRequest {
+        title: Some(format!("Add WASM for SNS canister type {}", canister_type)),
+        summary: "summary".to_string(),
+        url: "".to_string(),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AddSnsWasm as i32,
+                payload: Encode!(&payload).expect("Error encoding proposal payload"),
+            },
+        )),
+    };
+    propose_and_wait(agent, neuron_id, proposal).await
 }

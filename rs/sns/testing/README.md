@@ -33,7 +33,7 @@ To run the scenario on the local PocketIC instance:
    ```
 2) Bootstrap the NNS on the launched PocketIC instance:
    ```
-   bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing
+   bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing --deciding-nns-neuron-id 1
    ```
 3) Build and deploy `test` canister:
    ```
@@ -44,7 +44,7 @@ To run the scenario on the local PocketIC instance:
 4) Launch the basic SNS testing scenario:
    ```
    bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 run-basic-scenario \
-      --dev-identity sns-testing \
+      --dev-identity sns-testing --nns-neuron-id 1 \
       --test-canister-id "$(dfx canister --network http://127.0.0.1:8080 id test)"
    ```
 
@@ -62,7 +62,7 @@ remove `$PWD/sns-testing` and `$PWD/.dfx` directories before doing the steps men
 
 2) Bootstrap the NNS on the launched PocketIC instance:
    ```
-   bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing
+   bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing --deciding-nns-neuron-id 1
    ```
 
 Once these steps are completed, the PocketIC will expose the IC network HTTP endpoint on "http://127.0.0.1:8080".
@@ -72,7 +72,7 @@ by `sns-testing` will be automatically accepted.
 Additionally, `nns-init` will output the ID of the NNS neuron that should be used to create NNS proposals.
 ```
 ...
-Use the following Neuron ID for further testing: 449479075714955186
+Use the following Neuron ID for further testing: 1
 ```
 
 ### Create the new SNS
@@ -110,7 +110,7 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
    pushd ../cli
    # //rs/sns/cli:sns doesn't support CLI-provided identities despite '--identity' option
    dfx identity use sns-testing
-   bazel run //rs/sns/cli:sns -- propose --network http://127.0.0.1:8080 --neuron-id 449479075714955186 $PWD/test_sns_init_v2.yaml
+   bazel run //rs/sns/cli:sns -- propose --network http://127.0.0.1:8080 --neuron-id 1 $PWD/test_sns_init_v2.yaml
    popd
    ```
 

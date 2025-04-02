@@ -19,10 +19,10 @@ use ic_nns_constants::{
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
-    install_code::CanisterInstallMode, CreateServiceNervousSystem, ExecuteNnsFunction,
-    GetNeuronsFundAuditInfoResponse, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
-    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronResponse, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo,
+    install_code::CanisterInstallMode, CreateServiceNervousSystem, GetNeuronsFundAuditInfoResponse,
+    InstallCodeRequest, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronResponse, NetworkEconomics, Neuron,
+    ProposalActionRequest, ProposalInfo,
 };
 use ic_nns_test_utils::{
     common::{
@@ -55,9 +55,7 @@ use ic_sns_swap::pb::v1::{
     Lifecycle, NewSaleTicketResponse, RefreshBuyerTokensResponse,
 };
 use ic_sns_test_utils::itest_helpers::populate_canister_ids;
-use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, GetDeployedSnsByProposalIdResponse, SnsCanisterType, SnsWasm,
-};
+use ic_sns_wasm::pb::v1::{GetDeployedSnsByProposalIdResponse, SnsCanisterType, SnsWasm};
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -214,29 +212,120 @@ pub async fn install_canister_on_subnet(
     CanisterId::unchecked_from_principal(canister_id.into())
 }
 
+/// A builder for adding SNS WASW modules to SNS-W canister.
+#[derive(Default)]
+pub struct SnsWasmCanistersInstaller {
+    pub mainnet_sns_canister_versions: Option<bool>,
+    pub neuron_id: Option<NeuronId>,
+    pub principal_id: Option<PrincipalId>,
+}
+
+impl SnsWasmCanistersInstaller {
+    /// Requests the mainnet Wasm versions for all NNS canisters being installed.
+    pub fn with_mainnet_sns_canister_versions(&mut self) -> &mut Self {
+        self.mainnet_sns_canister_versions = Some(true);
+        self
+    }
+
+    /// Requests tip-of-this-branch Wasm versions for all NNS canisters being installed.
+    pub fn with_current_sns_canister_versions(&mut self) -> &mut Self {
+        self.mainnet_sns_canister_versions = Some(false);
+        self
+    }
+
+    /// Specifies the ID of the neuron which will be used to create NNS proposals and
+    /// principal ID that is able to submit proposals on behalf of the provided neuron.
+    /// If the neuron is not specified with this method, 'TEST_NEURON_1_ID' will be used
+    pub fn with_nns_neuron(&mut self, neuron_id: NeuronId, principal_id: PrincipalId) -> &mut Self {
+        self.neuron_id = Some(neuron_id);
+        self.principal_id = Some(principal_id);
+        self
+    }
+
+    pub async fn add_wasm_via_nns_proposal(
+        &self,
+        pocket_ic: &PocketIc,
+        wasm: SnsWasm,
+    ) -> Result<ProposalInfo, String> {
+        use ic_nervous_system_agent::helpers::nns as nns_agent_helpers;
+        let neuron_id = self.neuron_id.unwrap_or(NeuronId {
+            id: TEST_NEURON_1_ID,
+        });
+        let principal_id = self.principal_id.unwrap_or(*TEST_NEURON_1_OWNER_PRINCIPAL);
+        let agent = PocketIcAgent::new(pocket_ic, principal_id);
+        nns_agent_helpers::add_wasm_via_nns_proposal(&agent, neuron_id, wasm).await
+    }
+
+    pub async fn add_wasms_to_sns_wasm(
+        &self,
+        pocket_ic: &PocketIc,
+    ) -> Result<DeployedSnsStartingInfo, String> {
+        let with_mainnet_sns_canisters = self.mainnet_sns_canister_versions.expect(
+            "Please explicitly request either mainnet or tip-of-the-branch SNS canisters version.",
+        );
+        let (root_wasm, governance_wasm, swap_wasm, index_wasm, ledger_wasm, archive_wasm) =
+            if with_mainnet_sns_canisters {
+                (
+                    ensure_sns_wasm_gzipped(build_mainnet_root_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_mainnet_governance_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_mainnet_swap_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_mainnet_index_ng_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_mainnet_ledger_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_mainnet_archive_sns_wasm()),
+                )
+            } else {
+                (
+                    ensure_sns_wasm_gzipped(build_root_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_governance_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_swap_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_index_ng_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_ledger_sns_wasm()),
+                    ensure_sns_wasm_gzipped(build_archive_sns_wasm()),
+                )
+            };
+
+        let root_proposal_info = self
+            .add_wasm_via_nns_proposal(pocket_ic, root_wasm.clone())
+            .await?;
+        let gov_proposal_info = self
+            .add_wasm_via_nns_proposal(pocket_ic, governance_wasm.clone())
+            .await?;
+        let swap_proposal_info = self
+            .add_wasm_via_nns_proposal(pocket_ic, swap_wasm.clone())
+            .await?;
+
+        let index_proposal_info = self
+            .add_wasm_via_nns_proposal(pocket_ic, index_wasm.clone())
+            .await?;
+        let ledger_proposal_info = self
+            .add_wasm_via_nns_proposal(pocket_ic, ledger_wasm.clone())
+            .await?;
+        let archive_proposal_info = self
+            .add_wasm_via_nns_proposal(pocket_ic, archive_wasm.clone())
+            .await?;
+
+        Ok(btreemap! {
+            // Governance suite
+            SnsCanisterType::Swap => (swap_proposal_info, swap_wasm),
+            SnsCanisterType::Root => (root_proposal_info, root_wasm),
+            SnsCanisterType::Governance => (gov_proposal_info, governance_wasm),
+
+            // Ledger suite
+            SnsCanisterType::Index => (index_proposal_info, index_wasm),
+            SnsCanisterType::Ledger => (ledger_proposal_info, ledger_wasm),
+            SnsCanisterType::Archive => (archive_proposal_info, archive_wasm),
+        })
+    }
+}
+
 // TODO migrate this to nns::governance
 pub async fn add_wasm_via_nns_proposal(
     pocket_ic: &PocketIc,
     wasm: SnsWasm,
 ) -> Result<ProposalInfo, String> {
-    let hash = wasm.sha256_hash();
-    let canister_type = wasm.canister_type;
-    let payload = AddWasmRequest {
-        hash: hash.to_vec(),
-        wasm: Some(wasm),
-    };
-    let proposal = MakeProposalRequest {
-        title: Some(format!("Add WASM for SNS canister type {}", canister_type)),
-        summary: "summary".to_string(),
-        url: "".to_string(),
-        action: Some(ProposalActionRequest::ExecuteNnsFunction(
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::AddSnsWasm as i32,
-                payload: Encode!(&payload).expect("Error encoding proposal payload"),
-            },
-        )),
-    };
-    nns::governance::propose_and_wait(pocket_ic, proposal).await
+    SnsWasmCanistersInstaller::default()
+        .add_wasm_via_nns_proposal(pocket_ic, wasm)
+        .await
 }
 
 pub async fn propose_to_set_network_economics_and_wait(
@@ -272,46 +361,17 @@ pub async fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
     with_mainnet_sns_canisters: bool,
 ) -> Result<DeployedSnsStartingInfo, String> {
-    let (root_wasm, governance_wasm, swap_wasm, index_wasm, ledger_wasm, archive_wasm) =
-        if with_mainnet_sns_canisters {
-            (
-                ensure_sns_wasm_gzipped(build_mainnet_root_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_mainnet_governance_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_mainnet_swap_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_mainnet_index_ng_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_mainnet_ledger_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_mainnet_archive_sns_wasm()),
-            )
-        } else {
-            (
-                ensure_sns_wasm_gzipped(build_root_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_governance_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_swap_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_index_ng_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_ledger_sns_wasm()),
-                ensure_sns_wasm_gzipped(build_archive_sns_wasm()),
-            )
-        };
+    let mut sns_wasm_canister_installer = SnsWasmCanistersInstaller::default();
 
-    let root_proposal_info = add_wasm_via_nns_proposal(pocket_ic, root_wasm.clone()).await?;
-    let gov_proposal_info = add_wasm_via_nns_proposal(pocket_ic, governance_wasm.clone()).await?;
-    let swap_proposal_info = add_wasm_via_nns_proposal(pocket_ic, swap_wasm.clone()).await?;
+    if with_mainnet_sns_canisters {
+        sns_wasm_canister_installer.with_mainnet_sns_canister_versions();
+    } else {
+        sns_wasm_canister_installer.with_current_sns_canister_versions();
+    }
 
-    let index_proposal_info = add_wasm_via_nns_proposal(pocket_ic, index_wasm.clone()).await?;
-    let ledger_proposal_info = add_wasm_via_nns_proposal(pocket_ic, ledger_wasm.clone()).await?;
-    let archive_proposal_info = add_wasm_via_nns_proposal(pocket_ic, archive_wasm.clone()).await?;
-
-    Ok(btreemap! {
-        // Governance suite
-        SnsCanisterType::Swap => (swap_proposal_info, swap_wasm),
-        SnsCanisterType::Root => (root_proposal_info, root_wasm),
-        SnsCanisterType::Governance => (gov_proposal_info, governance_wasm),
-
-        // Ledger suite
-        SnsCanisterType::Index => (index_proposal_info, index_wasm),
-        SnsCanisterType::Ledger => (ledger_proposal_info, ledger_wasm),
-        SnsCanisterType::Archive => (archive_proposal_info, archive_wasm),
-    })
+    sns_wasm_canister_installer
+        .add_wasms_to_sns_wasm(pocket_ic)
+        .await
 }
 
 /// A builder for fine-tuning and installing the NNS canister suite in PocketIc.
@@ -325,6 +385,7 @@ pub struct NnsInstaller {
     with_cycles_ledger: bool,
     with_index_canister: bool,
     with_test_governance_canister: bool,
+    neurons: Option<Vec<Neuron>>,
 }
 
 impl NnsInstaller {
@@ -395,6 +456,13 @@ impl NnsInstaller {
         self
     }
 
+    /// Requests the NNS Governance to be initialized with the following neurons.
+    /// Overrides 'with_neurons_fund_hotkeys'.
+    pub fn with_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+        self.neurons = Some(neurons);
+        self
+    }
+
     /// Installs the NNS canister suite.
     ///
     /// Ensures that there is a whale neuron with `TEST_NEURON_1_ID`.
@@ -425,11 +493,15 @@ impl NnsInstaller {
         }
 
         let maturity_equivalent_icp_e8s = 1_500_000 * E8;
-        nns_init_payload_builder
-            .with_test_neurons_fund_neurons_with_hotkeys(
+        if let Some(neurons) = self.neurons {
+            nns_init_payload_builder.with_additional_neurons(neurons);
+        } else {
+            nns_init_payload_builder.with_test_neurons_fund_neurons_with_hotkeys(
                 self.neurons_fund_hotkeys,
                 maturity_equivalent_icp_e8s,
-            )
+            );
+        }
+        nns_init_payload_builder
             .with_sns_dedicated_subnets(vec![sns_subnet_id])
             .with_sns_wasm_access_controls(true);
 
