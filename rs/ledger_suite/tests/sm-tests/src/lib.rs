@@ -3263,9 +3263,10 @@ pub fn test_metrics_while_migrating<T>(
     );
 }
 
-pub fn test_upgrade_from_v1_not_possible<T>(
+pub fn test_upgrade_not_possible<T>(
     ledger_wasm_mainnet_v1: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
+    expected_errror_msg: &str,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -3282,9 +3283,7 @@ pub fn test_upgrade_from_v1_not_possible<T>(
             panic!("Upgrade from V1 should fail!")
         }
         Err(e) => {
-            assert!(e
-                .description()
-                .contains("Cannot upgrade from scratch stable memory, please upgrade to memory manager first."));
+            assert!(e.description().contains(expected_errror_msg));
         }
     };
 }
