@@ -43,7 +43,7 @@
         "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --profile canister-release --bin ic-icrc1-index-ng",
         "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-index-ng.wasm -o ../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-index-ng-opt.wasm"
       ],
-      "candid": "../../ledger_suite/icrc1/index/index.did",
+      "candid": "../../ledger_suite/icrc1/index-ng/index-ng.did",
       "wasm": "../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-index-ng-opt.wasm",
       "type": "custom"
     }
