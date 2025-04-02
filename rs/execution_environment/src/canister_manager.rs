@@ -14,7 +14,9 @@ use crate::{
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_embedders::wasm_utils::decoding::decode_wasm;
+use ic_embedders::{
+    wasm_utils::decoding::decode_wasm, wasmtime_embedder::system_api::ExecutionParameters,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
 use ic_logger::{error, fatal, info, ReplicaLogger};
@@ -41,7 +43,6 @@ use ic_replicated_state::{
     CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
     SchedulerState, SystemState,
 };
-use ic_system_api::ExecutionParameters;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
