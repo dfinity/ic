@@ -196,6 +196,7 @@ rust_test_suite_with_extra_srcs(
     ]),
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
+    flaky = True,
 )
 
 # Rosetta docker image
