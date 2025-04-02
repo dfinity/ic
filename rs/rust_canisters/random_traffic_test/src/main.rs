@@ -36,6 +36,10 @@ thread_local! {
     static RECORDS: RefCell<BTreeMap<u32, (u64, Record)>> = RefCell::default();
     /// A counter for synchronous rejections.
     static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
+    /// A counter for heartbeat invocations.
+    static HEARTBEAT_ID: Cell<u32> = Cell::default();
+    /// Keeps track of results of heartbeats, e.g. traps.
+    static HEARTBEAT_RESULTS: RefCell<BTreeMap<u32, Result<u32, String>>> = RefCell::default();
     /// A `COIN` that can be 'flipped' to determine whether to make a downstream call or not.
     /// The default value set here will yield only 'reply'.
     static DOWNSTREAM_CALL_COIN: RefCell<WeightedIndex<u32>> = RefCell::new(WeightedIndex::<u32>::new([0, 100]).unwrap());
@@ -183,6 +187,13 @@ fn synchronous_rejections_count() -> u32 {
     SYNCHRONOUS_REJECTIONS_COUNT.get()
 }
 
+#[query]
+fn heartbeat_results() -> BTreeMap<u32, Result<u32, String>> {
+    HEARTBEAT_RESULTS.with_borrow(|results| {
+        results.clone()
+    })
+}
+
 /// Flip the `DOWNSTREAM_CALL_COIN` to determine whether we should make a downstream call or reply
 /// instead.
 fn should_make_downstream_call() -> bool {
@@ -326,10 +337,32 @@ async fn pulse(calls_count: u32) -> u32 {
     calls_success_counter
 }
 
-/// Calls `pulse(calls_per_heartbeat)` each round.
+/// Calls `pulse(calls_per_heartbeat)` each round and records the result (e.g. traps).
 #[heartbeat]
 async fn heartbeat() {
-    pulse(CONFIG.with_borrow(|config| config.calls_per_heartbeat)).await;
+    let id = HEARTBEAT_ID.replace(HEARTBEAT_ID.get() + 1);
+    
+    let call = Call::new(api::canister_self(), "pulse")
+        .with_arg(CONFIG.with_borrow(|config| config.calls_per_heartbeat))
+        .call::<u32>();
+    
+    match call.await {
+        Err(CallError::CallRejected(rejection)) => {
+            HEARTBEAT_RESULTS.with_borrow_mut(|results| {
+                results.insert(id, Err(rejection.reject_message().to_string()));
+            })
+        }
+        Err(CallError::CandidDecodeFailed(err_msg)) => {
+            HEARTBEAT_RESULTS.with_borrow_mut(|results| {
+                results.insert(id, Err(err_msg));
+            });
+        }
+        Ok(calls_successful_count) => {
+            HEARTBEAT_RESULTS.with_borrow_mut(|results| {
+                results.insert(id, Ok(calls_successful_count));
+            })
+        }
+    }
 }
 
 /// Handles incoming calls; this method is called from the heartbeat method.
