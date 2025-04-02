@@ -28,7 +28,7 @@ message CanisterSnapshotBits {
   uint64 wasm_memory_size = 9;
   uint64 total_size = 10;
   repeated canister_state_bits.v1.Global exported_globals = 11;
-  optional CanisterTimer global_timer = 12;
+  CanisterTimer global_timer = 12;
   optional canister_state_bits.v1.OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 13;
   SnapshotSource source = 14;
 }
