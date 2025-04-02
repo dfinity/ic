@@ -182,6 +182,7 @@ impl InitArgsBuilder {
             },
             max_memo_length: None,
             feature_flags: None,
+            index_principal: None,
         })
     }
 
@@ -264,6 +265,7 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -340,6 +342,8 @@ pub struct UpgradeArgs {
     pub feature_flags: Option<FeatureFlags>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode)]
@@ -591,6 +595,8 @@ pub struct Ledger {
 
     #[serde(default)]
     pub ledger_version: u64,
+
+    index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -655,6 +661,7 @@ impl Ledger {
             fee_collector_account,
             max_memo_length,
             feature_flags,
+            index_principal,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -689,6 +696,7 @@ impl Ledger {
             maximum_number_of_accounts: 0,
             accounts_overflow_trim_quantity: 0,
             ledger_version: LEDGER_VERSION,
+            index_principal,
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -867,6 +875,10 @@ impl Ledger {
         self.decimals
     }
 
+    pub fn index_principal(&self) -> Option<Principal> {
+        self.index_principal
+    }
+
     pub fn metadata(&self) -> Vec<(String, Value)> {
         let mut records: Vec<(String, Value)> = self
             .metadata
@@ -882,6 +894,12 @@ impl Ledger {
             METADATA_MAX_MEMO_LENGTH,
             self.max_memo_length() as u64,
         ));
+        if let Some(index_principal) = self.index_principal() {
+            records.push(Value::entry(
+                "icrc106:index_principal",
+                index_principal.to_text(),
+            ));
+        }
         records
     }
 
@@ -943,6 +961,9 @@ impl Ledger {
             if let Some(archive) = maybe_archive.deref_mut() {
                 change_archive_options.apply(archive);
             }
+        }
+        if let Some(index_principal) = args.index_principal {
+            self.index_principal = Some(index_principal);
         }
     }
 
