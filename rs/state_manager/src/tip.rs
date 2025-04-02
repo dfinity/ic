@@ -1034,13 +1034,13 @@ fn serialize_snapshot_to_tip(
         .stable_memory
         .page_map
         .persist_delta(
-            &tip.snapshot_stable_memory(&snapshot_id)?,
+            &tip.snapshot_stable_memory(snapshot_id)?,
             tip.height(),
             lsmt_config,
             metrics,
         )?;
     canister_snapshot.chunk_store().page_map().persist_delta(
-        &tip.snapshot_wasm_chunk_store(&snapshot_id)?,
+        &tip.snapshot_wasm_chunk_store(snapshot_id)?,
         tip.height(),
         lsmt_config,
         metrics,

@@ -14,7 +14,7 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, PageMapLayout,
+    error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
     PageMapLayoutRef, ReadOnly, ReadPolicy,
 };
 use ic_types::batch::RawQueryStats;
@@ -999,7 +999,7 @@ fn load_snapshot(
     };
 
     let starting_time = Instant::now();
-    let wasm_chunk_store_layout = checkpoint_layout.snapshot_wasm_chunk_store(&snapshot_id)?;
+    let wasm_chunk_store_layout = checkpoint_layout.snapshot_wasm_chunk_store(snapshot_id)?;
     let wasm_chunk_store_data = PageMap::open(
         Box::new(wasm_chunk_store_layout.as_owned()),
         height,
