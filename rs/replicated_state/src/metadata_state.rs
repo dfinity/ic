@@ -1470,29 +1470,20 @@ impl Stream {
 
             if let RequestOrResponse::Response(response) = &msg {
                 if !response.is_best_effort() {
-                    debug_assert!(
-                        self.guaranteed_responses_counts
-                            .contains_key(&response.respondent)
-                            && *self
-                                .guaranteed_responses_counts
-                                .get(&response.respondent)
-                                .unwrap()
-                                > 0
-                    );
-
-                    *self
+                    match self
                         .guaranteed_responses_counts
-                        .entry(response.respondent)
-                        .or_insert(1) -= 1;
-
-                    if *self
-                        .guaranteed_responses_counts
-                        .get(&response.respondent)
-                        .unwrap()
-                        == 0
+                        .get_mut(&response.respondent)
                     {
-                        self.guaranteed_responses_counts
-                            .remove(&response.respondent);
+                        Some(0) | None => {
+                            debug_assert!(false);
+                            self.guaranteed_responses_counts
+                                .remove(&response.respondent);
+                        }
+                        Some(1) => {
+                            self.guaranteed_responses_counts
+                                .remove(&response.respondent);
+                        }
+                        Some(count) => *count -= 1,
                     }
                 }
             }
@@ -1557,8 +1548,8 @@ impl Stream {
         messages: &StreamIndexedQueue<RequestOrResponse>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut result = BTreeMap::new();
-        for (_, req_or_resp) in messages.iter() {
-            if let RequestOrResponse::Response(response) = req_or_resp {
+        for (_, msg) in messages.iter() {
+            if let RequestOrResponse::Response(response) = msg {
                 // We only count guaranteed responses
                 if !response.is_best_effort() {
                     *result.entry(response.respondent).or_insert(0) += 1;

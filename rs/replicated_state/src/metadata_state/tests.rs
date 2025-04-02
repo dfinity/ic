@@ -1600,7 +1600,7 @@ fn stream_responses_tracking() {
         .originator(*REMOTE_CANISTER)
         .build();
     stream.push(response.into());
-    *expected_counts.get_mut(&*LOCAL_CANISTER).unwrap() += 1;
+    *expected_counts.get_mut(&LOCAL_CANISTER).unwrap() += 1;
     assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
 
     let response = ResponseBuilder::default()
@@ -1621,7 +1621,7 @@ fn stream_responses_tracking() {
 
     // Discard everything in the same order.
     stream.discard_messages_before(StreamIndex::new(1), &vec![].into());
-    *expected_counts.get_mut(&*LOCAL_CANISTER).unwrap() -= 1;
+    *expected_counts.get_mut(&LOCAL_CANISTER).unwrap() -= 1;
     assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
     stream.discard_messages_before(StreamIndex::new(2), &vec![].into());
     assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
