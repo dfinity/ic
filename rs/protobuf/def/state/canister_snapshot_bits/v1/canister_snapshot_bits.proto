@@ -11,7 +11,7 @@ enum SnapshotSource {
 }
 
 // `None` corresponds to `CanisterTimer::Inactive`
-// `Some(ts)` corresponds to `CanisterTimer::Active(ts)`. 
+// `Some(ts)` corresponds to `CanisterTimer::Active(ts)`.
 message CanisterTimer {
   optional uint64 global_timer_nanos = 1;
 }
