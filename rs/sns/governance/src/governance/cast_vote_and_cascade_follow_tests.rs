@@ -1,5 +1,7 @@
+use crate::pb::v1::{neuron::FolloweesForTopic, Followee};
 use ic_nervous_system_common::E8;
 use maplit::btreeset;
+use pretty_assertions::assert_eq;
 
 use super::*;
 
@@ -129,7 +131,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
         };
 
         // Code under test.
-        let cast_vote_and_cascade_follow = |function_id, proposal_criticality| {
+        let cast_vote_and_cascade_follow = |function_id, topic| {
             // Give all neurons an empty ballot.
             let mut ballots = [
                 &voting_neuron_id,
@@ -153,8 +155,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
                 &neurons,
                 now_seconds,
                 &mut ballots,
-                proposal_criticality,
-                Default::default(),
+                topic,
             );
 
             ballots
@@ -163,7 +164,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
         // Step 2A: Consider following on non-critical proposal. Here catch-all/fallback
         // following should be used.
         let non_critical_ballots =
-            cast_vote_and_cascade_follow(non_critical_function_id, ProposalCriticality::Normal);
+            cast_vote_and_cascade_follow(non_critical_function_id, Topic::Governance);
 
         // Step 3: Inspect results.
 
@@ -194,7 +195,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
         // Step 2B: Critical proposal following. Here catch-all/fallback following should NOT be
         // used.
         let critical_ballots =
-            cast_vote_and_cascade_follow(critical_function_id, ProposalCriticality::Critical);
+            cast_vote_and_cascade_follow(critical_function_id, Topic::TreasuryAssetManagement);
 
         // Step 3B: Critical proposal.
         assert_eq!(
@@ -223,7 +224,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
         // Step 2C: A different critical proposal -> only direct voting happens here.
         let function_id = u64::from(&Action::DeregisterDappCanisters(Default::default()));
         let no_following_ballots =
-            cast_vote_and_cascade_follow(function_id, ProposalCriticality::Critical);
+            cast_vote_and_cascade_follow(function_id, Topic::CriticalDappOperations);
 
         // Step 3C: A different critical proposal.
         assert_eq!(
@@ -243,5 +244,778 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
                     => empty_ballot,
             }
         );
+    }
+}
+
+fn nid(id: u64) -> NeuronId {
+    NeuronId { id: vec![id as u8] }
+}
+
+#[test]
+fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
+    let voting_neuron_id = nid(0);
+
+    // Boilerplate variables.
+    let now_seconds = 123_456_789;
+    let cast_timestamp_seconds = now_seconds;
+
+    let cached_neuron_stake_e8s = E8;
+    let voting_power = cached_neuron_stake_e8s;
+
+    let proposal_id = ProposalId { id: 42 };
+
+    let neuron = |id, followees, topic_followees| Neuron {
+        id: Some(id),
+        followees,
+        topic_followees,
+        cached_neuron_stake_e8s,
+        ..Default::default()
+    };
+
+    let voting_neuron = neuron(nid(0), btreemap! {}, None);
+
+    let test_cases: &[(
+        &str,
+        Action,
+        Topic,
+        Vec<Neuron>,
+        Box<dyn Fn(Vote) -> BTreeMap<String, Ballot>>,
+    )] = &[
+        (
+            "Trivial case: One neuron votes; no following involved.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one does not follow and thus does not vote.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {},
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows this neuron, but on a different topic.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
+                                topic: Some(Topic::ApplicationBusinessLogic as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    })
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows this neuron, but on a different proposal type.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::RegisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows an unrelated neuron on this topic.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(2)), alias: None }],
+                            },
+                        }
+                    })
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows an unrelated neuron on this proposal type.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::RegisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows it on the same topic.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    })
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows it on the same function.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows on the same function.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows on the same function and topic.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows on the same function (and has unrelated topic-following).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
+                                topic: Some(Topic::ApplicationBusinessLogic as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Two neurons:  One neuron votes, another one follows on the same topic (and has unrelated function type-based following).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::RegisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Three neurons:  N0 -- type --> N1 -- type --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+                neuron(
+                    nid(2),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Three neurons:  N0 -- type --> N1 -- function --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+                neuron(
+                    nid(2),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(1)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Three neurons:  N0 -- function --> N1 -- type --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+                neuron(
+                    nid(2),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Three neurons:  N0 -- function --> N1 -- function --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+                neuron(
+                    nid(2),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(1)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Three neurons:  N0 -- type --> N1; N0 -- type --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                    },
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+                neuron(
+                    nid(2),
+                    btreemap! {
+                    },
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Three neurons:  N0 -- type --> N1; N0 -- function --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {},
+                    Some(TopicFollowees {
+                        topic_id_to_followees: btreemap! {
+                            Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                                followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
+                            },
+                        }
+                    }),
+                ),
+                neuron(
+                    nid(2),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+        (
+            "Three neurons:  N0 -- function --> N1; N0 -- function --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                voting_neuron.clone(),
+                neuron(
+                    nid(1),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+                neuron(
+                    nid(2),
+                    btreemap! {
+                        u64::from(&Action::DeregisterDappCanisters(Default::default())) => Followees {
+                            followees: vec![nid(0)],
+                        },
+                    },
+                    None,
+                ),
+            ],
+            Box::new(|directly_cast_vote| btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+                nid(2).to_string() => Ballot {
+                    vote: directly_cast_vote as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            }),
+        ),
+    ];
+
+    for (label, action, topic, neurons, expected_ballots) in test_cases {
+        let function_id = u64::from(action);
+
+        let neurons = neurons
+            .into_iter()
+            .map(|neuron| (neuron.id.clone().unwrap().to_string(), neuron.clone()))
+            .collect();
+
+        let function_followee_index =
+            legacy::build_function_followee_index(&btreemap! {}, &neurons);
+
+        let topic_follower_index = build_follower_index(&neurons);
+
+        for vote_of_neuron in [Vote::Yes, Vote::No] {
+            let label = format!("{} ({})", label, vote_of_neuron.as_str_name());
+
+            // Give all neurons an empty ballot.
+            let mut ballots = neurons
+                .values()
+                .cloned()
+                .into_iter()
+                .map(|neuron| {
+                    (
+                        neuron.id.unwrap().to_string(),
+                        Ballot {
+                            vote: Vote::Unspecified as i32,
+                            voting_power,
+                            cast_timestamp_seconds,
+                        },
+                    )
+                })
+                .collect();
+
+            Governance::cast_vote_and_cascade_follow(
+                &proposal_id,
+                &voting_neuron_id,
+                vote_of_neuron,
+                function_id,
+                &function_followee_index,
+                &topic_follower_index,
+                &neurons,
+                now_seconds,
+                &mut ballots,
+                *topic,
+            );
+
+            let expected_ballots = expected_ballots(vote_of_neuron);
+
+            assert_eq!(ballots, expected_ballots, "{}", label);
+        }
     }
 }

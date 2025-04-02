@@ -3513,7 +3513,6 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
-            proposal_criticality,
             proposal_topic.unwrap_or_default(),
         );
 
@@ -3545,7 +3544,6 @@ impl Governance {
         // particular, this has no impact on how the implications of following are deduced.
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
-        proposal_criticality: ProposalCriticality,
         topic: Topic,
     ) {
         let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
@@ -3572,7 +3570,7 @@ impl Governance {
 
             push_member(function_id);
 
-            match proposal_criticality {
+            match topic.proposal_criticality() {
                 ProposalCriticality::Normal => push_member(fallback_pseudo_function_id),
                 ProposalCriticality::Critical => (), // Do not use catch-all/fallback following.
             }
@@ -3741,7 +3739,6 @@ impl Governance {
 
         // Take topic-based criticality as it was defined when the proposal was made.
         let proposal_topic = proposal.topic();
-        let proposal_criticality = proposal_topic.proposal_criticality();
 
         let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
@@ -3789,7 +3786,6 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal.ballots,
-            proposal_criticality,
             proposal_topic.unwrap_or_default(),
         );
 
