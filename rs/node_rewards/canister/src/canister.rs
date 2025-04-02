@@ -10,6 +10,7 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
+use ic_types::RegistryVersion;
 use prost::Message;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -80,42 +81,50 @@ impl NodeRewardsCanister {
             .map_err(|e| format!("Could not find NodeRewardsTable: {e:?}"))?
             .ok_or_else(|| "NodeRewardsTable is missing".to_string())?;
 
-            let node_operators = registry_client
-                .get_key_family_with_values(NODE_OPERATOR_RECORD_KEY_PREFIX, latest_version)
-                .map_err(|e| format!("Could not get NodeOperatorRecords: {e:?}"))?
-                .into_iter()
-                .map(|(k, v)| {
-                    NodeOperatorRecord::decode(v.as_slice())
-                        .map_err(|e| {
-                            format!("Could not decode NodeOperatorRecord for key {k}: {e:?}")
-                        })
-                        .map(|record| (k, record))
-                })
-                .collect::<Result<Vec<_>, String>>()?;
+            let node_operators = decoded_key_value_pairs_for_prefix::<NodeOperatorRecord>(
+                &*registry_client,
+                NODE_OPERATOR_RECORD_KEY_PREFIX,
+                latest_version,
+            )?;
 
             println!(
                 "Before processing, data centers: {:?}",
                 registry_client.get_key_family_with_values(DATA_CENTER_KEY_PREFIX, latest_version)
             );
 
-            let data_centers = registry_client
-                .get_key_family_with_values(DATA_CENTER_KEY_PREFIX, latest_version)
-                .map_err(|e| format!("Could not get DataCenterRecords: {e:?}"))?
-                .into_iter()
-                .map(|(k, v)| {
-                    DataCenterRecord::decode(v.as_slice())
-                        .map_err(|e| {
-                            format!("Could not decode DataCenterRecord for key {k}: {e:?}")
-                        })
-                        .map(|record| (k, record))
-                })
-                .collect::<Result<BTreeMap<String, DataCenterRecord>, String>>()?;
+            let data_centers = decoded_key_value_pairs_for_prefix::<DataCenterRecord>(
+                &*registry_client,
+                DATA_CENTER_KEY_PREFIX,
+                latest_version,
+            )?
+            .into_iter()
+            .collect();
 
             println!("Data centers: {data_centers:?}");
 
             calculate_rewards_v0(&rewards_table, &node_operators, &data_centers)
         }
     }
+}
+
+/// Get the key value pairs for a given prefix from the registry.
+///
+/// NOTE: This function strips the prefix, so node_operator_xyz becomes xyz.
+fn decoded_key_value_pairs_for_prefix<T: prost::Message + Default>(
+    registry_client: &dyn CanisterRegistryClient,
+    key_prefix: &str,
+    version: RegistryVersion,
+) -> Result<Vec<(String, T)>, String> {
+    registry_client
+        .get_key_family_with_values(key_prefix, version)
+        .map_err(|e| format!("Could not get values for prefix {key_prefix}: {e:?}"))?
+        .into_iter()
+        .map(|(k, v)| {
+            T::decode(v.as_slice())
+                .map_err(|e| format!("Could not decode prost Message for key {k}: {e:?}"))
+                .map(|record| (k.strip_prefix(key_prefix).unwrap().to_string(), record))
+        })
+        .collect::<Result<Vec<_>, String>>()
 }
 
 /// Internal methods
