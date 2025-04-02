@@ -15,8 +15,8 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::{
         redact_human_readable, set_automatically_advance_target_version_flag,
         EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
     },
-    NnsInstaller,
 };
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{add_wasms_to_sns_wasm, nns},
