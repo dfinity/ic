@@ -179,7 +179,7 @@ message Neuron {
 
   // A collection of a neuron's followees (per topic).
   message TopicFollowees {
-    map<uint64, FolloweesForTopic> topic_id_to_followees = 1;
+    map<int32, FolloweesForTopic> topic_id_to_followees = 1;
   }
 
   // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs

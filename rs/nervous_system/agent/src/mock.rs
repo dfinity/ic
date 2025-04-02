@@ -96,6 +96,11 @@ impl CallCanisters for MockCallCanisters {
         #[allow(unreachable_code)]
         std::future::ready(Err(MockCallCanistersError("UNREACHABLE".to_string())))
     }
+
+    /// This could be implemented later, but for now, it's not needed.
+    fn is_canister_stopped_error(&self, _err: &Self::Error) -> bool {
+        unimplemented!();
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

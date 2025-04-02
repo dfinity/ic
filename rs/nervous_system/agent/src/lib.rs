@@ -1,9 +1,12 @@
 use candid::{CandidType, Principal};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
+use std::time::Duration;
 use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
+pub mod helpers;
+pub mod ledger;
 pub mod management_canister;
 pub mod mock;
 pub mod nns;
@@ -51,4 +54,20 @@ pub trait CallCanisters: sealed::Sealed {
         &self,
         canister_id: impl Into<Principal> + Send,
     ) -> impl Future<Output = Result<CanisterInfo, Self::Error>> + Send;
+
+    // Functions that use 'call' need to be able
+    // to determine if a call to the canister failed due to the canister being stopped.
+    // Matching on a specific error outside of the trait implementation is not viable
+    // since the 'Error' type is different for each trait implementation and thus we can
+    // only match on specific implementations errors in the trait implementation directly.
+    fn is_canister_stopped_error(&self, err: &Self::Error) -> bool;
+}
+
+// This trait is used to abstract the ability to progress the network state
+// since various scenarios may require waiting for certain action to happen
+// after some period of time, e.g. NNS proposal to become adopted or SNS swap to become open.
+//
+// @rvem: I don't really like the name, but I didn't manage to come up with a better one for now.
+pub trait ProgressNetwork: sealed::Sealed {
+    fn progress(&self, duration: Duration) -> impl Future<Output = ()>;
 }

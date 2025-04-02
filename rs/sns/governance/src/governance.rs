@@ -3,6 +3,14 @@ use crate::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
     },
+    follower_index::{
+        add_neuron_to_follower_index, build_follower_index,
+        legacy::{
+            self, add_neuron_to_function_followee_index, build_function_followee_index,
+            remove_neuron_from_function_followee_index,
+        },
+        remove_neuron_from_follower_index, FollowerIndex,
+    },
     following::ValidatedSetFollowing,
     logs::{ERROR, INFO},
     neuron::{
@@ -235,75 +243,6 @@ impl NeuronPermission {
 }
 
 impl GovernanceProto {
-    /// Builds an index that maps proposal sns functions to (followee) neuron IDs to these neuron's
-    /// followers. The resulting index is a map
-    /// Function Id -> (followee's neuron ID) -> set of followers' neuron IDs.
-    ///
-    /// The index is built from the `neurons` in the `Governance` struct, which map followers
-    /// (the neuron ID) to a set of followees per function.
-    pub fn build_function_followee_index(
-        &self,
-        neurons: &BTreeMap<String, Neuron>,
-    ) -> BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>> {
-        let mut function_followee_index = BTreeMap::new();
-        for neuron in neurons.values() {
-            GovernanceProto::add_neuron_to_function_followee_index(
-                &mut function_followee_index,
-                &self.id_to_nervous_system_functions,
-                neuron,
-            );
-        }
-        function_followee_index
-    }
-
-    /// Adds a neuron to the function_followee_index.
-    pub fn add_neuron_to_function_followee_index(
-        index: &mut BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
-        registered_functions: &BTreeMap<u64, NervousSystemFunction>,
-        neuron: &Neuron,
-    ) {
-        for (function_id, followees) in neuron.followees.iter() {
-            if !is_registered_function_id(*function_id, registered_functions) {
-                continue;
-            }
-
-            let followee_index = index.entry(*function_id).or_default();
-            for followee in followees.followees.iter() {
-                followee_index
-                    .entry(followee.to_string())
-                    .or_default()
-                    .insert(
-                        neuron
-                            .id
-                            .as_ref()
-                            .expect("Neuron must have a NeuronId")
-                            .clone(),
-                    );
-            }
-        }
-    }
-
-    /// Removes a neuron from the function_followee_index.
-    pub fn remove_neuron_from_function_followee_index(
-        index: &mut BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
-        neuron: &Neuron,
-    ) {
-        for (function, followees) in neuron.followees.iter() {
-            if let Some(followee_index) = index.get_mut(function) {
-                for followee in followees.followees.iter() {
-                    let nid = followee.to_string();
-                    if let Some(followee_set) = followee_index.get_mut(&nid) {
-                        followee_set
-                            .remove(neuron.id.as_ref().expect("Neuron must have a NeuronId"));
-                        if followee_set.is_empty() {
-                            followee_index.remove(&nid);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     /// Iterate through one neuron and add all the principals that have some permission on this
     /// neuron to the index that maps principalIDs to a set of neurons for which the principal
     /// has some permissions.
@@ -691,7 +630,17 @@ pub struct Governance {
     /// is saved and restored.
     ///
     /// Function ID -> (followee's neuron ID) -> set of followers' neuron IDs.
-    pub function_followee_index: BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
+    pub function_followee_index: legacy::FollowerIndex,
+
+    /// Cached data structure that (for each topic) maps a followee to
+    /// the set of its followers. It is the inverse of the mapping from follower
+    /// to followees that is stored in each (follower) neuron.
+    ///
+    /// This is a cached index and will be removed and recreated when the state
+    /// is saved and restored.
+    ///
+    /// Topic -> (followee's neuron ID) -> set of followers' neuron IDs.
+    pub topic_follower_index: FollowerIndex,
 
     /// Maps Principals to the Neuron IDs of all Neurons for which this principal
     /// has some permissions, i.e., all neurons that have this principal associated
@@ -796,6 +745,7 @@ impl Governance {
             nns_ledger,
             cmc,
             function_followee_index: BTreeMap::new(),
+            topic_follower_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -862,9 +812,13 @@ impl Governance {
     /// Must be called after the state has been externally changed (e.g. by
     /// setting a new proto).
     fn initialize_indices(&mut self) {
-        self.function_followee_index = self
-            .proto
-            .build_function_followee_index(&self.proto.neurons);
+        self.function_followee_index = build_function_followee_index(
+            &self.proto.id_to_nervous_system_functions,
+            &self.proto.neurons,
+        );
+
+        self.topic_follower_index = build_follower_index(&self.proto.neurons);
+
         self.principal_to_neuron_ids_index = self
             .proto
             .build_principal_to_neuron_ids_index(&self.proto.neurons);
@@ -1005,11 +959,13 @@ impl Governance {
             &neuron,
         );
 
-        GovernanceProto::add_neuron_to_function_followee_index(
+        add_neuron_to_function_followee_index(
             &mut self.function_followee_index,
             &self.proto.id_to_nervous_system_functions,
             &neuron,
         );
+
+        add_neuron_to_follower_index(&mut self.topic_follower_index, &neuron);
 
         self.proto.neurons.insert(neuron_id.to_string(), neuron);
 
@@ -1041,10 +997,9 @@ impl Governance {
             &neuron,
         );
 
-        GovernanceProto::remove_neuron_from_function_followee_index(
-            &mut self.function_followee_index,
-            &neuron,
-        );
+        remove_neuron_from_function_followee_index(&mut self.function_followee_index, &neuron);
+
+        remove_neuron_from_follower_index(&mut self.topic_follower_index, &neuron);
 
         self.proto.neurons.remove(&neuron_id.to_string());
 
@@ -3581,7 +3536,7 @@ impl Governance {
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         function_id: u64,
-        function_followee_index: &BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
+        function_followee_index: &legacy::FollowerIndex,
         neurons: &BTreeMap<String, Neuron>,
         // As of Dec, 2023 (52eec5c), the next parameter is only used to populate Ballots. In
         // particular, this has no impact on how the implications of following are deduced.
@@ -3932,13 +3887,39 @@ impl Governance {
 
     fn set_following(
         &mut self,
-        _id: &NeuronId,
-        _caller: &PrincipalId,
+        id: &NeuronId,
+        caller: &PrincipalId,
         set_following: &SetFollowing,
     ) -> Result<(), GovernanceError> {
+        let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!("Follower neuron not found: {}", id),
+            )
+        })?;
+
+        // Check that the caller is authorized to change followers (same authorization
+        // as voting required).
+        neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
+
+        // First, validate the requested followee modifications in isolation.
+
         // TODO[NNS1-3708]: Avoid cloning the neuron commands.
-        let _set_following = ValidatedSetFollowing::try_from(set_following.clone())
+        let set_following = ValidatedSetFollowing::try_from(set_following.clone())
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+        // Second, validate the requested followee modifications in composition with the neuron's
+        // old followees. If all validation steps succeed, save the new followees.
+        {
+            let old_topic_followees = neuron.topic_followees.clone();
+
+            let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
+                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+            neuron.topic_followees.replace(new_topic_followees);
+        }
+
+        // TODO[NNS1-3582]: Update the follower index.
 
         // TODO[NNS1-3582]: Enable following on topics.
         Err(GovernanceError::new_with_message(
@@ -5937,8 +5918,10 @@ impl Governance {
             ));
         }
 
-        // Must NOT clobber followees.
-        if old_neuron.followees != neuron.followees {
+        // Must NOT clobber followees or topic_followees.
+        if old_neuron.followees != neuron.followees
+            || old_neuron.topic_followees != neuron.topic_followees
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot update neuron's followees via update_neuron.".to_string(),
