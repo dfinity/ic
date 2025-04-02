@@ -6,7 +6,10 @@ use std::path::{Path, PathBuf};
 use crate::execution::common::log_dirty_pages;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_executor::{CanisterStateChanges, ExecutionStateChanges};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, ExecutionStateChanges},
+    wasmtime_embedder::system_api::ExecutionParameters,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
@@ -19,7 +22,6 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCod
 use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState, MessageMemoryUsage};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::ExecutionParameters;
 use ic_types::{
     funds::Cycles, messages::CanisterCall, CanisterLog, CanisterTimer, ComputeAllocation, Height,
     MemoryAllocation, NumInstructions, Time,

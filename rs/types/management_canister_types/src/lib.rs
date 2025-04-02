@@ -3866,8 +3866,8 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub canister_version: u64,
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    pub global_timer: GlobalTimer,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].

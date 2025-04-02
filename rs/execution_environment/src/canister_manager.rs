@@ -14,13 +14,15 @@ use crate::{
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_embedders::wasm_utils::decoding::decode_wasm;
+use ic_embedders::{
+    wasm_utils::decoding::decode_wasm, wasmtime_embedder::system_api::ExecutionParameters,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, GlobalTimer, Method as Ic00Method,
     ReadCanisterSnapshotMetadataResponse, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -41,7 +43,6 @@ use ic_replicated_state::{
     CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
     SchedulerState, SystemState,
 };
-use ic_system_api::ExecutionParameters;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -2024,7 +2025,10 @@ impl CanisterManager {
                 .collect(),
             canister_version: snapshot.canister_version(),
             certified_data: snapshot.certified_data().clone(),
-            global_timer: snapshot.execution_snapshot().global_timer.into(),
+            global_timer: snapshot
+                .execution_snapshot()
+                .global_timer
+                .map(GlobalTimer::from),
             on_low_wasm_memory_hook_status: snapshot
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,
