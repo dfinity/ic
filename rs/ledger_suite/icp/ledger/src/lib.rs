@@ -167,7 +167,10 @@ pub enum LedgerField {
 #[cfg(not(any(feature = "next-ledger-version", feature = "prev-ledger-version")))]
 pub const LEDGER_VERSION: u64 = 3;
 
-#[cfg(all(feature = "next-ledger-version", not(feature = "prev-ledger-version")))]
+#[cfg(any(
+    feature = "next-ledger-version",
+    all(feature = "next-ledger-version", feature = "prev-ledger-version")
+))]
 pub const LEDGER_VERSION: u64 = 4;
 
 #[cfg(all(feature = "prev-ledger-version", not(feature = "next-ledger-version")))]
