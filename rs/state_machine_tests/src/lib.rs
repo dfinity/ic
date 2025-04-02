@@ -2386,11 +2386,13 @@ impl StateMachine {
         if let Some(SignatureSecretKey::VetKD(k)) =
             self.chain_key_subnet_secret_keys.get(&context.key_id())
         {
+            let vetkd_context = context.derivation_path.iter().flatten().cloned().collect();
             let encrypted_key = k.vetkd_protocol(
                 context.request.sender.get().as_slice(),
-                context.derivation_path.as_ref(),
+                &vetkd_context,
                 context.vetkd_args().input.as_ref(),
                 &context.vetkd_args().transport_public_key,
+                &[42; 32],
             );
 
             Ok(VetKdDeriveKeyResult { encrypted_key })

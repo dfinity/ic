@@ -8469,7 +8469,9 @@ version = "0.1.0"
 dependencies = [
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-bls12-381-vetkd",
+ "ic-vetkd-utils",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]

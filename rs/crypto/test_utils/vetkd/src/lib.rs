@@ -2,6 +2,7 @@ use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_bls12_381_vetkd::{
     DerivationContext, EncryptedKey, EncryptedKeyShare, TransportPublicKey,
 };
+use rand_chacha::rand_core::SeedableRng;
 
 pub fn dummy_transport_public_key() -> [u8; 48] {
     G1Affine::generator().serialize()
@@ -15,7 +16,7 @@ pub struct PrivateKey {
 
 impl PrivateKey {
     pub fn generate(seed: &[u8]) -> Self {
-        let secret_key = Scalar::hash(seed, b"ic-crypto-vetkd-test-utils-generate-test-key");
+        let secret_key = Scalar::hash(b"ic-crypto-vetkd-test-utils-generate-test-key", seed);
         Self::from_scalar(secret_key)
     }
 
@@ -36,31 +37,22 @@ impl PrivateKey {
     pub fn vetkd_protocol(
         &self,
         canister_id: &[u8],
-        context: &[Vec<u8>],
+        context: &[u8],
         input: &[u8],
         tpk: &[u8],
+        seed: &[u8; 32],
     ) -> Vec<u8> {
-        let dc = if context.is_empty() {
-            DerivationContext::new(canister_id, &[])
-        } else {
-            DerivationContext::new(canister_id, &context[0])
-        };
+        let dc = DerivationContext::new(canister_id, context);
 
         let tpk =
             TransportPublicKey::deserialize(tpk).expect("Failed to deserialize TransportPublicKey");
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand_chacha::ChaCha20Rng::from_seed(*seed);
 
-        let eks = EncryptedKeyShare::create(
-            &mut rng,
-            &self.public_point,
-            &self.secret_key,
-            &tpk,
-            &dc,
-            input,
-        );
+        let eks =
+            EncryptedKeyShare::create(&mut rng, &self.public_point, &self.secret_key, &tpk, &dc, input);
 
-        let ek = EncryptedKey::combine_all(&[(1, eks)], 1, &self.public_point, &tpk, &dc, input)
+        let ek = EncryptedKey::combine_all(&[(0, eks)], 1, &self.public_point, &tpk, &dc, input)
             .expect("Failed to combine single EncryptedKeyShare to an EncryptedKey");
 
         ek.serialize().to_vec()
