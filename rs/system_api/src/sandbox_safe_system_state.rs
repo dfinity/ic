@@ -1,9 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{
-    cycles_balance_change::CyclesBalanceChange, routing, routing::ResolveDestinationError, ApiType,
-    CERTIFIED_DATA_MAX_LENGTH,
-};
+use crate::{routing::ResolveDestinationError, ApiType};
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
@@ -35,6 +32,8 @@ use ic_types::{
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+
+use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
 /// The information that canisters can see about their own status.
 #[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -1447,8 +1446,12 @@ mod tests {
         Time,
     };
 
-    use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
-    use crate::wasmtime_embedder::system_api::cycles_balance_change::CyclesBalanceChange;
+    use crate::{
+        cycles_balance_change::CyclesBalanceChange,
+        sandbox_safe_system_state::{
+            CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
+        },
+    };
 
     #[test]
     fn test_apply_balance_changes() {

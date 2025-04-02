@@ -1,4 +1,4 @@
-use super::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
+use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
 use ic_base_types::InternalAddress;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;

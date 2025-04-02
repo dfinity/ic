@@ -7,19 +7,16 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
-    "//rs/limits",
     "//rs/memory_tracker",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/nns/constants",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/sys",
-    "//rs/types/base_types",
+    "//rs/system_api",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
@@ -28,8 +25,6 @@ DEPENDENCIES = [
     "//rs/wasm_transform",
     "@crate_index//:anyhow",
     "@crate_index//:bincode",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:itertools",
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
@@ -54,6 +49,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/registry/routing_table",
     "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
@@ -63,6 +59,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:criterion",

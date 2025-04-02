@@ -2,17 +2,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::wasmtime_embedder::system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, ModificationTracking,
-    SystemApiImpl,
-};
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary,
     canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
     ExportedFunctions, Memory, NumWasmPages, PageMap,
 };
+use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
+use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::NumOsPages;
 use prometheus::IntCounter;
@@ -36,6 +33,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::{EmbedderCache, ExecutionState, MessageMemoryUsage};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use ic_system_api::{ExecutionParameters, ModificationTracking, SystemApiImpl};
 use ic_types::ExecutionRound;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};

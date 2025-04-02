@@ -3,7 +3,6 @@ mod wasmtime_simple;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
-    wasmtime_embedder::system_api::ApiType,
     WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::HypervisorError;
@@ -174,7 +173,7 @@ fn run_go_export(wat: &str) -> Result<(), HypervisorError> {
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
-        .with_api_type(ApiType::update(
+        .with_api_type(ic_system_api::ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::from(0_u128),

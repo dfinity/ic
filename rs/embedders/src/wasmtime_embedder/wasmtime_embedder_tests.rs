@@ -1,14 +1,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::{
-    linker,
-    system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
-        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
-    },
-    StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
-};
+use super::{linker, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
@@ -22,6 +15,10 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
+use ic_system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
+    ExecutionParameters, InstructionLimits, SystemApiImpl,
+};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
