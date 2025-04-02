@@ -10,7 +10,8 @@ enum SnapshotSource {
   SNAPSHOT_SOURCE_UPLOADED_MANUALLY = 2;
 }
 
-// This is a helper to encode an Opt<Opt<..>> in protobuf. 
+// `None` corresponds to `CanisterTimer::Inactive`
+// `Some(ts)` corresponds to `CanisterTimer::Active(ts)`. 
 message CanisterTimer {
   optional uint64 global_timer_nanos = 1;
 }

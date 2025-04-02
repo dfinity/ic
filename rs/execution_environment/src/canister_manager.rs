@@ -22,7 +22,7 @@ use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailable
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, Method as Ic00Method,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, GlobalTimer, Method as Ic00Method,
     ReadCanisterSnapshotMetadataResponse, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -2025,7 +2025,10 @@ impl CanisterManager {
                 .collect(),
             canister_version: snapshot.canister_version(),
             certified_data: snapshot.certified_data().clone(),
-            global_timer: snapshot.execution_snapshot().global_timer.map(|x| x.into()),
+            global_timer: snapshot
+                .execution_snapshot()
+                .global_timer
+                .map(GlobalTimer::from),
             on_low_wasm_memory_hook_status: snapshot
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,

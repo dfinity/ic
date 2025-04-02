@@ -2836,7 +2836,9 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .iter()
                 .map(|global| global.into())
                 .collect(),
-            global_timer: item.global_timer.map(|x| x.into()),
+            global_timer: item
+                .global_timer
+                .map(pb_canister_snapshot_bits::CanisterTimer::from),
             on_low_wasm_memory_hook_status: item
                 .on_low_wasm_memory_hook_status
                 .map(|x| pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&x).into()),
@@ -2870,13 +2872,13 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         for global in item.exported_globals.into_iter() {
             exported_globals.push(global.try_into()?);
         }
-        let global_timer = item.global_timer.map(|x| x.into());
-        let on_low_wasm_memory_hook_status = item.on_low_wasm_memory_hook_status.map(|x| {
-            OnLowWasmMemoryHookStatus::try_from(
-                pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(x).unwrap_or_default(),
-            )
-            .unwrap_or_default()
-        });
+        let global_timer = item.global_timer.map(CanisterTimer::from);
+        let on_low_wasm_memory_hook_status = item
+            .on_low_wasm_memory_hook_status
+            .map(pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from)
+            .map(Result::unwrap_or_default)
+            .map(OnLowWasmMemoryHookStatus::try_from)
+            .map(Result::unwrap_or_default);
         let source =
             pb_canister_snapshot_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
         let source = SnapshotSource::try_from(source).unwrap_or_default();
