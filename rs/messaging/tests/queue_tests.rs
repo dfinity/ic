@@ -377,6 +377,10 @@ fn test_timeout_removes_requests_from_output_queues() {
             ..CanisterConfig::default()
         },
     );
+//    subnets.tick();
+//    subnets.tick();
+//    let canister_log = subnets.canister_log(&local_canister);
+//    assert!(false, "{:#?}", canister_log);
 
     let msg_id = subnets.pulse_on(subnets.local_canister(), 10);
     for _ in 0..200 {

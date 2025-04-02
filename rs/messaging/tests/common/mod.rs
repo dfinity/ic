@@ -72,11 +72,11 @@ impl Default for SubnetPairConfig {
         Self {
             local_canisters_count: 2,
             //local_max_instructions_per_round: 1_000_000_000,
-            local_max_instructions_per_round: 100_000_000,
+            local_max_instructions_per_round: 10_000_000,
             local_message_memory_capacity: 100 * MB,
             remote_canisters_count: 1,
             //remote_max_instructions_per_round: 1_000_000_000,
-            remote_max_instructions_per_round: 100_000_000,
+            remote_max_instructions_per_round: 10_000_000,
             remote_message_memory_capacity: 50 * MB,
         }
     }
