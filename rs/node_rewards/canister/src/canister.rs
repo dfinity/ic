@@ -66,7 +66,7 @@ impl NodeRewardsCanister {
             // TODO DO NOT MERGE - make test for the version as a parameter
             let version = request
                 .registry_version
-                .map(|v| RegistryVersion::new(v))
+                .map(RegistryVersion::new)
                 .unwrap_or_else(|| registry_client.get_latest_version());
 
             let rewards_table = get_decoded_value::<NodeRewardsTable>(
