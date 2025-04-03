@@ -62,7 +62,6 @@ impl Registry {
             &new_operator_id,
         )?;
 
-        let mut required_node_allowance = 0;
         let mut mutations = vec![];
 
         for node_id in node_ids {
@@ -89,7 +88,6 @@ impl Registry {
                 ));
             }
 
-            required_node_allowance += 1;
             // Update the node record itself
             let node_key = make_node_record_key(node_id);
             let updated_node_record = NodeRecord {
@@ -104,14 +102,16 @@ impl Registry {
             return Ok(());
         }
 
-        if required_node_allowance > new_operator_record.node_allowance {
-            return Err(format!("{}do_replace_operator: Adding {} nodes would overflow node allowance for node operator {} who has {} remaining", LOG_PREFIX, required_node_allowance, new_operator_id, new_operator_record.node_allowance));
+        let node_mutations = mutations.len() as u64;
+
+        if node_mutations > new_operator_record.node_allowance {
+            return Err(format!("{}do_replace_operator: Adding {} nodes would overflow node allowance for node operator {} who has {} remaining", LOG_PREFIX, mutations.len(), new_operator_id, new_operator_record.node_allowance));
         }
 
         // Update new node operator record to decrease node allowance
         let new_node_operator_key = make_node_operator_record_key(new_operator_id);
         let updated_new_operator_record = NodeOperatorRecord {
-            node_allowance: new_operator_record.node_allowance - required_node_allowance,
+            node_allowance: new_operator_record.node_allowance - node_mutations,
             ..new_operator_record.clone()
         };
         mutations.push(update(
@@ -122,7 +122,7 @@ impl Registry {
         // Update old node operator record to increase node allowance
         let old_node_operator_key = make_node_operator_record_key(old_operator_id);
         let updated_old_operator_record = NodeOperatorRecord {
-            node_allowance: old_operator_record.node_allowance + required_node_allowance,
+            node_allowance: old_operator_record.node_allowance + node_mutations,
             ..old_operator_record.clone()
         };
         mutations.push(update(
