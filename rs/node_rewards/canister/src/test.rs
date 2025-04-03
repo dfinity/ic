@@ -1,6 +1,6 @@
 use crate::canister::NodeRewardsCanister;
 use futures_util::FutureExt;
-use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
+use ic_nervous_system_canisters::registry::FakeRegistry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
     NodeProvidersMonthlyXdrRewards,

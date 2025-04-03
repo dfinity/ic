@@ -91,11 +91,12 @@ impl Registry for RegistryCanister {
     }
 }
 
-pub type FakeRegistryResponses = BTreeMap<u64, Result<Vec<RegistryDelta>, Error>>;
+type FakeGetChangesSince = BTreeMap<u64, Result<Vec<RegistryDelta>, Error>>;
+type FakeGetLatestVersion = Vec<Result<u64, Error>>;
 
-/// This uses a Vec instead of VecDeque since inserting test values wont' necessarily happen
+/// This uses a Vec instead of VecDeque since inserting test values won't necessarily happen
 /// in the same order as it would in the real registry.
-pub type FakeRegistryMap = BTreeMap<Vec<u8>, Vec<RegistryValue>>;
+type FakeRegistryMap = BTreeMap<Vec<u8>, Vec<RegistryValue>>;
 
 /// A fake registry client for testing.  This re-implements some internals from the Registry
 /// as it is easier to interact with this store as though you were making Registry updates
@@ -105,8 +106,8 @@ pub type FakeRegistryMap = BTreeMap<Vec<u8>, Vec<RegistryValue>>;
 pub struct FakeRegistry {
     version: AtomicU64,
     store: Arc<Mutex<FakeRegistryMap>>,
-    override_get_changes_since: Arc<Mutex<FakeRegistryResponses>>,
-    override_get_latest_version: Arc<Mutex<Vec<Result<u64, Error>>>>,
+    override_get_changes_since: Arc<Mutex<FakeGetChangesSince>>,
+    override_get_latest_version: Arc<Mutex<FakeGetLatestVersion>>,
 }
 
 impl FakeRegistry {

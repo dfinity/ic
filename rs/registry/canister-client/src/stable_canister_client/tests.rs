@@ -2,7 +2,7 @@ use super::*;
 use crate::registry_data_stable_memory_impl;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
 use futures::FutureExt;
-use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
+use ic_nervous_system_canisters::registry::FakeRegistry;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
 use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
@@ -299,18 +299,6 @@ fn test_error_on_local_too_large() {
 
 #[test]
 fn test_caching_behavior_of_get_latest_version() {
-    let mut responses = FakeRegistryResponses::new();
-    responses.insert(
-        2, // The version it will make the request about
-        Ok(vec![RegistryDelta {
-            key: "Foo".as_bytes().to_vec(),
-            values: vec![RegistryValue {
-                value: vec![4],
-                version: 4,
-                deletion_marker: false,
-            }],
-        }]),
-    );
     let (client, fake_registry) = client_for_tests();
     fake_registry.set_value_at_version("Foo", 4, Some(vec![4]));
 
