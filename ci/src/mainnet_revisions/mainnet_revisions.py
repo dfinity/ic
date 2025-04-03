@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import logging
 import os
 import pathlib
 import subprocess
-import urllib.request
 import tempfile
-import hashlib
+import urllib.request
 from enum import Enum
 from typing import List
 
