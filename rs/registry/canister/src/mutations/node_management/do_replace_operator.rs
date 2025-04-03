@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 #[cfg(target_arch = "wasm32")]
@@ -44,7 +42,6 @@ impl Registry {
         payload: UpdateNodeOperatorPayload,
         caller_id: PrincipalId,
     ) -> Result<(), String> {
-        // 0. Validate the payload
         payload
             .validate()
             .map_err(|e| format!("{}do_replace_operator: {}", LOG_PREFIX, e))?;
@@ -53,38 +50,24 @@ impl Registry {
         let old_operator_id = payload.old_operator_id.clone().unwrap();
         let new_operator_id = payload.new_operator_id.clone().unwrap();
 
-        // 1. Fetch all node operators related to the caller
-        // which is a node provider.
-        let operators: Vec<_> = self
-            .get_node_operators_and_dcs_of_node_provider(caller_id)
-            .map(|operators_and_dcs| operators_and_dcs.into_iter().map(|(_, o)| o).collect())
-            .map_err(|e| format!("{}do_replace_operator: {:?}", LOG_PREFIX, e))?;
+        // Fetch operator records and extract
+        // the records related to the provided
+        // payload.
+        let operators = self.maybe_fetch_operators_for_provider(&caller_id)?;
 
-        if operators.is_empty() {
-            return Err(format!(
-                "{}do_replace_operator: Unknown node provider {}",
-                LOG_PREFIX, caller_id
-            ));
-        }
-
-        let new_operator_record =
-            find_node_operator_record_for_provider(&operators, &new_operator_id, &caller_id)?;
-        let old_operator_record =
-            find_node_operator_record_for_provider(&operators, &old_operator_id, &caller_id)?;
-
-        if new_operator_record.dc_id != old_operator_record.dc_id {
-            return Err(format!("{}do_replace_operator: Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}", LOG_PREFIX,
-            old_operator_id, old_operator_record.dc_id, new_operator_id, new_operator_record.dc_id));
-        }
+        let (old_operator_record, new_operator_record) = self.maybe_find_operator_records(
+            operators,
+            &caller_id,
+            &old_operator_id,
+            &new_operator_id,
+        )?;
 
         let mut required_node_allowance = 0;
         let mut mutations = vec![];
 
-        // To ensure unique node id entries
-        let node_ids: BTreeSet<_> = node_ids.iter().collect();
         for node_id in node_ids {
             // 1. Check that the node exists in the registry
-            let node_record = self.get_node(*node_id).ok_or_else(|| {
+            let node_record = self.get_node(node_id).ok_or_else(|| {
                 format!(
                     "{}do_replace_operator: Node not found: {}",
                     LOG_PREFIX, node_id
@@ -108,7 +91,7 @@ impl Registry {
 
             required_node_allowance += 1;
             // Update the node record itself
-            let node_key = make_node_record_key(*node_id);
+            let node_key = make_node_record_key(node_id);
             let updated_node_record = NodeRecord {
                 node_operator_id: new_operator_record.node_operator_principal_id.clone(),
                 ..node_record
@@ -155,6 +138,50 @@ impl Registry {
         );
 
         Ok(())
+    }
+
+    fn maybe_fetch_operators_for_provider(
+        &self,
+        provider_id: &PrincipalId,
+    ) -> Result<Vec<NodeOperatorRecord>, String> {
+        let operators: Vec<_> = self
+            .get_node_operators_and_dcs_of_node_provider(*provider_id)
+            .map(|operators_and_dcs| operators_and_dcs.into_iter().map(|(_, o)| o).collect())
+            .map_err(|e| format!("{}do_replace_operator: {:?}", LOG_PREFIX, e))?;
+
+        if operators.is_empty() {
+            return Err(format!(
+                "{}do_replace_operator: Unknown node provider {}",
+                LOG_PREFIX, provider_id
+            ));
+        }
+
+        Ok(operators)
+    }
+
+    fn maybe_find_operator_records(
+        &self,
+        operators: Vec<NodeOperatorRecord>,
+        provider: &PrincipalId,
+        old_operator_id: &PrincipalId,
+        new_operator_id: &PrincipalId,
+    ) -> Result<(NodeOperatorRecord, NodeOperatorRecord), String> {
+        match (
+            find_node_operator_record_for_provider(&operators, old_operator_id, provider),
+            find_node_operator_record_for_provider(&operators, new_operator_id, provider),
+        ) {
+            (Ok(old_operator_record), Ok(new_operator_record))
+                if old_operator_record.dc_id != new_operator_record.dc_id =>
+            {
+                return Err(format!("{}do_replace_operator: Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}", LOG_PREFIX,
+            old_operator_id, old_operator_record.dc_id, new_operator_id, new_operator_record.dc_id));
+            }
+            (Ok(old_operator_record), Ok(new_operator_record)) => {
+                Ok((old_operator_record.clone(), new_operator_record.clone()))
+            }
+            (Err(e), _) => Err(e),
+            (_, Err(e)) => Err(e),
+        }
     }
 }
 
