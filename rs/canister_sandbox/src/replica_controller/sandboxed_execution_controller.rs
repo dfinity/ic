@@ -75,10 +75,10 @@ const SANDBOX_PROCESSES_TO_EVICT: usize = 200;
 /// The RSS to evict in one go in order to amortize for the eviction cost (1 GiB).
 const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 1024);
 
-/// By default, assume each sandbox process consumes 50 MiB of RSS.
+/// By default, assume each sandbox process consumes 5 MiB of RSS.
 /// The actual memory usage is updated asynchronously.
 /// See `monitor_and_evict_sandbox_processes`
-const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024);
+const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(5 * 1024 * 1024);
 
 /// To speedup synchronous operations, the sandbox RSS-based eviction
 /// is triggered only when the system's available memory falls below
@@ -148,6 +148,7 @@ struct SandboxedExecutionMetrics {
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
+    sigsegv_handler_duration: HistogramVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -381,6 +382,12 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(0, 8),
                 &["api_type", "memory_type"],
             ),
+            sigsegv_handler_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_sigsegv_handler_duration_seconds",
+                "The total time spent in SIGSEGV signal handler in seconds",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type", "memory_type"],
+            ),
         }
     }
 
@@ -427,6 +434,9 @@ impl SandboxedExecutionMetrics {
         self.copy_page_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_copy_page_count as f64);
+        self.sigsegv_handler_duration
+            .with_label_values(&[api_type_label, "wasm"])
+            .observe(instance_stats.wasm_sigsegv_handler_duration.as_secs_f64());
 
         // Additional metrics for the stable memory.
         self.accessed_pages
@@ -453,6 +463,9 @@ impl SandboxedExecutionMetrics {
         self.copy_page_count
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_copy_page_count as f64);
+        self.sigsegv_handler_duration
+            .with_label_values(&[api_type_label, "stable"])
+            .observe(instance_stats.stable_sigsegv_handler_duration.as_secs_f64());
 
         self.allocated_pages.set(allocated_pages_count() as i64);
     }
@@ -1863,7 +1876,7 @@ fn open_wasm(
     }
 
     let wasm_id = WasmId::new();
-    match compilation_cache.get(&wasm_binary.binary) {
+    let compilation = match compilation_cache.get(&wasm_binary.binary) {
         None => {
             metrics.inc_cache_lookup(CACHE_MISS);
             let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
@@ -1885,35 +1898,31 @@ fn open_wasm(
 
             match result {
                 Ok((compilation_result, serialized_module)) => {
-                    sandbox_process
-                        .history
-                        .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
-                    sandbox_process
-                        .sandbox_service
-                        .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
-                            wasm_id,
-                            serialized_module: Arc::clone(&serialized_module.bytes),
-                        })
-                        .on_completion(|_| ());
-                    cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
-                    observe_metrics(metrics, &serialized_module.imports_details);
-                    compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
-                    Ok((wasm_id, Some(compilation_result)))
+                    let serialized_module =
+                        compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
+                    Ok((serialized_module, Some(compilation_result)))
                 }
                 Err(err) => {
                     compilation_cache.insert_err(&wasm_binary.binary, err.clone());
-                    cache_errored_wasm(&mut embedder_cache, err.clone());
                     Err(err)
                 }
             }
         }
         Some(Err(err)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
-            cache_errored_wasm(&mut embedder_cache, err.clone());
             Err(err)
         }
         Some(Ok(serialized_module)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
+            Ok((serialized_module, None))
+        }
+    };
+    match compilation {
+        Err(err) => {
+            cache_errored_wasm(&mut embedder_cache, err.clone());
+            Err(err)
+        }
+        Ok((serialized_module, compilation_result)) => {
             observe_metrics(metrics, &serialized_module.imports_details());
             match serialized_module {
                 StoredCompilation::Memory(serialized_module) => {
@@ -1948,10 +1957,11 @@ fn open_wasm(
                 }
             }
             cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
-            Ok((wasm_id, None))
+            Ok((wasm_id, compilation_result))
         }
     }
 }
+
 // Returns the id of the remote memory after making sure that the remote memory
 // is in sync with the local memory.
 fn open_remote_memory(
@@ -2222,16 +2232,22 @@ impl ControllerLauncherService for ExitWatcher {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{self, File};
+    use std::{
+        collections::BTreeMap,
+        fs::{self, File},
+    };
 
     use super::*;
-    use ic_config::{
-        execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
-    };
+    use ic_config::logger::Config as LoggerConfig;
+    use ic_embedders::CompilationCacheBuilder;
+    use ic_error_types::ErrorCode;
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
     use ic_test_utilities::state_manager::FakeStateManager;
+    use ic_test_utilities_execution_environment::ExecutionTestBuilder;
+    use ic_test_utilities_metrics::fetch_histogram_vec_stats;
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
+    use rstest::rstest;
     use slog::{o, Drain};
     use tempfile::TempDir;
 
@@ -2304,10 +2320,7 @@ mod tests {
                 canister_module,
                 PathBuf::new(),
                 canister_id,
-                Arc::new(CompilationCache::new(
-                    MAX_COMPILATION_CACHE_SIZE,
-                    tempfile::tempdir().unwrap(),
-                )),
+                Arc::new(CompilationCacheBuilder::new().build()),
             )
             .unwrap();
         let sandbox_pid = match controller
@@ -2648,5 +2661,151 @@ mod tests {
         assert_ne!(metric.get(), 0);
         let metric = &m.sandboxed_execution_subprocess_memfd_rss_total;
         assert_eq!(metric.get(), 0); // no memfd.
+    }
+
+    fn api_memory_key(api_type: &str, memory_type: &str) -> BTreeMap<String, String> {
+        BTreeMap::from([
+            ("api_type".into(), api_type.into()),
+            ("memory_type".into(), memory_type.into()),
+        ])
+    }
+
+    #[rstest]
+    #[case::canister_does_not_trap("", ErrorCode::CanisterDidNotReply)]
+    #[case::canister_traps("(unreachable)", ErrorCode::CanisterTrapped)]
+    fn sigsegv_handler_duration_metric_is_reported(
+        #[case] inject_trap: &str,
+        #[case] expected_error_code: ErrorCode,
+    ) {
+        let mut test = ExecutionTestBuilder::new().build();
+        let wat = format!(
+            r#"
+            (module
+                (import "ic0" "stable64_write"
+                    (func $stable_write (param $offset i64) (param $src i64) (param $size i64))
+                )
+                (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+                (func (export "canister_update write_heap")
+                    (i32.store (i32.const 0) (i32.const 42))
+                    {inject_trap}
+                )
+                (func (export "canister_update write_stable")
+                    (drop (call $stable_grow (i64.const 1)))
+                    (call $stable_write (i64.const 0) (i64.const 0) (i64.const 1))
+                    {inject_trap}
+                )
+                (memory 1)
+            )"#
+        );
+        let canister_id = test.canister_from_wat(wat).unwrap();
+
+        let err = test.ingress(canister_id, "write_heap", vec![]).unwrap_err();
+        assert_eq!(err.code(), expected_error_code);
+        let metrics = fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "sandboxed_execution_sigsegv_handler_duration_seconds",
+        );
+
+        const SOME_TINY_NON_ZERO_DURATION_SECONDS: f64 = 0.000001; // 1 µs
+        let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
+        assert_eq!(value.count, 1);
+        assert!(value.sum > SOME_TINY_NON_ZERO_DURATION_SECONDS);
+
+        let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
+        assert_eq!(value.count, 1);
+        assert!(value.sum == 0.0);
+
+        let err = test
+            .ingress(canister_id, "write_stable", vec![])
+            .unwrap_err();
+        assert_eq!(err.code(), expected_error_code);
+        let metrics = fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "sandboxed_execution_sigsegv_handler_duration_seconds",
+        );
+
+        let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
+        assert_eq!(value.count, 2);
+        assert!(value.sum > SOME_TINY_NON_ZERO_DURATION_SECONDS);
+
+        let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
+        assert_eq!(value.count, 2);
+        assert!(value.sum > SOME_TINY_NON_ZERO_DURATION_SECONDS);
+    }
+
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+    #[rstest]
+    #[case::canister_does_not_trap("", ErrorCode::CanisterDidNotReply)]
+    #[case::canister_traps("(unreachable)", ErrorCode::CanisterTrapped)]
+    fn sigsegv_handler_duration_metric_is_reported_for_many_writes(
+        #[case] inject_trap: &str,
+        #[case] expected_error_code: ErrorCode,
+    ) {
+        let mut test = ExecutionTestBuilder::new().build();
+        let wat = format!(
+            r#"
+            (module
+                (import "ic0" "stable64_write"
+                    (func $stable_write (param $offset i64) (param $src i64) (param $size i64))
+                )
+                (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+                (func (export "canister_update write_heap")
+                    (local $i i32)
+                    (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+                    (loop $loop
+                        (i32.store (local.get $i) (i32.const 1))
+                        (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+                    )
+                    {inject_trap}
+                )
+                (func (export "canister_update write_stable")
+                    (local $i i64)
+                    (local.set $i (i64.const 1073745920)) ;; 1GiB + 4096
+                    (drop (call $stable_grow (i64.const 16385))) ;; 1GiB + 65536
+                    (loop $loop
+                        (call $stable_write (local.get $i) (i64.const 0) (i64.const 1))
+                        (br_if $loop 
+                            (i32.wrap_i64 (local.tee $i (i64.sub (local.get $i) (i64.const 4096))))
+                        )
+                    )
+                    {inject_trap }
+                )
+                (memory 16385) ;; 1GiB + 65536
+            )"#
+        );
+        let canister_id = test.canister_from_wat(wat).unwrap();
+
+        let err = test.ingress(canister_id, "write_heap", vec![]).unwrap_err();
+        assert_eq!(err.code(), expected_error_code);
+        let metrics = fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "sandboxed_execution_sigsegv_handler_duration_seconds",
+        );
+
+        const SOME_BIGGER_DURATION_SECONDS: f64 = 0.001; // 1 ms
+        let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
+        assert_eq!(value.count, 1);
+        assert!(value.sum > SOME_BIGGER_DURATION_SECONDS);
+
+        let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
+        assert_eq!(value.count, 1);
+        assert!(value.sum == 0.0);
+
+        let err = test
+            .ingress(canister_id, "write_stable", vec![])
+            .unwrap_err();
+        assert_eq!(err.code(), expected_error_code);
+        let metrics = fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "sandboxed_execution_sigsegv_handler_duration_seconds",
+        );
+
+        let value = metrics.get(&api_memory_key("update", "wasm")).unwrap();
+        assert_eq!(value.count, 2);
+        assert!(value.sum > SOME_BIGGER_DURATION_SECONDS);
+
+        let value = metrics.get(&api_memory_key("update", "stable")).unwrap();
+        assert_eq!(value.count, 2);
+        assert!(value.sum > SOME_BIGGER_DURATION_SECONDS);
     }
 }

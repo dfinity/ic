@@ -13,7 +13,7 @@ use nix::{
 use std::{
     cell::{Cell, RefCell},
     ops::Range,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
 // The upper bound on the number of pages that are memory mapped from the
@@ -117,86 +117,128 @@ impl PageBitmap {
     }
 
     fn mark_range(&mut self, range: &Range<PageIndex>) {
-        let range = Range {
-            start: range.start.get(),
-            end: range.end.get(),
-        };
+        let range = range.start.get()..range.end.get();
         for i in range {
             self.mark(PageIndex::new(i));
         }
     }
 
-    // Returns the largest prefix of the given range such that all pages there have
+    // Returns the largest range around the faulting page such that all pages there have
     // not been marked yet.
-    fn restrict_range_to_unmarked(&self, range: Range<PageIndex>) -> Range<PageIndex> {
+    fn restrict_range_to_unmarked(
+        &self,
+        faulting_page: PageIndex,
+        range: Range<PageIndex>,
+    ) -> Range<PageIndex> {
+        debug_assert!(
+            range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ range:{range:?}"
+        );
         let range = range_intersection(&range, &self.page_range());
 
-        let start = range.start.get() as usize;
-        let old_end = range.end.get() as usize;
-        let mut end = start;
+        let old_start = range.start.get();
+        let mut start = faulting_page.get();
+        while start > old_start {
+            if self.pages.get(start as usize - 1).unwrap_or(true) {
+                break;
+            }
+            start -= 1;
+        }
+        let old_end = range.end.get();
+        let mut end = faulting_page.get();
         while end < old_end {
-            if self.pages.get(end).unwrap_or(true) {
+            if self.pages.get(end as usize).unwrap_or(true) {
                 break;
             }
             end += 1;
         }
-        Range {
-            start: PageIndex::new(start as u64),
-            end: PageIndex::new(end as u64),
-        }
+
+        PageIndex::new(start)..PageIndex::new(end)
     }
 
-    // Returns the largest prefix of the given range such that all pages there have
-    // been already marked.
-    fn restrict_range_to_marked(&self, range: Range<PageIndex>) -> Range<PageIndex> {
+    // Returns the largest range around the faulting page such that
+    // all pages there have been already marked.
+    fn restrict_range_to_marked(
+        &self,
+        faulting_page: PageIndex,
+        range: Range<PageIndex>,
+    ) -> Range<PageIndex> {
+        debug_assert!(
+            range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ range:{range:?}"
+        );
         let range = range_intersection(&range, &self.page_range());
 
-        let start = range.start.get() as usize;
-        let old_end = range.end.get() as usize;
-        let mut end = start;
+        let old_start = range.start.get();
+        let mut start = faulting_page.get();
+        while start > old_start {
+            match self.pages.get(start as usize - 1) {
+                None | Some(false) => break,
+                Some(true) => {}
+            }
+            start -= 1;
+        }
+        let old_end = range.end.get();
+        let mut end = faulting_page.get();
         while end < old_end {
-            match self.pages.get(end) {
+            match self.pages.get(end as usize) {
                 None | Some(false) => break,
                 Some(true) => {}
             }
             end += 1;
         }
-        Range {
-            start: PageIndex::new(start as u64),
-            end: PageIndex::new(end as u64),
-        }
+        PageIndex::new(start)..PageIndex::new(end)
     }
 
     // Returns the range of pages that are predicted to be marked in the future
-    // based on the marked pages before the start of the given range.
-    fn restrict_range_to_predicted(&self, range: Range<PageIndex>) -> Range<PageIndex> {
+    // based on the marked pages before the start of the given range or after the end.
+    fn restrict_range_to_predicted(
+        &self,
+        faulting_page: PageIndex,
+        range: Range<PageIndex>,
+    ) -> Range<PageIndex> {
+        debug_assert!(
+            range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ range:{range:?}"
+        );
         let range = range_intersection(&range, &self.page_range());
         if range.is_empty() {
             return range;
         }
 
-        let start = range.start.get() as usize;
-        let old_end = range.end.get() as usize;
+        let page = faulting_page.get();
+        let start = range.start.get();
+        let end = range.end.get();
 
-        let mut predicted_count = 1;
-        while predicted_count < start && start + predicted_count < old_end {
-            if !self.pages.get(start - predicted_count).unwrap_or(false) {
+        let mut bwd_predicted_count = 0;
+        while page - bwd_predicted_count > start {
+            if !self
+                .pages
+                .get((page + bwd_predicted_count + 1) as usize)
+                .unwrap_or(false)
+            {
                 break;
             }
-            predicted_count += 1;
+            bwd_predicted_count += 1;
         }
 
-        Range {
-            start: PageIndex::new(start as u64),
-            end: PageIndex::new((start + predicted_count) as u64),
+        let mut fwd_predicted_count = 1;
+        while fwd_predicted_count < page && page + fwd_predicted_count < end {
+            if !self
+                .pages
+                .get((page - fwd_predicted_count) as usize)
+                .unwrap_or(false)
+            {
+                break;
+            }
+            fwd_predicted_count += 1;
         }
+
+        PageIndex::new(page - bwd_predicted_count)..PageIndex::new(page + fwd_predicted_count)
     }
 
     fn page_range(&self) -> Range<PageIndex> {
-        Range {
-            start: PageIndex::new(0),
-            end: PageIndex::new(self.pages.len() as u64),
-        }
+        PageIndex::new(0)..PageIndex::new(self.pages.len() as u64)
     }
 }
 
@@ -209,6 +251,11 @@ struct MemoryInstructionsStats {
     mmap_count: AtomicUsize,
     mprotect_count: AtomicUsize,
     copy_page_count: AtomicUsize,
+}
+
+#[derive(Default)]
+pub struct MemoryTrackerMetrics {
+    pub sigsegv_handler_duration_nanos: AtomicU64,
 }
 
 pub struct SigsegvMemoryTracker {
@@ -225,6 +272,7 @@ pub struct SigsegvMemoryTracker {
     read_before_write_stats: ReadBeforeWriteStats,
     sigsegv_count: AtomicUsize,
     memory_instructions_stats: MemoryInstructionsStats,
+    pub metrics: MemoryTrackerMetrics,
 }
 
 impl SigsegvMemoryTracker {
@@ -270,6 +318,7 @@ impl SigsegvMemoryTracker {
                 mprotect_count: AtomicUsize::new(0),
                 copy_page_count: AtomicUsize::new(0),
             },
+            metrics: MemoryTrackerMetrics::default(),
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
@@ -360,10 +409,7 @@ impl SigsegvMemoryTracker {
     }
 
     fn add_dirty_pages(&self, dirty_page: PageIndex, prefetched_range: Range<PageIndex>) {
-        let range = Range {
-            start: prefetched_range.start.get() as usize,
-            end: prefetched_range.end.get() as usize,
-        };
+        let range = prefetched_range.start.get() as usize..prefetched_range.end.get() as usize;
         let mut dirty_pages = self.dirty_pages.borrow_mut();
         let mut speculatively_dirty_pages = self.speculatively_dirty_pages.borrow_mut();
         for i in range {
@@ -599,9 +645,10 @@ pub fn sigsegv_fault_handler_new(
             // for multiple pages as read/write right away.
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
-            let max_prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
-            let min_prefetch_range =
-                accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
+            let max_prefetch_range =
+                accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+            let min_prefetch_range = accessed_bitmap
+                .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
@@ -615,9 +662,10 @@ pub fn sigsegv_fault_handler_new(
             // write accesses to track dirty pages. We can do this for multiple pages.
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
-            let max_prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
-            let min_prefetch_range =
-                accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
+            let max_prefetch_range =
+                accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
+            let min_prefetch_range = accessed_bitmap
+                .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
                 ProtFlags::PROT_READ,
@@ -632,7 +680,8 @@ pub fn sigsegv_fault_handler_new(
             let prefetch_range =
                 range_from_count(faulting_page, NumOsPages::new(MAX_PAGES_TO_MAP as u64));
             // Ensure that we don't overwrite an already dirty page.
-            let prefetch_range = dirty_bitmap.restrict_range_to_unmarked(prefetch_range);
+            let prefetch_range =
+                dirty_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             if accessed_bitmap.is_marked(faulting_page) {
                 tracker
                     .read_before_write_stats
@@ -640,10 +689,12 @@ pub fn sigsegv_fault_handler_new(
                     .fetch_add(1, Ordering::Relaxed);
                 // Ensure that all pages in the range have already been accessed because we are
                 // going to simply `mprotect` the range.
-                let prefetch_range = accessed_bitmap.restrict_range_to_marked(prefetch_range);
+                let prefetch_range =
+                    accessed_bitmap.restrict_range_to_marked(faulting_page, prefetch_range);
                 // Amortize the prefetch work based on the previously written pages.
-                let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
-                let page_start_addr = tracker.page_start_addr_from(faulting_page);
+                let prefetch_range =
+                    dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
+                let page_start_addr = tracker.page_start_addr_from(prefetch_range.start);
                 unsafe {
                     mprotect(
                         page_start_addr,
@@ -669,9 +720,11 @@ pub fn sigsegv_fault_handler_new(
                 // Ensure that all pages in the range have not been accessed yet because we are
                 // going to set up a new mapping. Note that this implies that all pages in the
                 // range have not been written to.
-                let prefetch_range = accessed_bitmap.restrict_range_to_unmarked(prefetch_range);
+                let prefetch_range =
+                    accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
                 // Amortize the prefetch work based on the previously written pages.
-                let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
+                let prefetch_range =
+                    dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
                 let prefetch_range = map_unaccessed_pages(
                     tracker,
                     ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
@@ -705,7 +758,10 @@ fn map_unaccessed_pages(
 ) -> Range<PageIndex> {
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
-            && min_prefetch_range.end <= max_prefetch_range.end
+            && min_prefetch_range.end <= max_prefetch_range.end,
+        "Error checking min_prefetch_range:{:?} ⊆ max_prefetch_range:{:?}",
+        min_prefetch_range,
+        max_prefetch_range
     );
 
     let instructions = tracker
@@ -818,10 +874,7 @@ fn apply_memory_instructions(
 }
 
 fn range_intersection(range1: &Range<PageIndex>, range2: &Range<PageIndex>) -> Range<PageIndex> {
-    Range {
-        start: std::cmp::max(range1.start, range2.start),
-        end: std::cmp::min(range1.end, range2.end),
-    }
+    range1.start.max(range2.start)..range1.end.min(range2.end)
 }
 
 fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
@@ -829,10 +882,7 @@ fn range_size_in_bytes(range: &Range<PageIndex>) -> usize {
 }
 
 fn range_from_count(page: PageIndex, count: NumOsPages) -> Range<PageIndex> {
-    Range {
-        start: page,
-        end: PageIndex::new(page.get() + count.get()),
-    }
+    PageIndex::new(page.get().saturating_sub(count.get()))..PageIndex::new(page.get() + count.get())
 }
 
 fn print_enomem_help(errno: Errno) -> Errno {

@@ -532,24 +532,24 @@ fn duplicate_txns() {
 
 #[test]
 fn get_blocks_returns_correct_blocks() {
-    let mut state = Ledger::default();
+    let mut blocks = vec![];
 
-    state.from_init(
-        vec![(
-            PrincipalId::new_user_test_id(0).into(),
-            Tokens::new(1000000, 0).unwrap(),
-        )]
-        .into_iter()
-        .collect(),
-        PrincipalId::new_user_test_id(1000).into(),
-        Some(PrincipalId::new_user_test_id(1000).0.into()),
-        SystemTime::UNIX_EPOCH.into(),
-        None,
-        HashSet::new(),
-        None,
-        Some("ICP".into()),
-        Some("icp".into()),
-        None,
+    let tx = Transaction {
+        operation: Operation::Mint {
+            to: PrincipalId::new_user_test_id(0).into(),
+            amount: Tokens::from_e8s(1000),
+        },
+        memo: Memo(0),
+        created_at_time: None,
+        icrc1_memo: None,
+    };
+    blocks.push(
+        Block {
+            parent_hash: None,
+            transaction: tx,
+            timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
+        }
+        .encode(),
     );
 
     for i in 0..10 {
@@ -558,29 +558,27 @@ fn get_blocks_returns_correct_blocks() {
             PrincipalId::new_user_test_id(1).into(),
             None,
             Tokens::new(1, 0).unwrap(),
-            state.transfer_fee,
+            tokens(1),
             Memo(i),
             TimeStamp::new(1, 0),
         );
 
         let block = Block {
-            parent_hash: state.blockchain.last_hash,
+            parent_hash: None,
             transaction: txn,
             timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
         };
 
-        state.add_block(block).unwrap();
+        blocks.push(block.encode());
     }
 
-    let blocks = &state.blockchain.blocks;
-
-    let first_blocks = icp_ledger::get_blocks_ledger(blocks, 0, 1, 5).0.unwrap();
+    let first_blocks = icp_ledger::get_blocks(&blocks, 0, 1, 5).0.unwrap();
     for i in 0..first_blocks.len() {
         let block = Block::decode(first_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, i as u64);
     }
 
-    let last_blocks = icp_ledger::get_blocks_ledger(blocks, 0, 6, 5).0.unwrap();
+    let last_blocks = icp_ledger::get_blocks(&blocks, 0, 6, 5).0.unwrap();
     for i in 0..last_blocks.len() {
         let block = Block::decode(last_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, 5 + i as u64);

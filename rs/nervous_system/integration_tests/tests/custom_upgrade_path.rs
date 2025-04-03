@@ -1,6 +1,7 @@
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::{
+    helpers::await_with_timeout,
     nns::{
         governance::{add_sns_wasm, insert_sns_wasm_upgrade_path_entries},
         sns_wasm::get_next_sns_version,
@@ -8,19 +9,17 @@ use ic_nervous_system_agent::{
     pocketic_impl::PocketIcAgent,
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    await_with_timeout,
-    sns::{
-        self,
-        governance::{
-            redact_human_readable, set_automatically_advance_target_version_flag,
-            EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
-        },
+use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::{
+    self,
+    governance::{
+        redact_human_readable, set_automatically_advance_target_version_flag,
+        EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
     },
 };
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers::{add_wasms_to_sns_wasm, install_nns_canisters, nns},
+    pocket_ic_helpers::{add_wasms_to_sns_wasm, nns},
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_test_utils::sns_wasm::{
@@ -91,8 +90,10 @@ async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: 
     // Step 0: Prepare the world.
 
     // Step 0.0: Install the NNS WASMs built from the working copy.
-    let with_mainnet_nns_canisters = false;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.install(&pocket_ic).await;
+
     let (pocket_ic_agent, nns_neuron_id) = nns_agent(&pocket_ic);
 
     // Step 0.1: Publish (master) SNS Wasms to SNS-W.

@@ -2,11 +2,10 @@ use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
     models::seconds::Seconds, request_types::*,
 };
-use dfn_candid::CandidOne;
+use candid::Decode;
 use ic_nns_governance_api::pb::v1::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
-use on_wire::FromWire;
 use std::convert::{TryFrom, TryInto};
 
 use crate::models::Operation;
@@ -248,14 +247,15 @@ impl TryFrom<&models::Request> for Request {
 
         let manage_neuron = || {
             {
-                CandidOne::<ic_nns_governance_api::pb::v1::ManageNeuron>::from_bytes(
-                    payload.update_content().arg.0.clone(),
+                Decode!(
+                    &payload.update_content().arg.0,
+                    ic_nns_governance_api::pb::v1::ManageNeuron
                 )
                 .map_err(|e| {
                     ApiError::invalid_request(format!("Could not parse manage_neuron: {}", e))
                 })
             }
-            .map(|m| m.0.command)
+            .map(|m| m.command)
         };
 
         match request_type {

@@ -1,5 +1,5 @@
 use crate::{
-    decoder_config,
+    are_nf_fund_proposals_disabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -10,7 +10,6 @@ use crate::{
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
-    migrations::maybe_run_migrations,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -77,9 +76,10 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
-    cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
-    ONE_YEAR_SECONDS,
+    ledger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
@@ -184,9 +184,6 @@ pub const MAX_DISSOLVE_DELAY_SECONDS: u64 = 8 * ONE_YEAR_SECONDS;
 // computation.
 pub const MAX_NEURON_AGE_FOR_AGE_BONUS: u64 = 4 * ONE_YEAR_SECONDS;
 
-/// The minimum dissolve delay so that a neuron may vote.
-pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
-
 /// The maximum number of followees each neuron can establish for each topic.
 pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 
@@ -204,7 +201,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 400_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 500_000;
 
 // Spawning is exempted from rate limiting, so we don't need large of a limit here.
 pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
@@ -226,7 +223,7 @@ const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 200;
 
 /// The max number of open manage neuron proposals.
-pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 100000;
+pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 10_000;
 
 /// Max number of hot key for each neuron.
 pub const MAX_NUM_HOT_KEYS_PER_NEURON: usize = 10;
@@ -1672,13 +1669,8 @@ impl Governance {
         // the rest live in heap.
 
         // Note: We do not carry over the RNG seed in new governance, only in restored governance.
-        let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
+        let (neurons, heap_governance_proto, _maybe_rng_seed) =
             split_governance_proto(governance_proto);
-
-        assert!(
-            topic_followee_index.is_empty(),
-            "Topic followee index should be empty when initializing for the first time"
-        );
 
         // Step 3: Final assembly.
         Self {
@@ -1711,7 +1703,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
+        let (heap_neurons, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
@@ -1722,7 +1714,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
+            neuron_store: NeuronStore::new_restored(heap_neurons),
             env,
             ledger,
             cmc,
@@ -1740,28 +1732,17 @@ impl Governance {
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let neuron_store = std::mem::take(&mut self.neuron_store);
-        let (neurons, heap_topic_followee_index) = neuron_store.take();
+        let neurons = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(
-            neurons,
-            heap_topic_followee_index,
-            heap_governance_proto,
-            rng_seed,
-        )
+        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
         let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(
-            neurons,
-            heap_topic_followee_index,
-            heap_governance_proto,
-            rng_seed,
-        )
+        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
@@ -2071,7 +2052,7 @@ impl Governance {
     /// Neurons that directly follow the `followees` w.r.t. the
     /// topic `NeuronManagement`.
     pub fn get_managed_neuron_ids_for(&self, followees: Vec<NeuronId>) -> Vec<NeuronId> {
-        // Tap into the `topic_followee_index` for followers of level zero neurons.
+        // Tap into the neuron followee index for followers of level zero neurons.
         let mut managed: Vec<NeuronId> = followees.clone();
         for followee in followees {
             managed.extend(
@@ -4564,10 +4545,6 @@ impl Governance {
                 )
             })?;
 
-        println!(
-            "{}INFO: Committing new NetworkEconomics:\n{:#?}",
-            LOG_PREFIX, new_network_economics,
-        );
         self.heap_data.economics = Some(new_network_economics);
         Ok(())
     }
@@ -4877,9 +4854,59 @@ impl Governance {
         })?;
 
         // Early exit for deprecated commands.
-        if let Command::MergeMaturity(_) = manage_neuron.command.as_ref().unwrap() {
+        if let Command::MergeMaturity(_) = command {
             return Self::merge_maturity_removed_error();
         }
+
+        // Below we make sure the manage neuron proposal is not too large. Otherwise they can occupy
+        // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (100K).
+        //
+        // TODO: consolidate the validation logic with the `manage_neuron` implementation.
+        match command {
+            // We could implement more complicated logic to check its encoded size, or treat each
+            // type of proposal differently, but in the hotfix we simply disable it.
+            Command::MakeProposal(_) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot issue a make proposal command through a proposal",
+                ))
+            }
+            // DisburseMaturity contains a subaccount which can be unbounded without checking. This
+            // command is not implemented yet, and before we implement it we should also validate
+            // its subaccount.
+            Command::DisburseMaturity(_) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Disburse maturity is not supported yet",
+                ))
+            }
+            // Similar to DisburseMaturity, Disburse has a blob as the ICP account address. A
+            // successful conversion should indicate that the blob does not contain a large amount
+            // of data.
+            Command::Disburse(disburse) => {
+                if let Some(to_account) = &disburse.to_account {
+                    if AccountIdentifier::try_from(to_account).is_err() {
+                        return Err(GovernanceError::new_with_message(
+                            ErrorType::InvalidCommand,
+                            "The to_account field is invalid",
+                        ));
+                    }
+                }
+            }
+            Command::Follow(follow) => {
+                if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        format!(
+                            "Too many followees: {} (max: {})",
+                            follow.followees.len(),
+                            MAX_FOLLOWEES_PER_TOPIC
+                        ),
+                    ));
+                }
+            }
+            _ => {}
+        };
 
         let is_managed_neuron_not_for_profit = self
             .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
@@ -5224,10 +5251,21 @@ impl Governance {
         let conversion_result = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
             create_service_nervous_system.clone(),
         ));
-        if let Err(err) = conversion_result {
+
+        let validated = conversion_result.map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid CreateServiceNervousSystem: {}", e),
+            )
+        })?;
+
+        if are_nf_fund_proposals_disabled()
+            && validated.neurons_fund_participation.unwrap_or_default()
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Invalid CreateServiceNervousSystem: {}", err),
+                "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed \
+                as decided by motion proposal 135970: https://dashboard.internetcomputer.org/proposal/135970.",
             ));
         }
 
@@ -5810,10 +5848,6 @@ impl Governance {
         caller: &PrincipalId,
         follow_request: &manage_neuron::Follow,
     ) -> Result<(), GovernanceError> {
-        // The implementation of this method is complicated by the
-        // fact that we have to maintain a reverse index of all follow
-        // relationships, i.e., the `topic_followee_index`.
-
         // Find the neuron to modify.
         let (is_neuron_controlled_by_caller, is_caller_authorized_to_vote) =
             self.with_neuron(id, |neuron| {
@@ -6365,13 +6399,6 @@ impl Governance {
         Ok(id)
     }
 
-    fn maybe_run_migrations(&mut self) {
-        self.heap_data.migrations = Some(maybe_run_migrations(
-            self.heap_data.migrations.clone().unwrap_or_default(),
-            &mut self.neuron_store,
-        ));
-    }
-
     /// Increment neuron allowances if enough time has passed.
     fn maybe_increase_neuron_allowances(&mut self) {
         // We  increase the allowance over the maximum per hour to account
@@ -6455,7 +6482,6 @@ impl Governance {
         }
 
         self.maybe_gc();
-        self.maybe_run_migrations();
         self.maybe_increase_neuron_allowances();
     }
 

@@ -170,6 +170,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "actix-web": crate.spec(
                 version = "^4.9.0",
             ),
+            "actix-web-prom": crate.spec(
+                version = "0.9.0",
+            ),
             "addr": crate.spec(
                 version = "^0.15.6",
                 default_features = False,
@@ -301,7 +304,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "0.10.0",
+                version = "0.10.1",
                 features = [
                     "alloc",
                     "experimental",
@@ -630,7 +633,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "a6cdd78692aa0715c38979aaa8447e70c4456b0b",
+                rev = "469d2daee8b44aadb46400bcb2832d560baf7272",
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
@@ -655,7 +658,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.0",
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.6.5",
+                version = "^0.6.8",
             ),
             "icrc1-test-env": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",
@@ -838,7 +841,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.13.0",
             ),
             "mockito": crate.spec(
-                version = "^1.2.0",
+                version = "^1.6.1",
             ),
             "moka": crate.spec(
                 version = "^0.12.8",
@@ -887,14 +890,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "opentelemetry": crate.spec(
                 version = "^0.27.0",
-                features = [
-                    "metrics",
-                    "trace",
-                ],
-            ),
-            "opentelemetry_0_20_0": crate.spec(
-                package = "opentelemetry",
-                version = "^0.20.0",
                 features = [
                     "metrics",
                     "trace",

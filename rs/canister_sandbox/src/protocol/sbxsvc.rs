@@ -7,13 +7,14 @@ use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
 use ic_embedders::{SerializedModule, SerializedModuleBytes};
 use ic_interfaces::execution_environment::HypervisorResult;
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     page_map::{
         BaseFileSerialization, CheckpointSerialization, MappingSerialization,
         OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
         StorageSerialization,
     },
-    Global, NumWasmPages,
+    NumWasmPages,
 };
 use ic_types::CanisterId;
 use ic_utils;
@@ -372,15 +373,19 @@ mod tests {
         subnet_config::CyclesAccountManagerConfig,
     };
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-    use ic_embedders::{wasm_utils, CompilationResult, SerializedModule, WasmtimeEmbedder};
+    use ic_embedders::{
+        wasm_utils,
+        wasmtime_embedder::system_api::{
+            sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+            InstructionLimits,
+        },
+        CompilationResult, SerializedModule, WasmtimeEmbedder,
+    };
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Global, Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
-    };
-    use ic_system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
+        Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
     };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
@@ -521,7 +526,7 @@ mod tests {
             stable_memory_id: MemoryId::new(),
             exec_input: SandboxExecInput {
                 func_ref: FuncRef::Method(WasmMethod::Update("test".into())),
-                api_type: ic_system_api::ApiType::update(
+                api_type: ApiType::update(
                     Time::from_nanos_since_unix_epoch(10),
                     vec![1, 2, 3],
                     Cycles::new(100),

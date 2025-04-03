@@ -7,13 +7,12 @@ use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
     consensus::idkg::PreSigId,
     crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, Randomness, ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -21,6 +20,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt, ops,
     sync::Arc,
+    time::Duration,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -60,6 +60,9 @@ pub struct InstanceStats {
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
 
+    /// Total time spent in SIGSEGV handler for heap.
+    pub wasm_sigsegv_handler_duration: Duration,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
@@ -85,6 +88,9 @@ pub struct InstanceStats {
 
     /// Number of pages loaded by copying the data in stable memory.
     pub stable_copy_page_count: usize,
+
+    /// Total time spent in SIGSEGV handler for stable memory.
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 impl InstanceStats {
@@ -168,8 +174,8 @@ pub enum SystemApiCallId {
     CostSignWithEcdsa,
     /// Tracker for `ic0.cost_sign_with_schnorr()`
     CostSignWithSchnorr,
-    /// Tracker for `ic0.cost_vetkd_derive_encrypted_key()`
-    CostVetkdDeriveEncryptedKey,
+    /// Tracker for `ic0.cost_vetkd_derive_key()`
+    CostVetkdDeriveKey,
     /// Tracker for `ic0.cycles_burn128()`
     CyclesBurn128,
     /// Tracker for `ic0.data_certificate_copy()`
@@ -569,7 +575,7 @@ pub trait OutOfInstructionsHandler {
 
     // Invoked only when a long execution dirties many memory pages to yield control
     // and start the copy only in a new slice. This is a performance improvement.
-    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -615,12 +621,6 @@ pub trait SystemApi {
 
     /// Returns the amount of instructions needed to copy `num_bytes`.
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
-
-    /// Returns the indexes of all dirty pages in stable memory.
-    fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)>;
-
-    /// Returns the current size of the stable memory in wasm pages.
-    fn stable_memory_size(&self) -> usize;
 
     /// Returns the subnet type the replica runs on.
     fn subnet_type(&self) -> SubnetType;
@@ -851,15 +851,6 @@ pub trait SystemApi {
     /// `ic0.call_*` calls trap.
     fn ic0_call_perform(&mut self) -> HypervisorResult<i32>;
 
-    /// Returns the current size of the stable memory in WebAssembly pages.
-    fn ic0_stable_size(&self) -> HypervisorResult<u32>;
-
-    /// Tries to grow the stable memory by additional_pages many pages
-    /// containing zeros.
-    /// If successful, returns the previous size of the memory (in pages).
-    /// Otherwise, returns -1
-    fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32>;
-
     /// Same implementation as `ic0_stable_read`, but doesn't do any bounds
     /// checks on the stable memory size. This is part of the hidden API and
     /// should only be called from instrumented code that has already done the
@@ -872,85 +863,6 @@ pub trait SystemApi {
         size: u64,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
-
-    /// Copies the data referred to by offset/size out of the stable memory and
-    /// replaces the corresponding bytes starting at dst in the canister memory.
-    ///
-    /// This system call traps if dst+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    fn ic0_stable_read(
-        &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Copies the data referred to by src/size out of the canister and replaces
-    /// the corresponding segment starting at offset in the stable memory.
-    ///
-    /// This system call traps if src+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    /// Returns the number of **new** dirty pages created by the write.
-    fn ic0_stable_write(
-        &mut self,
-        offset: u32,
-        src: u32,
-        size: u32,
-        heap: &[u8],
-    ) -> HypervisorResult<()>;
-
-    /// Returns the current size of the stable memory in WebAssembly pages.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_size(&self) -> HypervisorResult<u64>;
-
-    /// Tries to grow the stable memory by additional_pages many pages
-    /// containing zeros.
-    /// If successful, returns the previous size of the memory (in pages).
-    /// Otherwise, returns -1
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64>;
-
-    /// Copies the data from location [offset, offset+size) of the stable memory
-    /// to the location [dst, dst+size) in the canister memory.
-    ///
-    /// This system call traps if dst+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_read(
-        &self,
-        dst: u64,
-        offset: u64,
-        size: u64,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Copies the data from location [src, src+size) of the canister memory to
-    /// location [offset, offset+size) in the stable memory.
-    ///
-    /// This system call traps if src+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    /// Returns the number of **new** dirty pages created by the write.
-    fn ic0_stable64_write(
-        &mut self,
-        offset: u64,
-        src: u64,
-        size: u64,
-        heap: &[u8],
-    ) -> HypervisorResult<()>;
-
-    /// Determines the number of dirty pages that a stable write would create
-    /// and the cost for those dirty pages (without actually doing the write).
-    fn dirty_pages_from_stable_write(
-        &self,
-        offset: u64,
-        size: u64,
-    ) -> HypervisorResult<(NumOsPages, NumInstructions)>;
 
     /// The canister can query the IC for the current time.
     fn ic0_time(&mut self) -> HypervisorResult<Time>;
@@ -993,7 +905,7 @@ pub trait SystemApi {
     /// This system call is not part of the public spec and it is invoked when
     /// Wasm execution has a large number of dirty pages that, for performance reasons,
     /// should be copied in a new execution slice.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been executed to check whether there's enough
@@ -1308,7 +1220,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of vetkd key derivation,
-    /// i.e., the management canister's `vetkd_derive_encrypted_key` for the key
+    /// i.e., the management canister's `vetkd_derive_key` for the key
     /// (whose name is given by textual representation at heap location `src`
     /// with byte length `size`) and the provided curve.
     ///
@@ -1321,7 +1233,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst` if the return
     /// value is 0.
-    fn ic0_cost_vetkd_derive_encrypted_key(
+    fn ic0_cost_vetkd_derive_key(
         &self,
         src: usize,
         size: usize,

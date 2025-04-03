@@ -1,54 +1,54 @@
 benches:
   bench_icrc1_transfers:
     total:
-      instructions: 67536723756
-      heap_increase: 262
+      instructions: 53661544202
+      heap_increase: 263
       stable_memory_increase: 256
     scopes:
       icrc1_transfer:
-        instructions: 16505736562
-        heap_increase: 31
+        instructions: 12864180796
+        heap_increase: 32
         stable_memory_increase: 0
       icrc2_approve:
-        instructions: 23302128840
+        instructions: 19064695531
         heap_increase: 28
         stable_memory_increase: 128
       icrc2_transfer_from:
-        instructions: 26980407644
+        instructions: 21030195744
         heap_increase: 3
         stable_memory_increase: 0
       icrc3_get_blocks:
-        instructions: 8557135
+        instructions: 8163460
         heap_increase: 0
         stable_memory_increase: 0
       post_upgrade:
-        instructions: 353759761
+        instructions: 353833726
         heap_increase: 71
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 149186080
+        instructions: 149306057
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
-        instructions: 502947905
+        instructions: 503141847
         heap_increase: 200
         stable_memory_increase: 128
   bench_upgrade_baseline:
     total:
-      instructions: 8683947
+      instructions: 8683434
       heap_increase: 258
       stable_memory_increase: 128
     scopes:
       post_upgrade:
-        instructions: 8605927
+        instructions: 8605802
         heap_increase: 129
         stable_memory_increase: 0
       pre_upgrade:
-        instructions: 75628
+        instructions: 75240
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
-        instructions: 8683258
+        instructions: 8682745
         heap_increase: 258
         stable_memory_increase: 128
-version: 0.1.8
+version: 0.1.9

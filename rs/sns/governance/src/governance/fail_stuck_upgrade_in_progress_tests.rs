@@ -15,7 +15,7 @@ use crate::{
     types::test_helpers::NativeEnvironment,
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::cmc::FakeCmc;
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 

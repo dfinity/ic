@@ -62,12 +62,15 @@ impl EnumerateInnerFileDescriptors for Reply {
 mod tests {
     use std::time::Duration;
 
-    use ic_embedders::wasm_executor::SliceExecutionOutput;
+    use ic_embedders::{
+        wasm_executor::SliceExecutionOutput,
+        wasmtime_embedder::system_api::sandbox_safe_system_state::SystemStateModifications,
+    };
     use ic_interfaces::execution_environment::{
         InstanceStats, SystemApiCallCounters, WasmExecutionOutput,
     };
-    use ic_replicated_state::{Global, NumWasmPages, PageMap};
-    use ic_system_api::sandbox_safe_system_state::SystemStateModifications;
+    use ic_management_canister_types_private::Global;
+    use ic_replicated_state::{NumWasmPages, PageMap};
     use ic_types::{ingress::WasmResult, NumBytes, NumInstructions};
 
     use crate::protocol::{
