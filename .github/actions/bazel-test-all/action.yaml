@@ -130,7 +130,7 @@ runs:
                 # complaining about the argument list being too long.
                 bazel_args+=( --target_pattern_file="$target_pattern_file" )
             else
-                bazel_args+=( "${bazel_targets[*]}" )
+                bazel_args+=( "${bazel_targets[@]}" )
             fi
 
             echo "Building as user: $(whoami)"
