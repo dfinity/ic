@@ -32,6 +32,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
+itertools = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

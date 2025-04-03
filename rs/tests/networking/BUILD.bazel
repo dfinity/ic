@@ -27,6 +27,7 @@ COMMON_DEPS = [
     "//rs/registry/subnet_type",
     "//rs/tests/driver:ic-system-test-driver",
     "@crate_index//:anyhow",
+    "@crate_index//:itertools",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
@@ -35,6 +36,7 @@ COMMON_DEPS = [
 HTTP_ENDPOINTS_DEPS = [
     # Keep sorted.
     "//rs/http_endpoints/test_agent",
+    "//rs/types/types",
 ]
 
 system_test_nns(

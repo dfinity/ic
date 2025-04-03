@@ -41,6 +41,8 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, UniversalCanister},
 };
+use ic_types::CanisterId;
+use itertools::Itertools;
 use slog::info;
 
 const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
@@ -82,7 +84,6 @@ fn test(env: TestEnv) {
         .nodes()
         .next()
         .expect("Failed to find node in system subnet");
-    let sys_agent = sys_subnet.nodes().next().unwrap().build_default_agent();
     let sys_subnet_canister_id_range = sys_subnet.subnet_canister_ranges()[0];
     let sys_uc1_id = sys_subnet_canister_id_range
         .generate_canister_id(None)
@@ -90,6 +91,10 @@ fn test(env: TestEnv) {
     let sys_uc2_id = sys_subnet_canister_id_range
         .generate_canister_id(Some(sys_uc1_id))
         .unwrap();
+
+    let sys_node = sys_subnet.nodes().next().unwrap();
+    let sys_agent = sys_node.build_default_agent();
+    let sys_socket_addr = std::net::SocketAddr::new(sys_node.get_ip_addr(), 8080);
 
     // Get the app subnet, setup an agent and get a cansiter id from the range
     let app_subnet = snapshot
@@ -100,8 +105,8 @@ fn test(env: TestEnv) {
         .nodes()
         .next()
         .expect("Failed to find node in system subnet");
-    let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
     let app_uc_id = app_node.effective_canister_id();
+    let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
 
     block_on(async {
         // Create three universal canister, two on the system sybnet, one on the app subnet
@@ -109,8 +114,34 @@ fn test(env: TestEnv) {
             UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger).await;
         let sys_uc2 =
             UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger).await;
-        let app_uc =
-            UniversalCanister::new_with_retries(&app_agent, app_uc_id.into(), &logger).await;
+        let app_uc = UniversalCanister::new_with_retries(&app_agent, app_uc_id, &logger).await;
+
+        let test_canister_ids: [CanisterId; 4] = [
+            // Valid destination on same subnet
+            sys_uc2_id,
+            // Valid destination on other subnet
+            CanisterId::try_from_principal_id(app_uc_id).unwrap(),
+            // Invalid canister id
+            CanisterId::from(1337),
+            // Management canister
+            CanisterId::ic_00(),
+        ];
+
+        // Test making update calls
+        for (version, canister_id) in CALL_VERSIONS
+            .iter()
+            .cartesian_product(test_canister_ids.iter())
+        {
+            let response = version
+                .call(
+                    sys_socket_addr,
+                    IngressMessage::default()
+                        .with_canister_id(sys_uc1_id.into(), (*canister_id).into()),
+                )
+                .await;
+            info!(logger, "Got response status: {}", response.status());
+            // TODO
+        }
 
         // TODO
     });
