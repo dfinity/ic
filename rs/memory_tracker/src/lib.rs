@@ -4,7 +4,7 @@ use ic_replicated_state::{
     page_map::{FileDescriptor, MemoryInstructions},
     PageIndex, PageMap,
 };
-use ic_sys::PAGE_SIZE;
+use ic_sys::{HUGE_PAGE_SIZE, PAGE_SIZE};
 use ic_types::{NumBytes, NumOsPages};
 use nix::{
     errno::Errno,
@@ -20,7 +20,15 @@ use std::{
 // checkpoint file per signal handler call. Higher value gives higher
 // throughput in memory intensive workloads, but may regress performance
 // in other workloads because it increases work per signal handler call.
-const MAX_PAGES_TO_MAP: usize = 128;
+//
+// The Transparent Huge Pages (THP) are enabled for the entire memory region
+// (refer to `MmapMemory::new()`). To utilize THP, we must operate on memory
+// regions that are large enough, i.e. 2 MiB or more.
+//
+// The number of normal pages within a 2 MiB huge page is 2 MiB / 4 KiB = 512.
+// Additionally, the memory region must be aligned to the 2 MiB boundary,
+// so we use 512 * 2.
+const MAX_PAGES_TO_MAP: usize = 1024;
 
 // The new signal handler requires `AccessKind` which currently available only
 // on Linux without WSL.
@@ -408,6 +416,57 @@ impl SigsegvMemoryTracker {
         self.accessed_bitmap.borrow().page_range()
     }
 
+    /// Returns an address range from the page index range.
+    fn addr_range_from(&self, range: &Range<PageIndex>) -> Range<usize> {
+        let start_addr = self.page_start_addr_from(range.start) as usize;
+        let end_addr = self.page_start_addr_from(range.end) as usize;
+        start_addr..end_addr
+    }
+
+    /// Shrinks the range to a huge page-aligned size if possible. If one side
+    /// can't be shrunk to keep the faulting page within the new region,
+    /// that side remains unaligned.
+    fn try_shrink_range_to_hp(
+        &self,
+        faulting_page: PageIndex,
+        range: Range<PageIndex>,
+    ) -> Range<PageIndex> {
+        debug_assert!(
+            range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ range:{range:?}"
+        );
+        let hp_mask = HUGE_PAGE_SIZE - 1;
+        let faulting_addr = self.page_start_addr_from(faulting_page) as usize;
+        let Range {
+            start: start_addr,
+            end: end_addr,
+        } = self.addr_range_from(&range);
+        // Try to align the range start address up to the nearest Huge Page.
+        let aligned_start_addr = (start_addr + hp_mask) & !hp_mask;
+        let start_idx = if faulting_addr >= aligned_start_addr && aligned_start_addr != start_addr {
+            // println!("XXX aligned start from {start_addr} to {aligned_start_addr}");
+            self.page_index_from(aligned_start_addr as *mut libc::c_void)
+        } else {
+            range.start
+        };
+        // Try to align the range end address down to the nearest Huge Page.
+        let aligned_end_addr = end_addr & !hp_mask;
+        let end_idx = if faulting_addr < aligned_end_addr && aligned_end_addr != end_addr {
+            // println!("XXX aligned end from {end_addr} to {aligned_end_addr}");
+            self.page_index_from(aligned_end_addr as *mut libc::c_void)
+        } else {
+            range.end
+        };
+
+        let new_range = start_idx..end_idx;
+        debug_assert!(
+            new_range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ new range:{new_range:?}"
+        );
+
+        new_range
+    }
+
     fn add_dirty_pages(&self, dirty_page: PageIndex, prefetched_range: Range<PageIndex>) {
         let range = prefetched_range.start.get() as usize..prefetched_range.end.get() as usize;
         let mut dirty_pages = self.dirty_pages.borrow_mut();
@@ -649,6 +708,10 @@ pub fn sigsegv_fault_handler_new(
                 accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             let min_prefetch_range = accessed_bitmap
                 .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
+            let min_prefetch_range =
+                tracker.try_shrink_range_to_hp(faulting_page, min_prefetch_range);
+            let max_prefetch_range =
+                tracker.try_shrink_range_to_hp(faulting_page, max_prefetch_range);
             let prefetch_range = map_unaccessed_pages(
                 tracker,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
@@ -666,6 +729,10 @@ pub fn sigsegv_fault_handler_new(
                 accessed_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             let min_prefetch_range = accessed_bitmap
                 .restrict_range_to_predicted(faulting_page, max_prefetch_range.clone());
+            let min_prefetch_range =
+                tracker.try_shrink_range_to_hp(faulting_page, min_prefetch_range);
+            let max_prefetch_range =
+                tracker.try_shrink_range_to_hp(faulting_page, max_prefetch_range);
             let prefetch_range = map_unaccessed_pages(
                 tracker,
                 ProtFlags::PROT_READ,
@@ -694,6 +761,7 @@ pub fn sigsegv_fault_handler_new(
                 // Amortize the prefetch work based on the previously written pages.
                 let prefetch_range =
                     dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
+                let prefetch_range = tracker.try_shrink_range_to_hp(faulting_page, prefetch_range);
                 let page_start_addr = tracker.page_start_addr_from(prefetch_range.start);
                 unsafe {
                     mprotect(
@@ -725,6 +793,7 @@ pub fn sigsegv_fault_handler_new(
                 // Amortize the prefetch work based on the previously written pages.
                 let prefetch_range =
                     dirty_bitmap.restrict_range_to_predicted(faulting_page, prefetch_range);
+                let prefetch_range = tracker.try_shrink_range_to_hp(faulting_page, prefetch_range);
                 let prefetch_range = map_unaccessed_pages(
                     tracker,
                     ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,

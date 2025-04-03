@@ -14,6 +14,7 @@ use libc::c_void;
 use libc::MAP_FAILED;
 use libc::{mmap, munmap};
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
+use nix::sys::mman::{madvise, MmapAdvise};
 use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
@@ -172,6 +173,14 @@ impl MmapMemory {
             size_in_bytes,
             Error::last_os_error()
         );
+        // SAFETY: the memory region was just successfully mapped.
+        // Enable Transparent Huge Pages (THP) for the newly allocated memory.
+        // TODO(EXC-2008): benchmark also `MADV_COLLAPSE`
+        unsafe {
+            madvise(start, size_in_bytes, MmapAdvise::MADV_HUGEPAGE).unwrap_or_else(|err| {
+                eprintln!("[EXC-BUG] Error in `madvise` addr:{start:?} len:{size_in_bytes}: {err}")
+            });
+        }
 
         // SAFETY: The allocated region includes the prologue guard region.
         let wasm_memory =
