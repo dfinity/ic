@@ -510,20 +510,18 @@ impl HttpEndpointBuilder {
 }
 
 pub mod test_agent {
-    use super::*;
     use ic_crypto_tree_hash::{Label, Path};
-
     use ic_types::{
         messages::{
             Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, SignedIngress,
+            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedIngress,
         },
         time::current_time,
         PrincipalId,
     };
-    use reqwest::header::CONTENT_TYPE;
+    use reqwest::{header::CONTENT_TYPE, StatusCode};
     use serde_cbor::Value as CBOR;
-    use std::time::Duration;
+    use std::{net::SocketAddr, time::Duration};
 
     const INGRESS_EXPIRY_DURATION: Duration = Duration::from_secs(300);
     const METHOD_NAME: &str = "test";
