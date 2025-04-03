@@ -36,7 +36,7 @@ def sync_main_branch_and_checkout_branch(
         raise Exception("Found uncommited work! Commit and then proceed. Uncommited work:\n%s", result.stdout.strip())
 
     if subprocess.call(["git", "checkout", branch_to_checkout], cwd=repo_root) == 0:
-        # The branch already exists, update the existing MR
+        # The branch already exists, update the existing PR
         logger.info("Found an already existing target branch")
     else:
         subprocess.check_call(["git", "checkout", "-b", branch_to_checkout], cwd=repo_root)
@@ -60,7 +60,7 @@ def commit_and_create_pr(
     paths_to_add = [path for path in check_for_updates_in_paths if path in git_modified_files]
 
     if len(paths_to_add) > 0:
-        logger.info("Creating/updating a MR that updates the saved icos revisions")
+        logger.info("Creating/updating a PR that updates the saved icos revisions")
         cmd = ["git", "add"] + paths_to_add
         logger.info("Running command '%s'", " ".join(cmd))
         subprocess.check_call(cmd, cwd=repo_root)
