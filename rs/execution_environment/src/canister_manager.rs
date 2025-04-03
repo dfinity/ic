@@ -52,7 +52,6 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
 };
-use ic_wasm_transform::Module;
 use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
@@ -485,12 +484,10 @@ impl CanisterManager {
         };
 
         let parser = wasmparser::Parser::new(0);
-        for section in parser.parse_all(decoded_wasm_module.as_slice()) {
-            if let Ok(wasmparser::Payload::MemorySection(reader)) = section {
-                for memory in reader {
-                    if let Ok(ty) = memory {
-                        return ty.memory64;
-                    }
+        for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
+            if let wasmparser::Payload::MemorySection(reader) = section {
+                if let Some(memory) = reader.into_iter().flatten().next() {
+                    return memory.memory64;
                 }
             }
         }

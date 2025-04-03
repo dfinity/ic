@@ -40,7 +40,6 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-utils-thread = { path = "../utils/thread" }
-ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
@@ -61,6 +60,7 @@ threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
+wasmparser = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -86,7 +86,6 @@ proptest = { workspace = true }
 regex = { workspace = true }
 rstest = { workspace = true }
 test-strategy = "0.3.1"
-wasmparser = { workspace = true }
 wat = { workspace = true }
 
 [build-dependencies]
