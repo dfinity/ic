@@ -1,4 +1,4 @@
-GitHub CI for the IC Repo
+GitHub CI for the IC Repo and others
 
 ## Using custom CI labels
 Note that setting custom CI logic via the pull request title has been deprecated and we now use labels instead. See labels below for custom logic that can be enabled:
