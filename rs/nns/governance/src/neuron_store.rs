@@ -31,6 +31,8 @@ use std::{
 };
 
 pub mod metrics;
+pub mod voting_power;
+
 use crate::governance::RandomnessGenerator;
 use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;
@@ -66,6 +68,8 @@ pub enum NeuronStoreError {
     InvalidOperation {
         reason: String,
     },
+    TotalPotentialVotingPowerOverflow,
+    TotalDecidingVotingPowerOverflow,
 }
 
 impl NeuronStoreError {
@@ -173,6 +177,12 @@ impl Display for NeuronStoreError {
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {}", reason)
             }
+            NeuronStoreError::TotalPotentialVotingPowerOverflow => {
+                write!(f, "Total potential voting power overflow")
+            }
+            NeuronStoreError::TotalDecidingVotingPowerOverflow => {
+                write!(f, "Total deciding voting power overflow")
+            }
         }
     }
 }
@@ -191,6 +201,8 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
+            NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
+            NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
