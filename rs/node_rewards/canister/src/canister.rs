@@ -63,7 +63,6 @@ impl NodeRewardsCanister {
                 )
             })?;
 
-            // TODO DO NOT MERGE - make test for the version as a parameter
             let version = request
                 .registry_version
                 .map(RegistryVersion::new)
