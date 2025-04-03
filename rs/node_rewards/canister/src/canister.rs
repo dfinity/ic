@@ -76,18 +76,11 @@ impl NodeRewardsCanister {
             .map_err(|e| format!("Could not find NodeRewardsTable: {e:?}"))?
             .ok_or_else(|| "NodeRewardsTable is missing".to_string())?;
 
-            println!("Rewards Table: {:?}", rewards_table);
-
             let node_operators = decoded_key_value_pairs_for_prefix::<NodeOperatorRecord>(
                 &*registry_client,
                 NODE_OPERATOR_RECORD_KEY_PREFIX,
                 version,
             )?;
-
-            println!(
-                "Before processing, data centers: {:?}",
-                registry_client.get_key_family_with_values(DATA_CENTER_KEY_PREFIX, version)
-            );
 
             let data_centers = decoded_key_value_pairs_for_prefix::<DataCenterRecord>(
                 &*registry_client,

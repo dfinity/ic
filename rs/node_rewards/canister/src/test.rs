@@ -21,6 +21,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::{PrincipalId, RegistryVersion};
 use maplit::btreemap;
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -79,7 +80,7 @@ fn reg_delta(key: impl AsRef<[u8]>, values: Vec<RegistryValue>) -> RegistryDelta
 }
 
 fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
-    let previous_rewards_table = NodeRewardsTable {
+    let version_1_rewards_table = NodeRewardsTable {
         table: btreemap! {
             "Africa,ZA".to_string() => NodeRewardRates {
                 rates: btreemap! {
@@ -99,9 +100,9 @@ fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
             }
         },
     };
-    fake_registry.encode_value_at_version(NODE_REWARDS_TABLE_KEY, 4, Some(previous_rewards_table));
+    fake_registry.encode_value_at_version(NODE_REWARDS_TABLE_KEY, 1, Some(version_1_rewards_table));
 
-    let latest_rewards_table = NodeRewardsTable {
+    let version_5_rewards_table = NodeRewardsTable {
         table: btreemap! {
             "Africa,ZA".to_string() => NodeRewardRates {
                 rates: btreemap! {
@@ -122,7 +123,7 @@ fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
         },
     };
 
-    fake_registry.encode_value_at_version(NODE_REWARDS_TABLE_KEY, 5, Some(latest_rewards_table));
+    fake_registry.encode_value_at_version(NODE_REWARDS_TABLE_KEY, 5, Some(version_5_rewards_table));
 
     // Node Operators
     let node_operator_a_id = PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap();
@@ -130,7 +131,7 @@ fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
 
     fake_registry.encode_value_at_version(
         make_node_operator_record_key(node_operator_a_id),
-        4,
+        2,
         Some(NodeOperatorRecord {
             node_operator_principal_id: PrincipalId::new_user_test_id(42).to_vec(),
             node_allowance: 0,
@@ -145,7 +146,7 @@ fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
 
     fake_registry.encode_value_at_version(
         make_node_operator_record_key(node_operator_b_id),
-        4,
+        3,
         Some(NodeOperatorRecord {
             node_operator_principal_id: PrincipalId::new_user_test_id(44).to_vec(),
             node_allowance: 0,
@@ -162,7 +163,7 @@ fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
 
     fake_registry.encode_value_at_version(
         make_data_center_record_key("dc1"),
-        4,
+        1,
         Some(DataCenterRecord {
             id: "dc1".to_string(),
             region: "Africa,ZA".to_string(),
@@ -197,70 +198,76 @@ fn test_rewards_calculation() {
     }
     CANISTER.with_borrow_mut(|canister| *canister = test_canister);
 
-    let request = GetNodeProvidersMonthlyXdrRewardsRequest {
-        registry_version: None,
-    };
+    let test_at_version =
+        |registry_version: Option<u64>, expected: Result<BTreeMap<&str, u64>, String>| {
+            let request = GetNodeProvidersMonthlyXdrRewardsRequest {
+                registry_version: registry_version.clone(),
+            };
+            let result = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
+                &CANISTER,
+                client.clone(),
+                request,
+            )
+            .now_or_never()
+            .unwrap();
 
-    let result = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
-        client.clone(),
-        request,
-    )
-    .now_or_never()
-    .unwrap();
+            let expected_result = match expected {
+                Ok(rewards) => {
+                    let rewards = rewards
+                        .into_iter()
+                        .map(|(k, v)| (PrincipalId::from_str(k).unwrap().0, v))
+                        .collect();
+                    GetNodeProvidersMonthlyXdrRewardsResponse {
+                        rewards: Some(NodeProvidersMonthlyXdrRewards {
+                            rewards,
+                            registry_version: registry_version.or(Some(latest_version)),
+                        }),
+                        error: None,
+                    }
+                }
+                Err(msg) => GetNodeProvidersMonthlyXdrRewardsResponse {
+                    rewards: None,
+                    error: Some(msg),
+                },
+            };
 
-    let expected_latest_result = GetNodeProvidersMonthlyXdrRewardsResponse {
-        rewards: Some(NodeProvidersMonthlyXdrRewards {
-            rewards: btreemap! {
-                PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap().0 => 80835271,
-                PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap().0 => 24691356,
-            },
-            registry_version: Some(latest_version),
-        }),
-        error: None,
-    };
+            assert_eq!(result, expected_result);
+        };
 
-    assert_eq!(result, expected_latest_result);
+    // We test with the different versions to make sure that the rewards are sensitive to
+    // changing versions for each component.
 
-    // Test with same version, but explicitly
-    let request = GetNodeProvidersMonthlyXdrRewardsRequest {
-        registry_version: Some(latest_version),
-    };
-
-    let result_for_explicit_version_5 =
-        NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-            &CANISTER,
-            client.clone(),
-            request,
-        )
-        .now_or_never()
-        .unwrap();
-    // should be the same.
-    assert_eq!(result_for_explicit_version_5, expected_latest_result);
-
-    // Test with a specific version
-    let request = GetNodeProvidersMonthlyXdrRewardsRequest {
-        registry_version: Some(4),
-    };
-
-    let actual_result_for_version_4 = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
-        client.clone(),
-        request,
-    )
-    .now_or_never()
-    .unwrap();
-
-    let expected_result_for_version_4 = GetNodeProvidersMonthlyXdrRewardsResponse {
-        rewards: Some(NodeProvidersMonthlyXdrRewards {
-            rewards: btreemap! {
-                PrincipalId::from_str("djduj-3qcaa-aaaaa-aaaap-4ai").unwrap().0 => 294,
-                PrincipalId::from_str("ykqw2-6tyam-aaaaa-aaaap-4ai").unwrap().0 => 400,
-            },
-            registry_version: Some(latest_version),
-        }),
-        error: None,
-    };
-
-    assert_eq!(actual_result_for_version_4, expected_result_for_version_4);
+    // Version 1
+    test_at_version(Some(1), Ok(btreemap! {}));
+    // Version 2
+    test_at_version(
+        Some(2),
+        Ok(btreemap! {"djduj-3qcaa-aaaaa-aaaap-4ai" => 294}),
+    );
+    // Version 3
+    test_at_version(
+        Some(3),
+        Err("Node Operator with key 'jpjxp-djmaa-aaaaa-aaaap-4ai' \
+                        has data center ID 'dc2' not found in the Registry"
+            .to_string()),
+    );
+    // Version 4
+    test_at_version(
+        Some(4),
+        Ok(btreemap! {"djduj-3qcaa-aaaaa-aaaap-4ai" => 294, "ykqw2-6tyam-aaaaa-aaaap-4ai" => 400 }),
+    );
+    // Version 5
+    test_at_version(
+        Some(5),
+        Ok(
+            btreemap! {"djduj-3qcaa-aaaaa-aaaap-4ai" => 80835271, "ykqw2-6tyam-aaaaa-aaaap-4ai" => 24691356 },
+        ),
+    );
+    // Latest
+    test_at_version(
+        None,
+        Ok(
+            btreemap! {"djduj-3qcaa-aaaaa-aaaap-4ai" => 80835271, "ykqw2-6tyam-aaaaa-aaaap-4ai" => 24691356 },
+        ),
+    );
 }
