@@ -2464,7 +2464,7 @@ where
 /// A value of type `WasmFile` declares that some path should contain
 /// a Wasm module and provides a way to read it from disk or write it
 /// to disk.
-pub struct WasmFile<Permissions> {
+pub struct WasmFile<Permissions: AccessPolicy> {
     path: PathBuf,
     permissions_tag: PhantomData<Permissions>,
     _checkpoint: Option<CheckpointLayout<Permissions>>,
