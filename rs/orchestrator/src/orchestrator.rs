@@ -588,7 +588,7 @@ impl Orchestrator {
 }
 
 struct TaskTracker {
-    tasks: JoinSet</*task_name=*/ String>,
+    tasks: JoinSet<()>,
     task_names: HashMap<tokio::task::Id, String>,
     logger: ReplicaLogger,
     metrics: Arc<OrchestratorMetrics>,
@@ -606,30 +606,20 @@ impl TaskTracker {
 
     fn spawn(&mut self, task_name: &str, future: impl Future<Output = ()> + Send + 'static) {
         info!(self.logger, "Spawning the task `{task_name}`");
-        let task_name_clone = String::from(task_name);
-        let id = self
-            .tasks
-            .spawn(async {
-                future.await;
-                task_name_clone
-            })
-            .id();
+        let id = self.tasks.spawn(future).id();
         self.task_names.insert(id, task_name.to_string());
         info!(self.logger, "Task `{task_name}` spawned");
     }
 
     async fn join_all(&mut self) {
-        while let Some(join_result) = self.tasks.join_next().await {
+        while let Some(join_result) = self.tasks.join_next_with_id().await {
             match join_result {
-                Ok(task_name) => {
+                Ok((id, ())) => {
+                    let task_name = self.task_name(&id);
                     info!(self.logger, "Task `{task_name}` finished gracefully");
                 }
                 Err(err) => {
-                    let task_name = self
-                        .task_names
-                        .get(&err.id())
-                        .cloned()
-                        .unwrap_or_else(|| String::from("unknown"));
+                    let task_name = self.task_name(&err.id());
 
                     if err.is_panic() {
                         error!(self.logger, "Task `{task_name}` panicked!");
@@ -643,6 +633,13 @@ impl TaskTracker {
                 }
             }
         }
+    }
+
+    fn task_name(&self, id: &tokio::task::Id) -> String {
+        self.task_names
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| String::from("unknown"))
     }
 }
 
