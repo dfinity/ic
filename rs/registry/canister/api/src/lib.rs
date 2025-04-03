@@ -344,8 +344,7 @@ mod tests {
 
         let err = payload
             .validate()
-            .err()
-            .expect("Payload should have been invalid.");
+            .expect_err("Payload should have been invalid.");
         assert_eq!(err, "Invalid data. Not all fields provided.")
     }
 
@@ -359,8 +358,7 @@ mod tests {
 
         let err = payload
             .validate()
-            .err()
-            .expect("Payload should have been invalid.");
+            .expect_err("Payload should have been invalid.");
 
         assert_eq!(err, "No nodes to update supplied.")
     }
@@ -375,8 +373,7 @@ mod tests {
 
         let err = payload
             .validate()
-            .err()
-            .expect("Payload should have been an invalid.");
+            .expect_err("Payload should have been an invalid.");
 
         assert_eq!(err, "Old and new operator ids have to differ.")
     }
@@ -394,8 +391,7 @@ mod tests {
 
         let err = payload
             .validate()
-            .err()
-            .expect("Payload should have been an invalid.");
+            .expect_err("Payload should have been an invalid.");
 
         assert_eq!(err, "Provided node ids contain duplicates.")
     }

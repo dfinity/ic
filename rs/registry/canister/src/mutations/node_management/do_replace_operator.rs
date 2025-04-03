@@ -49,8 +49,8 @@ impl Registry {
             .map_err(|e| format!("{}do_replace_operator: {}", LOG_PREFIX, e))?;
 
         let node_ids = payload.node_ids.clone().unwrap();
-        let old_operator_id = payload.old_operator_id.clone().unwrap();
-        let new_operator_id = payload.new_operator_id.clone().unwrap();
+        let old_operator_id = payload.old_operator_id.unwrap();
+        let new_operator_id = payload.new_operator_id.unwrap();
 
         // Fetch operator records and extract
         // the records related to the provided
@@ -190,8 +190,7 @@ impl Registry {
             (Ok(old_operator_record), Ok(new_operator_record))
                 if old_operator_record.dc_id != new_operator_record.dc_id =>
             {
-                return Err(format!("{}do_replace_operator: Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}", LOG_PREFIX,
-            old_operator_id, old_operator_record.dc_id, new_operator_id, new_operator_record.dc_id));
+                Err(format!("{}do_replace_operator: Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}", LOG_PREFIX, old_operator_id, old_operator_record.dc_id, new_operator_id, new_operator_record.dc_id))
             }
             (Ok(old_operator_record), Ok(new_operator_record)) => {
                 Ok((old_operator_record.clone(), new_operator_record.clone()))
