@@ -72,6 +72,8 @@ jobs:
           elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$BRANCH_NAME" =~ ^dev-gh-.* ]]; then
               EXCLUDED_TEST_TAGS+=(long_test)
           fi
+          # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
+          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
           # Prepend tags with '-' and join them with commas for Bazel
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
