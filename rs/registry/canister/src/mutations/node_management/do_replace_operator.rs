@@ -8,7 +8,7 @@ use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperato
 use ic_registry_canister_api::UpdateNodeOperatorPayload;
 use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
 use ic_registry_transport::update;
-use ic_types::{NodeId, PrincipalId};
+use ic_types::PrincipalId;
 use prost::Message;
 
 impl Registry {
@@ -44,8 +44,14 @@ impl Registry {
         payload: UpdateNodeOperatorPayload,
         caller_id: PrincipalId,
     ) -> Result<(), String> {
-        let (node_ids, old_operator_id, new_operator_id) =
-            Self::validate_and_extract_incoming_data(&payload)?;
+        // 0. Validate the payload
+        payload
+            .validate()
+            .map_err(|e| format!("{}do_replace_operator: {}", LOG_PREFIX, e))?;
+
+        let node_ids = payload.node_ids.clone().unwrap();
+        let old_operator_id = payload.old_operator_id.clone().unwrap();
+        let new_operator_id = payload.new_operator_id.clone().unwrap();
 
         // 1. Fetch all node operators related to the caller
         // which is a node provider.
@@ -149,55 +155,6 @@ impl Registry {
         );
 
         Ok(())
-    }
-
-    fn validate_and_extract_incoming_data(
-        payload: &UpdateNodeOperatorPayload,
-    ) -> Result<(Vec<NodeId>, PrincipalId, PrincipalId), String> {
-        let (node_ids, old_operator_id, new_operator_id) = match (
-            &payload.node_ids,
-            &payload.old_operator_id,
-            &payload.new_operator_id,
-        ) {
-            (Some(node_ids), Some(old_operator_id), Some(new_operator_id)) => (
-                node_ids.clone(),
-                old_operator_id.clone(),
-                new_operator_id.clone(),
-            ),
-            _ => {
-                return Err(format!(
-                    "{}do_replace_operator: Invalid data. Not all fields provided.",
-                    LOG_PREFIX
-                ))
-            }
-        };
-
-        // Ensure there are some nodes sent
-        if node_ids.is_empty() {
-            return Err(format!(
-                "{}do_replace_operator: No nodes to update supplied.",
-                LOG_PREFIX
-            ));
-        }
-
-        // Ensure there are no duplicates
-        let deduplicated_nodes: BTreeSet<_> = node_ids.iter().cloned().collect();
-        if deduplicated_nodes.len() != node_ids.len() {
-            return Err(format!(
-                "{}do_replace_operator: Provided node ids contain duplicates.",
-                LOG_PREFIX
-            ));
-        }
-
-        // Ensure the node operators are different
-        if new_operator_id == old_operator_id {
-            return Err(format!(
-                "{}do_replace_operator: Old and new operator ids have to differ.",
-                LOG_PREFIX
-            ));
-        }
-
-        Ok((node_ids, old_operator_id, new_operator_id))
     }
 }
 
@@ -382,57 +339,6 @@ mod tests {
             make_data_center_record_key(dc_id).as_bytes().to_vec(),
             dc_record.encode_to_vec(),
         )
-    }
-
-    #[test]
-    fn disallow_empty_node_ids() {
-        let mut registry = Registry::new();
-
-        registry
-            .do_replace_operator_with_caller(payload(operator(1), operator(2), &[]), caller(99))
-            .assert_err_contains("No nodes to update supplied");
-    }
-
-    #[test]
-    fn disallow_same_operator_ids() {
-        let mut registry = Registry::new();
-
-        registry
-            .do_replace_operator_with_caller(
-                payload(operator(1), operator(1), &[node(1)]),
-                caller(99),
-            )
-            .assert_err_contains("Old and new operator ids have to differ.");
-    }
-
-    #[test]
-    fn disallow_invalid_payloads() {
-        let mut registry = Registry::new();
-
-        // Some but not all invalid payloads
-        let invalid_payloads = vec![
-            UpdateNodeOperatorPayload {
-                node_ids: None,
-                new_operator_id: None,
-                old_operator_id: None,
-            },
-            UpdateNodeOperatorPayload {
-                node_ids: Some(vec![node(1)]),
-                new_operator_id: None,
-                old_operator_id: Some(operator(1)),
-            },
-            UpdateNodeOperatorPayload {
-                node_ids: None,
-                new_operator_id: Some(operator(2)),
-                old_operator_id: Some(operator(1)),
-            },
-        ];
-
-        for invalid_payload in invalid_payloads {
-            registry
-                .do_replace_operator_with_caller(invalid_payload, provider(1))
-                .assert_err_contains("Invalid data. Not all fields provided.");
-        }
     }
 
     #[test]
@@ -680,18 +586,6 @@ mod tests {
             assert_eq!(operator_record.version, version_before + 1);
             assert_eq!(decoded.node_allowance, *allowance);
         }
-    }
-
-    #[test]
-    fn disallow_duplicate_correct_records() {
-        let mut registry = Registry::new();
-
-        registry
-            .do_replace_operator_with_caller(
-                payload(operator(1), operator(2), &[node(1), node(1)]),
-                caller(1),
-            )
-            .assert_err_contains("Provided node ids contain duplicates.");
     }
 
     // Functions below are used to create an invariant

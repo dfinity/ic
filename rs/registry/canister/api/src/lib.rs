@@ -1,7 +1,12 @@
 use candid::{CandidType, Deserialize};
 use ic_base_types::{NodeId, PrincipalId};
 use serde::Serialize;
-use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt,
+    net::Ipv4Addr,
+    str::FromStr,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -228,6 +233,37 @@ pub struct UpdateNodeOperatorPayload {
     pub old_operator_id: Option<PrincipalId>,
 }
 
+impl UpdateNodeOperatorPayload {
+    pub fn validate(&self) -> Result<(), String> {
+        // Ensure all fields are specified
+        let (node_ids, old_operator_id, new_operator_id) =
+            match (&self.node_ids, &self.old_operator_id, &self.new_operator_id) {
+                (Some(node_ids), Some(old_operator_id), Some(new_operator_id)) => {
+                    (node_ids, old_operator_id, new_operator_id)
+                }
+                _ => return Err("Invalid data. Not all fields provided.".to_string()),
+            };
+
+        // Ensure there are some nodes sent
+        if node_ids.is_empty() {
+            return Err("No nodes to update supplied.".to_string());
+        }
+
+        // Ensure there are no duplicates
+        let deduplicated_nodes: BTreeSet<_> = node_ids.iter().cloned().collect();
+        if deduplicated_nodes.len() != node_ids.len() {
+            return Err("Provided node ids contain duplicates.".to_string());
+        }
+
+        // Ensure the node operators are different
+        if new_operator_id == old_operator_id {
+            return Err("Old and new operator ids have to differ.".to_string());
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +332,71 @@ mod tests {
         assert!(!is_global_ipv4_address("100.96.12.34")); // shared
         assert!(!is_global_ipv4_address("240.255.249.11")); // reserved
         assert!(!is_global_ipv4_address("0.0.0.0")); // unspecified
+    }
+
+    #[test]
+    fn disallow_missing_fields() {
+        let payload = UpdateNodeOperatorPayload {
+            node_ids: None,
+            new_operator_id: None,
+            old_operator_id: None,
+        };
+
+        let err = payload
+            .validate()
+            .err()
+            .expect("Payload should have been invalid.");
+        assert_eq!(err, "Invalid data. Not all fields provided.")
+    }
+
+    #[test]
+    fn disallow_empty_node_ids() {
+        let payload = UpdateNodeOperatorPayload {
+            node_ids: Some(vec![]),
+            new_operator_id: Some(PrincipalId::new_user_test_id(0)),
+            old_operator_id: Some(PrincipalId::new_user_test_id(1)),
+        };
+
+        let err = payload
+            .validate()
+            .err()
+            .expect("Payload should have been invalid.");
+
+        assert_eq!(err, "No nodes to update supplied.")
+    }
+
+    #[test]
+    fn disallow_same_node_operator_id() {
+        let payload = UpdateNodeOperatorPayload {
+            node_ids: Some(vec![NodeId::new(PrincipalId::new_node_test_id(0))]),
+            new_operator_id: Some(PrincipalId::new_user_test_id(0)),
+            old_operator_id: Some(PrincipalId::new_user_test_id(0)),
+        };
+
+        let err = payload
+            .validate()
+            .err()
+            .expect("Payload should have been an invalid.");
+
+        assert_eq!(err, "Old and new operator ids have to differ.")
+    }
+
+    #[test]
+    fn disallow_duplicate_node_ids() {
+        let payload = UpdateNodeOperatorPayload {
+            node_ids: Some(vec![
+                NodeId::new(PrincipalId::new_node_test_id(0)),
+                NodeId::new(PrincipalId::new_node_test_id(0)),
+            ]),
+            new_operator_id: Some(PrincipalId::new_user_test_id(0)),
+            old_operator_id: Some(PrincipalId::new_user_test_id(1)),
+        };
+
+        let err = payload
+            .validate()
+            .err()
+            .expect("Payload should have been an invalid.");
+
+        assert_eq!(err, "Provided node ids contain duplicates.")
     }
 }
