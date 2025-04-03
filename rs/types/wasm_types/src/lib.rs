@@ -91,7 +91,7 @@ impl CanisterModule {
     pub fn file(&self) -> Option<&Path> {
         match &self.module {
             ModuleStorage::Memory(_) => None,
-            ModuleStorage::File(storage) => Some(&storage.path),
+            ModuleStorage::File(storage) => Some(&storage.file.path()),
         }
     }
 
