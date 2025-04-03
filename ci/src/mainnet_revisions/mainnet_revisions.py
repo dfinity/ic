@@ -175,7 +175,8 @@ def get_subnet_replica_version(subnet_id: str) -> str:
 def update_saved_hostos_revision(
     repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, version: str
 ):
-    """Download the hostos update image for the given version, compute its sha256 hash, and update the saved version.
+    """
+    Download the hostos update image for the given version, compute its sha256 hash, and update the saved version.
     """
     full_path = repo_root / file_path
     # Check if the hostos revision is already up-to-date.
