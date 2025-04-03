@@ -2519,7 +2519,7 @@ pub fn validate_wasm(wasm_file_layout: &dyn WasmFileLayout) -> Result<(), Layout
 
 impl<T> WasmFile<T>
 where
-    T: ReadPolicy + Send,
+    T: ReadPolicy + Send + Sync,
 {
     pub fn deserialize(self, module_hash: Option<WasmHash>) -> Result<CanisterModule, LayoutError> {
         CanisterModule::new_from_file(Box::new(self), module_hash).map_err(|err| {
