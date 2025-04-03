@@ -18,7 +18,6 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_state_removal_failed: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
     pub(crate) critical_error_task_panicked: IntCounterVec,
-    pub(crate) task_status: IntGaugeVec,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
@@ -43,8 +42,6 @@ impl KeyRotationStatus {
         matches!(self, KeyRotationStatus::Error)
     }
 }
-
-const LABEL_TASK: &str = "task_name";
 
 impl OrchestratorMetrics {
     pub fn new(metrics_registry: &ic_metrics::MetricsRegistry) -> Self {
@@ -99,12 +96,7 @@ impl OrchestratorMetrics {
             critical_error_task_panicked: metrics_registry.int_counter_vec(
                 "orchestrator_task_panicked",
                 "Number of times a task panicked, grouped by the a task name",
-                &[LABEL_TASK],
-            ),
-            task_status: metrics_registry.int_gauge_vec(
-                "orchestrator_task_status",
-                "The status of an orchestrator task: 0 = not running, 1 = running",
-                &[LABEL_TASK],
+                &["task_name"],
             ),
         }
     }

@@ -616,19 +616,13 @@ impl TaskTracker {
             .id();
         self.task_names.insert(id, task_name.to_string());
         info!(self.logger, "Task `{task_name}` spawned");
-        self.metrics
-            .task_status
-            .with_label_values(&[task_name])
-            .set(1);
     }
 
     async fn join_all(&mut self) {
         while let Some(join_result) = self.tasks.join_next().await {
-            let task_name = match join_result {
+            match join_result {
                 Ok(task_name) => {
                     info!(self.logger, "Task `{task_name}` finished gracefully");
-
-                    task_name
                 }
                 Err(err) => {
                     let task_name = self
@@ -646,15 +640,8 @@ impl TaskTracker {
                     } else {
                         info!(self.logger, "Task `{task_name}` was cancelled");
                     }
-
-                    task_name
                 }
-            };
-
-            self.metrics
-                .task_status
-                .with_label_values(&[&task_name])
-                .set(0);
+            }
         }
     }
 }
