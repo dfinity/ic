@@ -28,6 +28,7 @@ def transform_yaml(input_file, output_file):
 
 
 def main():
+    print("Ok let's go")
     github_dir = Path(__file__).parents[1]
     workflows_source = github_dir / "workflows-source"
     workflows_output = github_dir / "workflows"
