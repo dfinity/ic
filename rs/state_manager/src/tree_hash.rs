@@ -65,7 +65,7 @@ mod tests {
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, Global, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
     };
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
@@ -77,7 +77,7 @@ mod tests {
         metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
-        ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
+        ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{

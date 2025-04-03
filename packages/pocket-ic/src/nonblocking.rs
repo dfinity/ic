@@ -8,7 +8,9 @@ use crate::common::rest::{
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse};
+use crate::{
+    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse,
+};
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
@@ -33,11 +35,12 @@ use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::File;
+use std::fs::{remove_dir_all, File};
 use std::future::Future;
-use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::net::{IpAddr, SocketAddr};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
+use tempfile::TempDir;
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
@@ -84,6 +87,7 @@ pub struct PocketIc {
     // the instance should only be deleted when dropping this handle if this handle owns the instance
     owns_instance: bool,
     _log_guard: Option<WorkerGuard>,
+    _temp_dir: Option<TempDir>,
 }
 
 impl PocketIc {
@@ -119,6 +123,7 @@ impl PocketIc {
             reqwest_client,
             owns_instance: false,
             _log_guard: log_guard,
+            _temp_dir: None,
         }
     }
 
@@ -127,7 +132,8 @@ impl PocketIc {
         server_url: Option<Url>,
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PathBuf>,
+        read_only_state_dir: Option<PathBuf>,
+        mut state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -139,11 +145,40 @@ impl PocketIc {
         };
 
         let subnet_config_set = subnet_config_set.into();
-        if state_dir.is_none()
-            || File::open(state_dir.clone().unwrap().join("topology.json")).is_err()
-        {
+
+        // copy the read-only state dir to the state dir
+        // (creating an empty temp dir to serve as the state dir if no state dir is provided)
+        let mut temp_dir = None;
+        if let Some(read_only_state_dir) = read_only_state_dir {
+            let instance_state_dir = if let Some(ref state_dir) = state_dir {
+                if Path::new(state_dir).exists() {
+                    remove_dir_all(state_dir).unwrap();
+                }
+                state_dir.clone()
+            } else {
+                let instance_temp_dir = TempDir::new().unwrap();
+                let instance_state_dir = instance_temp_dir.path().to_path_buf();
+                temp_dir = Some(instance_temp_dir);
+                state_dir = Some(instance_state_dir.clone());
+                instance_state_dir
+            };
+            copy_dir(read_only_state_dir, instance_state_dir)
+                .expect("Failed to copy state directory");
+        };
+
+        // now that we initialized the state dir, we check if it contains a topology file
+        let has_topology = state_dir
+            .as_ref()
+            .map(|state_dir| File::open(state_dir.join("topology.json")).is_ok())
+            .unwrap_or_default();
+
+        // if there is no topology to fetch from the state dir,
+        // the topology will be derived from the provided subnet config set
+        // that we need to validate
+        if !has_topology {
             subnet_config_set.validate().unwrap();
         }
+
         let instance_config = InstanceConfig {
             subnet_config_set,
             state_dir,
@@ -179,6 +214,7 @@ impl PocketIc {
             reqwest_client,
             owns_instance: true,
             _log_guard: log_guard,
+            _temp_dir: temp_dir,
         }
     }
 
@@ -326,6 +362,12 @@ impl PocketIc {
         self.instance_url()
     }
 
+    /// Returns whether automatic progress is enabled on the PocketIC instance.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub async fn auto_progress_enabled(&self) -> bool {
+        self.get("auto_progress").await
+    }
+
     pub(crate) fn instance_url(&self) -> Url {
         self.server_url
             .join("/instances/")
@@ -350,28 +392,34 @@ impl PocketIc {
             .map(|res| Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap())
     }
 
-    /// Creates an HTTP gateway for this PocketIC instance listening
-    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// Creates an HTTP gateway for this PocketIC instance binding to `127.0.0.1`
+    /// and an optionally specified port (defaults to choosing an arbitrary unassigned port);
+    /// listening on `localhost`;
     /// and configures the PocketIC instance to make progress automatically, i.e.,
-    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api/v2` and `/api/v3` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
-        self.make_live_with_params(listen_at, None, None).await
+        self.make_live_with_params(None, listen_at, None, None)
+            .await
     }
 
-    /// Creates an HTTP gateway for this PocketIC instance listening
-    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
-    /// and optionally specified domains (default to `localhost`)
+    /// Creates an HTTP gateway for this PocketIC instance binding
+    /// to an optionally specified IP address (defaults to `127.0.0.1`)
+    /// and port (defaults to choosing an arbitrary unassigned port);
+    /// listening on optionally specified domains (default to `localhost`);
     /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
     /// and configures the PocketIC instance to make progress automatically, i.e.,
-    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api/v2` and `/api/v3` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live_with_params(
         &mut self,
+        ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
@@ -380,19 +428,25 @@ impl PocketIc {
             return url;
         }
         self.auto_progress().await;
-        self.start_http_gateway(listen_at, domains, https_config)
-            .await
+        self.start_http_gateway(
+            ip_addr.map(|ip_addr| ip_addr.to_string()),
+            listen_at,
+            domains,
+            https_config,
+        )
+        .await
     }
 
     async fn start_http_gateway(
         &mut self,
+        ip_addr: Option<String>,
         port: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
-            ip_addr: None,
+            ip_addr,
             port,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),

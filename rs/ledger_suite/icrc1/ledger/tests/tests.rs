@@ -209,7 +209,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         minting_account: MINTER,
         fee_collector_account: args.fee_collector_account,
         initial_balances: args.initial_balances,
-        transfer_fee: FEE.into(),
+        transfer_fee: args.transfer_fee,
         token_name: TOKEN_NAME.to_string(),
         decimals: Some(DECIMAL_PLACES),
         token_symbol: TOKEN_SYMBOL.to_string(),
@@ -513,9 +513,17 @@ fn test_archiving_lots_of_blocks_after_enabling_archiving() {
 }
 
 #[test]
-fn test_archiving_in_chunks_returns_non_disjoint_block_range_locations() {
-    ic_ledger_suite_state_machine_tests::archiving::archiving_in_chunks_returns_non_disjoint_block_range_locations(
+fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
+    ic_ledger_suite_state_machine_tests::archiving::archiving_in_chunks_returns_disjoint_block_range_locations(
         ledger_wasm(), encode_init_args
+    );
+}
+
+#[test]
+fn test_get_blocks_returns_multiple_archive_callbacks() {
+    ic_ledger_suite_state_machine_tests::archiving::get_blocks_returns_multiple_archive_callbacks(
+        ledger_wasm(),
+        encode_init_args,
     );
 }
 
@@ -870,6 +878,14 @@ mod metrics {
             ledger_wasm(),
             encode_init_args,
             encode_upgrade_args,
+        );
+    }
+
+    #[test]
+    fn should_compute_and_export_total_volume_metric() {
+        ic_ledger_suite_state_machine_tests::metrics::should_compute_and_export_total_volume_metric(
+            ledger_wasm(),
+            encode_init_args,
         );
     }
 }

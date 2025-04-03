@@ -6,7 +6,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::validation::{
     RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT, WASM_VALID_SYSTEM_FUNCTIONS,
 };
-use ic_replicated_state::Global;
+use ic_management_canister_types_private::Global;
 use ic_types::methods::WasmMethod;
 use lazy_static::lazy_static;
 use std::collections::BTreeSet;

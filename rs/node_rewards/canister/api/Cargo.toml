@@ -1,5 +1,5 @@
 [package]
-name = "node-rewards-canister-api"
+name = "ic-node-rewards-canister-api"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

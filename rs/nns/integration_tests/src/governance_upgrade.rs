@@ -27,7 +27,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{install_governance_canister, state_machine_test_on_nns_subnet},
     state_test_helpers::{
-        create_canister_id_at_position, setup_nns_root_with_correct_canister_id,
+        ensure_canister_id_exists_at_position, setup_nns_root_with_correct_canister_id,
         state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
@@ -96,7 +96,7 @@ fn test_upgrade_after_state_shrink() {
 #[test]
 fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeout() {
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let governance_id = create_canister_id_at_position(
+    let governance_id = ensure_canister_id_exists_at_position(
         &state_machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(

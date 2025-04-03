@@ -10,7 +10,7 @@ This macro defines the overall build process for ICOS images, including:
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
+load("//bazel:defs.bzl", "file_size_check", "gzip_compress", "zstd_compress")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
@@ -23,6 +23,7 @@ def icos_build(
         image_deps_func,
         mode = None,
         malicious = False,
+        max_file_sizes = None,
         upgrades = True,
         vuln_scan = True,
         visibility = None,
@@ -39,6 +40,7 @@ def icos_build(
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
+      max_file_sizes: mapping of output file to max allowed size
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
@@ -50,6 +52,9 @@ def icos_build(
 
     if mode == None:
         mode = name
+
+    if max_file_sizes == None:
+        max_file_sizes = {}
 
     image_deps = image_deps_func(mode, malicious)
 
@@ -337,6 +342,12 @@ def icos_build(
         tags = ["manual"],
     )
 
+    if "disk-img.tar.zst" in max_file_sizes:
+        file_size_check(
+            name = "disk-img.tar.zst",
+            max_file_size = max_file_sizes["disk-img.tar.zst"],
+        )
+
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -358,6 +369,12 @@ def icos_build(
             tags = ["manual"],
         )
 
+        if "update-img.tar.zst" in max_file_sizes:
+            file_size_check(
+                name = "update-img.tar.zst",
+                max_file_size = max_file_sizes["update-img.tar.zst"],
+            )
+
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -375,6 +392,12 @@ def icos_build(
             visibility = visibility,
             tags = ["manual"],
         )
+
+        if "update-img-test.tar.zst" in max_file_sizes:
+            file_size_check(
+                name = "update-img-test.tar.zst",
+                max_file_size = max_file_sizes["update-img-test.tar.zst"],
+            )
 
     # -------------------- Upload artifacts --------------------
 
@@ -462,6 +485,7 @@ EOF
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":disk-img.tar.zst",
+            "//rs/tests/nested:empty-disk-img.tar.zst",
             ":version.txt",
             "//bazel:upload_systest_dep",
         ],
@@ -471,6 +495,7 @@ EOF
             "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
             "VERSION_FILE": "$(location :version.txt)",
             "DISK_IMG": "$(location :disk-img.tar.zst)",
+            "EMPTY_DISK_IMG_PATH": "$(location //rs/tests/nested:empty-disk-img.tar.zst)",
         },
         testonly = True,
         tags = ["manual"],
