@@ -175,7 +175,19 @@ def get_subnet_replica_version(subnet_id: str) -> str:
 def update_saved_hostos_revision(
     repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, version: str
 ):
-    """Download the hostos update image for the given version, compute its sha256 hash, and update the saved version"""
+    """Download the hostos update image for the given version, compute its sha256 hash, and update the saved version.
+    """
+    full_path = repo_root / file_path
+    # Check if the hostos revision is already up-to-date.
+    with open(full_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    hostos_info = data.get("hostos", {})
+    latest_release = hostos_info.get("latest_release", {})
+    existing_version = latest_release.get("version", "")
+    if existing_version == version:
+        logger.info("Hostos revision already updated to version %s. Skipping download.", version)
+        return
+
     url = f"https://download.dfinity.systems/ic/{version}/host-os/update-img/update-img.tar.zst"
     logger.info("Downloading hostos update image from %s", url)
     with tempfile.NamedTemporaryFile() as tmp_file:
@@ -186,9 +198,6 @@ def update_saved_hostos_revision(
                 sha256.update(chunk)
         update_img_hash = sha256.hexdigest()
 
-    full_path = repo_root / file_path
-    with open(full_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
     data["hostos"] = {"latest_release": {"version": version, "update_img_hash": update_img_hash}}
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
