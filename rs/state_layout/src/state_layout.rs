@@ -2213,7 +2213,11 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     }
 
     pub fn wasm(&self) -> WasmFile<Permissions> {
-        self.snapshot_root.join(WASM_FILE).into()
+        WasmFile {
+            path: self.snapshot_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
     pub fn snapshot(
