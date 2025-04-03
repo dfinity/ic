@@ -172,10 +172,10 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         return latest_replica_version
 
 
-def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, version: str):
-    """
-    Download the hostos update image for the given version, compute its sha256 hash, and update the saved version
-    """
+def update_saved_hostos_revision(
+    repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, version: str
+):
+    """Download the hostos update image for the given version, compute its sha256 hash, and update the saved version"""
     url = f"https://download.dfinity.systems/ic/{version}/host-os/update-img/update-img.tar.zst"
     logger.info("Downloading hostos update image from %s", url)
     with tempfile.NamedTemporaryFile() as tmp_file:
@@ -189,12 +189,7 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
     full_path = repo_root / file_path
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    data["hostos"] = {
-        "latest_release": {
-            "version": version,
-            "update_img_hash": update_img_hash
-        }
-    }
+    data["hostos"] = {"latest_release": {"version": version, "update_img_hash": update_img_hash}}
     with open(full_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     logger.info("Updated hostos revision to version %s with image hash %s", version, update_img_hash)
