@@ -2519,9 +2519,12 @@ pub fn validate_wasm(wasm_file_layout: &dyn WasmFileLayout) -> Result<(), Layout
 
 impl<T> WasmFile<T>
 where
-    T: ReadPolicy + Send + Sync + 'static,
+    T: ReadPolicy,
 {
-    pub fn deserialize(self, module_hash: Option<WasmHash>) -> Result<CanisterModule, LayoutError> {
+    pub fn deserialize(self, module_hash: Option<WasmHash>) -> Result<CanisterModule, LayoutError>
+    where
+        T: Send + Sync + 'static,
+    {
         let path = self.path.clone();
         CanisterModule::new_from_file(Box::new(self), module_hash).map_err(|err| {
             LayoutError::IoError {
