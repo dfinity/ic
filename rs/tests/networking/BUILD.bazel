@@ -32,6 +32,11 @@ COMMON_DEPS = [
     "@crate_index//:slog-term",
 ]
 
+HTTP_ENDPOINTS_DEPS = [
+    # Keep sorted.
+    "//rs/http_endpoints/test_agent"
+]
+
 system_test_nns(
     name = "canister_http_test",
     env = {
@@ -169,6 +174,17 @@ system_test_nns(
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:url",
+    ],
+)
+
+system_test_nns(
+    name = "http_endpoints_public_spec_test",
+    flaky = False,
+    target_compatible_with = ["@platforms//os:linux"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
     ],
 )
 
