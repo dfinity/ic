@@ -2474,7 +2474,7 @@ pub struct WasmFile<Permissions: AccessPolicy> {
     _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
-impl<T> WasmFile<T> {
+impl<Permissions: AccessPolicy> WasmFile<Permissions> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
