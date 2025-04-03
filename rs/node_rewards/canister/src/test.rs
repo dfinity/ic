@@ -18,7 +18,7 @@ use ic_registry_keys::{
 use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
-use ic_types::{PrincipalId, RegistryVersion};
+use ic_types::PrincipalId;
 use maplit::btreemap;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -50,33 +50,6 @@ fn setup_canister_for_test() -> (
     // I ahve the store, the registry client, and the actual canister
     // I have memory, but that's abstracted away by the interface
     (canister, registry_client, fake_registry)
-}
-
-fn reg_value<T>(version: u64, value: Option<T>) -> RegistryValue
-where
-    T: prost::Message + Default,
-{
-    let deletion_marker = value.is_none();
-    let value = value
-        .map(|v| {
-            let mut buf = Vec::new();
-            v.encode(&mut buf).expect("Failed to encode value");
-            buf
-        })
-        .unwrap_or_default();
-
-    RegistryValue {
-        value,
-        version,
-        deletion_marker,
-    }
-}
-
-fn reg_delta(key: impl AsRef<[u8]>, values: Vec<RegistryValue>) -> RegistryDelta {
-    RegistryDelta {
-        key: key.as_ref().to_vec(),
-        values,
-    }
 }
 
 fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
@@ -201,7 +174,7 @@ fn test_rewards_calculation() {
     let test_at_version =
         |registry_version: Option<u64>, expected: Result<BTreeMap<&str, u64>, String>| {
             let request = GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: registry_version.clone(),
+                registry_version: registry_version,
             };
             let result = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
                 &CANISTER,
