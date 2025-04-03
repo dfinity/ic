@@ -74,9 +74,11 @@ pub trait RegistryDataStableMemory: Send + Sync {
 
 /// Usage: stable_memory_thread_local!(DummyState, MemoryId::new(0));
 /// That will produce an empty struct with RegistryDataStableMemory implemented for MemoryId 0,
-/// which will also initialize a BTreeMap to that position
+/// which will also initialize a BTreeMap to that position.
+/// This is useful for testing, but it's recommended to implement more explicitly in production
+/// to avoid any confusion with your Stable Memory configurations.
 #[macro_export]
-macro_rules! registry_data_stable_memory_impl {
+macro_rules! test_registry_data_stable_memory_impl {
     ($state_struct:ident, $local_key_btree_map:expr) => {
 
         struct $state_struct;

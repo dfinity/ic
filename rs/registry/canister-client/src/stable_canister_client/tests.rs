@@ -1,6 +1,6 @@
 use super::*;
-use crate::registry_data_stable_memory_impl;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
+use crate::test_registry_data_stable_memory_impl;
 use futures::FutureExt;
 use ic_nervous_system_canisters::registry::FakeRegistry;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
@@ -20,7 +20,7 @@ thread_local! {
     });
 }
 
-registry_data_stable_memory_impl!(DummyState, STATE);
+test_registry_data_stable_memory_impl!(DummyState, STATE);
 
 pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
     STATE.with_borrow_mut(|map| {

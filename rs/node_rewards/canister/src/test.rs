@@ -8,7 +8,9 @@ use ic_node_rewards_canister_api::monthly_rewards::{
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
-use ic_registry_canister_client::{registry_data_stable_memory_impl, StableCanisterRegistryClient};
+use ic_registry_canister_client::{
+    test_registry_data_stable_memory_impl, StableCanisterRegistryClient,
+};
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };
@@ -34,7 +36,7 @@ thread_local! {
     });
 }
 
-registry_data_stable_memory_impl!(TestState, STATE);
+test_registry_data_stable_memory_impl!(TestState, STATE);
 
 fn setup_canister_for_test() -> (
     NodeRewardsCanister,
