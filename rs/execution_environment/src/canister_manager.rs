@@ -484,13 +484,17 @@ impl CanisterManager {
             }
         };
 
-        let module = match Module::parse(decoded_wasm_module.as_slice(), false) {
-            Ok(module) => module,
-            Err(_err) => {
-                return false;
+        let parser = wasmparser::Parser::new(0);
+        for section in parser.parse_all(decoded_wasm_module.as_slice()) {
+            if let Ok(wasmparser::Payload::MemorySection(reader)) = section {
+                for memory in reader {
+                    if let Ok(ty) = memory {
+                        return ty.memory64;
+                    }
+                }
             }
-        };
-        module.memories.first().is_some_and(|m| m.memory64)
+        }
+        false
     }
 
     /// Installs code to a canister.
