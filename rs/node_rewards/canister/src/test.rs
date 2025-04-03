@@ -17,7 +17,6 @@ use ic_registry_canister_client::{
 use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, NODE_REWARDS_TABLE_KEY,
 };
-use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_types::PrincipalId;
@@ -175,9 +174,7 @@ fn test_rewards_calculation() {
 
     let test_at_version =
         |registry_version: Option<u64>, expected: Result<BTreeMap<&str, u64>, String>| {
-            let request = GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: registry_version,
-            };
+            let request = GetNodeProvidersMonthlyXdrRewardsRequest { registry_version };
             let result = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
                 &CANISTER,
                 client.clone(),
