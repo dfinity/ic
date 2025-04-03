@@ -1410,7 +1410,7 @@ impl<Permissions: AccessPolicy> Drop for CheckpointLayoutImpl<Permissions> {
 
 pub struct CheckpointLayout<Permissions: AccessPolicy>(Arc<CheckpointLayoutImpl<Permissions>>);
 
-impl<Permissions: AccessPolicy> Clone for CheckpointLayout<Permissions> {
+impl Clone for CheckpointLayout<ReadOnly> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
