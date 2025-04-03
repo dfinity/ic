@@ -222,10 +222,10 @@ pub struct Chunk {
 /// with a different one in the same data center and that is linked
 /// to the same node provider.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct ReplaceNodeOperatorPayload {
-    pub node_ids: Vec<NodeId>,
-    pub new_operator_id: PrincipalId,
-    pub old_operator_id: PrincipalId,
+pub struct UpdateNodeOperatorPayload {
+    pub node_ids: Option<Vec<NodeId>>,
+    pub new_operator_id: Option<PrincipalId>,
+    pub old_operator_id: Option<PrincipalId>,
 }
 
 #[cfg(test)]
