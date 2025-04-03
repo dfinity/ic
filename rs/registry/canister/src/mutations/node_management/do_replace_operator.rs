@@ -8,7 +8,7 @@ use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperato
 use ic_registry_canister_api::UpdateNodeOperatorPayload;
 use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
 use ic_registry_transport::update;
-use ic_types::PrincipalId;
+use ic_types::{NodeId, PrincipalId};
 use prost::Message;
 
 impl Registry {
@@ -19,6 +19,13 @@ impl Registry {
     /// Expected caller of this function has to be a principal
     /// related to a node provider. All other principals will
     /// be rejected.
+    ///
+    /// It is expected that all the nodes currently have set
+    /// `old_node_operator` as their node operator.
+    ///
+    /// Both `old_node_operator` and `new_node_operator` must
+    /// belong to the same node provider, who is the caller,
+    /// and must be within the same data center.
     pub fn do_replace_operator(
         &mut self,
         payload: UpdateNodeOperatorPayload,
@@ -37,34 +44,8 @@ impl Registry {
         payload: UpdateNodeOperatorPayload,
         caller_id: PrincipalId,
     ) -> Result<(), String> {
-        let (node_ids, old_operator_id, new_operator_id) = match (
-            &payload.node_ids,
-            &payload.old_operator_id,
-            &payload.new_operator_id,
-        ) {
-            (Some(node_ids), Some(old_operator_id), Some(new_operator_id)) => (
-                node_ids.clone(),
-                old_operator_id.clone(),
-                new_operator_id.clone(),
-            ),
-            _ => return Err("Invalid data. Not all fields provided.".to_string()),
-        };
-
-        // 0. Ensure there are some nodes sent
-        if node_ids.is_empty() {
-            return Err(format!(
-                "{}do_replace_operator: No nodes to update supplied.",
-                LOG_PREFIX
-            ));
-        }
-
-        // 0. Ensure the node operators are different
-        if new_operator_id == old_operator_id {
-            return Err(format!(
-                "{}do_replace_operator: Old and new operator ids have to differ.",
-                LOG_PREFIX
-            ));
-        }
+        let (node_ids, old_operator_id, new_operator_id) =
+            Self::validate_and_extract_incoming_data(&payload)?;
 
         // 1. Fetch all node operators related to the caller
         // which is a node provider.
@@ -168,6 +149,55 @@ impl Registry {
         );
 
         Ok(())
+    }
+
+    fn validate_and_extract_incoming_data(
+        payload: &UpdateNodeOperatorPayload,
+    ) -> Result<(Vec<NodeId>, PrincipalId, PrincipalId), String> {
+        let (node_ids, old_operator_id, new_operator_id) = match (
+            &payload.node_ids,
+            &payload.old_operator_id,
+            &payload.new_operator_id,
+        ) {
+            (Some(node_ids), Some(old_operator_id), Some(new_operator_id)) => (
+                node_ids.clone(),
+                old_operator_id.clone(),
+                new_operator_id.clone(),
+            ),
+            _ => {
+                return Err(format!(
+                    "{}do_replace_operator: Invalid data. Not all fields provided.",
+                    LOG_PREFIX
+                ))
+            }
+        };
+
+        // Ensure there are some nodes sent
+        if node_ids.is_empty() {
+            return Err(format!(
+                "{}do_replace_operator: No nodes to update supplied.",
+                LOG_PREFIX
+            ));
+        }
+
+        // Ensure there are no duplicates
+        let deduplicated_nodes: BTreeSet<_> = node_ids.iter().cloned().collect();
+        if deduplicated_nodes.len() != node_ids.len() {
+            return Err(format!(
+                "{}do_replace_operator: Provided node ids contain duplicates.",
+                LOG_PREFIX
+            ));
+        }
+
+        // Ensure the node operators are different
+        if new_operator_id == old_operator_id {
+            return Err(format!(
+                "{}do_replace_operator: Old and new operator ids have to differ.",
+                LOG_PREFIX
+            ));
+        }
+
+        Ok((node_ids, old_operator_id, new_operator_id))
     }
 }
 
@@ -653,53 +683,15 @@ mod tests {
     }
 
     #[test]
-    fn allow_duplicate_correct_records() {
+    fn disallow_duplicate_correct_records() {
         let mut registry = Registry::new();
 
-        let first_node = generate_valid_node_id();
-        registry.apply_mutations_for_test(
-            vec![
-                dc_mutation("dc1"),
-                operator_mutation(operator(1), provider(1), 10, "dc1"),
-                operator_mutation(operator(2), provider(1), 10, "dc1"),
-                node_mutation(first_node.node_id(), operator(1)),
-            ]
-            .into_iter()
-            // These are the mutations required to have a compliant registry
-            .chain(get_mutations_to_achieve_invariancy(&[&first_node]))
-            .collect(),
-        );
-
-        let version_before = registry.latest_version();
         registry
             .do_replace_operator_with_caller(
-                payload(
-                    operator(1),
-                    operator(2),
-                    &[first_node.node_id(), first_node.node_id()],
-                ),
+                payload(operator(1), operator(2), &[node(1), node(1)]),
                 caller(1),
             )
-            .assert_ok();
-
-        assert!(
-            registry.latest_version() == version_before + 1,
-            "Expected registry version to increase. Before execution: {}, after execution: {}",
-            version_before,
-            registry.latest_version()
-        );
-        for (operator, allowance) in &[(operator(1), 11), (operator(2), 9)] {
-            let operator_record = registry
-                .get(
-                    make_node_operator_record_key(*operator).as_bytes(),
-                    registry.latest_version(),
-                )
-                .unwrap();
-
-            let decoded = NodeOperatorRecord::decode(operator_record.value.as_slice()).unwrap();
-            assert_eq!(operator_record.version, version_before + 1);
-            assert_eq!(decoded.node_allowance, *allowance);
-        }
+            .assert_err_contains("Provided node ids contain duplicates.");
     }
 
     // Functions below are used to create an invariant
