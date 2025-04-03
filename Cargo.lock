@@ -9179,6 +9179,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-http-endpoints-test-agent"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-tree-hash",
+ "ic-types",
+ "ic-validator",
+ "reqwest 0.12.12",
+ "serde_cbor",
+ "tokio",
+]
+
+[[package]]
 name = "ic-http-endpoints-xnet"
 version = "0.9.0"
 dependencies = [
