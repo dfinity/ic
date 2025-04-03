@@ -5,12 +5,26 @@ Goal:: Ensure simple HTTP requests can be made from canisters.
 
 Runbook::
 0. Create an IC with two subnets with one node each
-1. Instanciate two universal canisters, one on each subnet
+1. Instanciate two universal canisters, two on the system subnet, one on the app subnet
 2. Run the specific spec tests
 
 
 Success::
 1. Received expected http response code as per specification
+
+
+Effective Canister test:
+1. Update call with canister_id A to the endpoint /api/v{2,3}/canister/B/call with a different canister ID B in the URL is rejected with 4xx;
+2. Query call with canister_id A to the endpoint /api/v2/canister/B/query with a different canister ID B in the URL is rejected with 4xx;
+3. Read state request for the path /canisters/A/controllers to the endpoint /api/v2/canister/B/read_state with a different canister ID B in the URL is rejected with 4xx;
+4. Read state request for the path /time to the endpoint /api/v2/canister/aaaaa-aa/read_state is rejected with 4xx.
+
+The different canister ID B is
+1. The canister ID of a different canister on the same subnet;
+2. The canister ID of a different canister on a different subnet;
+3. A malformed principal;
+4. The management canister ID.
+
 
 end::catalog[] */
 
@@ -25,8 +39,11 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
+    util::{block_on, UniversalCanister},
 };
 use slog::info;
+
+const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -54,22 +71,47 @@ fn setup(env: TestEnv) {
 
 fn test(env: TestEnv) {
     let logger = env.logger();
+    let snapshot = env.topology_snapshot();
 
-    let sys_subnet = env
-        .topology_snapshot()
+    // Get the system subnet, setup an agent and get two canister ids from the range
+    let sys_subnet = snapshot
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::System)
         .expect("Failed to find system subnet");
+    let sys_node = sys_subnet
+        .nodes()
+        .next()
+        .expect("Failed to find node in system subnet");
     let sys_agent = sys_subnet.nodes().next().unwrap().build_default_agent();
+    let sys_subnet_canister_id_range = sys_subnet.subnet_canister_ranges()[0];
+    let sys_uc1_id = sys_subnet_canister_id_range
+        .generate_canister_id(None)
+        .unwrap();
+    let sys_uc2_id = sys_subnet_canister_id_range
+        .generate_canister_id(Some(sys_uc1_id))
+        .unwrap();
 
-    let app_subnet = env
-        .topology_snapshot()
+    // Get the app subnet, setup an agent and get a cansiter id from the range
+    let app_subnet = snapshot
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("Failed to find app subnet");
+    let app_node = app_subnet
+        .nodes()
+        .next()
+        .expect("Failed to find node in system subnet");
     let app_agent = app_subnet.nodes().next().unwrap().build_default_agent();
+    let app_uc_id = app_node.effective_canister_id();
 
     block_on(async {
+        // Create three universal canister, two on the system sybnet, one on the app subnet
+        let sys_uc1 =
+            UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger).await;
+        let sys_uc2 =
+            UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger).await;
+        let app_uc =
+            UniversalCanister::new_with_retries(&app_agent, app_uc_id.into(), &logger).await;
+
         // TODO
     });
     todo!()
