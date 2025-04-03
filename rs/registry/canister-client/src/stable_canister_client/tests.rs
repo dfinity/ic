@@ -272,8 +272,6 @@ fn test_sync_registry_stored() {
 
 #[test]
 fn test_error_on_local_too_large() {
-    let mut responses = FakeRegistryResponses::new();
-
     let (client, fake_registry) = client_for_tests();
     // These values will cause the current_local version to be greater than 1
     fake_registry.set_value_at_version("Foo", 1, Some(vec![1]));

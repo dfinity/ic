@@ -181,9 +181,9 @@ impl FakeRegistry {
 impl Registry for FakeRegistry {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
         if let Some(response) = self.override_get_latest_version.lock().unwrap().pop() {
-            return response.map(RegistryVersion::new).map_err(|e| {
-                NervousSystemError::new_with_message(format!("Error getting latest version: {e:?}"))
-            });
+            return response
+                .map(RegistryVersion::new)
+                .map_err(|e| NervousSystemError::new_with_message(format!("{e:?}")));
         }
 
         Ok(self
