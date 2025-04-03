@@ -10,7 +10,7 @@ use ic_types::MemoryDiskBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::{
     fmt,
     path::{Path, PathBuf},
@@ -72,8 +72,11 @@ impl CanisterModule {
         }
     }
 
-    pub fn new_from_file(path: PathBuf, module_hash: Option<WasmHash>) -> std::io::Result<Self> {
-        let module = ModuleStorage::from_file(path);
+    pub fn new_from_file(
+        wasm_file_layout: Box<dyn WasmFileLayout + Send + Sync>,
+        module_hash: Option<WasmHash>,
+    ) -> std::io::Result<Self> {
+        let module = ModuleStorage::from_file(wasm_file_layout);
         // It should only be necessary to compute the hash here when
         // loading checkpoints written by older replica versions
         let module_hash =
@@ -88,7 +91,7 @@ impl CanisterModule {
     pub fn file(&self) -> Option<&Path> {
         match &self.module {
             ModuleStorage::Memory(_) => None,
-            ModuleStorage::File(file_storage) => Some(&file_storage.path),
+            ModuleStorage::File(storage) => Some(&storage.path),
         }
     }
 
@@ -213,44 +216,43 @@ fn wasmhash_display() {
 #[derive(Clone)]
 enum ModuleStorage {
     Memory(Arc<Vec<u8>>),
-    File(FileStorage),
+    File(WasmFileStorage),
 }
 
 #[derive(Clone)]
-pub struct FileStorage {
-    path: PathBuf,
+pub struct WasmFileStorage {
+    file: Arc<Box<dyn WasmFileLayout + Send + Sync>>,
     mmap: Arc<OnceLock<ic_sys::mmap::ScopedMmap>>,
 }
 
-impl FileStorage {
-    fn from_file(path: PathBuf) -> Self {
+/// Trait for file-based storage backends.
+///
+/// # Invariant
+/// Implementors **must guarantee** that the path returned by `path()`
+/// points to a valid file that exists and is accessible whenever `mmap_file()` is called.
+///
+/// If the path does not exist, `mmap_file()` will panic
+pub trait WasmFileLayout {
+    fn mmap_file(&self) -> std::io::Result<ic_sys::mmap::ScopedMmap>;
+
+    fn path(&self) -> &Path;
+}
+
+impl WasmFileStorage {
+    pub fn lazy_load(wasm_file_layout: Box<dyn WasmFileLayout + Send + Sync>) -> Self {
         Self {
-            path,
+            file: Arc::new(wasm_file_layout),
             mmap: Arc::new(OnceLock::new()),
         }
     }
 
-    fn init_or_die(&self) -> &ic_sys::mmap::ScopedMmap {
-        self.mmap
-            .get_or_init(|| Self::mmap_file(&self.path).expect("Failed to mmap file"))
+    pub fn is_loaded(&self) -> bool {
+        self.mmap.get().is_some()
     }
 
-    // NB: call it in validation stage
-    pub fn mmap_file(path: &Path) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
-        use std::io;
-
-        let f = std::fs::File::open(&path)?;
-        let len = f.metadata()?.len();
-        if len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{}: Wasm file must not be empty", path.display()),
-            ));
-        }
-        match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
-            Ok(mmap) => Ok(mmap),
-            Err(_) => Err(io::Error::last_os_error()),
-        }
+    fn init_or_die(&self) -> &ic_sys::mmap::ScopedMmap {
+        self.mmap
+            .get_or_init(|| self.file.mmap_file().expect("Failed to mmap file"))
     }
 
     fn as_slice(&self) -> &[u8] {
@@ -263,22 +265,22 @@ impl FileStorage {
 }
 
 impl ModuleStorage {
-    fn from_file(path: PathBuf) -> Self {
-        Self::File(FileStorage::from_file(path))
+    fn from_file(file: Box<dyn WasmFileLayout + Send + Sync>) -> Self {
+        Self::File(WasmFileStorage::lazy_load(file))
     }
 
     fn as_slice(&self) -> &[u8] {
         match &self {
             Self::Memory(arc) => arc.as_slice(),
             // This is safe because the file is read-only.
-            Self::File(file_storage) => file_storage.as_slice(),
+            Self::File(storage) => storage.as_slice(),
         }
     }
 
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
-            ModuleStorage::File(file_storage) => file_storage.len(),
+            ModuleStorage::File(storage) => storage.len(),
         }
     }
 }

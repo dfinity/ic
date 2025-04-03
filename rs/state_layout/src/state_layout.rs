@@ -29,7 +29,7 @@ use ic_types::{
     LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{CanisterModule, FileStorage, WasmHash};
+use ic_wasm_types::{CanisterModule, WasmFileLayout, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
@@ -46,6 +46,7 @@ use crate::error::LayoutError;
 use crate::utils::do_copy;
 
 use crossbeam_channel::{bounded, unbounded, Sender};
+use ic_replicated_state::page_map::PersistenceError;
 use ic_utils_thread::JoinOnDrop;
 
 #[cfg(test)]
@@ -2122,7 +2123,11 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     }
 
     pub fn wasm(&self) -> WasmFile<Permissions> {
-        self.canister_root.join(WASM_FILE).into()
+        WasmFile {
+            path: self.canister_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
     pub fn canister(
@@ -2462,6 +2467,7 @@ where
 pub struct WasmFile<Permissions> {
     path: PathBuf,
     permissions_tag: PhantomData<Permissions>,
+    _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
 impl<T> WasmFile<T> {
@@ -2470,30 +2476,55 @@ impl<T> WasmFile<T> {
     }
 }
 
+impl<T> WasmFileLayout for WasmFile<T>
+where
+    T: ReadPolicy,
+{
+    fn mmap_file(&self) -> std::io::Result<ic_sys::mmap::ScopedMmap> {
+        use std::io;
+        let path = self.path();
+        let f = std::fs::File::open(&path)?;
+        let len = f.metadata()?.len();
+        if len == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}: Wasm file must not be empty", path.display()),
+            ));
+        }
+        match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
+            Ok(mmap) => Ok(mmap),
+            Err(_) => Err(io::Error::last_os_error()),
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+pub fn validate_wasm(wasm_file_layout: &dyn WasmFileLayout) -> Result<(), LayoutError> {
+    wasm_file_layout
+        .mmap_file()
+        .map_err(|err| LayoutError::IoError {
+            path: wasm_file_layout.path().to_path_buf(),
+            message: "Failed to validate wasm file".to_string(),
+            io_err: err,
+        })?;
+    Ok(())
+}
+
 impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn deserialize(
-        &self,
-        module_hash: Option<WasmHash>,
-    ) -> Result<CanisterModule, LayoutError> {
-        CanisterModule::new_from_file(self.path.clone(), module_hash).map_err(|err| {
+    pub fn deserialize(self, module_hash: Option<WasmHash>) -> Result<CanisterModule, LayoutError> {
+        CanisterModule::new_from_file(Box::new(self), module_hash).map_err(|err| {
             LayoutError::IoError {
                 path: self.path.clone(),
                 message: "Failed to read file contents".to_string(),
                 io_err: err,
             }
         })
-    }
-
-    pub fn validate(&self) -> Result<(), LayoutError> {
-        FileStorage::mmap_file(&self.path).map_err(|err| LayoutError::IoError {
-            path: self.path.clone(),
-            message: "Failed to validate wasm file".to_string(),
-            io_err: err,
-        })?;
-        Ok(())
     }
 
     /// Hardlink the (readonly) file from `src` to `dst`.
@@ -2568,15 +2599,6 @@ where
     /// Removes the file if it exists, else does nothing.
     pub fn try_delete_file(&self) -> Result<(), LayoutError> {
         try_remove_file(&self.path)
-    }
-}
-
-impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
-    fn from(path: PathBuf) -> Self {
-        Self {
-            path,
-            permissions_tag: PhantomData,
-        }
     }
 }
 
