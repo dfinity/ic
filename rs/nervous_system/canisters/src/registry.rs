@@ -105,27 +105,31 @@ pub type FakeRegistryMap = BTreeMap<Vec<u8>, Vec<RegistryValue>>;
 pub struct FakeRegistry {
     version: AtomicU64,
     store: Arc<Mutex<FakeRegistryMap>>,
-    override_responses: Arc<Mutex<FakeRegistryResponses>>,
+    override_get_changes_since: Arc<Mutex<FakeRegistryResponses>>,
+    override_get_latest_version: Arc<Mutex<Vec<Result<u64, Error>>>>,
 }
 
 impl FakeRegistry {
     pub fn new() -> Self {
-        FakeRegistry {
-            version: AtomicU64::new(0),
-            store: Default::default(),
-            override_responses: Default::default(),
-        }
+        FakeRegistry::default()
     }
 
-    pub fn add_fake_response_for_get_changes_since(
+    pub fn set_fake_response_for_get_changes_since(
         &mut self,
         version: u64,
         response: Result<Vec<RegistryDelta>, Error>,
     ) {
-        self.override_responses
+        self.override_get_changes_since
             .lock()
             .unwrap()
             .insert(version, response);
+    }
+
+    pub fn add_fake_response_for_get_latest_version(&self, response: Result<u64, Error>) {
+        self.override_get_latest_version
+            .lock()
+            .unwrap()
+            .push(response);
     }
 
     pub fn encode_value_at_version<T: prost::Message + Default>(
@@ -134,6 +138,16 @@ impl FakeRegistry {
         version: u64,
         value: Option<T>,
     ) {
+        let value = value.map(|v| {
+            let mut buf = Vec::new();
+            v.encode(&mut buf).expect("Failed to encode value");
+            buf
+        });
+
+        self.set_value_at_version(key, version, value);
+    }
+
+    pub fn set_value_at_version(&self, key: impl AsRef<str>, version: u64, value: Option<Vec<u8>>) {
         let key_bytes = key.as_ref().as_bytes().to_vec();
         let mut binding = self.store.lock().unwrap();
 
@@ -147,14 +161,7 @@ impl FakeRegistry {
             ),
             Err(index) => {
                 let deletion_marker = value.is_none();
-                let value = value
-                    .map(|v| {
-                        let mut buf = Vec::new();
-                        v.encode(&mut buf).expect("Failed to encode value");
-                        buf
-                    })
-                    .unwrap_or_default();
-
+                let value = value.unwrap_or_default();
                 let registry_value = RegistryValue {
                     value,
                     version,
@@ -173,6 +180,12 @@ impl FakeRegistry {
 #[async_trait]
 impl Registry for FakeRegistry {
     async fn get_latest_version(&self) -> Result<RegistryVersion, NervousSystemError> {
+        if let Some(response) = self.override_get_latest_version.lock().unwrap().pop() {
+            return response.map(RegistryVersion::new).map_err(|e| {
+                NervousSystemError::new_with_message(format!("Error getting latest version: {e:?}"))
+            });
+        }
+
         Ok(self
             .version
             .load(std::sync::atomic::Ordering::SeqCst)
@@ -189,7 +202,7 @@ impl Registry for FakeRegistry {
         version: RegistryVersion,
     ) -> Result<Vec<RegistryDelta>, NervousSystemError> {
         if let Some(response) = self
-            .override_responses
+            .override_get_changes_since
             .lock()
             .unwrap()
             .remove(&version.get())
