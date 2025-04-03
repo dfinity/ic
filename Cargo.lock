@@ -8463,6 +8463,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-test-utils-vetkd"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-internal-bls12-381-type",
+ "ic-crypto-internal-bls12-381-vetkd",
+ "ic-vetkd-utils",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+]
+
+[[package]]
 name = "ic-crypto-tls-cert-validation"
 version = "0.9.0"
 dependencies = [
@@ -8861,6 +8872,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-prng",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-cycles-account-manager",
@@ -13250,6 +13262,7 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
