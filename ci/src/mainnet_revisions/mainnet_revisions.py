@@ -192,11 +192,8 @@ def update_saved_hostos_revision(
     logger.info("Downloading hostos update image from %s", url)
     with tempfile.NamedTemporaryFile() as tmp_file:
         urllib.request.urlretrieve(url, tmp_file.name)
-        sha256 = hashlib.sha256()
         with open(tmp_file.name, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                sha256.update(chunk)
-        update_img_hash = sha256.hexdigest()
+            update_img_hash = hashlib.file_digest(f, "sha256").hexdigest()
 
     data["hostos"] = {"latest_release": {"version": version, "update_img_hash": update_img_hash}}
     with open(full_path, "w", encoding="utf-8") as f:
