@@ -8,6 +8,7 @@ on:
   pull_request:
   merge_group:
 
+# test
 # Ensure there's only one instance of this workflow for any PR/branch/tag, and
 # cancel the previous one if necessary; except on master where we want to build
 # every commit
