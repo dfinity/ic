@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 #[cfg(target_arch = "wasm32")]
@@ -6,7 +8,7 @@ use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperato
 use ic_registry_canister_api::UpdateNodeOperatorPayload;
 use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
 use ic_registry_transport::update;
-use ic_types::PrincipalId;
+use ic_types::{NodeId, PrincipalId};
 use prost::Message;
 
 impl Registry {
@@ -62,50 +64,28 @@ impl Registry {
             &new_operator_id,
         )?;
 
-        let mut mutations = vec![];
-
-        for node_id in node_ids {
-            // 1. Check that the node exists in the registry
-            let node_record = self.get_node(node_id).ok_or_else(|| {
-                format!(
-                    "{}do_replace_operator: Node not found: {}",
-                    LOG_PREFIX, node_id
-                )
-            })?;
-
-            if node_record.node_operator_id == new_operator_record.node_operator_principal_id {
-                println!(
-                    "{}do_replace_operator: Node {} already belongs to node operator {}",
-                    LOG_PREFIX, node_id, new_operator_id
-                );
-                continue;
-            }
-
-            if node_record.node_operator_id != old_operator_record.node_operator_principal_id {
-                return Err(format!(
-                    "{}do_replace_operator: Node {} does not belong to node operator {}",
-                    LOG_PREFIX, node_id, old_operator_id
-                ));
-            }
-
-            // Update the node record itself
-            let node_key = make_node_record_key(node_id);
-            let updated_node_record = NodeRecord {
-                node_operator_id: new_operator_record.node_operator_principal_id.clone(),
-                ..node_record
-            };
-            mutations.push(update(node_key, updated_node_record.encode_to_vec()));
-        }
+        let mut valid_mutations: Vec<_> = self
+            .maybe_fetch_nodes_to_update(&node_ids, &new_operator_id, &old_operator_id)?
+            .into_iter()
+            .map(|(node_id, node_record)| {
+                let node_key = make_node_record_key(node_id);
+                let updated_node_record = NodeRecord {
+                    node_operator_id: new_operator_id.as_slice().to_vec(),
+                    ..node_record
+                };
+                update(node_key, updated_node_record.encode_to_vec())
+            })
+            .collect();
 
         // Nothing should be done.
-        if mutations.is_empty() {
+        if valid_mutations.is_empty() {
             return Ok(());
         }
 
-        let node_mutations = mutations.len() as u64;
+        let node_mutations = valid_mutations.len() as u64;
 
         if node_mutations > new_operator_record.node_allowance {
-            return Err(format!("{}do_replace_operator: Adding {} nodes would overflow node allowance for node operator {} who has {} remaining", LOG_PREFIX, mutations.len(), new_operator_id, new_operator_record.node_allowance));
+            return Err(format!("{}do_replace_operator: New operator cannot accept {} nodes due to remaining allowance {}", LOG_PREFIX, node_mutations, new_operator_record.node_allowance));
         }
 
         // Update new node operator record to decrease node allowance
@@ -114,7 +94,7 @@ impl Registry {
             node_allowance: new_operator_record.node_allowance - node_mutations,
             ..new_operator_record.clone()
         };
-        mutations.push(update(
+        valid_mutations.push(update(
             new_node_operator_key,
             updated_new_operator_record.encode_to_vec(),
         ));
@@ -125,12 +105,12 @@ impl Registry {
             node_allowance: old_operator_record.node_allowance + node_mutations,
             ..old_operator_record.clone()
         };
-        mutations.push(update(
+        valid_mutations.push(update(
             old_node_operator_key,
             updated_old_operator_record.encode_to_vec(),
         ));
 
-        self.maybe_apply_mutation_internal(mutations);
+        self.maybe_apply_mutation_internal(valid_mutations);
 
         println!(
             "{}do_replace_operator: Finished executing payload: {:?}",
@@ -138,6 +118,43 @@ impl Registry {
         );
 
         Ok(())
+    }
+
+    fn maybe_fetch_nodes_to_update(
+        &self,
+        provided_node_ids: &Vec<NodeId>,
+        new_operator_id: &PrincipalId,
+        old_operator_id: &PrincipalId,
+    ) -> Result<BTreeMap<NodeId, NodeRecord>, String> {
+        let mut node_records = BTreeMap::new();
+
+        for node_id in provided_node_ids {
+            let node_record = self.get_node(*node_id).ok_or_else(|| {
+                format!(
+                    "{}do_replace_operator: Node not found: {}",
+                    LOG_PREFIX, node_id
+                )
+            })?;
+
+            if node_record.node_operator_id.eq(new_operator_id.as_slice()) {
+                println!(
+                    "{}do_replace_operator: Node {} already belongs to node operator {}",
+                    LOG_PREFIX, node_id, new_operator_id
+                );
+                continue;
+            }
+
+            if node_record.node_operator_id.ne(old_operator_id.as_slice()) {
+                return Err(format!(
+                    "{}do_replace_operator: Node {} does not belong to node operator {}",
+                    LOG_PREFIX, node_id, old_operator_id
+                ));
+            }
+
+            node_records.insert(*node_id, node_record);
+        }
+
+        Ok(node_records)
     }
 
     fn maybe_fetch_operators_for_provider(
@@ -532,7 +549,7 @@ mod tests {
                 payload(operator(1), operator(2), &[node(1), node(2), node(3)]),
                 caller(1),
             )
-            .assert_err_contains(&format!("Adding 3 nodes would overflow node allowance for node operator {} who has 2 remaining", operator(2)));
+            .assert_err_contains("New operator cannot accept 3 nodes due to remaining allowance 2");
     }
 
     #[test]
