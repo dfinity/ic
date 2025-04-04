@@ -22,13 +22,17 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 
-use ic_nns_governance_api::pb::v1::{create_service_nervous_system::{
+use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
     initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
-}};
+};
 
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron::{Follow, SetFollowing}, neuron::FolloweesForTopic, proposal::Action, topics::Topic, Followee, Proposal, UpgradeSnsControlledCanister
+    manage_neuron::SetFollowing,
+    neuron::FolloweesForTopic,
+    proposal::Action,
+    topics::Topic,
+    Followee, Proposal, UpgradeSnsControlledCanister,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
@@ -149,15 +153,16 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
                 Topic::CriticalDappOperations,
                 Topic::DaoCommunitySettings,
                 Topic::SnsFrameworkManagement,
-            ].iter().map(|topic|
-                FolloweesForTopic {
-                    topic: Some(*topic),
-                    followees: vec![Followee {
-                        neuron_id: Some(dev_participant_neuron_id.clone()),
-                        alias: Some("Developer".to_string()),
-                    }]
-                },
-            ).collect(),
+            ]
+            .iter()
+            .map(|topic| FolloweesForTopic {
+                topic: Some(*topic),
+                followees: vec![Followee {
+                    neuron_id: Some(dev_participant_neuron_id.clone()),
+                    alias: Some("Developer".to_string()),
+                }],
+            })
+            .collect(),
         };
 
         sns_governance

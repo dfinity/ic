@@ -131,8 +131,12 @@ impl GovernanceCanister {
         neuron_id: NeuronId,
         set_following: manage_neuron::SetFollowing,
     ) -> Result<ManageNeuronResponse, C::Error> {
-        self.manage_neuron(agent, neuron_id, manage_neuron::Command::SetFollowing(set_following))
-            .await
+        self.manage_neuron(
+            agent,
+            neuron_id,
+            manage_neuron::Command::SetFollowing(set_following),
+        )
+        .await
     }
 
     pub async fn increase_dissolve_delay<C: CallCanisters>(
