@@ -1155,6 +1155,7 @@ fn test_vetkd() {
         .with_nns_subnet()
         .with_ii_subnet() // this subnet has threshold keys
         .with_application_subnet()
+        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 
     // We retrieve the app subnet ID from the topology.
