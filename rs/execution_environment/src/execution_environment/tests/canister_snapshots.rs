@@ -2240,7 +2240,6 @@ fn read_canister_snapshot_data_succeeds() {
             uni_canister_wasm.clone(),
         )
         .unwrap();
-
     // Upload chunk 1.
     let chunk1 = vec![1, 2, 3, 4, 5];
     let upload_args = UploadChunkArgs {
@@ -2257,7 +2256,6 @@ fn read_canister_snapshot_data_succeeds() {
     };
     test.subnet_message("upload_chunk", upload_args.encode())
         .unwrap();
-
     // Grow the stable memory
     let stable_pages = 65;
     let payload = wasm().stable64_grow(stable_pages).reply().build();
@@ -2293,7 +2291,9 @@ fn read_canister_snapshot_data_succeeds() {
         wasm_chunk_store,
         ..
     } = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
-    // ===== tests =====
+
+    // Test geting all binary snapshot data
+    // wasm module
     let args_module = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
@@ -2306,6 +2306,7 @@ fn read_canister_snapshot_data_succeeds() {
     let chunk = read_canister_snapshot_data(&mut test, &args_module);
     assert_eq!(chunk, uni_canister_wasm);
 
+    // canister heap
     let args_main = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
@@ -2317,6 +2318,8 @@ fn read_canister_snapshot_data_succeeds() {
     );
     let chunk = read_canister_snapshot_data(&mut test, &args_main);
     assert_eq!(chunk.len(), wasm_memory_size as usize);
+
+    // stable memory
     let args_stable = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
@@ -2328,6 +2331,7 @@ fn read_canister_snapshot_data_succeeds() {
     );
     let chunk = read_canister_snapshot_data(&mut test, &args_stable);
     assert_eq!(chunk.len(), stable_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
+
     // chunk store
     assert_eq!(wasm_chunk_store.len(), 2);
     let args_chunk_1 = ReadCanisterSnapshotDataArgs::new(
