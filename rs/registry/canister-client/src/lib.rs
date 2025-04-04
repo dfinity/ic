@@ -2,7 +2,9 @@
 //! where polling in the background is not required because handed over to a timer.
 //! The code is entirely copied from `ic-registry-client-fake` and more tests added.
 use async_trait::async_trait;
-use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
+use ic_interfaces_registry::{
+    RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
+};
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 
@@ -77,7 +79,27 @@ pub trait CanisterRegistryClient: Send + Sync {
         &self,
         key_prefix: &str,
         version: RegistryVersion,
-    ) -> Result<Vec<String>, RegistryClientError>;
+    ) -> Result<Vec<String>, RegistryClientError> {
+        let mut effective_records =
+            self.get_effective_records_between(key_prefix, RegistryVersion::new(0), version)?;
+
+        // First we sort by key to get all the records
+        // with the same key one next to the other.
+        // If the key is the same we want to sort
+        // versions in decending order so in order
+        // to have the maximum versions be first.
+        effective_records.sort_by(|a, b| match a.key.cmp(&b.key) {
+            std::cmp::Ordering::Equal => b.version.cmp(&a.version),
+            o => o,
+        });
+        // Then we dedup by the first key we find
+        // which will result in latest versions.
+        effective_records.dedup_by_key(|r| r.key.clone());
+        Ok(effective_records
+            .into_iter()
+            .filter_map(|r| r.value.is_some().then_some(r.key))
+            .collect())
+    }
 
     /// Returns a particular value for a key at a given version.
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
@@ -93,4 +115,17 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
     /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
+
+    /// Returns all records that start with `key_prefix` and exist in between
+    /// `lower_bound` and `upper_bound`. Both `lower_bound` and `upper_bound`
+    /// are included in the returned result.
+    ///
+    /// The returned list does not contain any duplicates. There are no
+    /// guarantees wrt. the order of the contained elements.
+    fn get_effective_records_between(
+        &self,
+        key_prefix: &str,
+        lower_bound: RegistryVersion,
+        upper_bound: RegistryVersion,
+    ) -> Result<Vec<RegistryVersionedRecord<Vec<u8>>>, RegistryClientError>;
 }
