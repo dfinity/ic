@@ -71,3 +71,42 @@ pub trait RegistryDataStableMemory: Send + Sync {
         f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
     ) -> R;
 }
+
+/// Usage: test_stable_memory_thread_local!(DummyState, &LOCAL_KEY_BTREE_MAP);
+///
+/// Example:
+///
+/// thread_local! {
+///     static LOCAL_KEY_BTREE_MAP: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>> = RefCell::new({
+///         let mgr = MemoryManager::init(DefaultMemoryImpl::default());
+///         StableBTreeMap::init(mgr.get(MemoryId::new(0)))
+///     });
+/// }
+///
+///  test_registry_data_stable_memory_impl!(TestState, LOCAL_KEY_BTREE_MAP);
+///
+/// That will produce an empty struct with RegistryDataStableMemory implemented for the
+/// LOCAL_KEY_BTREE_MAP.
+/// This is useful for testing, but it's recommended to implement more explicitly in production
+/// code.
+#[macro_export]
+macro_rules! test_registry_data_stable_memory_impl {
+    ($state_struct:ident, $local_key_btree_map:expr) => {
+
+        struct $state_struct;
+
+        impl RegistryDataStableMemory for $state_struct {
+            fn with_registry_map<R>(
+                f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+            ) -> R {
+                $local_key_btree_map.with_borrow(f)
+            }
+
+            fn with_registry_map_mut<R>(
+                f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
+            ) -> R {
+                $local_key_btree_map.with_borrow_mut(f)
+            }
+        }
+    };
+}

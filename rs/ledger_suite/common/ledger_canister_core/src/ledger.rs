@@ -501,12 +501,12 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
     // that the oldest archive (with the lowest block IDs) is first, and the newest archive (with
     // the highest block IDs) is last. Iterate over the archives in reverse order since we are
     // removing overlapping suffixes from the ranges, starting from the latest blocks stored in the
-    // ledger. Collect the items in the original order (with oldest blocks first).
+    // ledger.
     let mut later_range = None;
     let archived_blocks: Vec<_> = archive
         .iter()
-        .rev()
         .flat_map(|archive| archive.index().into_iter())
+        .rev()
         .filter_map(|((from, to), canister_id)| {
             let mut slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
             if !slice.is_empty() {
@@ -524,8 +524,9 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
             }
             (!slice.is_empty()).then_some((canister_id, slice))
         })
-        .rev()
         .collect();
+    // Reverse the order of the archived blocks to return the oldest archive first.
+    let archived_blocks: Vec<_> = archived_blocks.into_iter().rev().collect();
 
     debug_assert!(
         !range_utils::contains_intersections(
