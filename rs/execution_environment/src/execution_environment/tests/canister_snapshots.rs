@@ -2208,6 +2208,21 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
 }
 
+fn read_canister_snapshot_data(
+    test: &mut ExecutionTest,
+    args: &ReadCanisterSnapshotDataArgs,
+) -> Vec<u8> {
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_data", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let ReadCanisterSnapshotDataResponse { chunk } =
+        Decode!(&bytes, ReadCanisterSnapshotDataResponse).unwrap();
+    chunk
+}
+
 #[test]
 fn read_canister_snapshot_data_succeeds() {
     let own_subnet = subnet_test_id(1);
@@ -2230,7 +2245,7 @@ fn read_canister_snapshot_data_succeeds() {
     let chunk1 = vec![1, 2, 3, 4, 5];
     let upload_args = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: chunk1,
+        chunk: chunk1.clone(),
     };
     test.subnet_message("upload_chunk", upload_args.encode())
         .unwrap();
@@ -2238,13 +2253,13 @@ fn read_canister_snapshot_data_succeeds() {
     let chunk2 = vec![6, 7, 8];
     let upload_args = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: chunk2,
+        chunk: chunk2.clone(),
     };
     test.subnet_message("upload_chunk", upload_args.encode())
         .unwrap();
 
     // Grow the stable memory
-    let stable_pages = 13;
+    let stable_pages = 65;
     let payload = wasm().stable64_grow(stable_pages).reply().build();
     test.ingress(canister_id, "update", payload).unwrap();
     // Set some cert data
@@ -2278,40 +2293,62 @@ fn read_canister_snapshot_data_succeeds() {
         wasm_chunk_store,
         ..
     } = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
-    // tests:
+    // ===== tests =====
     let args_module = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
         CanisterSnapshotDataKind::WasmModule {
             offset: 0,
+            // currently about 184k, so it fits in a single 2MB message
             size: wasm_module_size,
         },
     );
-    let WasmResult::Reply(bytes) = test
-        .subnet_message("read_canister_snapshot_data", args_module.encode())
-        .unwrap()
-    else {
-        panic!("expected WasmResult::Reply")
-    };
-    let ReadCanisterSnapshotDataResponse { chunk } =
-        Decode!(&bytes, ReadCanisterSnapshotDataResponse).unwrap();
+    let chunk = read_canister_snapshot_data(&mut test, &args_module);
     assert_eq!(chunk, uni_canister_wasm);
 
     let args_main = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::MainMemory { offset: 0, size: 0 },
+        CanisterSnapshotDataKind::MainMemory {
+            offset: 0,
+            // 3_276_800
+            size: wasm_memory_size,
+        },
     );
+    let chunk = read_canister_snapshot_data(&mut test, &args_main);
+    assert_eq!(chunk.len(), wasm_memory_size as usize);
     let args_stable = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::StableMemory { offset: 0, size: 0 },
+        CanisterSnapshotDataKind::StableMemory {
+            offset: 0,
+            // 4259840
+            size: stable_memory_size,
+        },
     );
-    let args_chunks = ReadCanisterSnapshotDataArgs::new(
+    let chunk = read_canister_snapshot_data(&mut test, &args_stable);
+    assert_eq!(chunk.len(), stable_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
+    // chunk store
+    assert_eq!(wasm_chunk_store.len(), 2);
+    let args_chunk_1 = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::WasmChunk { hash: vec![] },
+        CanisterSnapshotDataKind::WasmChunk {
+            hash: wasm_chunk_store[0].hash.clone(),
+        },
     );
+    let args_chunk_2 = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmChunk {
+            hash: wasm_chunk_store[1].hash.clone(),
+        },
+    );
+    let chunk_1 = read_canister_snapshot_data(&mut test, &args_chunk_1);
+    let chunk_2 = read_canister_snapshot_data(&mut test, &args_chunk_2);
+    let original = { vec![chunk1, chunk2] }.sort();
+    let returned = { vec![chunk_1, chunk_2] }.sort();
+    assert_eq!(original, returned);
 }
 
 #[test]
