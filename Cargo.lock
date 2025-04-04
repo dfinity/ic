@@ -4410,6 +4410,7 @@ dependencies = [
  "criterion",
  "ic-config",
  "ic-cycles-account-manager",
+ "ic-embedders",
  "ic-error-types",
  "ic-execution-environment",
  "ic-interfaces",
@@ -4419,7 +4420,6 @@ dependencies = [
  "ic-nns-constants",
  "ic-registry-subnet-type",
  "ic-replicated-state",
- "ic-system-api",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
@@ -6607,7 +6607,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-sys",
- "ic-system-api",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-metrics",
@@ -8464,6 +8463,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-test-utils-vetkd"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-internal-bls12-381-type",
+ "ic-crypto-internal-bls12-381-vetkd",
+ "ic-vetkd-utils",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+]
+
+[[package]]
 name = "ic-crypto-tls-cert-validation"
 version = "0.9.0"
 dependencies = [
@@ -8764,18 +8774,20 @@ dependencies = [
  "criterion",
  "embedders_bench",
  "ic-base-types",
+ "ic-btc-interface",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-interfaces",
+ "ic-limits",
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
+ "ic-nns-constants",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-sys",
- "ic-system-api",
  "ic-test-utilities",
  "ic-test-utilities-embedders",
  "ic-test-utilities-execution-environment",
@@ -8789,6 +8801,7 @@ dependencies = [
  "ic-wasm-transform",
  "ic-wasm-types",
  "insta",
+ "itertools 0.12.1",
  "lazy_static",
  "libc",
  "libflate",
@@ -8859,6 +8872,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-prng",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-cycles-account-manager",
@@ -8881,7 +8895,6 @@ dependencies = [
  "ic-state-layout",
  "ic-state-machine-tests",
  "ic-sys",
- "ic-system-api",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
@@ -8894,7 +8907,6 @@ dependencies = [
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
  "ic-utils-thread",
- "ic-wasm-transform",
  "ic-wasm-types",
  "itertools 0.12.1",
  "lazy_static",
@@ -9379,7 +9391,6 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
- "dfn_core",
  "ic-base-types",
  "ic-canisters-http-types",
  "ic-cdk 0.17.1",
@@ -9471,7 +9482,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.1.2"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "axum 0.8.1",
@@ -13250,6 +13261,7 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
@@ -13478,45 +13490,6 @@ dependencies = [
  "thiserror 2.0.11",
  "tokio",
  "wsl",
-]
-
-[[package]]
-name = "ic-system-api"
-version = "0.9.0"
-dependencies = [
- "assert_matches",
- "candid",
- "ic-base-types",
- "ic-btc-interface",
- "ic-config",
- "ic-cycles-account-manager",
- "ic-error-types",
- "ic-interfaces",
- "ic-limits",
- "ic-logger",
- "ic-management-canister-types-private",
- "ic-nns-constants",
- "ic-registry-routing-table",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-replicated-state",
- "ic-sys",
- "ic-test-utilities",
- "ic-test-utilities-embedders",
- "ic-test-utilities-state",
- "ic-test-utilities-time",
- "ic-test-utilities-types",
- "ic-types",
- "ic-utils 0.9.0",
- "ic-wasm-types",
- "itertools 0.12.1",
- "maplit",
- "more-asserts",
- "prometheus",
- "serde",
- "serde_bytes",
- "slog",
- "strum",
 ]
 
 [[package]]
@@ -13807,7 +13780,6 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
  "ic-replicated-state",
- "ic-system-api",
  "ic-test-utilities",
  "ic-test-utilities-state",
  "ic-test-utilities-types",
@@ -13839,7 +13811,6 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
- "ic-system-api",
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
@@ -14793,8 +14764,8 @@ dependencies = [
  "clap 4.5.27",
  "eyre",
  "ic-config",
+ "ic-embedders",
  "ic-replicated-state",
- "ic-system-api",
  "ic-types",
  "serde",
  "serde_json",
@@ -18195,6 +18166,7 @@ dependencies = [
  "slog",
  "strum",
  "strum_macros",
+ "tempfile",
  "thiserror 2.0.11",
  "tokio",
  "tracing",
