@@ -3935,13 +3935,11 @@ impl Governance {
             neuron.topic_followees.replace(new_topic_followees);
         }
 
-        // TODO[NNS1-3582]: Update the follower index.
+        // Third, update the followee index for this neuron.
+        remove_neuron_from_follower_index(&mut self.topic_follower_index, neuron);
+        add_neuron_to_follower_index(&mut self.topic_follower_index, neuron);
 
-        // TODO[NNS1-3582]: Enable following on topics.
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidCommand,
-            "SetFollowing is not supported yet.".to_string(),
-        ))
+        Ok(())
     }
 
     /// Configures a given neuron (specified by the given neuron id).
