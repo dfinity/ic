@@ -660,7 +660,7 @@ mod tests {
         assert_eq!(
             metrics
                 .critical_error_task_panicked
-                .get_metric_with_label_values(&[&"panicky"])
+                .get_metric_with_label_values(&["panicky"])
                 .unwrap()
                 .get(),
             1
@@ -668,7 +668,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn task_tracker_graceful_exists_are_tracked_test() {
+    async fn task_tracker_graceful_completions_are_ignored_test() {
         let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
         let mut task_tracker = TaskTracker::new(metrics.clone(), no_op_logger());
 
@@ -678,7 +678,7 @@ mod tests {
         assert_eq!(
             metrics
                 .critical_error_task_panicked
-                .get_metric_with_label_values(&[&"graceful"])
+                .get_metric_with_label_values(&["graceful"])
                 .unwrap()
                 .get(),
             0
