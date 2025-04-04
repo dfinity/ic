@@ -41,7 +41,8 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{no_op_logger, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -656,6 +657,14 @@ impl PocketIcSubnets {
                     name: name.to_string(),
                 };
                 subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+            }
+
+            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                let key_id = VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: name.to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
             }
         }
         for chain_key in &subnet_chain_keys {
