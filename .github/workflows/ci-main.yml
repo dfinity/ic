@@ -29,6 +29,7 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 jobs:
   config:
+    name: Set Config
     runs-on: ubuntu-latest
     steps:
       - name: Infer build config
