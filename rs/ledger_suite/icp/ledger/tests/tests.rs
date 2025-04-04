@@ -1929,6 +1929,14 @@ fn test_account_balance_non_standard_account_identifier_length() {
     assert_eq!(res, Tokens::from_e8s(0));
 }
 
+#[test]
+fn test_icp_get_encoded_blocks_returns_multiple_archive_callbacks() {
+    ic_ledger_suite_state_machine_tests::archiving::icp_get_encoded_blocks_returns_multiple_archive_callbacks(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
