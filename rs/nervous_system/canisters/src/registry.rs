@@ -133,18 +133,13 @@ impl FakeRegistry {
             .push(response);
     }
 
-    pub fn encode_value_at_version<T: prost::Message + Default>(
+    pub fn encode_value_at_version<T: prost::Message>(
         &self,
         key: impl AsRef<str>,
         version: u64,
         value: Option<T>,
     ) {
-        let value = value.map(|v| {
-            let mut buf = Vec::new();
-            v.encode(&mut buf).expect("Failed to encode value");
-            buf
-        });
-
+        let value = value.map(|v| v.encode_to_vec());
         self.set_value_at_version(key, version, value);
     }
 

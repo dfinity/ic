@@ -220,7 +220,7 @@ fn test_rewards_calculation() {
     test_at_version(
         Some(3),
         Err("Node Operator with key 'jpjxp-djmaa-aaaaa-aaaap-4ai' \
-                        has data center ID 'dc2' not found in the Registry"
+             has data center ID 'dc2' not found in the Registry"
             .to_string()),
     );
     // Version 4
