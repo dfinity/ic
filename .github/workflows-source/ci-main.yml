@@ -66,6 +66,10 @@ jobs:
   config:
     name: Set Config
     runs-on: ubuntu-latest
+    outputs:
+      release_build: ${{ steps.config.outputs.release_build }}
+      diff_only: ${{ steps.config.outputs.diff_only }}
+      skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
     steps:
       - name: Infer build config
         id: config
@@ -154,7 +158,7 @@ jobs:
               nns_tests_nightly
           )
 
-          if [[ '${{ needs.config.outputs.config.skip_long_tests }}' == 'true' ]]; then
+          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
             EXCLUDED_TEST_TAGS+=(long_test)
           fi
 
@@ -176,8 +180,8 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          diff-only: ${{ needs.config.outputs.config.diff_only }}
-          release-build: ${{ needs.config.outputs.config.release_build }}
+          diff-only: ${{ needs.config.outputs.diff_only }}
+          release-build: ${{ needs.config.outputs.release_build }}
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
@@ -289,8 +293,8 @@ jobs:
           BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.config.diff_only }}
-          RELEASE_BUILD: ${{ needs.config.outputs.config.release_build }}
+          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
       - name: Upload SHA256SUMS (nocache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
