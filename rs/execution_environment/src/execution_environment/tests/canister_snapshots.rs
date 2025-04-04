@@ -2310,7 +2310,7 @@ fn read_canister_snapshot_data_succeeds() {
     let args_chunks = ReadCanisterSnapshotDataArgs::new(
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::WasmChunk { hash: todo!() },
+        CanisterSnapshotDataKind::WasmChunk { hash: vec![] },
     );
 }
 

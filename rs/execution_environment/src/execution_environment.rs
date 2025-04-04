@@ -2459,11 +2459,10 @@ impl ExecutionEnvironment {
         args: ReadCanisterSnapshotDataArgs,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(args.get_canister_id(), state)?;
-        let result = self
-            .canister_manager
+        self.canister_manager
             .read_snapshot_data(sender, canister, args.get_snapshot_id(), args.kind, state)
-            .map_err(UserError::from)?;
-        Ok(Encode!(&result).unwrap())
+            .map(|res| Encode!(&res).unwrap())
+            .map_err(UserError::from)
     }
 
     fn read_canister_snapshot_metadata(
@@ -2477,7 +2476,7 @@ impl ExecutionEnvironment {
         self.canister_manager
             .read_snapshot_metadata(sender, snapshot_id, canister, state)
             .map(|res| Encode!(&res).unwrap())
-            .map_err(|e| e.into())
+            .map_err(UserError::from)
     }
 
     fn node_metrics_history(

@@ -4043,6 +4043,12 @@ pub struct ReadCanisterSnapshotDataResponse {
     pub chunk: Vec<u8>,
 }
 
+impl ReadCanisterSnapshotDataResponse {
+    pub fn new(chunk: Vec<u8>) -> Self {
+        Self { chunk }
+    }
+}
+
 /// Struct to encode/decode
 /// (record {
 ///     canister_id : principal;

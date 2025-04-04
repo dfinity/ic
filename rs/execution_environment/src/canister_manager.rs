@@ -23,8 +23,8 @@ use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash, GlobalTimer,
-    Method as Ic00Method, ReadCanisterSnapshotMetadataResponse, StoredChunksReply,
-    UploadChunkReply,
+    Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
+    StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkHash;
@@ -2045,7 +2045,7 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
         state: &ReplicatedState,
-    ) -> Result<Vec<u8>, CanisterManagerError> {
+    ) -> Result<ReadCanisterSnapshotDataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
@@ -2061,7 +2061,7 @@ impl CanisterManager {
                 snapshot_id,
             });
         }
-        match kind {
+        let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
                 let stable_memory_page_map =
                     snapshot.execution_snapshot().stable_memory.page_map.clone();
@@ -2097,7 +2097,8 @@ impl CanisterManager {
                 };
                 Ok(chunk)
             }
-        }
+        };
+        res.map(ReadCanisterSnapshotDataResponse::new)
     }
 }
 
