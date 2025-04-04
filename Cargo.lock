@@ -10434,6 +10434,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "mockall",
+ "prost 0.13.4",
 ]
 
 [[package]]
@@ -11448,6 +11449,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "futures-util",
  "ic-cdk 0.17.1",
  "ic-cdk-timers",
  "ic-interfaces-registry",
@@ -11457,9 +11459,13 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
+ "ic-registry-node-provider-rewards",
+ "ic-registry-transport",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
+ "maplit",
+ "prost 0.13.4",
 ]
 
 [[package]]
@@ -11809,6 +11815,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-types",
  "itertools 0.12.1",
+ "prost 0.13.4",
 ]
 
 [[package]]
