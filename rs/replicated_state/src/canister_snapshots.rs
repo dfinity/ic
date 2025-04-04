@@ -1,5 +1,8 @@
 use crate::{
-    canister_state::{execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore},
+    canister_state::{
+        execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore,
+        WASM_PAGE_SIZE_IN_BYTES,
+    },
     page_map::Buffer,
     CanisterState, NumWasmPages, PageMap,
 };
@@ -474,15 +477,22 @@ impl CanisterSnapshot {
     }
 
     /// Get a user-defined chunk of the (stable/main) memory represented by `page_map`.
+    /// Returns an error if offset + size exceed the page_map's current size.
     pub fn get_memory_chunk(
-        page_map: PageMap,
+        page_memory: PageMemory,
         offset: u64,
         size: u64,
     ) -> Result<Vec<u8>, CanisterSnapshotError> {
-        let memory_buffer = Buffer::new(page_map);
+        let page_map_size_bytes = (page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64;
+        if offset + size > page_map_size_bytes {
+            return Err(CanisterSnapshotError::InvalidSubslice {
+                offset,
+                size,
+                actual_size: page_map_size_bytes,
+            });
+        }
+        let memory_buffer = Buffer::new(page_memory.page_map);
         let mut dst = vec![0; size as usize];
-        // TODO: what if the caller requests memory beyond what's valid?
-        // rn we'll return zeroes, but can we / should we truncate?
         memory_buffer.read(&mut dst, offset as usize);
         Ok(dst)
     }

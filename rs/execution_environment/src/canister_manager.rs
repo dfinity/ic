@@ -2061,19 +2061,18 @@ impl CanisterManager {
                 snapshot_id,
             });
         }
+        let max_message_size_bytes = 2 * 1024 * 1024; // TODO: where is this constant defined?
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
-                let stable_memory_page_map =
-                    snapshot.execution_snapshot().stable_memory.page_map.clone();
-                match CanisterSnapshot::get_memory_chunk(stable_memory_page_map, offset, size) {
+                let stable_memory = snapshot.execution_snapshot().stable_memory.clone();
+                match CanisterSnapshot::get_memory_chunk(stable_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
                     Err(e) => Err(e.into()),
                 }
             }
             CanisterSnapshotDataKind::MainMemory { offset, size } => {
-                let main_memory_page_map =
-                    snapshot.execution_snapshot().wasm_memory.page_map.clone();
-                match CanisterSnapshot::get_memory_chunk(main_memory_page_map, offset, size) {
+                let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
+                match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
                     Err(e) => Err(e.into()),
                 }

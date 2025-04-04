@@ -2305,6 +2305,7 @@ fn read_canister_snapshot_data_succeeds() {
     );
     let chunk = read_canister_snapshot_data(&mut test, &args_module);
     assert_eq!(chunk, uni_canister_wasm);
+    println!("wasm module ok");
 
     // canister heap
     let args_main = ReadCanisterSnapshotDataArgs::new(
@@ -2318,6 +2319,7 @@ fn read_canister_snapshot_data_succeeds() {
     );
     let chunk = read_canister_snapshot_data(&mut test, &args_main);
     assert_eq!(chunk.len(), wasm_memory_size as usize);
+    println!("heap ok");
 
     // stable memory
     let args_stable = ReadCanisterSnapshotDataArgs::new(
@@ -2331,6 +2333,7 @@ fn read_canister_snapshot_data_succeeds() {
     );
     let chunk = read_canister_snapshot_data(&mut test, &args_stable);
     assert_eq!(chunk.len(), stable_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
+    println!("stable memory ok");
 
     // chunk store
     assert_eq!(wasm_chunk_store.len(), 2);
