@@ -27,7 +27,7 @@ struct Cli {
     config_ini: ConfigIni,
 
     #[arg(long)]
-    private_key_path: Option<PathBuf>,
+    node_operator_private_key: Option<PathBuf>,
 
     #[arg(long, value_delimiter = ',')]
     public_keys: Option<Vec<String>>,
@@ -114,15 +114,12 @@ async fn main() -> Result<(), Error> {
         .await
         .context("failed to copy config file")?;
 
-    // Update node-provider private-key
-    if let Some(private_key_path) = cli.private_key_path {
+    // Update node_operator_private_key.pem
+    if let Some(key_path) = cli.node_operator_private_key {
         config
-            .write_file(
-                &private_key_path,
-                Path::new("/node_operator_private_key.pem"),
-            )
+            .write_file(&key_path, Path::new("/node_operator_private_key.pem"))
             .await
-            .context("failed to copy private-key")?;
+            .context("failed to write node_operator_private_key.pem")?;
     }
 
     // Print previous public keys
