@@ -1412,7 +1412,9 @@ fn setup_registry(
 }
 
 /// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-/// or when transient error persists [`None`] is returned.
+/// [`None`] is returned.
+///
+/// Panicks when a permanent error other than `StateNotFullyCertified` is returned.
 fn get_state_hash<T>(
     state_manager: &impl StateManager<State = T>,
     log: &ReplicaLogger,
@@ -1439,6 +1441,7 @@ fn get_state_hash<T>(
                 panic!("State hash computation failed: {}", err)
             }
         }
+
         std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
     }
 }
