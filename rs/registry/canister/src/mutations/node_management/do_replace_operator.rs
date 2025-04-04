@@ -88,7 +88,7 @@ impl Registry {
             return Err(format!("{}do_replace_operator: New operator cannot accept {} nodes due to remaining allowance {}", LOG_PREFIX, node_mutations, new_operator_record.node_allowance));
         }
 
-        // Update new node operator record to decrease node allowance
+        // Decrement new operator allowance.
         let new_node_operator_key = make_node_operator_record_key(new_operator_id);
         let updated_new_operator_record = NodeOperatorRecord {
             node_allowance: new_operator_record.node_allowance - node_mutations,
@@ -99,7 +99,7 @@ impl Registry {
             updated_new_operator_record.encode_to_vec(),
         ));
 
-        // Update old node operator record to increase node allowance
+        // Increment old operator allowance.
         let old_node_operator_key = make_node_operator_record_key(old_operator_id);
         let updated_old_operator_record = NodeOperatorRecord {
             node_allowance: old_operator_record.node_allowance + node_mutations,
@@ -120,6 +120,11 @@ impl Registry {
         Ok(())
     }
 
+    /// Return the set of node records that belong to `old_operator_id`.
+    ///
+    /// If the node record is linked to the `new_operator_id`, it will
+    /// be filtered from the results, meaning that not all nodes from
+    /// `provided_node_ids` have to be returned.
     fn maybe_fetch_nodes_to_update(
         &self,
         provided_node_ids: &Vec<NodeId>,
@@ -157,6 +162,8 @@ impl Registry {
         Ok(node_records)
     }
 
+    /// Fetches all the node operator records for a single
+    /// node provider.
     fn maybe_fetch_operators_for_provider(
         &self,
         provider_id: &PrincipalId,
@@ -176,6 +183,11 @@ impl Registry {
         Ok(operators)
     }
 
+    /// Tries to find node operator records for `old_operator_id` and `new_operator_id` that
+    /// have to be within `operators`.
+    ///
+    /// Function will error out if the node operator records are not within the same data
+    /// center which is requred for replacing node operator functionality.
     fn maybe_find_operator_records(
         &self,
         operators: Vec<NodeOperatorRecord>,
@@ -201,14 +213,19 @@ impl Registry {
     }
 }
 
+/// Helper function which tries to find find a single node operator record
+/// within an array of `operators`, returning either a reference to the found
+/// record or an error.
 fn find_node_operator_record_for_provider<'a>(
     operators: &'a [NodeOperatorRecord],
     operator_id: &'a PrincipalId,
     provider: &'a PrincipalId,
 ) -> Result<&'a NodeOperatorRecord, String> {
+    let operator = operator_id.0.as_slice();
+
     operators
         .iter()
-        .find(|o| o.node_operator_principal_id == operator_id.0.as_slice())
+        .find(|o| o.node_operator_principal_id == operator)
         .ok_or_else(|| {
             format!(
                 "{}do_replace_operator: Operator {} not found for provider {}",
@@ -345,22 +362,22 @@ mod tests {
         /// Needed for invariant checks of each node
         /// because each node has to have unique xnet
         /// and http endpoints
-        static NODE_NUM: RefCell<u8> = const { RefCell::new(0) };
+        static NEXT_NODE_NUMBER: RefCell<u8> = const { RefCell::new(0) };
     }
 
     fn node_mutation(node_id: NodeId, operator: PrincipalId) -> RegistryMutation {
-        let current_node_num = NODE_NUM.with_borrow_mut(|current| {
-            *current += 1;
-            *current
+        let current_node_number = NEXT_NODE_NUMBER.with_borrow_mut(|next_node_number| {
+            *next_node_number += 1;
+            *next_node_number
         });
         let node_record = NodeRecord {
             node_operator_id: operator.as_slice().to_vec(),
             xnet: Some(ConnectionEndpoint {
-                ip_addr: format!("192.{current_node_num}.0.1"),
+                ip_addr: format!("192.{current_node_number}.0.1"),
                 port: 8080,
             }),
             http: Some(ConnectionEndpoint {
-                ip_addr: format!("192.{current_node_num}.0.2"),
+                ip_addr: format!("192.{current_node_number}.0.2"),
                 port: 8080,
             }),
             ..Default::default()
