@@ -262,7 +262,7 @@ mod tests {
         make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
         make_subnet_record_key, make_unassigned_nodes_config_record_key,
     };
-    use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
+    use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
     use ic_stable_structures::Storable;
     use ic_types::{crypto::KeyPurpose, CanisterId, NodeId, PrincipalId, ReplicaVersion};
 
@@ -330,14 +330,6 @@ mod tests {
         }
     }
 
-    fn mutation(key: Vec<u8>, value: Vec<u8>) -> RegistryMutation {
-        RegistryMutation {
-            mutation_type: Type::Upsert as i32,
-            key,
-            value,
-        }
-    }
-
     fn operator_mutation(
         operator: PrincipalId,
         provider: PrincipalId,
@@ -352,8 +344,8 @@ mod tests {
             ..Default::default()
         };
 
-        mutation(
-            make_node_operator_record_key(operator).as_bytes().to_vec(),
+        upsert(
+            make_node_operator_record_key(operator).as_bytes(),
             operator_record.encode_to_vec(),
         )
     }
@@ -383,8 +375,8 @@ mod tests {
             ..Default::default()
         };
 
-        mutation(
-            make_node_record_key(node_id).as_bytes().to_vec(),
+        upsert(
+            make_node_record_key(node_id).as_bytes(),
             node_record.encode_to_vec(),
         )
     }
@@ -395,8 +387,8 @@ mod tests {
             ..Default::default()
         };
 
-        mutation(
-            make_data_center_record_key(dc_id).as_bytes().to_vec(),
+        upsert(
+            make_data_center_record_key(dc_id).as_bytes(),
             dc_record.encode_to_vec(),
         )
     }
@@ -719,8 +711,8 @@ mod tests {
             }],
         };
 
-        mutation(
-            make_routing_table_record_key().as_bytes().to_vec(),
+        upsert(
+            make_routing_table_record_key().as_bytes(),
             routing_table.encode_to_vec(),
         )
     }
@@ -739,15 +731,15 @@ mod tests {
             timestamp: Some(42),
         };
 
-        mutation(
-            make_crypto_node_key(node, purpose).as_bytes().to_vec(),
+        upsert(
+            make_crypto_node_key(node, purpose).as_bytes(),
             key.encode_to_vec(),
         )
     }
 
     fn certificate_mutation(node_id: NodeId, certificate: X509PublicKeyCert) -> RegistryMutation {
-        mutation(
-            make_crypto_tls_cert_key(node_id).as_bytes().to_vec(),
+        upsert(
+            make_crypto_tls_cert_key(node_id).as_bytes(),
             certificate.encode_to_vec(),
         )
     }
@@ -763,10 +755,8 @@ mod tests {
             ..Default::default()
         };
 
-        mutation(
-            make_subnet_record_key(PrincipalId::new_subnet_test_id(0).into())
-                .as_bytes()
-                .to_vec(),
+        upsert(
+            make_subnet_record_key(PrincipalId::new_subnet_test_id(0).into()).as_bytes(),
             subnet_record.encode_to_vec(),
         )
     }
@@ -780,10 +770,8 @@ mod tests {
         };
         let replica_version = ReplicaVersion::default();
 
-        mutation(
-            make_replica_version_key(&replica_version)
-                .to_bytes()
-                .to_vec(),
+        upsert(
+            make_replica_version_key(&replica_version).to_bytes(),
             replica_version_record.encode_to_vec(),
         )
     }
@@ -794,8 +782,8 @@ mod tests {
             blessed_version_ids: vec![replica_version.to_string()],
         };
 
-        mutation(
-            make_blessed_replica_versions_key().to_bytes().to_vec(),
+        upsert(
+            make_blessed_replica_versions_key().to_bytes(),
             blessed_versions_record.encode_to_vec(),
         )
     }
@@ -805,8 +793,8 @@ mod tests {
             subnets: vec![PrincipalId::new_subnet_test_id(0).as_slice().to_vec()],
         };
 
-        mutation(
-            make_subnet_list_record_key().as_bytes().to_vec(),
+        upsert(
+            make_subnet_list_record_key().as_bytes(),
             subnet_list_record.encode_to_vec(),
         )
     }
@@ -818,10 +806,8 @@ mod tests {
             replica_version: replica_version.to_string(),
         };
 
-        mutation(
-            make_unassigned_nodes_config_record_key()
-                .as_bytes()
-                .to_vec(),
+        upsert(
+            make_unassigned_nodes_config_record_key().as_bytes(),
             unassigned_record.encode_to_vec(),
         )
     }
