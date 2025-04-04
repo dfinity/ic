@@ -144,6 +144,8 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
             // UpgradeSnsControlledCanister
             function_id: 3,
         };
+
+        // TODO[NNS1-3676]: This should be changed to SetFollowing when that command is enabled.
         sns_governance
             .follow(
                 swap_participant_agent,
@@ -393,7 +395,7 @@ pub mod pocket_ic {
         let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
         let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
-        let swap_partipants_agents = swap_participant_secret_keys(DEFAULT_SWAP_PARTICIPANTS_NUMBER)
+        let swap_participants_agents = swap_participant_secret_keys(DEFAULT_SWAP_PARTICIPANTS_NUMBER)
             .iter()
             .map(|secret_key| {
                 let identity = Secp256k1Identity::from_private_key(secret_key.clone());
@@ -405,7 +407,7 @@ pub mod pocket_ic {
             NNS_NEURON_ID,
             &dev_participant,
             &swap_treasury_agent,
-            swap_partipants_agents,
+            swap_participants_agents,
             dapp_canister_ids,
         )
         .await

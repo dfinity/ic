@@ -2316,7 +2316,7 @@ impl NeuronRecipe {
         };
 
         // All other neurons follow on all available topics.
-        let topic_id_to_followees: BTreeMap<i32, crate::pb::v1::neuron::FolloweesForTopic> = TOPICS
+        let topic_id_to_followees = TOPICS
             .iter()
             .map(|topic| {
                 let topic = i32::from(*topic);
@@ -2328,6 +2328,7 @@ impl NeuronRecipe {
                     .map(|(followee_neuron_index, followee_neuron_id)| {
                         let alias = Some(root_neuron_alias(followee_neuron_index, num_followees));
                         let neuron_id = Some(followee_neuron_id.clone());
+
                         Followee { neuron_id, alias }
                     })
                     .collect();
