@@ -154,7 +154,7 @@ jobs:
               nns_tests_nightly
           )
 
-          if [[ '${{ needs.config.outputs.config.skip_long_tests }}' ]]; then
+          if [[ '${{ needs.config.outputs.config.skip_long_tests }}' == 'true' ]]; then
             EXCLUDED_TEST_TAGS+=(long_test)
           fi
 
