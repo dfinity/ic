@@ -218,8 +218,8 @@ impl Registry {
 /// record or an error.
 fn find_node_operator_record_for_provider<'a>(
     operators: &'a [NodeOperatorRecord],
-    operator_id: &'a PrincipalId,
-    provider: &'a PrincipalId,
+    operator_id: &PrincipalId,
+    provider: &PrincipalId,
 ) -> Result<&'a NodeOperatorRecord, String> {
     let operator = operator_id.0.as_slice();
 
@@ -646,7 +646,7 @@ mod tests {
         }
     }
 
-    // Functions below are used to create an invariant
+    // Functions below are used to create an invariants-compliant
     // registry. They are not important for the tests above
     fn get_mutations_to_achieve_invariancy(
         nodes: &[&ValidNodePublicKeys],
