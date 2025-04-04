@@ -1,7 +1,7 @@
 use clap::Parser;
 use ic_http_endpoints_async_utils::shutdown_signal;
+use ic_logger::{info, warn};
 use orchestrator::{args::OrchestratorArgs, orchestrator::Orchestrator};
-use slog::{info, warn};
 
 #[tokio::main]
 async fn main() {
@@ -12,9 +12,9 @@ async fn main() {
     let mut orchestrator = Orchestrator::new(args)
         .await
         .expect("Failed to start orchestrator");
-    let logger = orchestrator.logger.inner_logger.root.clone();
+    let logger = orchestrator.logger.clone();
     let join_handle = tokio::spawn(async move { orchestrator.spawn_tasks(exit_signal).await });
-    shutdown_signal(logger.clone()).await;
+    shutdown_signal(logger.inner_logger.root.clone()).await;
 
     exit_sender.send(true).expect("Failed to send exit signal");
 
