@@ -156,10 +156,6 @@ pub struct AppSubnetRecoveryArgs {
     /// Which steps to skip
     #[clap(long)]
     pub skip: Option<Vec<StepType>>,
-
-    /// When replaying the state, how long to wait for a state hash to be computed,
-    /// before timing out.
-    pub replay_state_hash_timeout_seconds: Option<u64>,
 }
 
 pub struct AppSubnetRecovery {
@@ -377,10 +373,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::ICReplay => Ok(Box::new(self.recovery.get_replay_step(
                 self.params.subnet_id,
-                /*subcmd=*/ None,
-                /*canister_caller_id=*/ None,
+                None,
+                None,
                 self.params.replay_until_height,
-                self.params.replay_state_hash_timeout_seconds,
             ))),
 
             StepType::ValidateReplayOutput => Ok(Box::new(

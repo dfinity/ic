@@ -474,22 +474,18 @@ pub struct ReplayStep {
     pub canister_caller_id: Option<CanisterId>,
     pub replay_until_height: Option<u64>,
     pub result: PathBuf,
-    pub state_hash_timeout_seconds: Option<u64>,
 }
 
 impl Step for ReplayStep {
     fn descr(&self) -> String {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let mut base = format!(
-            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}{}",
+            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
             self.replay_until_height
                 .map(|h| format!(" --replay-until-height {h}"))
-                .unwrap_or_default(),
-            self.state_hash_timeout_seconds
-                .map(|s| format!(" --hash-state-timeout-seconds {s}"))
                 .unwrap_or_default()
         );
         if let Some(subcmd) = &self.subcmd {
@@ -512,7 +508,6 @@ impl Step for ReplayStep {
             self.subcmd.as_ref().map(|c| c.cmd.clone()),
             self.replay_until_height,
             self.result.clone(),
-            self.state_hash_timeout_seconds,
         ))?;
 
         let latest_height = state_params.height;
@@ -854,12 +849,11 @@ impl Step for UpdateLocalStoreStep {
         block_on(replay_helper::replay(
             self.subnet_id,
             self.work_dir.join("ic.json5"),
-            /*canister_caller_id=*/ None,
+            None,
             self.work_dir.join("data"),
             Some(SubCommand::UpdateRegistryLocalStore),
-            /*replay_until_height=*/ None,
+            None,
             self.work_dir.join("update_local_store.txt"),
-            /*replay_until_height=*/ None,
         ))?;
         Ok(())
     }
@@ -890,7 +884,7 @@ impl Step for GetRecoveryCUPStep {
         block_on(replay_helper::replay(
             self.subnet_id,
             self.config.clone(),
-            /*canister_caller_id=*/ None,
+            None,
             self.work_dir.join("data"),
             Some(SubCommand::GetRecoveryCup(GetRecoveryCupCmd {
                 state_hash: self.state_hash.clone(),
@@ -899,9 +893,8 @@ impl Step for GetRecoveryCUPStep {
                 registry_store_sha256: None,
                 output_file: self.work_dir.join("cup.proto"),
             })),
-            /*replay_until_height=*/ None,
+            None,
             self.result.clone(),
-            /*replay_until_height=*/ None,
         ))?;
         Ok(())
     }

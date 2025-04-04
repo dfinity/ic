@@ -191,7 +191,6 @@ pub fn test(env: TestEnv) {
         replacement_nodes: Some(replacement_nodes),
         next_step: None,
         skip: None,
-        replay_state_hash_timeout_seconds: None,
     };
 
     let mut subnet_recovery = NNSRecoveryFailoverNodes::new(

@@ -403,7 +403,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
         skip: None,
-        replay_state_hash_timeout_seconds: None,
     };
 
     info!(

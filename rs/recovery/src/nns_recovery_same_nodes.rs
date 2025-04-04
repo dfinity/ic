@@ -75,10 +75,6 @@ pub struct NNSRecoverySameNodesArgs {
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
     pub next_step: Option<StepType>,
-
-    /// When replaying the state, how long to wait for a state hash to be computed,
-    /// before timing out.
-    pub replay_state_hash_timeout_seconds: Option<u64>,
 }
 
 pub struct NNSRecoverySameNodes {
@@ -228,15 +224,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         url,
                         hash,
                         self.params.replay_until_height,
-                        self.params.replay_state_hash_timeout_seconds,
                     )?))
                 } else {
                     Ok(Box::new(self.recovery.get_replay_step(
                         self.params.subnet_id,
-                        /*subcmd=*/ None,
-                        /*canister_caller_id=*/ None,
+                        None,
+                        None,
                         self.params.replay_until_height,
-                        self.params.replay_state_hash_timeout_seconds,
                     )))
                 }
             }

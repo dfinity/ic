@@ -40,10 +40,6 @@ pub struct ReplayToolArgs {
     #[clap(long)]
     /// The replay will stop at this height and make a checkpoint.
     pub replay_until_height: Option<u64>,
-
-    #[clap(long)]
-    /// Timeout for computing the state hash,
-    pub state_hash_timeout_seconds: Option<u64>,
 }
 
 #[derive(Clone, Subcommand)]

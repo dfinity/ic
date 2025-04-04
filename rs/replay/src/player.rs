@@ -135,7 +135,6 @@ pub(crate) struct Player {
     // None means finalized height.
     replay_target_height: Option<u64>,
     runtime: Runtime,
-    state_hash_timeout: Duration,
 }
 
 impl Player {
@@ -148,7 +147,6 @@ impl Player {
         registry_local_store_path: &Path,
         subnet_id: SubnetId,
         start_height: u64,
-        state_hash_timeout: Duration,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
 
@@ -207,7 +205,6 @@ impl Player {
             replica_version,
             log,
             _async_log_guard,
-            state_hash_timeout,
         );
         player.tmp_dir = Some(tmp_dir);
         player
@@ -215,7 +212,7 @@ impl Player {
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub(crate) fn new(cfg: Config, subnet_id: SubnetId, state_hash_timeout: Duration) -> Self {
+    pub(crate) fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
@@ -254,7 +251,6 @@ impl Player {
             replica_version,
             log,
             _async_log_guard,
-            state_hash_timeout,
         )
     }
 
@@ -268,7 +264,6 @@ impl Player {
         replica_version: ReplicaVersion,
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
-        state_hash_timeout: Duration,
     ) -> Self {
         println!("Setting default replica version {}", replica_version);
         if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
@@ -389,7 +384,6 @@ impl Player {
             tmp_dir: None,
             replay_target_height: None,
             runtime,
-            state_hash_timeout,
         }
     }
 
@@ -1242,12 +1236,7 @@ impl Player {
     }
 
     fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
-        get_state_hash(
-            self.state_manager.as_ref(),
-            &self.log,
-            self.state_hash_timeout,
-            height,
-        )
+        get_state_hash(self.state_manager.as_ref(), &self.log, height)
     }
 }
 
@@ -1427,10 +1416,8 @@ fn setup_registry(
 fn get_state_hash<T>(
     state_manager: &impl StateManager<State = T>,
     log: &ReplicaLogger,
-    state_hash_timeout: Duration,
     height: Height,
 ) -> Option<CryptoHashOfState> {
-    let start = std::time::Instant::now();
     loop {
         match state_manager.get_state_hash_at(height) {
             Ok(hash) => return Some(hash),
@@ -1453,13 +1440,6 @@ fn get_state_hash<T>(
             }
         }
         std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
-        if std::time::Instant::now().duration_since(start) > state_hash_timeout {
-            warn!(
-                log,
-                "Waited too long to get the state hash. Returning `None`",
-            );
-            return None;
-        }
     }
 }
 
@@ -1602,34 +1582,32 @@ mod tests {
             .expect_get_state_hash_at()
             .return_once(move |_| Ok(fake_state_hash()));
 
-        let state_hash = get_state_hash(
-            &state_manager,
-            &no_op_logger(),
-            Duration::from_secs(60),
-            Height::new(1),
-        );
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
 
         assert_eq!(state_hash, Some(fake_state_hash()));
     }
 
     #[test]
-    fn get_state_hash_returns_none_after_timing_out_test() {
+    fn get_state_hash_retries_on_transient_errors_test() {
+        let mut counter = 0;
         let mut state_manager = MockStateManager::new();
         state_manager
             .expect_get_state_hash_at()
             .times(5)
-            .return_const(Err(StateHashError::Transient(
-                TransientStateHashError::StateNotCommittedYet(Height::new(1)),
-            )));
+            .returning(move |_| {
+                counter += 1;
+                if counter < 5 {
+                    Err(StateHashError::Transient(
+                        TransientStateHashError::StateNotCommittedYet(Height::new(1)),
+                    ))
+                } else {
+                    Ok(fake_state_hash())
+                }
+            });
 
-        let state_hash = get_state_hash(
-            &state_manager,
-            &no_op_logger(),
-            Duration::from_secs_f32(4.5),
-            Height::new(1),
-        );
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
 
-        assert!(state_hash.is_none());
+        assert!(state_hash.is_some());
     }
 
     #[test]
@@ -1642,12 +1620,7 @@ mod tests {
             ))
         });
 
-        get_state_hash(
-            &state_manager,
-            &no_op_logger(),
-            Duration::from_secs_f32(4.5),
-            Height::new(1),
-        );
+        get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
     }
 
     fn fake_state_hash() -> CryptoHashOfState {

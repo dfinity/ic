@@ -380,13 +380,12 @@ impl Recovery {
 
     /// Return a [ReplayStep] to replay the downloaded state of the given
     /// subnet.
-    pub(crate) fn get_replay_step(
+    pub fn get_replay_step(
         &self,
         subnet_id: SubnetId,
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
         replay_until_height: Option<u64>,
-        state_hash_timeout_seconds: Option<u64>,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -397,7 +396,6 @@ impl Recovery {
             canister_caller_id,
             replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
-            state_hash_timeout_seconds,
         }
     }
 
@@ -410,7 +408,6 @@ impl Recovery {
         upgrade_url: Url,
         sha256: String,
         replay_until_height: Option<u64>,
-        state_hash_timeout_seconds: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
@@ -429,9 +426,8 @@ impl Recovery {
                     upgrade_version, version_record
                 ),
             }),
-            /*canister_caller_id=*/ None,
+            None,
             replay_until_height,
-            state_hash_timeout_seconds,
         ))
     }
 
@@ -443,7 +439,6 @@ impl Recovery {
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
         replay_until_height: Option<u64>,
-        state_hash_timeout_seconds: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -466,7 +461,6 @@ impl Recovery {
             }),
             Some(canister_id),
             replay_until_height,
-            state_hash_timeout_seconds,
         ))
     }
 
