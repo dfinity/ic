@@ -9,6 +9,7 @@ use crate::{
         NeuronPermissionType, ProposalId, Topic, Vote,
     },
 };
+use assert_matches::debug_assert_matches;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -346,14 +347,10 @@ impl Neuron {
         let mut no: usize = 0;
         for neuron_id in &followees {
             let Some(ballot) = ballots.get(&neuron_id.to_string()) else {
-                log!(
-                    ERROR,
-                    "Skipping followee neuron {} without a ballot for proposal {}",
-                    neuron_id,
-                    proposal_id.id,
-                );
                 continue;
             };
+
+            debug_assert_matches!(Vote::try_from(ballot.vote), Ok(_));
 
             let Ok(followee_vote) = Vote::try_from(ballot.vote) else {
                 log!(
