@@ -473,14 +473,14 @@ fn test_sign_with_threshold_key_fee_charged() {
         env.set_vetkd_enabled(true);
         let max_ticks = 100;
         let result = env.await_ingress(msg_id, max_ticks);
-        let result = match method {
+        let signature = match method {
             Method::SignWithECDSA => expect_reply::<SignWithECDSAReply>(result).signature,
             Method::SignWithSchnorr => expect_reply::<SignWithSchnorrReply>(result).signature,
             Method::VetKdDeriveKey => expect_reply::<VetKdDeriveKeyResult>(result).encrypted_key,
             _ => panic!("Unexpected method"),
         };
-        // Expect non-empty result.
-        assert!(!result.is_empty());
+        // Expect non-empty signature.
+        assert!(!signature.is_empty());
     }
 }
 
