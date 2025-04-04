@@ -3285,7 +3285,7 @@ pub fn test_upgrade_not_possible<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     ) {
         Ok(_) => {
-            panic!("Upgrade from V1 should fail!")
+            panic!("Upgrade should fail!")
         }
         Err(e) => {
             assert!(e.description().contains(expected_errror_msg));
