@@ -24,8 +24,7 @@ EOF
         done
         LIST_OF_FUZZERS=$(bazel query 'attr(tags, "sandbox_libfuzzer", //rs/...)')
         for FUZZER in $LIST_OF_FUZZERS; do
-            # Overriding 180s timeout from bes config as few artifact uploads were timing out for fuzzing
-            bazel run --config=bes --bes_timeout=600s --config=sandbox_fuzzing $FUZZER -- -runs=$MAX_EXECUTIONS
+            bazel run --config=bes --config=sandbox_fuzzing $FUZZER -- -runs=$MAX_EXECUTIONS
         done
         ;;
 

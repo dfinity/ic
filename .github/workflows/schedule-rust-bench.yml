@@ -34,7 +34,13 @@ jobs:
           - "//rs/artifact_pool/..."
           - "//rs/consensus/..."
           - "//rs/ingress_manager/..."
+          - "//rs/embedders:compilation_bench"
           - "//rs/embedders:heap_bench"
+          - "//rs/embedders:stable_memory_bench"
+          - "//rs/execution_environment:execute_inspect_message_bench"
+          - "//rs/execution_environment:execute_query_bench"
+          - "//rs/execution_environment:execute_update_bench"
+          - "//rs/execution_environment:wasm_instructions_bench"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
