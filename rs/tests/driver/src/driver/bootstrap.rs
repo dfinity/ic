@@ -87,7 +87,7 @@ pub fn init_ic(
         test_env.write_json_object(SOCKS_PROXY_PATH, &socks_proxy)?;
     }
 
-    // In production, this dummy hash is not actually checked and exists
+    // In production. this dummy hash is not actually checked and exists
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
