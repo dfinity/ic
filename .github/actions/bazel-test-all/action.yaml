@@ -105,7 +105,9 @@ runs:
 
 
             if [[ $diff_only == "true" ]]; then
-                target_pattern_file=$(mktemp) # TODO: remove (or upload?)
+                target_pattern_file=$(mktemp)
+                trap "rm $target_pattern_file" INT TERM EXIT
+
                 merge_base_sha='${{ github.event.pull_request.base.sha }}'
                 branch_head_sha='${{ github.event.pull_request.head.sha }}'
 
@@ -118,7 +120,7 @@ runs:
                 # the targets that are expected to be built.
                 comm -12 \
                   <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
-                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, "manual", //...)" | sort; ) > "$target_pattern_file"
+                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
 
                 # if bazel targets is empty we don't need to run any tests
                 if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
