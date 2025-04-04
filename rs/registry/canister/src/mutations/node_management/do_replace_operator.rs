@@ -649,7 +649,7 @@ mod tests {
     // Functions below are used to create an invariants-compliant
     // registry. They are not important for the tests above
     fn get_mutations_to_achieve_invariancy(
-        nodes: &[&ValidNodePublicKeys],
+        valid_node_public_keys: &[&ValidNodePublicKeys],
     ) -> Vec<RegistryMutation> {
         let one_more_nns_node = generate_valid_node_id();
         let mut mutations = vec![
@@ -674,7 +674,7 @@ mod tests {
         mutations.extend(threshold_pk_and_cup_mutations);
 
         // One more node is required for
-        for node in nodes.iter().chain(&[&one_more_nns_node]) {
+        for node in valid_node_public_keys.iter().chain(&[&one_more_nns_node]) {
             mutations.extend(vec![
                 upsert_key_mutation(
                     node.node_id(),
