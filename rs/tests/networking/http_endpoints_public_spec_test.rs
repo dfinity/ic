@@ -28,7 +28,8 @@ The different canister ID B is
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::Result;
+use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -43,7 +44,8 @@ use ic_system_test_driver::{
 };
 use ic_types::CanisterId;
 use itertools::Itertools;
-use slog::info;
+use reqwest::Response;
+use slog::{info, Logger};
 
 const CALL_VERSIONS: [Call; 2] = [Call::V2, Call::V3];
 
@@ -71,6 +73,7 @@ fn setup(env: TestEnv) {
     });
 }
 
+// TODO: Name this test correctly
 fn test(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
@@ -127,8 +130,23 @@ fn test(env: TestEnv) {
             CanisterId::ic_00(),
         ];
 
-        // Test making update calls
-        for (version, canister_id) in CALL_VERSIONS
+        // Test update calls
+
+        // Test that well formed calls get accepted
+        for version in CALL_VERSIONS.iter() {
+            let response = version
+                .call(
+                    sys_socket_addr,
+                    IngressMessage::default()
+                        .with_canister_id(sys_uc1_id.into(), sys_uc1_id.into()),
+                )
+                .await;
+            let status = inspect_response(response, "Call", &logger).await;
+            assert!((200..300).contains(&status));
+        }
+
+        // Test that malformed calls get rejects
+        for (version, effective_canister_id) in CALL_VERSIONS
             .iter()
             .cartesian_product(test_canister_ids.iter())
         {
@@ -136,14 +154,70 @@ fn test(env: TestEnv) {
                 .call(
                     sys_socket_addr,
                     IngressMessage::default()
-                        .with_canister_id(sys_uc1_id.into(), (*canister_id).into()),
+                        .with_canister_id(sys_uc1_id.into(), (*effective_canister_id).into()),
                 )
                 .await;
-            info!(logger, "Got response status: {}", response.status());
-            // TODO
+            let status = inspect_response(response, "Call", &logger).await;
+            assert!((400..500).contains(&status));
         }
+
+        // Test query calls
+
+        // Test that well formed calls get accepted
+        let response = Query::new(sys_uc1_id.into(), sys_uc1_id.into())
+            .query(sys_socket_addr)
+            .await;
+        let status = inspect_response(response, "Query", &logger).await;
+        assert!((200..300).contains(&status));
+
+        // Test that malformed calls get rejeceted
+        for effective_canister_id in test_canister_ids {
+            let response = Query::new(sys_uc1_id.into(), effective_canister_id.into())
+                .query(sys_socket_addr)
+                .await;
+            let status = inspect_response(response, "Query", &logger).await;
+            assert!((400..500).contains(&status));
+        }
+
+        // Test read state requests
+
+        // Test that well formed read state requests work
+        let response =
+            CanisterReadState::new(vec![Path::from(Label::from("time"))], sys_uc1_id.into())
+                .read_state(sys_socket_addr)
+                .await;
+        let status = inspect_response(response, "ReadState", &logger).await;
+        // TODO: Check status
+
+        let response = CanisterReadState::new(
+            vec![Path::from(vec![
+                Label::from("canister"),
+                Label::from(sys_uc1_id),
+                Label::from("controllers"),
+            ])],
+            sys_uc1_id.into(),
+        )
+        .read_state(sys_socket_addr)
+        .await;
+        let status = inspect_response(response, "ReadState", &logger).await;
+        // TODO: Check status
+
+        // Test that
 
         // TODO
     });
     todo!()
+}
+
+async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16 {
+    let status = response.status().as_u16();
+    let text = if !(200..300).contains(&status) {
+        format!("Reason: {}", response.text().await.unwrap())
+    } else {
+        String::default()
+    };
+
+    info!(logger, "{}: Got response status: {} {}", typ, status, text);
+
+    status
 }

@@ -17,6 +17,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-http-endpoint-test-agent = { path = "../../http_endpoints/test_agent" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
