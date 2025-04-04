@@ -64,6 +64,7 @@ anchors:
 
 jobs:
   config:
+    name: Set Config
     runs-on: ubuntu-latest
     steps:
       - name: Infer build config
