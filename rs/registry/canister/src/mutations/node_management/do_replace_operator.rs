@@ -330,7 +330,7 @@ mod tests {
         }
     }
 
-    fn operator_mutation(
+    fn upsert_node_operator_mutation(
         operator: PrincipalId,
         provider: PrincipalId,
         node_allowance: u64,
@@ -357,7 +357,7 @@ mod tests {
         static NEXT_NODE_NUMBER: RefCell<u8> = const { RefCell::new(0) };
     }
 
-    fn node_mutation(node_id: NodeId, operator: PrincipalId) -> RegistryMutation {
+    fn upsert_node_mutation(node_id: NodeId, operator: PrincipalId) -> RegistryMutation {
         let current_node_number = NEXT_NODE_NUMBER.with_borrow_mut(|next_node_number| {
             *next_node_number += 1;
             *next_node_number
@@ -381,7 +381,7 @@ mod tests {
         )
     }
 
-    fn dc_mutation(dc_id: &str) -> RegistryMutation {
+    fn upsert_dc_mutation(dc_id: &str) -> RegistryMutation {
         let dc_record = DataCenterRecord {
             id: dc_id.to_string(),
             ..Default::default()
@@ -398,10 +398,10 @@ mod tests {
         let mut registry = Registry::new();
 
         registry.apply_mutations_for_test(vec![
-            dc_mutation("dc1"),
-            operator_mutation(operator(1), provider(1), 10, "dc1"),
-            operator_mutation(operator(2), provider(1), 10, "dc1"),
-            node_mutation(node(1), operator(1)),
+            upsert_dc_mutation("dc1"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
+            upsert_node_mutation(node(1), operator(1)),
         ]);
 
         registry
@@ -417,10 +417,10 @@ mod tests {
         let mut registry = Registry::new();
 
         registry.apply_mutations_for_test(vec![
-            dc_mutation("dc1"),
-            operator_mutation(operator(1), provider(1), 10, "dc1"),
-            operator_mutation(operator(2), provider(1), 10, "dc1"),
-            node_mutation(node(1), operator(1)),
+            upsert_dc_mutation("dc1"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
+            upsert_node_mutation(node(1), operator(1)),
         ]);
 
         // Old operator should not be found in the registry
@@ -453,11 +453,11 @@ mod tests {
         let mut registry = Registry::new();
 
         registry.apply_mutations_for_test(vec![
-            dc_mutation("dc1"),
-            dc_mutation("dc2"),
-            operator_mutation(operator(1), provider(1), 10, "dc1"),
-            operator_mutation(operator(2), provider(1), 10, "dc2"),
-            node_mutation(node(1), operator(1)),
+            upsert_dc_mutation("dc1"),
+            upsert_dc_mutation("dc2"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 10, "dc2"),
+            upsert_node_mutation(node(1), operator(1)),
         ]);
 
         registry
@@ -476,10 +476,10 @@ mod tests {
         let mut registry = Registry::new();
 
         registry.apply_mutations_for_test(vec![
-            dc_mutation("dc1"),
-            operator_mutation(operator(1), provider(1), 10, "dc1"),
-            operator_mutation(operator(2), provider(1), 10, "dc1"),
-            node_mutation(node(1), operator(1)),
+            upsert_dc_mutation("dc1"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
+            upsert_node_mutation(node(1), operator(1)),
         ]);
 
         registry
@@ -495,12 +495,12 @@ mod tests {
         let mut registry = Registry::new();
 
         registry.apply_mutations_for_test(vec![
-            dc_mutation("dc1"),
-            operator_mutation(operator(1), provider(1), 10, "dc1"),
-            operator_mutation(operator(2), provider(1), 10, "dc1"),
-            node_mutation(node(1), operator(2)),
-            node_mutation(node(2), operator(2)),
-            node_mutation(node(3), operator(2)),
+            upsert_dc_mutation("dc1"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
+            upsert_node_mutation(node(1), operator(2)),
+            upsert_node_mutation(node(2), operator(2)),
+            upsert_node_mutation(node(3), operator(2)),
         ]);
 
         let version_before_replacement = registry.latest_version();
@@ -519,12 +519,12 @@ mod tests {
         let mut registry = Registry::new();
 
         registry.apply_mutations_for_test(vec![
-            dc_mutation("dc1"),
-            operator_mutation(operator(1), provider(1), 10, "dc1"),
-            operator_mutation(operator(2), provider(1), 10, "dc1"),
-            operator_mutation(operator(3), provider(1), 10, "dc1"),
-            node_mutation(node(1), operator(1)),
-            node_mutation(node(2), operator(3)),
+            upsert_dc_mutation("dc1"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(3), provider(1), 10, "dc1"),
+            upsert_node_mutation(node(1), operator(1)),
+            upsert_node_mutation(node(2), operator(3)),
         ]);
 
         registry
@@ -544,12 +544,12 @@ mod tests {
         let mut registry = Registry::new();
 
         registry.apply_mutations_for_test(vec![
-            dc_mutation("dc1"),
-            operator_mutation(operator(1), provider(1), 10, "dc1"),
-            operator_mutation(operator(2), provider(1), 2, "dc1"),
-            node_mutation(node(1), operator(1)),
-            node_mutation(node(2), operator(1)),
-            node_mutation(node(3), operator(1)),
+            upsert_dc_mutation("dc1"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 2, "dc1"),
+            upsert_node_mutation(node(1), operator(1)),
+            upsert_node_mutation(node(2), operator(1)),
+            upsert_node_mutation(node(3), operator(1)),
         ]);
 
         registry
@@ -569,12 +569,12 @@ mod tests {
         let third_node = generate_valid_node_id();
         registry.apply_mutations_for_test(
             vec![
-                dc_mutation("dc1"),
-                operator_mutation(operator(1), provider(1), 10, "dc1"),
-                operator_mutation(operator(2), provider(1), 10, "dc1"),
-                node_mutation(first_node.node_id(), operator(1)),
-                node_mutation(second_node.node_id(), operator(1)),
-                node_mutation(third_node.node_id(), operator(1)),
+                upsert_dc_mutation("dc1"),
+                upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+                upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
+                upsert_node_mutation(first_node.node_id(), operator(1)),
+                upsert_node_mutation(second_node.node_id(), operator(1)),
+                upsert_node_mutation(third_node.node_id(), operator(1)),
             ]
             .into_iter()
             // These are the mutations required to have a compliant registry
@@ -647,12 +647,12 @@ mod tests {
     ) -> Vec<RegistryMutation> {
         let one_more_nns_node = generate_valid_node_id();
         let mut mutations = vec![
-            routing_table_mutation(),
-            subnet_list_record(),
-            nns(one_more_nns_node.node_id()),
-            replica_version_mutation(),
-            blessed_replica_versions_mutation(),
-            node_mutation(one_more_nns_node.node_id(), operator(150)),
+            upsert_routing_table_mutation(),
+            upsert_subnet_list_record(),
+            upsert_nns(one_more_nns_node.node_id()),
+            upsert_replica_version_mutation(),
+            upsert_blessed_replica_versions_mutation(),
+            upsert_node_mutation(one_more_nns_node.node_id(), operator(150)),
         ];
 
         let threshold_pk_and_cup_mutations =
@@ -670,35 +670,35 @@ mod tests {
         // One more node is required for
         for node in nodes.iter().chain(&[&one_more_nns_node]) {
             mutations.extend(vec![
-                key_mutation(
+                upsert_key_mutation(
                     node.node_id(),
                     node.node_signing_key().key_value.clone(),
                     KeyPurpose::NodeSigning,
                 ),
-                key_mutation(
+                upsert_key_mutation(
                     node.node_id(),
                     node.committee_signing_key().key_value.clone(),
                     KeyPurpose::CommitteeSigning,
                 ),
-                key_mutation(
+                upsert_key_mutation(
                     node.node_id(),
                     node.dkg_dealing_encryption_key().key_value.clone(),
                     KeyPurpose::DkgDealingEncryption,
                 ),
-                key_mutation(
+                upsert_key_mutation(
                     node.node_id(),
                     node.idkg_dealing_encryption_key().key_value.clone(),
                     KeyPurpose::IDkgMEGaEncryption,
                 ),
-                certificate_mutation(node.node_id(), node.tls_certificate().clone()),
-                unassigned_nodes_record(),
+                upsert_certificate_mutation(node.node_id(), node.tls_certificate().clone()),
+                upsert_unassigned_nodes_record(),
             ]);
         }
 
         mutations
     }
 
-    fn routing_table_mutation() -> RegistryMutation {
+    fn upsert_routing_table_mutation() -> RegistryMutation {
         let routing_table = RoutingTable {
             entries: vec![Entry {
                 range: Some(CanisterIdRange {
@@ -722,7 +722,7 @@ mod tests {
         generate_node_keys_once(&config, None).unwrap()
     }
 
-    fn key_mutation(node: NodeId, key: Vec<u8>, purpose: KeyPurpose) -> RegistryMutation {
+    fn upsert_key_mutation(node: NodeId, key: Vec<u8>, purpose: KeyPurpose) -> RegistryMutation {
         let key = PublicKey {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
@@ -737,14 +737,17 @@ mod tests {
         )
     }
 
-    fn certificate_mutation(node_id: NodeId, certificate: X509PublicKeyCert) -> RegistryMutation {
+    fn upsert_certificate_mutation(
+        node_id: NodeId,
+        certificate: X509PublicKeyCert,
+    ) -> RegistryMutation {
         upsert(
             make_crypto_tls_cert_key(node_id).as_bytes(),
             certificate.encode_to_vec(),
         )
     }
 
-    fn nns(node_id: NodeId) -> RegistryMutation {
+    fn upsert_nns(node_id: NodeId) -> RegistryMutation {
         let bytes = node_id.get().into_vec();
         let replica_version = ReplicaVersion::default();
         let subnet_record = SubnetRecord {
@@ -761,7 +764,7 @@ mod tests {
         )
     }
 
-    fn replica_version_mutation() -> RegistryMutation {
+    fn upsert_replica_version_mutation() -> RegistryMutation {
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex:
                 "1816ff15e4f9a4937b246699ba9e72e59494eb6e29a71ee1757fb63f9f4ca3bd".to_string(),
@@ -776,7 +779,7 @@ mod tests {
         )
     }
 
-    fn blessed_replica_versions_mutation() -> RegistryMutation {
+    fn upsert_blessed_replica_versions_mutation() -> RegistryMutation {
         let replica_version = ReplicaVersion::default();
         let blessed_versions_record = BlessedReplicaVersions {
             blessed_version_ids: vec![replica_version.to_string()],
@@ -788,7 +791,7 @@ mod tests {
         )
     }
 
-    fn subnet_list_record() -> RegistryMutation {
+    fn upsert_subnet_list_record() -> RegistryMutation {
         let subnet_list_record = SubnetListRecord {
             subnets: vec![PrincipalId::new_subnet_test_id(0).as_slice().to_vec()],
         };
@@ -799,7 +802,7 @@ mod tests {
         )
     }
 
-    fn unassigned_nodes_record() -> RegistryMutation {
+    fn upsert_unassigned_nodes_record() -> RegistryMutation {
         let replica_version = ReplicaVersion::default();
         let unassigned_record = UnassignedNodesConfigRecord {
             ssh_readonly_access: vec![],
