@@ -3080,10 +3080,6 @@ pub struct Governance {
     pub spawning_neurons: Option<bool>,
     #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: Option<governance::MakingSnsProposal>,
-    /// A Structure used during upgrade to store the index of topics for neurons to their followers.
-    /// This is the inverse of what is stored in a Neuron (its followees).
-    #[prost(map = "int32, message", tag = "22")]
-    pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: Option<XdrConversionRate>,
@@ -3325,31 +3321,6 @@ pub mod governance {
         pub caller: Option<PrincipalId>,
         #[prost(message, optional, tag = "3")]
         pub proposal: Option<super::Proposal>,
-    }
-    /// A map of followees to their followers.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct FollowersMap {
-        /// The key is the neuron ID of the followee.
-        #[prost(map = "fixed64, message", tag = "1")]
-        pub followers_map: ::std::collections::HashMap<u64, followers_map::Followers>,
-    }
-    /// Nested message and enum types in `FollowersMap`.
-    pub mod followers_map {
-        use super::*;
-
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Message)]
-        pub struct Followers {
-            /// The followers of the neuron with the given ID.
-            /// These values will be non-repeating, and order does not matter.
-            #[prost(message, repeated, tag = "1")]
-            pub followers: Vec<NeuronId>,
-        }
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

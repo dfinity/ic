@@ -1,5 +1,4 @@
 use crate::common::storage::types::RosettaBlock;
-use crate::common::utils::utils::create_progress_bar_if_needed;
 use crate::MetadataEntry;
 use anyhow::{bail, Context};
 use candid::Nat;
@@ -124,9 +123,6 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
     if highest_block_idx < next_block_to_be_updated {
         return Ok(());
     }
-    // Create a progressbar to visualize the updating process
-    let pb = create_progress_bar_if_needed(next_block_to_be_updated, highest_block_idx);
-
     // Take an interval of 100000 blocks and update the account balances for these blocks
     const BATCH_SIZE: u64 = 100000;
     let mut batch_start_idx = next_block_to_be_updated;
@@ -208,9 +204,6 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                     }
                 }
             }
-            if let Some(ref pb) = pb {
-                pb.inc(1);
-            }
         }
 
         // Flush the cache
@@ -235,9 +228,6 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
             + 1;
         batch_end_idx = batch_start_idx + BATCH_SIZE;
         rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
-    }
-    if let Some(pb) = pb {
-        pb.finish_with_message("Account Balances have been updated successfully");
     }
     Ok(())
 }

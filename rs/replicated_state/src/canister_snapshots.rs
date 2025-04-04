@@ -299,9 +299,9 @@ pub struct ExecutionStateSnapshot {
     #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: PageMemory,
     /// Status of global timer
-    pub global_timer: CanisterTimer,
+    pub global_timer: Option<CanisterTimer>,
     /// Whether the hook is inactive, ready or executed.
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 /// Contains all information related to a canister snapshot.
@@ -366,8 +366,8 @@ impl CanisterSnapshot {
             exported_globals: execution_state.exported_globals.clone(),
             stable_memory: PageMemory::from(&execution_state.stable_memory),
             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
-            global_timer,
-            on_low_wasm_memory_hook_status: hook_status,
+            global_timer: Some(global_timer),
+            on_low_wasm_memory_hook_status: Some(hook_status),
         };
 
         Ok(CanisterSnapshot {
@@ -533,8 +533,8 @@ mod tests {
                 page_map: PageMap::new_for_testing(),
                 size: NumWasmPages::new(10),
             },
-            global_timer: CanisterTimer::Inactive,
-            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+            global_timer: Some(CanisterTimer::Inactive),
+            on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
         };
         let snapshot = CanisterSnapshot::new(
             canister_id,
