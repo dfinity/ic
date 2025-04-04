@@ -132,5 +132,9 @@ pub fn execute_query_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, execute_query_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_query_bench
+}
 criterion_main!(benchmarks);
