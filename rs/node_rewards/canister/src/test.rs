@@ -37,11 +37,7 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(TestState, STATE);
 
-fn setup_canister_for_test() -> (
-    NodeRewardsCanister,
-    Arc<StableCanisterRegistryClient<TestState>>,
-    Arc<FakeRegistry>,
-) {
+fn setup_canister_for_test() -> (NodeRewardsCanister, Arc<FakeRegistry>) {
     let fake_registry = Arc::new(FakeRegistry::new());
     let registry_client = Arc::new(StableCanisterRegistryClient::<TestState>::new(
         fake_registry.clone(),
@@ -50,7 +46,7 @@ fn setup_canister_for_test() -> (
     // In the actual canister,  there are 3 things to keep track of for tests
     // I ahve the store, the registry client, and the actual canister
     // I have memory, but that's abstracted away by the interface
-    (canister, registry_client, fake_registry)
+    (canister, fake_registry)
 }
 
 fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
@@ -161,7 +157,7 @@ fn add_registry_data_to_fake_registry(fake_registry: Arc<FakeRegistry>) {
 #[test]
 fn test_rewards_calculation() {
     let latest_version = 5;
-    let (test_canister, client, fake_registry) = setup_canister_for_test();
+    let (test_canister, fake_registry) = setup_canister_for_test();
     add_registry_data_to_fake_registry(fake_registry);
 
     thread_local! {
