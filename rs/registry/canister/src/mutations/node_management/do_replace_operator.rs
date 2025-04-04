@@ -592,11 +592,7 @@ mod tests {
                 payload(
                     operator(1),
                     operator(2),
-                    &[
-                        first_node.node_id(),
-                        second_node.node_id(),
-                        third_node.node_id(),
-                    ],
+                    &[first_node.node_id(), second_node.node_id()],
                 ),
                 caller(1),
             )
@@ -609,11 +605,7 @@ mod tests {
             registry.latest_version()
         );
 
-        for node_id in &[
-            first_node.node_id(),
-            second_node.node_id(),
-            third_node.node_id(),
-        ] {
+        for node_id in &[first_node.node_id(), second_node.node_id()] {
             let node = registry
                 .get(
                     make_node_record_key(*node_id).as_bytes(),
@@ -626,7 +618,21 @@ mod tests {
             assert_eq!(decoded.node_operator_id, operator(2).as_slice())
         }
 
-        for (operator, allowance) in &[(operator(1), 13), (operator(2), 7)] {
+        let third_untouched_node = registry
+            .get(
+                make_node_record_key(third_node.node_id()).as_bytes(),
+                registry.latest_version(),
+            )
+            .unwrap();
+        let third_untouched_decoded_node =
+            NodeRecord::decode(third_untouched_node.value.as_slice()).unwrap();
+        assert_eq!(third_untouched_node.version, version_before);
+        assert_eq!(
+            third_untouched_decoded_node.node_operator_id,
+            operator(1).as_slice()
+        );
+
+        for (operator, allowance) in &[(operator(1), 12), (operator(2), 8)] {
             let operator_record = registry
                 .get(
                     make_node_operator_record_key(*operator).as_bytes(),
