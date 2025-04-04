@@ -22,13 +22,13 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 
-use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
+use ic_nns_governance_api::pb::v1::{create_service_nervous_system::{
     initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
-};
+}};
 
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron::Follow, proposal::Action, Proposal, UpgradeSnsControlledCanister,
+    manage_neuron::{Follow, SetFollowing}, neuron::FolloweesForTopic, proposal::Action, topics::Topic, Followee, Proposal, UpgradeSnsControlledCanister
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
@@ -139,18 +139,32 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
         let swap_participant_neuron_id = get_caller_neuron(swap_participant_agent, sns_governance)
             .await
             .expect("Failed to get the caller neuron");
-        let follow = Follow {
-            followees: vec![dev_participant_neuron_id.clone()],
-            // UpgradeSnsControlledCanister
-            function_id: 3,
+
+        let set_following = SetFollowing {
+            topic_following: [
+                Topic::DappCanisterManagement,
+                Topic::ApplicationBusinessLogic,
+                Topic::Governance,
+                Topic::TreasuryAssetManagement,
+                Topic::CriticalDappOperations,
+                Topic::DaoCommunitySettings,
+                Topic::SnsFrameworkManagement,
+            ].iter().map(|topic|
+                FolloweesForTopic {
+                    topic: Some(*topic),
+                    followees: vec![Followee {
+                        neuron_id: Some(dev_participant_neuron_id.clone()),
+                        alias: Some("Developer".to_string()),
+                    }]
+                },
+            ).collect(),
         };
 
-        // TODO[NNS1-3676]: This should be changed to SetFollowing when that command is enabled.
         sns_governance
-            .follow(
+            .set_following(
                 swap_participant_agent,
                 swap_participant_neuron_id.clone(),
-                follow,
+                set_following,
             )
             .await
             .expect("Failed to follow the dev neuron");
