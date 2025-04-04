@@ -245,8 +245,8 @@ pub mod neuron {
         ::prost::Message,
     )]
     pub struct TopicFollowees {
-        #[prost(btree_map = "uint64, message", tag = "1")]
-        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<u64, FolloweesForTopic>,
+        #[prost(btree_map = "int32, message", tag = "1")]
+        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.

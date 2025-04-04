@@ -79,11 +79,7 @@ impl Setup {
     }
 
     fn upgrade(&self, upgrade_arg: Option<ArchiveUpgradeArgument>, expected_error: Option<String>) {
-        let upgrade_arg = if let Some(upgrade_arg) = upgrade_arg {
-            Encode!(&upgrade_arg).expect("should encode archive upgrade args")
-        } else {
-            vec![]
-        };
+        let upgrade_arg = Encode!(&upgrade_arg).expect("should encode archive upgrade args");
         match self.pocket_ic.upgrade_canister(
             Principal::from(self.canister_id),
             self.archive_wasm.clone(),
