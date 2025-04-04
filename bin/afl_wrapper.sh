@@ -78,7 +78,6 @@ function afl_env() {
                 use_sigaltstack=1"
 
     # Keep them sorted
-    # AFL_DRIVER_DONT_DEFER=1 \ Reuse if there is an issue with deferred mode
     ASAN_OPTIONS=$ASAN_OPTIONS \
         LSAN_OPTIONS=$LSAN_OPTIONS \
         AFL_CMPLOG_ONLY_NEW=1 \
