@@ -878,9 +878,9 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             .with_schnorr_signature_fee(fee)
             .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
-            // Turn off ECDSA signatures to fill up the queue.
+            // Turn off automatic ECDSA signatures to fill up the queue.
             .with_ecdsa_signing_enabled(false)
-            // Turn off Schnorr signatures to fill up the queue.
+            // Turn off automatic Schnorr signatures to fill up the queue.
             .with_schnorr_signing_enabled(false)
             // Turn off automatic VetKey derivation to fill up the queue.
             .with_vetkd_enabled(false)
