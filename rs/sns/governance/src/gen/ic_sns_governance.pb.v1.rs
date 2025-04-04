@@ -33,6 +33,22 @@ pub struct NeuronId {
     #[serde(with = "serde_bytes")]
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
+/// Neuron whose voting decisions are being followed.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Followee {
+    #[prost(message, optional, tag = "1")]
+    pub neuron_id: ::core::option::Option<NeuronId>,
+    /// Human-readable alias that helps identify this followee among other neurons.
+    #[prost(string, optional, tag = "2")]
+    pub alias: ::core::option::Option<::prost::alloc::string::String>,
+}
 /// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
 #[derive(
     candid::CandidType,
@@ -215,7 +231,7 @@ pub mod neuron {
     )]
     pub struct FolloweesForTopic {
         #[prost(message, repeated, tag = "1")]
-        pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
+        pub followees: ::prost::alloc::vec::Vec<super::Followee>,
         #[prost(enumeration = "super::Topic", optional, tag = "2")]
         pub topic: ::core::option::Option<i32>,
     }
@@ -229,8 +245,8 @@ pub mod neuron {
         ::prost::Message,
     )]
     pub struct TopicFollowees {
-        #[prost(btree_map = "uint64, message", tag = "1")]
-        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<u64, FolloweesForTopic>,
+        #[prost(btree_map = "int32, message", tag = "1")]
+        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
@@ -1826,7 +1842,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20"
+            tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 11, 12, 13, 20"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -1876,6 +1892,8 @@ pub mod governance {
             Configure(super::super::manage_neuron::Configure),
             #[prost(message, tag = "10")]
             Follow(super::super::manage_neuron::Follow),
+            #[prost(message, tag = "14")]
+            SetFollowing(super::super::manage_neuron::SetFollowing),
             #[prost(message, tag = "11")]
             MakeProposal(super::super::Proposal),
             #[prost(message, tag = "12")]
@@ -2323,7 +2341,7 @@ pub struct ManageNeuron {
     pub subaccount: ::prost::alloc::vec::Vec<u8>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -2620,6 +2638,19 @@ pub mod manage_neuron {
         #[prost(message, repeated, tag = "2")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowing {
+        /// The neuron's topic-based following, specified as a sequence of `FolloweesForTopic`.
+        #[prost(message, repeated, tag = "1")]
+        pub topic_following: ::prost::alloc::vec::Vec<super::neuron::FolloweesForTopic>,
+    }
     /// The operation that registers a given vote from the neuron for a given
     /// proposal (a directly cast vote as opposed to a vote that is cast as
     /// a result of a follow relation).
@@ -2750,6 +2781,8 @@ pub mod manage_neuron {
         Disburse(Disburse),
         #[prost(message, tag = "4")]
         Follow(Follow),
+        #[prost(message, tag = "14")]
+        SetFollowing(SetFollowing),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         #[prost(message, tag = "5")]
@@ -2785,7 +2818,7 @@ pub mod manage_neuron {
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub command: ::core::option::Option<manage_neuron_response::Command>,
 }
@@ -2883,6 +2916,17 @@ pub mod manage_neuron_response {
         ::prost::Message,
     )]
     pub struct FollowResponse {}
+    /// The response to the ManageNeuron command 'set_following'.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowingResponse {}
     /// The response to the ManageNeuron command 'make_proposal'.
     #[derive(
         candid::CandidType,
@@ -2977,6 +3021,8 @@ pub mod manage_neuron_response {
         Disburse(DisburseResponse),
         #[prost(message, tag = "4")]
         Follow(FollowResponse),
+        #[prost(message, tag = "14")]
+        SetFollowing(SetFollowingResponse),
         #[prost(message, tag = "5")]
         MakeProposal(MakeProposalResponse),
         #[prost(message, tag = "6")]
@@ -4277,6 +4323,7 @@ impl ClaimSwapNeuronsError {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     Debug,

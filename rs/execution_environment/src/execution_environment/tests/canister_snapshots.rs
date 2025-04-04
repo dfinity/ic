@@ -6,9 +6,10 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
-    CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    CanisterSnapshotResponse, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, GlobalTimer,
     ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus,
-    Payload as Ic00Payload, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    Payload as Ic00Payload, ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    SnapshotSource, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -16,6 +17,7 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
         system_state::CyclesUseCase,
+        WASM_PAGE_SIZE_IN_BYTES,
     },
     CanisterState, ExecutionState, SchedulerState,
 };
@@ -30,6 +32,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     CanisterId, Cycles, NumInstructions, SnapshotId,
 };
+use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_gt;
 use serde_bytes::ByteBuf;
@@ -964,6 +967,60 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
         test.subnet_available_memory(),
         initial_subnet_available_memory
     );
+}
+
+#[test]
+fn take_snapshot_with_maximal_chunk_store() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_heap_delta_rate_limit(u64::MAX.into())
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+        )
+        .unwrap();
+
+    // The chunk store may have no more than 100 entries.
+    // If this test fails, the wasm chunk store size or the
+    // max number of stored chunks may have changed.
+    // On macos, the OS pages are bigger, so there are
+    // fewer entries possible. FIXME in a nicer way.
+    let max = {
+        #[cfg(target_os = "macos")]
+        let m = 25u32;
+        #[cfg(not(target_os = "macos"))]
+        let m = 100u32;
+        m
+    };
+    for i in 0..max {
+        let chunk = i.to_be_bytes().to_vec();
+        let upload_args = UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk,
+        };
+        test.subnet_message("upload_chunk", upload_args.encode())
+            .unwrap();
+    }
+    // this one should fail
+    let chunk = vec![42; 42];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap_err();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let _snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // TODO: get metadata once pull/4514 is merged.
 }
 
 #[test]
@@ -1993,6 +2050,159 @@ fn snapshot_must_include_globals() {
         .non_replicated_query(canister_id, "read_global", vec![])
         .unwrap();
     assert_eq!(result, WasmResult::Reply(vec![1, 0, 0, 0]));
+}
+
+#[test]
+fn read_canister_snapshot_metadata_succeeds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    // Create new canister.
+    let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            uni_canister_wasm.clone(),
+        )
+        .unwrap();
+
+    // Upload chunk.
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    // Grow the stable memory
+    let stable_pages = 13;
+    let payload = wasm().stable64_grow(stable_pages).reply().build();
+    let _res = test.ingress(canister_id, "update", payload).unwrap();
+    // Set some cert data
+    let cert_data = [42];
+    let payload = wasm().certified_data_set(&cert_data).reply().build();
+    let _res = test.ingress(canister_id, "update", payload).unwrap();
+    // Set a global timer
+    let timestamp = 43;
+    let payload = wasm().api_global_timer_set(timestamp).reply().build();
+    let _res = test.ingress(canister_id, "update", payload).unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Get the metadata
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let metadata = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+    assert_eq!(metadata.source, SnapshotSource::TakenFromCanister);
+    assert_eq!(
+        metadata.stable_memory_size,
+        WASM_PAGE_SIZE_IN_BYTES as u64 * stable_pages
+    );
+    assert_eq!(metadata.wasm_module_size, uni_canister_wasm.len() as u64);
+    assert_eq!(metadata.wasm_chunk_store.len(), 1);
+    assert_eq!(metadata.certified_data, cert_data);
+    assert_eq!(metadata.global_timer, Some(GlobalTimer::Active(timestamp)));
+    assert_eq!(
+        metadata.on_low_wasm_memory_hook_status,
+        Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+    );
+    assert_eq!(metadata.canister_version, 4);
+}
+
+#[test]
+fn read_canister_snapshot_metadata_fails_canister_and_snapshot_must_match() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+        )
+        .unwrap();
+
+    // Create other canister.
+    let other_canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+        )
+        .unwrap();
+
+    // Take a snapshot of the first canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Try to access metadata via the wrong canister id
+    let args = ReadCanisterSnapshotMetadataArgs::new(other_canister_id, snapshot_id);
+    let error = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+
+    // Try to access metadata via a bad snapshot id
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, (canister_id, 42).into());
+    let error = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+}
+
+#[test]
+fn read_canister_snapshot_metadata_fails_invalid_controller() {
+    let own_subnet = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .build();
+    // Create new canister.
+    let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            uni_canister_wasm.clone(),
+        )
+        .unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Non-controller user tries to get metadata
+    test.set_user_id(user_test_id(42));
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let error = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterInvalidController);
 }
 
 /// Early warning system / stumbling block forcing the authors of changes adding

@@ -79,6 +79,10 @@ type GetBlocksResult = variant {
 
 type GetEncodedBlocksResult = variant { Ok : vec blob; Err : GetBlocksError };
 
+type ArchiveUpgradeArgument = record {
+    max_memory_size_bytes : opt nat64;
+};
+
 service : {
     get_blocks : (GetBlocksArgs) -> (GetBlocksResult) query;
     get_encoded_blocks : (GetBlocksArgs) -> (GetEncodedBlocksResult) query;

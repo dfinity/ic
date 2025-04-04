@@ -1,7 +1,14 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
+use super::{
+    linker,
+    system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
+        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
+    },
+    StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
@@ -15,10 +22,6 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
-};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
@@ -136,7 +139,7 @@ fn test_wasmtime_system_api() {
 
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
 
-    system_api::syscalls::<u32>(
+    linker::syscalls::<u32>(
         &mut linker,
         config.feature_flags,
         config.stable_memory_dirty_page_limit,

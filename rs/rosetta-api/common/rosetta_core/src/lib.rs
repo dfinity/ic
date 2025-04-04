@@ -1,5 +1,6 @@
 pub mod convert;
 pub mod identifiers;
+pub mod metrics;
 pub mod miscellaneous;
 pub mod models;
 pub mod objects;

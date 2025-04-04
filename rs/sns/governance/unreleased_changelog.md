@@ -9,11 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `Neuron.topic_followees` to support the upcoming [SNS topics](https://forum.dfinity.org/t/sns-topics-design) feature.
+* Added the (currently disabled) `SetFollowing` neuron command.
 
 ## Changed
-
-- `SetTopcisForCustomProposals` proposal is now under the `CriticalDappOperations` topic.
 
 ## Deprecated
 
