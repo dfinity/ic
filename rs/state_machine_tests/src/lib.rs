@@ -55,7 +55,7 @@ use ic_management_canister_types_private::{
     CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
     SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply,
+    UploadChunkReply, VetKdDeriveKeyResult,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -129,7 +129,9 @@ use ic_types::{
     },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript},
+        threshold_sig::ni_dkg::{
+            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
+        },
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
     },
     malicious_flags::MaliciousFlags,
@@ -835,6 +837,7 @@ enum SignatureSecretKey {
     EcdsaSecp256k1(ic_secp256k1::PrivateKey),
     SchnorrBip340(ic_secp256k1::PrivateKey),
     Ed25519(ic_ed25519::DerivedPrivateKey),
+    VetKD(ic_crypto_test_utils_vetkd::PrivateKey),
 }
 
 /// Represents a replicated state machine detached from the network layer that
@@ -847,6 +850,7 @@ pub struct StateMachine {
     secret_key: SecretKeyBytes,
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
+    is_vetkd_enabled: bool,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
@@ -873,6 +877,7 @@ pub struct StateMachine {
     time_of_last_round: RwLock<Time>,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
+    ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
@@ -951,8 +956,10 @@ pub struct StateMachineBuilder {
     chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
+    vetkd_derive_key_fee: Option<Cycles>,
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
+    is_vetkd_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -982,8 +989,10 @@ impl StateMachineBuilder {
             chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
+            vetkd_derive_key_fee: None,
             is_ecdsa_signing_enabled: true,
             is_schnorr_signing_enabled: true,
+            is_vetkd_enabled: true,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -1133,6 +1142,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_vetkd_derive_key_fee(self, fee: u128) -> Self {
+        Self {
+            vetkd_derive_key_fee: Some(Cycles::new(fee)),
+            ..self
+        }
+    }
+
     pub fn with_features(self, features: SubnetFeatures) -> Self {
         Self { features, ..self }
     }
@@ -1172,6 +1188,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_vetkd_enabled(self, is_vetkd_enabled: bool) -> Self {
+        Self {
+            is_vetkd_enabled,
+            ..self
+        }
+    }
+
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1205,8 +1228,10 @@ impl StateMachineBuilder {
             self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
+            self.vetkd_derive_key_fee,
             self.is_ecdsa_signing_enabled,
             self.is_schnorr_signing_enabled,
+            self.is_vetkd_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1546,8 +1571,10 @@ impl StateMachine {
         chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
+        vetkd_derive_key_fee: Option<Cycles>,
         is_ecdsa_signing_enabled: bool,
         is_schnorr_signing_enabled: bool,
+        is_vetkd_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1577,6 +1604,9 @@ impl StateMachine {
             subnet_config
                 .cycles_account_manager_config
                 .schnorr_signature_fee = schnorr_signature_fee;
+        }
+        if let Some(vetkd_derive_key_fee) = vetkd_derive_key_fee {
+            subnet_config.cycles_account_manager_config.vetkd_fee = vetkd_derive_key_fee;
         }
 
         let mut node_rng = StdRng::from_seed(seed);
@@ -1719,6 +1749,7 @@ impl StateMachine {
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let mut chain_key_subnet_secret_keys = BTreeMap::new();
+        let mut ni_dkg_ids = BTreeMap::new();
 
         for key_id in chain_keys_enabled_status.keys() {
             let (public_key, private_key) = match key_id {
@@ -1812,13 +1843,34 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                 },
-                MasterPublicKeyId::VetKd(_vetkd_key_id) => {
-                    todo!("CRP-2629: Support vetKD in state machine tests")
+                MasterPublicKeyId::VetKd(id) => {
+                    use ic_crypto_test_utils_vetkd::PrivateKey;
+
+                    let private_key = PrivateKey::generate(id.name.as_bytes());
+
+                    let public_key = MasterPublicKey {
+                        algorithm_id: AlgorithmId::VetKD,
+                        public_key: private_key.public_key_bytes(),
+                    };
+
+                    let private_key = SignatureSecretKey::VetKD(private_key);
+
+                    let nidkg_id = NiDkgId {
+                        start_block_height: Height::new(0),
+                        dealer_subnet: subnet_id,
+                        dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                            id.clone(),
+                        )),
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    };
+
+                    ni_dkg_ids.insert(key_id.clone(), nidkg_id);
+
+                    (public_key, private_key)
                 }
             };
 
             chain_key_subnet_secret_keys.insert(key_id.clone(), private_key);
-
             chain_key_subnet_public_keys.insert(key_id.clone(), public_key);
         }
 
@@ -1865,6 +1917,7 @@ impl StateMachine {
             public_key_der,
             is_ecdsa_signing_enabled,
             is_schnorr_signing_enabled,
+            is_vetkd_enabled,
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
@@ -1891,6 +1944,7 @@ impl StateMachine {
             time_of_last_round: RwLock::new(time),
             chain_key_subnet_public_keys,
             chain_key_subnet_secret_keys,
+            ni_dkg_ids,
             replica_logger: replica_logger.clone(),
             log_level,
             nodes,
@@ -2323,6 +2377,38 @@ impl StateMachine {
         Ok(SignWithSchnorrReply { signature })
     }
 
+    fn build_vetkd_derive_key_reply(
+        &self,
+        context: &SignWithThresholdContext,
+    ) -> Result<VetKdDeriveKeyResult, UserError> {
+        assert!(context.is_vetkd());
+
+        if let Some(SignatureSecretKey::VetKD(k)) =
+            self.chain_key_subnet_secret_keys.get(&context.key_id())
+        {
+            let vetkd_context: Vec<u8> =
+                context.derivation_path.iter().flatten().cloned().collect();
+            let encrypted_key = k.vetkd_protocol(
+                context.request.sender.get().as_slice(),
+                &vetkd_context,
+                context.vetkd_args().input.as_ref(),
+                &context.vetkd_args().transport_public_key,
+                &[42; 32],
+            );
+
+            Ok(VetKdDeriveKeyResult { encrypted_key })
+        } else {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Subnet {} does not hold threshold key {}.",
+                    self.subnet_id,
+                    context.key_id()
+                ),
+            ))
+        }
+    }
+
     fn process_threshold_signing_request(
         &self,
         id: &CallbackId,
@@ -2362,6 +2448,22 @@ impl StateMachine {
                     }
                 }
             }
+            ThresholdArguments::VetKd(_) if self.is_vetkd_enabled => {
+                match self.build_vetkd_derive_key_reply(context) {
+                    Ok(response) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                    Err(user_error) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Reject(RejectContext::from(user_error)),
+                        ));
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -2374,6 +2476,11 @@ impl StateMachine {
     /// If set to true, the state machine will handle sign_with_schnorr calls during `tick()`.
     pub fn set_schnorr_signing_enabled(&mut self, value: bool) {
         self.is_schnorr_signing_enabled = value;
+    }
+
+    /// If set to true, the state machine will handle vetkd_derive_key calls during `tick()`.
+    pub fn set_vetkd_enabled(&mut self, value: bool) {
+        self.is_vetkd_enabled = value;
     }
 
     /// Triggers a single round of execution without any new inputs.  The state
@@ -2483,7 +2590,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: BTreeMap::new(),
+            ni_dkg_ids: self.ni_dkg_ids.clone(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
@@ -3799,6 +3906,15 @@ impl StateMachine {
             .metadata
             .subnet_call_context_manager
             .sign_with_schnorr_contexts()
+    }
+
+    /// Returns `vetkd_derive_key` contexts from internal subnet call context manager.
+    pub fn vetkd_derive_key_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .vetkd_derive_key_contexts()
     }
 
     /// Returns canister HTTP request contexts from internal subnet call context manager.
