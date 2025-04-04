@@ -739,7 +739,7 @@ impl ReplicatedState {
             self.metadata
                 .streams
                 .iter()
-                .all(|(_, stream)| stream.guaranteed_responses_counts().get(canister).is_none())
+                .all(|(_, stream)| stream.guaranteed_response_counts().get(canister).is_none())
         };
 
         let canister_state = match self.canister_state(canister) {

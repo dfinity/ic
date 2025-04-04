@@ -188,6 +188,7 @@ impl ReplicatedStateFixture {
             .pop()
     }
 
+    /// Push the message to a stream.
     fn push_to_streams(&mut self, msgs: Vec<RequestOrResponse>) {
         let mut streams = self.state.take_streams();
         for msg in msgs.into_iter() {
@@ -196,6 +197,7 @@ impl ReplicatedStateFixture {
         self.state.put_streams(streams);
     }
 
+    /// Discard the next `count` messages from the same stream as `push_to_streams` uses.
     fn discard_from_streams(&mut self, count: u64) {
         let mut streams = self.state.take_streams();
         let stream = streams.entry(SUBNET_ID).or_default();

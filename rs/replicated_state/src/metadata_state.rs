@@ -1234,7 +1234,7 @@ pub struct Stream {
     reverse_stream_flags: StreamFlags,
 
     /// Number of guaranteed responses per responding canister.
-    guaranteed_responses_counts: BTreeMap<CanisterId, usize>,
+    guaranteed_response_counts: BTreeMap<CanisterId, usize>,
 }
 
 impl Default for Stream {
@@ -1246,14 +1246,14 @@ impl Default for Stream {
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
-        let guaranteed_responses_counts = BTreeMap::default();
+        let guaranteed_response_counts = BTreeMap::default();
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
             reverse_stream_flags,
-            guaranteed_responses_counts,
+            guaranteed_response_counts,
         }
     }
 }
@@ -1292,7 +1292,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         for req_or_resp in item.messages {
             messages.push(req_or_resp.try_into()?);
         }
-        let guaranteed_responses_counts = Self::calculate_guaranteed_responses_counts(&messages);
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
@@ -1334,7 +1334,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
                     deprecated_responses_only: flags.deprecated_responses_only,
                 })
                 .unwrap_or_default(),
-            guaranteed_responses_counts,
+            guaranteed_response_counts,
         })
     }
 }
@@ -1343,14 +1343,14 @@ impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
-        let guaranteed_responses_counts = Self::calculate_guaranteed_responses_counts(&messages);
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals: VecDeque::new(),
             messages_size_bytes,
             reverse_stream_flags: Default::default(),
-            guaranteed_responses_counts,
+            guaranteed_response_counts,
         }
     }
 
@@ -1361,14 +1361,14 @@ impl Stream {
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
-        let guaranteed_responses_counts = Self::calculate_guaranteed_responses_counts(&messages);
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
             reverse_stream_flags: Default::default(),
-            guaranteed_responses_counts,
+            guaranteed_response_counts,
         }
     }
 
@@ -1406,8 +1406,8 @@ impl Stream {
     }
 
     /// Returns the number of guaranteed responses in the stream for each responding canister.
-    pub fn guaranteed_responses_counts(&self) -> &BTreeMap<CanisterId, usize> {
-        &self.guaranteed_responses_counts
+    pub fn guaranteed_response_counts(&self) -> &BTreeMap<CanisterId, usize> {
+        &self.guaranteed_response_counts
     }
 
     /// Appends the given message to the tail of the stream.
@@ -1416,7 +1416,7 @@ impl Stream {
         if let RequestOrResponse::Response(response) = &message {
             if !response.is_best_effort() {
                 *self
-                    .guaranteed_responses_counts
+                    .guaranteed_response_counts
                     .entry(response.respondent)
                     .or_insert(0) += 1;
             }
@@ -1424,8 +1424,8 @@ impl Stream {
         self.messages.push(message);
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
         debug_assert_eq!(
-            Self::calculate_guaranteed_responses_counts(&self.messages),
-            self.guaranteed_responses_counts
+            Self::calculate_guaranteed_response_counts(&self.messages),
+            self.guaranteed_response_counts
         );
     }
 
@@ -1471,25 +1471,23 @@ impl Stream {
             if let RequestOrResponse::Response(response) = &msg {
                 if !response.is_best_effort() {
                     match self
-                        .guaranteed_responses_counts
+                        .guaranteed_response_counts
                         .get_mut(&response.respondent)
                     {
                         Some(0) | None => {
                             debug_assert!(false);
-                            self.guaranteed_responses_counts
-                                .remove(&response.respondent);
+                            self.guaranteed_response_counts.remove(&response.respondent);
                         }
                         Some(1) => {
-                            self.guaranteed_responses_counts
-                                .remove(&response.respondent);
+                            self.guaranteed_response_counts.remove(&response.respondent);
                         }
                         Some(count) => *count -= 1,
                     }
                 }
             }
             debug_assert_eq!(
-                Self::calculate_guaranteed_responses_counts(&self.messages),
-                self.guaranteed_responses_counts
+                Self::calculate_guaranteed_response_counts(&self.messages),
+                self.guaranteed_response_counts
             );
 
             // If we received a reject signal for this message, collect it in
@@ -1544,7 +1542,7 @@ impl Stream {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 
-    fn calculate_guaranteed_responses_counts(
+    fn calculate_guaranteed_response_counts(
         messages: &StreamIndexedQueue<RequestOrResponse>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut result = BTreeMap::new();

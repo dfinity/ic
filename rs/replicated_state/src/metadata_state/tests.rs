@@ -1574,16 +1574,17 @@ fn compatibility_for_reject_reason() {
 #[test]
 fn stream_responses_tracking() {
     let mut stream = Stream::new(StreamIndexedQueue::with_begin(0.into()), 0.into());
-    let mut expected_counts = BTreeMap::new();
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert!(stream.guaranteed_response_counts().is_empty());
 
     let response = ResponseBuilder::default()
         .respondent(*LOCAL_CANISTER)
         .originator(*REMOTE_CANISTER)
         .build();
     stream.push(response.into());
-    expected_counts.insert(*LOCAL_CANISTER, 1);
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
 
     // Best-effort responses don't count.
     let response = ResponseBuilder::default()
@@ -1592,24 +1593,31 @@ fn stream_responses_tracking() {
         .deadline(CoarseTime::from_secs_since_unix_epoch(1))
         .build();
     stream.push(response.into());
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
 
-    // Response from a different respondent.
     let response = ResponseBuilder::default()
         .respondent(*LOCAL_CANISTER)
         .originator(*REMOTE_CANISTER)
         .build();
     stream.push(response.into());
-    *expected_counts.get_mut(&LOCAL_CANISTER).unwrap() += 1;
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2 }
+    );
 
+    // Response from a different respondent.
     let response = ResponseBuilder::default()
         .respondent(*REMOTE_CANISTER)
         .originator(*LOCAL_CANISTER)
         .build();
     stream.push(response.into());
-    expected_counts.insert(*REMOTE_CANISTER, 1);
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
 
     // Requests don't count.
     let request = RequestBuilder::default()
@@ -1617,19 +1625,26 @@ fn stream_responses_tracking() {
         .receiver(*REMOTE_CANISTER)
         .build();
     stream.push(request.into());
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
 
     // Discard everything in the same order.
     stream.discard_messages_before(StreamIndex::new(1), &vec![].into());
-    *expected_counts.get_mut(&LOCAL_CANISTER).unwrap() -= 1;
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
     stream.discard_messages_before(StreamIndex::new(2), &vec![].into());
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
     stream.discard_messages_before(StreamIndex::new(4), &vec![].into());
-    let expected_counts = BTreeMap::new();
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert!(stream.guaranteed_response_counts().is_empty());
     stream.discard_messages_before(StreamIndex::new(5), &vec![].into());
-    assert_eq!(stream.guaranteed_responses_counts(), &expected_counts);
+    assert!(stream.guaranteed_response_counts().is_empty());
 }
 
 #[test]
