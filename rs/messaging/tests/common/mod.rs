@@ -432,38 +432,19 @@ impl SubnetPair {
     ///
     /// Advances time on each env by 1 second.
     pub fn tick(&self) {
-        if let Ok(xnet_payload) = self.local_env.generate_xnet_payload(
-            self.remote_env.get_subnet_id(),
-            None,
-            None,
-            None,
-            None,
-        ) {
-            self.remote_env
-                .execute_block_with_xnet_payload(xnet_payload);
-        } else {
-            self.remote_env.tick();
+        for (from_env, into_env) in [
+            (&self.local_env, &self.remote_env),
+            (&self.remote_env, &self.local_env),
+        ] {
+            if induct_from_head_of_stream(from_env, into_env, None).is_err() {
+                into_env.tick();
+            }
+            into_env.advance_time(std::time::Duration::from_secs(1));
         }
-        self.remote_env
-            .advance_time(std::time::Duration::from_secs(1));
-
-        if let Ok(xnet_payload) = self.remote_env.generate_xnet_payload(
-            self.local_env.get_subnet_id(),
-            None,
-            None,
-            None,
-            None,
-        ) {
-            self.local_env.execute_block_with_xnet_payload(xnet_payload);
-        } else {
-            self.local_env.tick();
-        }
-        self.local_env
-            .advance_time(std::time::Duration::from_secs(1));
     }
 
     /// Repeatedly calls `f()` until it returns `Ok(true)` indicating 'job done' or else
-    /// the job is considered failed after `MAX_TICKS` iterations.
+    /// the job is considered failed after `max_ticks` iterations.
     pub fn repeat<F>(&self, label: &str, max_ticks: usize, f: F) -> Result<(), (String, DebugInfo)>
     where
         F: Fn() -> Result<bool, (String, DebugInfo)>,

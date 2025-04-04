@@ -163,7 +163,10 @@ fn bla() {
 /// signals for requests in the stream to the local_subnet. But since we migrated the `migrating_canister`
 /// to the remote subnet, the locally generated reject responses fail to induct and are rerouted into the
 /// stream to the remote subnet. The remote subnet eventually picks them up and inducts them into
-/// `migrating_canister` leaving no pending calls after some more rounds.
+/// `migrating_canister` after which the migration can be completed.
+///
+/// Finally all calls on `migrating_canister` must successfully conclude after a number of
+/// additional ticks (including the self-calls made by the heartbeat).
 ///
 /// If there are pending calls after a threshold number of rounds, there is most likely a bug
 /// connected to reject signals for requests, specifically with the corresponding exceptions due to
