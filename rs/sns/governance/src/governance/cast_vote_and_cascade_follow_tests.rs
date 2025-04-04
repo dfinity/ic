@@ -1,5 +1,6 @@
 use crate::pb::v1::{neuron::FolloweesForTopic, Followee};
 use ic_nervous_system_common::E8;
+use itertools::Itertools;
 use maplit::btreeset;
 use pretty_assertions::assert_eq;
 
@@ -1026,15 +1027,10 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
 /// following has higher priority, with function-based following being a fallback.
 #[test]
 fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
-    let voting_neuron_id = nid(0);
-    
     // Boilerplate variables.
     let now_seconds = 123_456_789;
     let cast_timestamp_seconds = now_seconds;
-
     let cached_neuron_stake_e8s = E8;
-    let voting_power = cached_neuron_stake_e8s;
-
     let proposal_id = ProposalId { id: 42 };
 
     let neuron = |id, followees, topic_followees| Neuron {
@@ -1052,8 +1048,8 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
             Action::DeregisterDappCanisters(Default::default()),
             Topic::CriticalDappOperations,
             vec![
-                (neuron(nid(0), btreemap! {}, None), Vote::Yes),
-                (neuron(nid(1), btreemap! {}, None), Vote::Yes),
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::Yes, E8),
                 (
                     neuron(
                         nid(2),
@@ -1071,23 +1067,26 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                             }
                         }),
                     ),
-                    Vote::Unspecified
+                    Vote::Unspecified,
+                    E8,
                 ),
             ],
             btreemap! {
                 nid(0).to_string() => Ballot {
                     vote: Vote::Yes as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
                 nid(1).to_string() => Ballot {
                     vote: Vote::Yes as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
+                // Main postcondition: N2's vote follows that of N1, since it is the only followee
+                // that is taken into account (since N0 is followed on a specific function).
                 nid(2).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
             },
@@ -1098,8 +1097,8 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
             Action::DeregisterDappCanisters(Default::default()),
             Topic::CriticalDappOperations,
             vec![
-                (neuron(nid(0), btreemap! {}, None), Vote::No),
-                (neuron(nid(1), btreemap! {}, None), Vote::Yes),
+                (neuron(nid(0), btreemap! {}, None), Vote::No, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::Yes, E8),
                 (
                     neuron(
                         nid(2),
@@ -1117,23 +1116,26 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                             }
                         }),
                     ),
-                    Vote::Unspecified
+                    Vote::Unspecified,
+                    E8,
                 ),
             ],
             btreemap! {
                 nid(0).to_string() => Ballot {
                     vote: Vote::No as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
                 nid(1).to_string() => Ballot {
                     vote: Vote::Yes as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
+                // Main postcondition: N2's vote follows that of N1, since it is the only followee
+                // that is taken into account (since N0 is followed on a specific function).
                 nid(2).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
             },
@@ -1144,8 +1146,8 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
             Action::DeregisterDappCanisters(Default::default()),
             Topic::CriticalDappOperations,
             vec![
-                (neuron(nid(0), btreemap! {}, None), Vote::Yes),
-                (neuron(nid(1), btreemap! {}, None), Vote::No),
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::No, E8),
                 (
                     neuron(
                         nid(2),
@@ -1163,23 +1165,26 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                             }
                         }),
                     ),
-                    Vote::Unspecified
+                    Vote::Unspecified,
+                    E8,
                 ),
             ],
             btreemap! {
                 nid(0).to_string() => Ballot {
                     vote: Vote::Yes as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
                 nid(1).to_string() => Ballot {
                     vote: Vote::No as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
+                // Main postcondition: N2's vote follows that of N1, since it is the only followee
+                // that is taken into account (since N0 is followed on a specific function).
                 nid(2).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
+                    vote: Vote::No as i32,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
             },
@@ -1190,8 +1195,8 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
             Action::DeregisterDappCanisters(Default::default()),
             Topic::CriticalDappOperations,
             vec![
-                (neuron(nid(0), btreemap! {}, None), Vote::No),
-                (neuron(nid(1), btreemap! {}, None), Vote::No),
+                (neuron(nid(0), btreemap! {}, None), Vote::No, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::No, E8),
                 (
                     neuron(
                         nid(2),
@@ -1209,35 +1214,232 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                             }
                         }),
                     ),
-                    Vote::Unspecified
+                    Vote::Unspecified,
+                    E8,
                 ),
             ],
             btreemap! {
                 nid(0).to_string() => Ballot {
                     vote: Vote::No as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
                 nid(1).to_string() => Ballot {
                     vote: Vote::No as i32,
-                    voting_power,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
+                // Main postcondition: N2's vote follows that of N1, since it is the only followee
+                // that is taken into account (since N0 is followed on a specific function).
                 nid(2).to_string() => Ballot {
                     vote: Vote::No as i32,
-                    voting_power,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+            },
+        ),
+        (
+            "Three neurons:  N0:YES -- topic --> N2; \
+                             N1:YES -- topic --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::Yes, E8),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {},
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![
+                                        Followee { neuron_id: Some(nid(0)), alias: None },
+                                        Followee { neuron_id: Some(nid(1)), alias: None },
+                                    ],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified,
+                    E8,
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                // Main postcondition: N2's vote follows that of N0 and N1, since they agree.
+                nid(2).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+            },
+        ),
+        (
+            "Three neurons:  N0:YES -- topic --> N2 (N1 did not vote yet).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::Unspecified, E8),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {},
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![
+                                        Followee { neuron_id: Some(nid(0)), alias: None },
+                                        Followee { neuron_id: Some(nid(1)), alias: None },
+                                    ],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified,
+                    E8,
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                // Main postcondition: N2's is not swayed by N0's vote,
+                // as N1's vote is not yet cast.
+                nid(2).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+            },
+        ),
+        (
+            "Three neurons:  N0:YES -- topic --> N2 (N1 did not vote yet, but it's followed on a different topic).",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::Unspecified, E8),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {},
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![
+                                        Followee { neuron_id: Some(nid(0)), alias: None },
+                                    ],
+                                },
+                                Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::ApplicationBusinessLogic as i32),
+                                    followees: vec![
+                                        Followee { neuron_id: Some(nid(1)), alias: None },
+                                    ],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified,
+                    E8,
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                // Main postcondition: N2's is swayed by N0's vote, as N1 (which didn't vote yet)
+                // is followed on a different topic.
+                nid(2).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+            }
+        ),
+        (
+            "Three neurons:  N0:YES -- topic --> N2; \
+                             N1:NO  -- topic --> N2.",
+            Action::DeregisterDappCanisters(Default::default()),
+            Topic::CriticalDappOperations,
+            vec![
+                (neuron(nid(0), btreemap! {}, None), Vote::Yes, E8),
+                (neuron(nid(1), btreemap! {}, None), Vote::No, E8),
+                (
+                    neuron(
+                        nid(2),
+                        btreemap! {},
+                        Some(TopicFollowees {
+                            topic_id_to_followees: btreemap! {
+                                Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                                    topic: Some(Topic::CriticalDappOperations as i32),
+                                    followees: vec![
+                                        Followee { neuron_id: Some(nid(0)), alias: None },
+                                        Followee { neuron_id: Some(nid(1)), alias: None },
+                                    ],
+                                },
+                            }
+                        }),
+                    ),
+                    Vote::Unspecified,
+                    E8,
+                ),
+            ],
+            btreemap! {
+                nid(0).to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                nid(1).to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power: E8,
+                    cast_timestamp_seconds,
+                },
+                // Main postcondition: N2's is not swayed by N0's vote but swayed by N1's vote,
+                // as this is an equal split of YES and NO votes amongst the two followees.
+                nid(2).to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    voting_power: E8,
                     cast_timestamp_seconds,
                 },
             },
         ),
     ];
-    
-    for (label, action, topic, neuron_votes, expected_ballots) in test_cases {
+
+    for (label, action, topic, neuron_vote_powers, expected_ballots) in test_cases {
         let function_id = u64::from(&action);
 
-        let neurons = neuron_votes
+        let neurons = neuron_vote_powers
             .iter()
-            .map(|(neuron, _)| (neuron.id.clone().unwrap().to_string(), neuron.clone()))
+            .map(|(neuron, _, _)| (neuron.id.clone().unwrap().to_string(), neuron.clone()))
             .collect();
 
         let function_followee_index =
@@ -1245,44 +1447,59 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
 
         let topic_follower_index = build_follower_index(&neurons);
 
-        // Give all neurons a starting ballot.
-        let mut ballots = neuron_votes
-            .iter()
-            .map(|(neuron, vote)| {
-                let neuron_id = neuron.id.clone().unwrap().to_string();
-                (
-                    neuron_id,
-                    Ballot {
-                        vote: *vote as i32,
-                        voting_power,
-                        cast_timestamp_seconds,
-                    },
-                )
-            })
-            .collect();
+        let mut ballots = btreemap! {};
+        let mut actively_voting_neurons = vec![];
 
-        let vote_of_neuron = neuron_votes.iter().find_map(|(neuron, vote)| {
+        for (neuron, vote, voting_power) in neuron_vote_powers {
             let neuron_id = neuron.id.clone().unwrap();
-            if neuron_id == voting_neuron_id {
-                Some(*vote)
-            } else {
-                None
-            }
-        }).unwrap_or_else(|| panic!("Neuron with ID {} not found in neuron_votes for {}", voting_neuron_id, label));
 
-        Governance::cast_vote_and_cascade_follow(
-            &proposal_id,
-            &voting_neuron_id,
-            vote_of_neuron,
-            function_id,
-            &function_followee_index,
-            &topic_follower_index,
-            &neurons,
-            now_seconds,
-            &mut ballots,
-            topic,
+            if vote != Vote::Unspecified {
+                actively_voting_neurons.push((neuron_id.clone(), vote));
+            }
+
+            // Give all neurons an empty ballot.
+            ballots.insert(
+                neuron_id.to_string(),
+                Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                    cast_timestamp_seconds,
+                },
+            );
+        }
+
+        assert_ne!(
+            actively_voting_neurons.len(),
+            0,
+            "There must be at least one actively voting neuron. {}",
+            label
         );
 
-        assert_eq!(ballots, expected_ballots, "{}", label);
+        // The order of votes should not matter, as the `cast_vote_and_cascade_follow` function
+        // should have a single fixedpoint.
+        for permutation in actively_voting_neurons
+            .iter()
+            .permutations(actively_voting_neurons.len())
+            .unique()
+        {
+            let mut ballots = ballots.clone();
+
+            for (voting_neuron_id, vote_of_neuron) in permutation {
+                Governance::cast_vote_and_cascade_follow(
+                    &proposal_id,
+                    voting_neuron_id,
+                    *vote_of_neuron,
+                    function_id,
+                    &function_followee_index,
+                    &topic_follower_index,
+                    &neurons,
+                    now_seconds,
+                    &mut ballots,
+                    topic,
+                );
+            }
+
+            assert_eq!(ballots, expected_ballots, "{}", label);
+        }
     }
 }
