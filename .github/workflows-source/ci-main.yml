@@ -37,7 +37,7 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-large
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-large') || 'ubuntu-24-large' }}
     container:
       <<: *image
       options: >-
@@ -47,7 +47,7 @@ anchors:
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
     runs-on:
-      labels: dind-small
+      labels: ${{ (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name && 'dind-small') || 'ubuntu-latest' }}
     container:
       <<: *image
     timeout-minutes: 30
@@ -66,9 +66,7 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
+    timeout-minutes: 180
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
@@ -76,6 +74,7 @@ jobs:
       RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - <<: *checkout
+
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
         id: bazel-extra-args
@@ -89,6 +88,8 @@ jobs:
               system_test_staging
               system_test_hotfix
               system_test_benchmark
+              system_test_colocation
+              system_test
               fuzz_test
               fi_tests_nightly
               nns_tests_nightly
@@ -114,14 +115,15 @@ jobs:
               BAZEL_EXTRA_ARGS+=( --keep_going )
           fi
           echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
+
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT || '' }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE || '' }}
 
       - name: Upload SHA256SUMS (cache)
         uses: ./.github/actions/bazel-upload-checksums/
@@ -153,8 +155,8 @@ jobs:
         with:
           BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-          GPG_PASSPHRASE: ''
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT || '' }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE || '' }}
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -173,7 +175,7 @@ jobs:
         with:
           BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE || '' }}
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -186,11 +188,11 @@ jobs:
         with:
           BAZEL_COMMAND: build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE || '' }}
 
   python-ci-tests:
     name: Python CI Tests
-    <<: *dind-small-setup
+    runs-on: ubuntu-latest
     steps:
       - <<: *checkout
       - <<: *python-setup
@@ -214,12 +216,10 @@ jobs:
   build-ic:
     name: Build IC
     <<: *dind-large-setup
-    # keep options from dind-large-setup but run on dind-small-setup
-    runs-on:
-      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
+
       - name: Run Build IC
         id: build-ic
         run: ./ci/scripts/run-build-ic.sh
@@ -229,6 +229,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+
       - name: Upload SHA256SUMS (nocache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:

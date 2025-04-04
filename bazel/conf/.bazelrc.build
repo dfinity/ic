@@ -43,6 +43,10 @@ build --workspace_status_command='$(pwd)/bazel/workspace_status.sh'
 
 build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
 
+# Run `bazel build ... --config=local` to build targets without cache
+build:local --remote_cache=
+build:local --experimental_remote_downloader=
+
 common --flag_alias=release_build=//bazel:release_build
 common --flag_alias=s3_endpoint=//ci/src/artifacts:s3_endpoint
 common --flag_alias=s3_upload=//ci/src/artifacts:s3_upload

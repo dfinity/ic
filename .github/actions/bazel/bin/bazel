@@ -12,6 +12,7 @@ log() {
 }
 
 BUILDBUDDY_LINKS="${BUILDBUDDY_LINKS:-}"
+FORK_PR="${FORK_PR:-false}"
 
 # Remove ourselves from the PATH, in case the bazel command tries to call bazel as well
 PATH="$BAZEL_ACTION_OLDPATH"
@@ -68,6 +69,18 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     if [ -n "${BUILDBUDDY_LINKS:-}" ]; then
         bazel_args+=(
             --build_metadata=BUILDBUDDY_LINKS="$BUILDBUDDY_LINKS"
+        )
+    fi
+
+    # we build without remote cache if this run is on pr from a forked repo
+    if [ "$FORK_PR" = true ]; then
+        bazel_args+=(
+            --config=local
+        )
+    else
+        bazel_args+=(
+            --build_event_binary_file="$BAZEL_ACTION_METRICS_OUT/bazel-bep-$command_timestamp.pb"
+            --profile="$BAZEL_ACTION_METRICS_OUT/profile-$command_timestamp.json"
         )
     fi
 fi

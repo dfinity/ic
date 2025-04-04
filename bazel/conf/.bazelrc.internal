@@ -24,15 +24,11 @@ build:ci --remote_timeout=5m # Default is 60s.
 #build --remote_download_outputs=toplevel # Still download outputs from top level targets.
 
 build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
-build:local --experimental_remote_downloader=
 build --remote_local_fallback
 build    --remote_upload_local_results=false
 build:ci --remote_upload_local_results=true
 
 build:ci --noremote_local_fallback
-
-# Run `bazel build ... --config=local` to build targets without cache
-build:local --remote_cache=
 
 # Upload bes by default when running system tests so that e.g. failures can
 # be shared easily without having to rerun a potentially very-long systest
