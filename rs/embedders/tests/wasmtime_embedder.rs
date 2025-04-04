@@ -2636,7 +2636,7 @@ fn wasm64_root_key() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ic_embedders::wasmtime_embedder::system_api::ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
