@@ -12103,6 +12103,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
