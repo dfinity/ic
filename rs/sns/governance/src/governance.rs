@@ -4295,7 +4295,8 @@ impl Governance {
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
-                followees: neuron_recipe.construct_followees(),
+                // Deprecated
+                followees: btreemap! {},
                 topic_followees: Some(neuron_recipe.construct_topic_followees()),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
