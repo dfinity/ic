@@ -10,6 +10,7 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_suite_state_machine_tests::archiving::get_icrc_archive_count;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
@@ -521,9 +522,11 @@ fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
 
 #[test]
 fn test_get_blocks_returns_multiple_archive_callbacks() {
-    ic_ledger_suite_state_machine_tests::archiving::get_blocks_returns_multiple_archive_callbacks(
+    ic_ledger_suite_state_machine_tests::archiving::icp_get_encoded_blocks_returns_multiple_archive_callbacks(
         ledger_wasm(),
         encode_init_args,
+        get_icrc_archive_count,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
     );
 }
 

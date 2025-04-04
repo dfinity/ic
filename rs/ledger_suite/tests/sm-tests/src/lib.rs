@@ -5350,118 +5350,19 @@ pub mod archiving {
         );
     }
 
-    pub fn get_blocks_returns_multiple_archive_callbacks<T>(
-        ledger_wasm: Vec<u8>,
-        encode_init_args: fn(InitArgs) -> T,
-    ) where
-        T: CandidType,
-    {
-        const NUM_BLOCKS_TO_ARCHIVE: usize = 10;
-        const NUM_INITIAL_BALANCES: usize = 20;
-        const TRIGGER_THRESHOLD: usize = 20;
-        const EXPECTED_NUM_BLOCKS_PER_ARCHIVE: usize = 3;
-        const EXPECTED_NUM_ARCHIVES: usize = 4;
-        const EXPECTED_NUM_BLOCKS_IN_LEDGER: usize =
-            NUM_INITIAL_BALANCES + 1 - NUM_BLOCKS_TO_ARCHIVE;
-        let p1 = PrincipalId::new_user_test_id(1);
-        let p2 = PrincipalId::new_user_test_id(2);
-        let archive_controller = PrincipalId::new_user_test_id(1_000_000);
-        let mut initial_balances = vec![];
-        for i in 0..NUM_INITIAL_BALANCES {
-            initial_balances.push((
-                Account::from(PrincipalId::new_user_test_id(i as u64).0),
-                10_000_000,
-            ));
-        }
+    pub fn get_icrc_archive_count(env: &StateMachine, ledger_id: CanisterId) -> usize {
+        list_archives(&env, ledger_id).len()
+    }
 
-        let env = StateMachine::new();
-        let args = encode_init_args(InitArgs {
-            archive_options: ArchiveOptions {
-                trigger_threshold: TRIGGER_THRESHOLD,
-                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
-                node_max_memory_size_bytes: Some(330), // 3 blocks per archive
-                max_message_size_bytes: None,
-                controller_id: archive_controller,
-                more_controller_ids: None,
-                cycles_for_archive_creation: Some(0),
-                max_transactions_per_response: None,
-            },
-            ..init_args(initial_balances)
-        });
-        let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm.clone(), args, None)
-            .unwrap();
-
-        // Assert no archives exist.
-        assert!(list_archives(&env, ledger_id).is_empty());
-
-        // Perform a transaction. This should spawn a bunch of archives.
-        transfer(&env, ledger_id, p1.0, p2.0, 10_000).expect("failed to transfer funds");
-
-        // Keep listing the archives and calling env.tick() until the ledger reports that an
-        // archive has been created.
-        let mut archive_info = list_archives(&env, ledger_id);
-        while archive_info.is_empty() {
-            env.tick();
-            println!("ticking");
-            archive_info = list_archives(&env, ledger_id);
-        }
-        println!("spawned {} archives", archive_info.len());
-        assert_eq!(
-            archive_info.len(),
-            EXPECTED_NUM_ARCHIVES,
-            "expect {} archives",
-            EXPECTED_NUM_ARCHIVES
-        );
-
-        // Request all the blocks and verify that they are included either in the ledger local
-        // blocks, or in the archive callback request ranges.
-        let get_blocks_res = icrc3_get_blocks(&env, ledger_id, 0, NUM_INITIAL_BALANCES + 1);
-        assert_eq!(get_blocks_res.blocks.len(), EXPECTED_NUM_BLOCKS_IN_LEDGER);
-        for (i, archive) in get_blocks_res.archived_blocks.iter().enumerate() {
-            let archive_range = archive
-                .args
-                .first()
-                .expect("should return one archive args");
-            let archive_num_blocks = archive_range
-                .length
-                .0
-                .to_u64()
-                .expect("the number of blocks in the archive should fit into u64");
-            match (i + 1).cmp(&EXPECTED_NUM_ARCHIVES) {
-                Ordering::Equal => {
-                    // The last archive will only contain one block
-                    assert_eq!(archive_num_blocks, 1);
-                }
-                _ => {
-                    // Most archives will be full
-                    assert_eq!(archive_num_blocks as usize, EXPECTED_NUM_BLOCKS_PER_ARCHIVE)
-                }
-            }
-        }
-
-        // Perform some more calls to get blocks and verify the response is correct.
-        let mut runner = TestRunner::new(proptest::test_runner::Config::default());
-        runner
-            .run(
-                &(
-                    0..(NUM_INITIAL_BALANCES + 2) as u64,
-                    0..(NUM_INITIAL_BALANCES + 2),
-                )
-                    .no_shrink(),
-                |(start, len)| {
-                    let get_blocks_res = icrc3_get_blocks(&env, ledger_id, start, len);
-                    assert_icrc3_get_blocks_response(start, len as u64, &get_blocks_res);
-                    Ok(())
-                },
-            )
-            .unwrap();
+    pub fn get_icp_archive_count(env: &StateMachine, ledger_id: CanisterId) -> usize {
+        archives(&env, ledger_id).len()
     }
 
     pub fn icp_get_encoded_blocks_returns_multiple_archive_callbacks<T>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
+        get_archive_count: fn(&StateMachine, CanisterId) -> usize,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse,
     ) where
         T: CandidType,
     {
@@ -5503,32 +5404,31 @@ pub mod archiving {
             .unwrap();
 
         // Assert no archives exist.
-        assert!(archives(&env, ledger_id).is_empty());
+        assert_eq!(get_archive_count(&env, ledger_id), 0);
 
         // Perform a transaction. This should spawn a bunch of archives.
         transfer(&env, ledger_id, p1.0, p2.0, 10_000).expect("failed to transfer funds");
 
         // Keep listing the archives and calling env.tick() until the ledger reports that an
         // archive has been created.
-        let mut archive_info = archives(&env, ledger_id);
-        while archive_info.is_empty() {
+        let mut archive_count = get_archive_count(&env, ledger_id);
+        while archive_count == 0 {
             env.tick();
-            archive_info = archives(&env, ledger_id);
+            archive_count = get_archive_count(&env, ledger_id);
         }
         assert_eq!(
-            archive_info.len(),
-            EXPECTED_NUM_ARCHIVES,
+            archive_count, EXPECTED_NUM_ARCHIVES,
             "expect {} archives",
             EXPECTED_NUM_ARCHIVES
         );
 
         // Request all the blocks and verify that they are included either in the ledger local
         // blocks, or in the archive callback request ranges.
-        let get_blocks_res = query_encoded_blocks(&env, ledger_id, 0, NUM_INITIAL_BALANCES + 1);
-        assert_eq!(get_blocks_res.blocks.len(), EXPECTED_NUM_BLOCKS_IN_LEDGER);
-        for (i, archived_encoded_blocks_range) in get_blocks_res.archived_blocks.iter().enumerate()
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, NUM_INITIAL_BALANCES + 1);
+        assert_eq!(get_blocks_res.num_blocks, EXPECTED_NUM_BLOCKS_IN_LEDGER);
+        for (i, archived_encoded_blocks_range) in get_blocks_res.archived_ranges.iter().enumerate()
         {
-            let archive_num_blocks = archived_encoded_blocks_range.length;
+            let archive_num_blocks = range_utils::range_len(archived_encoded_blocks_range);
             match (i + 1).cmp(&EXPECTED_NUM_ARCHIVES) {
                 Ordering::Equal => {
                     // The last archive will only contain one block
@@ -5551,7 +5451,7 @@ pub mod archiving {
                 )
                     .no_shrink(),
                 |(start, len)| {
-                    let get_blocks_res = query_encoded_blocks(&env, ledger_id, start, len);
+                    let get_blocks_res = get_blocks_fn(&env, ledger_id, start, len);
                     assert_query_encoded_blocks_response(start, len as u64, &get_blocks_res);
                     Ok(())
                 },
@@ -5570,17 +5470,92 @@ pub mod archiving {
         .archives
     }
 
-    fn query_encoded_blocks(
+    pub struct GenericGetBlocksResponse {
+        pub chain_length: u64,
+        pub num_blocks: usize,
+        pub first_block_index: u64,
+        pub archived_ranges: Vec<Range<u64>>,
+    }
+
+    impl From<QueryEncodedBlocksResponse> for GenericGetBlocksResponse {
+        fn from(value: QueryEncodedBlocksResponse) -> Self {
+            let mut archived_ranges = vec![];
+            for archived_blocks in value.archived_blocks {
+                let start = archived_blocks.start;
+                let length = archived_blocks.length;
+                archived_ranges.push(Range {
+                    start,
+                    end: start + length,
+                });
+            }
+            GenericGetBlocksResponse {
+                chain_length: value.chain_length,
+                num_blocks: value.blocks.len(),
+                first_block_index: value.first_block_index,
+                archived_ranges,
+            }
+        }
+    }
+
+    impl From<GetBlocksResult> for GenericGetBlocksResponse {
+        fn from(value: GetBlocksResult) -> Self {
+            let mut archived_ranges: Vec<Range<u64>> = vec![];
+            for archived_range in &value.archived_blocks {
+                let start = archived_range
+                    .args
+                    .first()
+                    .unwrap()
+                    .clone()
+                    .start
+                    .0
+                    .to_u64()
+                    .unwrap();
+                let length = archived_range
+                    .args
+                    .first()
+                    .unwrap()
+                    .length
+                    .0
+                    .to_u64()
+                    .unwrap();
+                archived_ranges.push(Range {
+                    start,
+                    end: start + length,
+                });
+            }
+            GenericGetBlocksResponse {
+                chain_length: value.log_length.0.to_u64().unwrap(),
+                num_blocks: value.blocks.len(),
+                first_block_index: match value.blocks.first() {
+                    Some(block) => block.id.0.to_u64().unwrap(),
+                    None => 0,
+                },
+                archived_ranges,
+            }
+        }
+    }
+
+    pub fn query_icrc3_get_blocks(
         env: &StateMachine,
         canister_id: CanisterId,
         start: u64,
         length: usize,
-    ) -> icp_ledger::QueryEncodedBlocksResponse {
+    ) -> GenericGetBlocksResponse {
+        let icrc3_get_blocks_result = icrc3_get_blocks(env, canister_id, start, length);
+        GenericGetBlocksResponse::from(icrc3_get_blocks_result)
+    }
+
+    pub fn query_encoded_blocks(
+        env: &StateMachine,
+        canister_id: CanisterId,
+        start: u64,
+        length: usize,
+    ) -> GenericGetBlocksResponse {
         let get_blocks_args = icp_ledger::GetBlocksArgs {
             start,
             length: length as u64,
         };
-        Decode!(
+        let res = Decode!(
             &env.query(
                 canister_id,
                 "query_encoded_blocks",
@@ -5590,7 +5565,8 @@ pub mod archiving {
             .bytes(),
             icp_ledger::QueryEncodedBlocksResponse
         )
-        .expect("failed to decode query_encoded_blocks response")
+        .expect("failed to decode query_encoded_blocks response");
+        GenericGetBlocksResponse::from(res)
     }
 
     fn encode_transfer_args(
@@ -5736,7 +5712,7 @@ pub mod archiving {
     fn assert_query_encoded_blocks_response(
         req_start: u64,
         req_len: u64,
-        get_blocks_response: &QueryEncodedBlocksResponse,
+        get_blocks_response: &GenericGetBlocksResponse,
     ) {
         // Compute the effective range, i.e., based on the query, which blocks should the ledger
         // be expected to return (either itself, or as archive callbacks).
@@ -5748,27 +5724,23 @@ pub mod archiving {
             },
         )
         .unwrap_or(Range { start: 0, end: 0 });
-        let mut total_blocks_returned = get_blocks_response.blocks.len() as u64;
+        let mut total_blocks_returned = get_blocks_response.num_blocks as u64;
         let mut ledger_range = Range {
             start: req_start,
             end: req_start,
         };
-        if !get_blocks_response.blocks.is_empty() {
+        if get_blocks_response.num_blocks != 0 {
             let start = get_blocks_response.first_block_index;
-            let length = get_blocks_response.blocks.len();
+            let length = get_blocks_response.num_blocks;
             ledger_range = range_utils::make_range(start, length);
         }
-        let mut archived_ranges = vec![];
-        for archive in &get_blocks_response.archived_blocks {
-            let archive_start = archive.start;
-            let archive_len = archive.length;
-            let archive_range = range_utils::make_range(archive_start, archive_len as usize);
-            total_blocks_returned += archive_len;
-            archived_ranges.push(archive_range);
+        let archived_ranges = &get_blocks_response.archived_ranges;
+        for archived_range in archived_ranges {
+            total_blocks_returned += range_utils::range_len(archived_range);
         }
         // Make sure the archived ranges are ordered
         let mut previous_start = None;
-        for range in &archived_ranges {
+        for range in archived_ranges {
             if let Some(previous_start) = previous_start {
                 assert!(
                     range.start > previous_start,

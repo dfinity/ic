@@ -6,6 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::{BlockIndex, EncodedBlock};
 use ic_ledger_core::{block::BlockType, Tokens};
+use ic_ledger_suite_state_machine_tests::archiving::get_icp_archive_count;
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer,
@@ -1934,6 +1935,8 @@ fn test_icp_get_encoded_blocks_returns_multiple_archive_callbacks() {
     ic_ledger_suite_state_machine_tests::archiving::icp_get_encoded_blocks_returns_multiple_archive_callbacks(
         ledger_wasm(),
         encode_init_args,
+        get_icp_archive_count,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
     );
 }
 
