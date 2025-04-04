@@ -9,7 +9,6 @@ use crate::{
         NeuronPermissionType, ProposalId, Topic, Vote,
     },
 };
-use assert_matches::debug_assert_matches;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -350,7 +349,13 @@ impl Neuron {
                 continue;
             };
 
-            debug_assert_matches!(Vote::try_from(ballot.vote), Ok(_));
+            let followee_vote = Vote::try_from(ballot.vote);
+
+            debug_assert!(
+                followee_vote.is_ok(),
+                "Cannot convert ballot vote to Vote for {:?}",
+                ballot
+            );
 
             let Ok(followee_vote) = Vote::try_from(ballot.vote) else {
                 log!(
