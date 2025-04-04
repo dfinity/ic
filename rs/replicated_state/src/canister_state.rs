@@ -7,7 +7,7 @@ mod tests;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, MessageMemoryUsage, StateError};
-pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
+pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;

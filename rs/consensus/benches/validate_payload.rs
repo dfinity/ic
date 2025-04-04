@@ -53,16 +53,17 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     batch::{BatchPayload, IngressPayload, ValidationContext},
-    consensus::certification::*,
-    consensus::*,
+    consensus::{certification::*, *},
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
     signature::*,
     time::UNIX_EPOCH,
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
 };
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 type SignedCertificationContent =
     Signed<CertificationContent, ThresholdSignature<CertificationContent>>;
@@ -169,6 +170,7 @@ where
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             metrics_registry,
             no_op_logger(),

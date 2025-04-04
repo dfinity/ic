@@ -1,0 +1,35 @@
+[package]
+name = "ic-node-rewards-canister"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "node-rewards-canister"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-node-rewards-canister-api = { path = "./api" }
+ic-registry-canister-client = { path = "../../registry/canister-client" }
+ic-stable-structures = { workspace = true }
+ic-types = { path = "../../types/types" }
+candid = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+
+[features]
+test = []

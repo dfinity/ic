@@ -4,17 +4,25 @@ use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
+use ic_embedders::{
+    wasm_utils::compile,
+    wasmtime_embedder::{
+        system_api::{
+            sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
+            DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
+            ModificationTracking, SystemApiImpl,
+        },
+        WasmtimeInstance,
+    },
+    WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Global, Memory, NetworkTopology, NumWasmPages, PageMap};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
-    ModificationTracking, SystemApiImpl,
-};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
@@ -27,12 +35,13 @@ pub struct WasmtimeInstanceBuilder {
     wasm: Vec<u8>,
     wat: String,
     globals: Option<Vec<Global>>,
-    api_type: ic_system_api::ApiType,
+    api_type: ApiType,
     num_instructions: NumInstructions,
     subnet_type: SubnetType,
     network_topology: NetworkTopology,
     config: ic_config::embedders::Config,
     canister_memory_limit: NumBytes,
+    memory_usage: NumBytes,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -41,12 +50,13 @@ impl Default for WasmtimeInstanceBuilder {
             wasm: vec![],
             wat: "".to_string(),
             globals: None,
-            api_type: ic_system_api::ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get()),
+            api_type: ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get()),
             num_instructions: DEFAULT_NUM_INSTRUCTIONS,
             subnet_type: SubnetType::Application,
             network_topology: NetworkTopology::default(),
             config: ic_config::embedders::Config::default(),
             canister_memory_limit: NumBytes::from(4 << 30), // Set to 4 GiB by default
+            memory_usage: NumBytes::from(0),
         }
     }
 }
@@ -78,7 +88,7 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn with_api_type(self, api_type: ic_system_api::ApiType) -> Self {
+    pub fn with_api_type(self, api_type: ApiType) -> Self {
         Self { api_type, ..self }
     }
 
@@ -99,6 +109,13 @@ impl WasmtimeInstanceBuilder {
     pub fn with_canister_memory_limit(self, canister_memory_limit: NumBytes) -> Self {
         Self {
             canister_memory_limit,
+            ..self
+        }
+    }
+
+    pub fn with_memory_usage(self, memory_usage: NumBytes) -> Self {
+        Self {
+            memory_usage,
             ..self
         }
     }
@@ -142,10 +159,10 @@ impl WasmtimeInstanceBuilder {
 
         let subnet_memory_capacity = i64::MAX / 2;
 
-        let api = ic_system_api::SystemApiImpl::new(
+        let api = SystemApiImpl::new(
             self.api_type,
             sandbox_safe_system_state,
-            ic_types::NumBytes::from(0),
+            self.memory_usage,
             ic_replicated_state::MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
@@ -170,9 +187,7 @@ impl WasmtimeInstanceBuilder {
             embedder.config(),
             Memory::new_for_testing(),
             NumWasmPages::from(0),
-            Rc::new(ic_system_api::DefaultOutOfInstructionsHandler::new(
-                self.num_instructions,
-            )),
+            Rc::new(DefaultOutOfInstructionsHandler::new(self.num_instructions)),
             log,
         );
         let instruction_limit = api.slice_instruction_limit();

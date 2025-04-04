@@ -1,7 +1,7 @@
 use crate::common::{
     build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
-    build_ledger_wasm, build_lifeline_wasm, build_registry_wasm, build_root_wasm,
-    build_sns_wasms_wasm, NnsInitPayloads,
+    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm, build_registry_wasm,
+    build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
@@ -28,13 +28,13 @@ use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
+    NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
     ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
     SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
-    governance::Migrations,
     manage_neuron::{
         self,
         claim_or_refresh::{self, MemoAndController},
@@ -51,6 +51,8 @@ use ic_nns_governance_api::pb::v1::{
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_node_rewards_canister_api::lifecycle_args::InitArgs;
+use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
@@ -124,6 +126,34 @@ pub fn registry_get_changes_since(
     };
 
     RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
+}
+
+pub fn registry_get_chunk(
+    state_machine: &StateMachine,
+    chunk_content_sha256: &[u8],
+) -> Result<ic_registry_canister_api::Chunk, String> {
+    let content_sha256 = Some(chunk_content_sha256.to_vec());
+    let request = GetChunkRequest { content_sha256 };
+
+    let result = state_machine
+        .execute_ingress(
+            REGISTRY_CANISTER_ID,
+            "get_chunk",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get chunk was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&result, Result<ic_registry_canister_api::Chunk, String>).unwrap()
 }
 
 /// Creates a canister with a wasm, payload, and optionally settings on a StateMachine
@@ -478,6 +508,7 @@ pub fn try_call_with_cycles_via_universal_canister(
 
     update(machine, sender, "update", universal_canister_payload)
 }
+
 /// Converts a canisterID to a u64 by relying on an implementation detail.
 fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
@@ -487,22 +518,30 @@ fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     u64::from_be_bytes(bytes)
 }
 
-/// Create a canister at 0-indexed position (assuming canisters are created sequentially)
-/// This also creates all intermediate canisters
-pub fn create_canister_id_at_position(
+/// Check that a canister exists  at 0-indexed position (assuming canisters are created sequentially).
+/// If it does not, then create it (and all canisters in between).
+/// This approach is used because create_canister advances the canister ID counter in the underlying
+/// execution environment, which otherwise creates problems with creating other canisters
+/// with non-specified IDs.  If that bug is fixed, the behavior in this test helper can be changed.
+pub fn ensure_canister_id_exists_at_position(
     machine: &StateMachine,
     position: u64,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
-    let mut canister_id = machine.create_canister(canister_settings.clone());
-    while canister_id_to_u64(canister_id) < position {
+    let mut canister_id = CanisterId::from_u64(position);
+    if machine.canister_exists(canister_id) {
+        canister_id
+    } else {
         canister_id = machine.create_canister(canister_settings.clone());
+        while canister_id_to_u64(canister_id) < position {
+            canister_id = machine.create_canister(canister_settings.clone());
+        }
+
+        // In case we tried using this when we are already past the sequence
+        assert_eq!(canister_id_to_u64(canister_id), position);
+
+        canister_id
     }
-
-    // In case we tried using this when we are already past the sequence
-    assert_eq!(canister_id_to_u64(canister_id), position);
-
-    canister_id
 }
 
 pub fn setup_nns_governance_with_correct_canister_id(
@@ -510,7 +549,7 @@ pub fn setup_nns_governance_with_correct_canister_id(
     init_payload: Governance,
     features: &[&str],
 ) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position(
         machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -536,7 +575,7 @@ pub fn setup_nns_root_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: RootCanisterInitPayload,
 ) {
-    let root_canister_id = create_canister_id_at_position(
+    let root_canister_id = ensure_canister_id_exists_at_position(
         machine,
         ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -565,7 +604,7 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: SnsWasmCanisterInitPayload,
 ) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position(
         machine,
         SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
@@ -583,6 +622,30 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
             CanisterInstallMode::Install,
             build_sns_wasms_wasm().bytes(),
             Encode!(&init_payload).unwrap(),
+        )
+        .unwrap();
+}
+
+#[allow(dead_code)]
+fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine, init: InitArgs) {
+    let canister_id = ensure_canister_id_exists_at_position(
+        machine,
+        NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
+
+    assert_eq!(canister_id, NODE_REWARDS_CANISTER_ID);
+
+    machine
+        .install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Install,
+            build_node_rewards_wasm().bytes(),
+            Encode!(&init).unwrap(),
         )
         .unwrap();
 }
@@ -1314,18 +1377,6 @@ pub fn nns_stake_maturity(
     });
 
     manage_neuron(state_machine, sender, neuron_id, command)
-}
-
-pub fn nns_get_migrations(state_machine: &StateMachine) -> Migrations {
-    let reply = query(
-        state_machine,
-        GOVERNANCE_CANISTER_ID,
-        "get_migrations",
-        Encode!(&Empty {}).unwrap(),
-    )
-    .unwrap();
-
-    Decode!(&reply, Migrations).unwrap()
 }
 
 pub fn nns_list_proposals(
@@ -2129,7 +2180,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
 }
 
 pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &StateMachine) {
-    let canister_id = create_canister_id_at_position(
+    let canister_id = ensure_canister_id_exists_at_position(
         state_machine,
         SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(

@@ -28,6 +28,8 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Update IC versions file
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 
@@ -38,7 +40,7 @@ jobs:
       labels: dind-small
     environment: CREATE_PR
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     steps:
@@ -46,8 +48,8 @@ jobs:
         uses: actions/create-github-app-token@v1
         id: app-token
         with:
-          app-id: ${{ vars.PR_CREATION_BOT_PRIVATE_KEY }}
-          private-key: ${{ secrets.PR_CREATION_BOT_APP_ID }}
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -61,6 +63,8 @@ jobs:
           version: 2.53.0
 
       - name: Update Mainnet canisters file
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 

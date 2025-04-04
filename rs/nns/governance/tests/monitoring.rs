@@ -28,6 +28,7 @@ fn test_reward_event_amounts_metrics() {
         helpers.get_fake_env(),
         helpers.get_fake_ledger(),
         helpers.get_fake_cmc(),
+        helpers.get_fake_randomness_generator(),
     );
 
     let now = 123_456_789;

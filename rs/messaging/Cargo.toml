@@ -14,7 +14,7 @@ ic-limits = { path = "../limits" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -46,8 +46,6 @@ ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-local-registry = { path = "../registry/local_registry" }
-ic-registry-local-store = { path = "../registry/local_store" }
-ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
@@ -69,7 +67,6 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 random-traffic-test = { path = "../rust_canisters/random_traffic_test" }
 serde = { workspace = true }
-tempfile = { workspace = true }
 test-strategy = "0.3.1"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 

@@ -27,6 +27,7 @@ use http::{
     HeaderName, Method, StatusCode,
 };
 use ic_bn_lib::http::body::buffer_body;
+use ic_bn_lib::http::headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID};
 use ic_bn_lib::http::proxy::proxy;
 use ic_bn_lib::http::{Client, Error as IcBnError};
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
@@ -53,7 +54,7 @@ use tokio::{
     sync::mpsc::Receiver,
     sync::{mpsc, Mutex, RwLock},
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
-    time::{self, sleep, Instant},
+    time::{self, sleep},
 };
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
@@ -423,9 +424,11 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
 
 // ADAPTED from ic-gateway
 
-const X_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
+
+const X_OC_JWT: HeaderName = HeaderName::from_static("x-oc-jwt");
+const X_OC_API_KEY: HeaderName = HeaderName::from_static("x-oc-api-key");
 
 fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
@@ -435,6 +438,7 @@ fn layer(methods: &[Method]) -> CorsLayer {
             ACCEPT_RANGES,
             CONTENT_LENGTH,
             CONTENT_RANGE,
+            X_REQUEST_ID,
             X_IC_CANISTER_ID,
         ])
         .allow_headers([
@@ -446,7 +450,36 @@ fn layer(methods: &[Method]) -> CorsLayer {
             CONTENT_TYPE,
             RANGE,
             COOKIE,
+            X_REQUESTED_WITH,
             X_IC_CANISTER_ID,
+        ])
+        .max_age(10 * MINUTE)
+}
+
+fn http_gw_layer(methods: &[Method]) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(methods.to_vec())
+        .expose_headers([
+            ACCEPT_RANGES,
+            CONTENT_LENGTH,
+            CONTENT_RANGE,
+            X_REQUEST_ID,
+            X_IC_CANISTER_ID,
+        ])
+        .allow_headers([
+            USER_AGENT,
+            DNT,
+            IF_NONE_MATCH,
+            IF_MODIFIED_SINCE,
+            CACHE_CONTROL,
+            CONTENT_TYPE,
+            RANGE,
+            COOKIE,
+            X_REQUESTED_WITH,
+            X_IC_CANISTER_ID,
+            X_OC_JWT,
+            X_OC_API_KEY,
         ])
         .max_age(10 * MINUTE)
 }
@@ -712,15 +745,15 @@ impl ApiState {
         Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
+    pub async fn add_instance<F>(&self, f: F) -> Result<(InstanceId, Topology), String>
     where
-        F: FnOnce(u64) -> PocketIc + std::marker::Send + 'static,
+        F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // create the instance using `spawn_blocking` before acquiring a lock
         let instance = tokio::task::spawn_blocking(move || f(seed))
             .await
-            .expect("Failed to create PocketIC instance");
+            .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
         let mut instances = self.instances.write().await;
         let instance_id = instances.len();
@@ -728,7 +761,7 @@ impl ApiState {
             progress_thread: None,
             state: InstanceState::Available(instance),
         }));
-        (instance_id, topology)
+        Ok((instance_id, topology))
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
@@ -858,19 +891,19 @@ impl ApiState {
             // IC API proxy routers
             let router_api_v2 = Router::new()
                 .route(
-                    "/canister/:principal/query",
+                    "/canister/{principal}/query",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:principal/call",
+                    "/canister/{principal}/call",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/canister/:principal/read_state",
+                    "/canister/{principal}/read_state",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route(
-                    "/subnet/:principal/read_state",
+                    "/subnet/{principal}/read_state",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .route("/status", get(proxy_handler).layer(cors_get.clone()))
@@ -878,7 +911,7 @@ impl ApiState {
                 .with_state((format!("{}/api/v2", replica_url), backend_client.clone()));
             let router_api_v3 = Router::new()
                 .route(
-                    "/canister/:principal/call",
+                    "/canister/{principal}/call",
                     post(proxy_handler).layer(cors_post.clone()),
                 )
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") })
@@ -890,7 +923,7 @@ impl ApiState {
                     .put(handler)
                     .delete(handler)
                     .patch(handler)
-                    .layer(layer(&[
+                    .layer(http_gw_layer(&[
                         Method::HEAD,
                         Method::GET,
                         Method::POST,
@@ -986,7 +1019,6 @@ impl ApiState {
                 debug!("Starting auto progress for instance {}.", instance_id);
                 let mut now = SystemTime::now();
                 loop {
-                    let start = Instant::now();
                     let old = std::mem::replace(&mut now, SystemTime::now());
                     let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
                     if Self::execute_operation(
@@ -1014,12 +1046,8 @@ impl ApiState {
                     {
                         break;
                     }
-                    let duration = start.elapsed();
-                    sleep(std::cmp::max(
-                        duration,
-                        std::cmp::max(artificial_delay, MIN_OPERATION_DELAY),
-                    ))
-                    .await;
+                    let sleep_duration = std::cmp::max(artificial_delay, MIN_OPERATION_DELAY);
+                    sleep(sleep_duration).await;
                     if received_stop_signal(&mut rx) {
                         break;
                     }
@@ -1031,6 +1059,12 @@ impl ApiState {
         } else {
             Err("Auto progress mode has already been enabled.".to_string())
         }
+    }
+
+    pub async fn get_auto_progress(&self, instance_id: InstanceId) -> bool {
+        let instances = self.instances.read().await;
+        let instance = instances[instance_id].lock().await;
+        instance.progress_thread.is_some()
     }
 
     pub async fn stop_progress(&self, instance_id: InstanceId) {

@@ -3,6 +3,15 @@ use crate::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
     },
+    follower_index::{
+        add_neuron_to_follower_index, build_follower_index,
+        legacy::{
+            self, add_neuron_to_function_followee_index, build_function_followee_index,
+            remove_neuron_from_function_followee_index,
+        },
+        remove_neuron_from_follower_index, FollowerIndex,
+    },
+    following::ValidatedSetFollowing,
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -27,12 +36,13 @@ use crate::{
                 self,
                 claim_or_refresh::{By, MemoAndController},
                 AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
-                RemoveNeuronPermissions,
+                RemoveNeuronPermissions, SetFollowing,
             },
             manage_neuron_response::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
-            neuron::{DissolveState, Followees},
+            nervous_system_function::FunctionType,
+            neuron::{DissolveState, Followees, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
@@ -52,24 +62,22 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
-        validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
+        ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
         canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
         get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
-    types::{
-        function_id_to_proposal_criticality, is_registered_function_id, Environment,
-        HeapGrowthPotential, LedgerUpdateLock, Wasm,
-    },
+    types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
@@ -83,10 +91,10 @@ use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
+use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
-    cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
     NervousSystemError, ONE_DAY_SECONDS,
@@ -104,7 +112,7 @@ use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
-use maplit::hashset;
+use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
@@ -235,75 +243,6 @@ impl NeuronPermission {
 }
 
 impl GovernanceProto {
-    /// Builds an index that maps proposal sns functions to (followee) neuron IDs to these neuron's
-    /// followers. The resulting index is a map
-    /// Function Id -> (followee's neuron ID) -> set of followers' neuron IDs.
-    ///
-    /// The index is built from the `neurons` in the `Governance` struct, which map followers
-    /// (the neuron ID) to a set of followees per function.
-    pub fn build_function_followee_index(
-        &self,
-        neurons: &BTreeMap<String, Neuron>,
-    ) -> BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>> {
-        let mut function_followee_index = BTreeMap::new();
-        for neuron in neurons.values() {
-            GovernanceProto::add_neuron_to_function_followee_index(
-                &mut function_followee_index,
-                &self.id_to_nervous_system_functions,
-                neuron,
-            );
-        }
-        function_followee_index
-    }
-
-    /// Adds a neuron to the function_followee_index.
-    pub fn add_neuron_to_function_followee_index(
-        index: &mut BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
-        registered_functions: &BTreeMap<u64, NervousSystemFunction>,
-        neuron: &Neuron,
-    ) {
-        for (function_id, followees) in neuron.followees.iter() {
-            if !is_registered_function_id(*function_id, registered_functions) {
-                continue;
-            }
-
-            let followee_index = index.entry(*function_id).or_default();
-            for followee in followees.followees.iter() {
-                followee_index
-                    .entry(followee.to_string())
-                    .or_default()
-                    .insert(
-                        neuron
-                            .id
-                            .as_ref()
-                            .expect("Neuron must have a NeuronId")
-                            .clone(),
-                    );
-            }
-        }
-    }
-
-    /// Removes a neuron from the function_followee_index.
-    pub fn remove_neuron_from_function_followee_index(
-        index: &mut BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
-        neuron: &Neuron,
-    ) {
-        for (function, followees) in neuron.followees.iter() {
-            if let Some(followee_index) = index.get_mut(function) {
-                for followee in followees.followees.iter() {
-                    let nid = followee.to_string();
-                    if let Some(followee_set) = followee_index.get_mut(&nid) {
-                        followee_set
-                            .remove(neuron.id.as_ref().expect("Neuron must have a NeuronId"));
-                        if followee_set.is_empty() {
-                            followee_index.remove(&nid);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     /// Iterate through one neuron and add all the principals that have some permission on this
     /// neuron to the index that maps principalIDs to a set of neurons for which the principal
     /// has some permissions.
@@ -691,7 +630,17 @@ pub struct Governance {
     /// is saved and restored.
     ///
     /// Function ID -> (followee's neuron ID) -> set of followers' neuron IDs.
-    pub function_followee_index: BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
+    pub function_followee_index: legacy::FollowerIndex,
+
+    /// Cached data structure that (for each topic) maps a followee to
+    /// the set of its followers. It is the inverse of the mapping from follower
+    /// to followees that is stored in each (follower) neuron.
+    ///
+    /// This is a cached index and will be removed and recreated when the state
+    /// is saved and restored.
+    ///
+    /// Topic -> (followee's neuron ID) -> set of followers' neuron IDs.
+    pub topic_follower_index: FollowerIndex,
 
     /// Maps Principals to the Neuron IDs of all Neurons for which this principal
     /// has some permissions, i.e., all neurons that have this principal associated
@@ -796,6 +745,7 @@ impl Governance {
             nns_ledger,
             cmc,
             function_followee_index: BTreeMap::new(),
+            topic_follower_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -862,9 +812,13 @@ impl Governance {
     /// Must be called after the state has been externally changed (e.g. by
     /// setting a new proto).
     fn initialize_indices(&mut self) {
-        self.function_followee_index = self
-            .proto
-            .build_function_followee_index(&self.proto.neurons);
+        self.function_followee_index = build_function_followee_index(
+            &self.proto.id_to_nervous_system_functions,
+            &self.proto.neurons,
+        );
+
+        self.topic_follower_index = build_follower_index(&self.proto.neurons);
+
         self.principal_to_neuron_ids_index = self
             .proto
             .build_principal_to_neuron_ids_index(&self.proto.neurons);
@@ -1005,11 +959,13 @@ impl Governance {
             &neuron,
         );
 
-        GovernanceProto::add_neuron_to_function_followee_index(
+        add_neuron_to_function_followee_index(
             &mut self.function_followee_index,
             &self.proto.id_to_nervous_system_functions,
             &neuron,
         );
+
+        add_neuron_to_follower_index(&mut self.topic_follower_index, &neuron);
 
         self.proto.neurons.insert(neuron_id.to_string(), neuron);
 
@@ -1041,10 +997,9 @@ impl Governance {
             &neuron,
         );
 
-        GovernanceProto::remove_neuron_from_function_followee_index(
-            &mut self.function_followee_index,
-            &neuron,
-        );
+        remove_neuron_from_function_followee_index(&mut self.function_followee_index, &neuron);
+
+        remove_neuron_from_follower_index(&mut self.topic_follower_index, &neuron);
 
         self.proto.neurons.remove(&neuron_id.to_string());
 
@@ -1373,6 +1328,7 @@ impl Governance {
             created_timestamp_seconds: creation_timestamp_seconds,
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
+            topic_followees: parent_neuron.topic_followees.clone(),
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
@@ -2139,6 +2095,9 @@ impl Governance {
                         action_auxiliary.unwrap_advance_sns_target_version_or_err()
                     })
                     .and_then(|new_target| self.perform_advance_target_version(new_target))
+            }
+            Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+                self.perform_set_topics_for_custom_proposals(set_topics_for_custom_proposals)
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
@@ -3121,6 +3080,53 @@ impl Governance {
         Ok(())
     }
 
+    // Make a change to the mapping from custom proposal types to topics.
+    fn perform_set_topics_for_custom_proposals(
+        &mut self,
+        set_topics_for_custom_proposals: SetTopicsForCustomProposals,
+    ) -> Result<(), GovernanceError> {
+        // This proposal had already been validated at submission time, but the state may have
+        // change since then, which is why it is being validated again.
+        if let Err(message) = validate_and_render_set_topics_for_custom_proposals(
+            &set_topics_for_custom_proposals,
+            &self.proto.custom_functions_to_topics(),
+        ) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                message,
+            ));
+        }
+
+        let SetTopicsForCustomProposals {
+            custom_function_id_to_topic,
+        } = set_topics_for_custom_proposals;
+
+        for (custom_function_id, new_topic) in custom_function_id_to_topic {
+            let nervous_system_function = self
+                .proto
+                .id_to_nervous_system_functions
+                .get_mut(&custom_function_id);
+
+            if let Some(nervous_system_function) = nervous_system_function {
+                let proposal_type = nervous_system_function.function_type.as_mut();
+
+                if let Some(FunctionType::GenericNervousSystemFunction(custom_proposal_type)) =
+                    proposal_type
+                {
+                    custom_proposal_type.topic = Some(new_topic);
+                } else {
+                    log!(
+                        ERROR,
+                        "Unexpected situation: Cannot change the topic of a native proposal type: \
+                        {proposal_type:?}",
+                    )
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     // Returns an option with the NervousSystemParameters
     fn nervous_system_parameters(&self) -> Option<&NervousSystemParameters> {
         self.proto.parameters.as_ref()
@@ -3371,9 +3377,14 @@ impl Governance {
             .max_age_bonus_percentage
             .expect("NervousSystemParameters must have max_age_bonus_percentage");
 
+        // Define topic-based criticality based on the current mapping from proposals to topics.
+        let (proposal_topic, proposal_criticality) = self
+            .get_topic_and_criticality_for_action(action)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
         // Voting duration parameters.
         let voting_duration_parameters =
-            action.voting_duration_parameters(nervous_system_parameters);
+            action.voting_duration_parameters(nervous_system_parameters, proposal_criticality);
         let initial_voting_period_seconds = voting_duration_parameters
             .initial_voting_period
             .seconds
@@ -3386,11 +3397,13 @@ impl Governance {
             .expect("Unable to determine the wait for quiet deadline increase amount.");
 
         // Voting power threshold parameters.
-        let voting_power_thresholds = action.voting_power_thresholds();
-        let minimum_yes_proportion_of_total =
-            voting_power_thresholds.minimum_yes_proportion_of_total;
-        let minimum_yes_proportion_of_exercised =
-            voting_power_thresholds.minimum_yes_proportion_of_exercised;
+        let (minimum_yes_proportion_of_total, minimum_yes_proportion_of_exercised) = {
+            let voting_power_thresholds = proposal_criticality.voting_power_thresholds();
+            (
+                voting_power_thresholds.minimum_yes_proportion_of_total,
+                voting_power_thresholds.minimum_yes_proportion_of_exercised,
+            )
+        };
 
         for (k, v) in self.proto.neurons.iter() {
             // If this neuron is eligible to vote, record its
@@ -3468,6 +3481,7 @@ impl Governance {
             // TODO(NNS1-2731): Delete this.
             is_eligible_for_rewards: true,
             action_auxiliary,
+            topic: proposal_topic.map(i32::from),
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -3487,6 +3501,7 @@ impl Governance {
             .neuron_fees_e8s += proposal_data.reject_cost_e8s;
 
         let function_id = u64::from(action);
+
         // Cast a 'yes'-vote for the proposer, including following.
         Governance::cast_vote_and_cascade_follow(
             &proposal_id,
@@ -3497,6 +3512,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
+            proposal_criticality,
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3520,12 +3536,13 @@ impl Governance {
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         function_id: u64,
-        function_followee_index: &BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
+        function_followee_index: &legacy::FollowerIndex,
         neurons: &BTreeMap<String, Neuron>,
         // As of Dec, 2023 (52eec5c), the next parameter is only used to populate Ballots. In
         // particular, this has no impact on how the implications of following are deduced.
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
+        proposal_criticality: ProposalCriticality,
     ) {
         let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
         assert!(function_id != fallback_pseudo_function_id);
@@ -3551,7 +3568,6 @@ impl Governance {
 
             push_member(function_id);
 
-            let proposal_criticality = function_id_to_proposal_criticality(function_id);
             match proposal_criticality {
                 ProposalCriticality::Normal => push_member(fallback_pseudo_function_id),
                 ProposalCriticality::Critical => (), // Do not use catch-all/fallback following.
@@ -3639,7 +3655,12 @@ impl Governance {
                     }
                 };
 
-                let follower_vote = follower_neuron.would_follow_ballots(function_id, ballots);
+                let follower_vote = follower_neuron.would_follow_ballots(
+                    function_id,
+                    ballots,
+                    proposal_criticality,
+                );
+
                 if follower_vote != Vote::Unspecified {
                     // follower_neuron would be swayed by its followees!
                     //
@@ -3696,6 +3717,7 @@ impl Governance {
         let proposal = self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
             // Proposal not found.
             GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
+
         let action = proposal
             .proposal
             .as_ref()
@@ -3703,6 +3725,10 @@ impl Governance {
             .action
             .as_ref()
             .expect("Proposal must have an action");
+
+        // Take topic-based criticality as it was defined when the proposal was made.
+        let proposal_topic = proposal.topic();
+        let proposal_criticality = proposal_topic.proposal_criticality();
 
         let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
@@ -3744,6 +3770,7 @@ impl Governance {
             &self.proto.neurons,
             now_seconds,
             &mut proposal.ballots,
+            proposal_criticality,
         );
 
         self.process_proposal(proposal_id.id);
@@ -3856,6 +3883,49 @@ impl Governance {
             neuron.followees.remove(&f.function_id);
             Ok(())
         }
+    }
+
+    fn set_following(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        set_following: &SetFollowing,
+    ) -> Result<(), GovernanceError> {
+        let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!("Follower neuron not found: {}", id),
+            )
+        })?;
+
+        // Check that the caller is authorized to change followers (same authorization
+        // as voting required).
+        neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
+
+        // First, validate the requested followee modifications in isolation.
+
+        // TODO[NNS1-3708]: Avoid cloning the neuron commands.
+        let set_following = ValidatedSetFollowing::try_from(set_following.clone())
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+        // Second, validate the requested followee modifications in composition with the neuron's
+        // old followees. If all validation steps succeed, save the new followees.
+        {
+            let old_topic_followees = neuron.topic_followees.clone();
+
+            let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
+                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+            neuron.topic_followees.replace(new_topic_followees);
+        }
+
+        // TODO[NNS1-3582]: Update the follower index.
+
+        // TODO[NNS1-3582]: Enable following on topics.
+        Err(GovernanceError::new_with_message(
+            ErrorType::InvalidCommand,
+            "SetFollowing is not supported yet.".to_string(),
+        ))
     }
 
     /// Configures a given neuron (specified by the given neuron id).
@@ -4041,6 +4111,9 @@ impl Governance {
             created_timestamp_seconds: now,
             aging_since_timestamp_seconds: now,
             followees: self.default_followees_or_panic().followees,
+            topic_followees: Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {},
+            }),
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
@@ -4207,6 +4280,7 @@ impl Governance {
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
                 followees: neuron_recipe.construct_followees(),
+                topic_followees: Some(neuron_recipe.construct_topic_followees()),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_recipe.get_dissolve_delay_seconds_or_panic(),
@@ -4510,6 +4584,9 @@ impl Governance {
             C::Follow(f) => self
                 .follow(&neuron_id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
+            C::SetFollowing(set_following) => self
+                .set_following(&neuron_id, caller, set_following)
+                .map(|_| ManageNeuronResponse::set_following_response()),
             C::MakeProposal(p) => self
                 .make_proposal(&neuron_id, caller, p)
                 .await
@@ -4571,6 +4648,7 @@ impl Governance {
             Disburse(_) => err("Disburse"),
             Split(_) => err("Split"),
             Follow(_)
+            | SetFollowing(_)
             | MakeProposal(_)
             | RegisterVote(_)
             | ClaimOrRefresh(_)
@@ -5840,8 +5918,10 @@ impl Governance {
             ));
         }
 
-        // Must NOT clobber followees.
-        if old_neuron.followees != neuron.followees {
+        // Must NOT clobber followees or topic_followees.
+        if old_neuron.followees != neuron.followees
+            || old_neuron.topic_followees != neuron.topic_followees
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot update neuron's followees via update_neuron.".to_string(),
@@ -6013,6 +6093,9 @@ mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
 mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod proposal_topics_tests;
 
 #[cfg(test)]
 mod test_helpers;

@@ -767,6 +767,7 @@ pub fn load_canister_state(
                 err,
             )
         })?;
+
     durations.insert("canister_state_bits", starting_time.elapsed());
 
     let execution_state = match canister_state_bits.execution_state_bits {
@@ -870,7 +871,7 @@ pub fn load_canister_state(
         canister_state_bits.cycles_debit,
         canister_state_bits.reserved_balance,
         canister_state_bits.reserved_balance_limit,
-        canister_state_bits.task_queue.into_iter().collect(),
+        canister_state_bits.task_queue,
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
         canister_state_bits.canister_history,
@@ -882,7 +883,6 @@ pub fn load_canister_state(
         canister_state_bits.next_snapshot_id,
         canister_state_bits.snapshots_memory_usage,
         metrics,
-        canister_state_bits.on_low_wasm_memory_hook_status,
     );
 
     let canister_state = CanisterState {
@@ -983,12 +983,15 @@ pub fn load_snapshot(
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
         let exported_globals = canister_snapshot_bits.exported_globals.clone();
-
+        let global_timer = canister_snapshot_bits.global_timer;
+        let on_low_wasm_memory_hook_status = canister_snapshot_bits.on_low_wasm_memory_hook_status;
         ExecutionStateSnapshot {
             wasm_binary,
             exported_globals,
             stable_memory,
             wasm_memory,
+            global_timer,
+            on_low_wasm_memory_hook_status,
         }
     };
 
@@ -1007,6 +1010,7 @@ pub fn load_snapshot(
 
     let canister_snapshot = CanisterSnapshot::new(
         canister_snapshot_bits.canister_id,
+        canister_snapshot_bits.source,
         canister_snapshot_bits.taken_at_timestamp,
         canister_snapshot_bits.canister_version,
         canister_snapshot_bits.certified_data.clone(),

@@ -30,7 +30,8 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     // TODO(PSEC): The binary name is hardcoded right now, but we would
     // need a different approach to enable multiple fuzzers use this
     // approach. The logic can be gated with #[cfg(feature = "fuzzing_code")]
-    "execute_with_wasm_executor_system_api_call",
+    "execute_with_wasm_executor_system_api",
+    "execute_with_wasm_executor_ic_wasm",
     "execute_subnet_message_update_settings",
 ];
 

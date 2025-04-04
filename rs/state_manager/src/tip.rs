@@ -364,6 +364,21 @@ pub(crate) fn spawn_tip_thread(
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest");
+                            if let Some(manifest_delta) = &manifest_delta {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} incrementally from checkpoint @{}",
+                                    checkpoint_layout.height(),
+                                    manifest_delta.base_height
+                                );
+                            } else {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} from scratch",
+                                    checkpoint_layout.height()
+                                );
+                            }
+
                             tip_state.latest_checkpoint_state.has_manifest = true;
                             handle_compute_manifest_request(
                                 &mut thread_pool,
@@ -960,7 +975,7 @@ fn serialize_canister_to_tip(
                 .scheduler_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
-            task_queue: canister_state.system_state.task_queue.get_queue().into(),
+            task_queue: canister_state.system_state.task_queue.clone(),
             global_timer_nanos: canister_state
                 .system_state
                 .global_timer
@@ -983,10 +998,6 @@ fn serialize_canister_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
-            on_low_wasm_memory_hook_status: canister_state
-                .system_state
-                .task_queue
-                .peek_hook_status(),
         }
         .into(),
     )?;
@@ -1017,6 +1028,11 @@ fn serialize_snapshot_to_tip(
             wasm_memory_size: canister_snapshot.wasm_memory().size,
             total_size: canister_snapshot.size(),
             exported_globals: canister_snapshot.exported_globals().clone(),
+            source: canister_snapshot.source(),
+            global_timer: canister_snapshot.execution_snapshot().global_timer,
+            on_low_wasm_memory_hook_status: canister_snapshot
+                .execution_snapshot()
+                .on_low_wasm_memory_hook_status,
         }
         .into(),
     )?;

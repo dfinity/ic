@@ -1,11 +1,8 @@
 use super::*;
+use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{
-        governance::{followers_map::Followers, FollowersMap},
-        neuron::DissolveState,
-        Neuron as NeuronProto,
-    },
+    pb::v1::{neuron::DissolveState, Neuron as NeuronProto},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
@@ -451,9 +448,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                         total_e8s: swap_total_e8s,
                         initial_swap_amount_e8s: swap_total_e8s,
                     },),
-                    airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
-                        airdrop_neurons: vec![],
-                    },),
                 },
             ),
         );
@@ -795,9 +789,6 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                         total_e8s: swap_total_e8s,
                         initial_swap_amount_e8s: swap_total_e8s,
                     },),
-                    airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
-                        airdrop_neurons: vec![],
-                    },),
                 },
             ),
         );
@@ -844,10 +835,11 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
 }
 
 mod metrics_tests {
-
     use ic_nns_common::pb::v1::ProposalId;
     use maplit::btreemap;
+    use std::sync::Arc;
 
+    use crate::test_utils::MockRandomness;
     use crate::{
         encode_metrics,
         governance::Governance,
@@ -893,7 +885,6 @@ mod metrics_tests {
             }),
             ..ProposalData::default()
         };
-
         let governance = Governance::new(
             GovernanceProto {
                 proposals: btreemap! {
@@ -902,9 +893,10 @@ mod metrics_tests {
                 },
                 ..GovernanceProto::default()
             },
-            Box::new(MockEnvironment::new(Default::default(), 0)),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 1000);
@@ -966,9 +958,10 @@ mod metrics_tests {
                 },
                 ..GovernanceProto::default()
             },
-            Box::<MockEnvironment>::default(),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
+            Arc::<MockEnvironment>::default(),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
         );
 
         let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 10);
@@ -1158,7 +1151,7 @@ fn test_pre_and_post_upgrade_first_time() {
     };
     let neurons = btreemap! { 1 => neuron1 };
 
-    // This simulates the state of heap on first post_upgrade (empty topic_followee_index)
+    // This simulates the state of heap on first post_upgrade.
     let governance_proto = GovernanceProto {
         neurons,
         ..Default::default()
@@ -1166,45 +1159,36 @@ fn test_pre_and_post_upgrade_first_time() {
 
     // Precondition
     assert_eq!(governance_proto.neurons.len(), 1);
-    assert_eq!(governance_proto.topic_followee_index.len(), 0);
 
     // Then Governance is instantiated during upgrade with proto
     let mut governance = Governance::new(
         governance_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
+
+    // Simulate seeding the randomness in a running governance canister.
+    governance.randomness.seed_rng([12; 32]);
 
     assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
-    let mut extracted_proto = governance.take_heap_proto();
-
-    // topic_followee_index should have been populated
-    assert_eq!(extracted_proto.topic_followee_index.len(), 1);
-
-    // We now modify it so that we can be assured that it is not rebuilding on the next post_upgrade
-    extracted_proto.topic_followee_index.insert(
-        4,
-        FollowersMap {
-            followers_map: hashmap! {5 => Followers { followers: vec![NeuronId { id : 6}]}},
-        },
-    );
-
-    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
+    let extracted_proto = governance.take_heap_proto();
 
     // We now simulate the post_upgrade
     let mut governance = Governance::new_restored(
         extracted_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
-    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
+    assert_eq!(extracted_proto.rng_seed, Some(vec![12; 32]));
 }
 
 #[test]
@@ -1217,9 +1201,10 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
 
     let mut governance = Governance::new(
         proto,
-        Box::new(mock_env),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(mock_env),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
     // No neurons to spawn...
     assert!(!governance.can_spawn_neurons());
@@ -1264,9 +1249,10 @@ fn test_validate_execute_nns_function() {
             }],
             ..Default::default()
         },
-        Box::new(MockEnvironment::new(vec![], 100)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let test_execute_nns_function_error =
@@ -1513,6 +1499,7 @@ fn test_deciding_voting_power_adjustment_factor() {
     let voting_power_economics = VotingPowerEconomics {
         start_reducing_voting_power_after_seconds: Some(60),
         clear_following_after_seconds: Some(30),
+        neuron_minimum_dissolve_delay_to_vote_seconds: Some(60),
     };
 
     let deciding_voting_power = |seconds_since_refresh| {
@@ -1584,9 +1571,10 @@ fn test_update_neuron_errors_out_expectedly() {
     };
     let mut governance = Governance::new(
         governance_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     assert_eq!(
@@ -1648,9 +1636,10 @@ fn test_compute_ballots_for_new_proposal() {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
     let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
         id: Some(NeuronId { id: 10 }),

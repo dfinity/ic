@@ -1,29 +1,22 @@
-use super::delivery::*;
-use super::execution::*;
-use super::types::*;
+use super::{delivery::*, execution::*, types::*};
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::{
-    certification::{CertificationCrypto, CertifierImpl},
-    idkg,
-};
+use ic_consensus_certification::{CertificationCrypto, CertifierImpl};
 use ic_consensus_dkg::DkgKeyManager;
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::membership::Membership;
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::ConsensusPoolCache;
-use ic_interfaces::time_source::TimeSource;
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+};
+use ic_interfaces::{consensus_pool::ConsensusPoolCache, time_source::TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::Height;
-use ic_types::Time;
+use ic_types::{malicious_flags::MaliciousFlags, Height, Time};
 use rand::{thread_rng, Rng, RngCore};
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
 use slog::Drain;
-use std::cell::{RefCell, RefMut};
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::{
+    cell::{RefCell, RefMut},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 use tokio::sync::watch;
 
 fn stop_immediately(_: &ConsensusInstance<'_>) -> bool {
@@ -160,6 +153,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.self_validating_payload_builder.clone(),
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
+            deps.vetkd_payload_builder.clone(),
             deps.dkg_pool.clone(),
             deps.idkg_pool.clone(),
             dkg_key_manager.clone(),
@@ -183,7 +177,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );
-        let idkg = idkg::IDkgImpl::new(
+        let idkg = ic_consensus_idkg::IDkgImpl::new(
             deps.replica_config.node_id,
             deps.consensus_pool.read().unwrap().get_block_cache(),
             consensus_crypto,

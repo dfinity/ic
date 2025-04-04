@@ -6,8 +6,10 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
+    "//rs/consensus/certification",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
+    "//rs/consensus/vetkd",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tls_interfaces",
     "//rs/cycles_account_manager",
@@ -37,11 +39,13 @@ DEPENDENCIES = [
 NONMALICIOUS_DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus:consensus",
+    "//rs/consensus/idkg",
 ]
 
 MALICIOUS_DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus:malicious_consensus",
+    "//rs/consensus/idkg:malicious_idkg",
 ]
 
 rust_library(

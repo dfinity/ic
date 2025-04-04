@@ -155,6 +155,7 @@ impl FromStr for KeyPurpose {
     Serialize,
 )]
 #[cfg_attr(all(test, not(target_arch = "wasm32")), derive(Arbitrary))]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 #[allow(non_camel_case_types)]
 #[strum(serialize_all = "snake_case")]
 pub enum AlgorithmId {
@@ -803,7 +804,7 @@ impl CurrentNodePublicKeys {
     }
 }
 
-/// Metadata used to derive keys for tECDSA, tSchnorr, and vetKD.
+/// Metadata used to derive keys for tECDSA, and tSchnorr.
 #[serde_with::serde_as]
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

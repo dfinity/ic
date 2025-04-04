@@ -1,7 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
-load("//bazel:json.bzl", "jq_dep")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -15,19 +14,8 @@ exports_files([
     "rustfmt.toml",
     "WORKSPACE.bazel",
     "mainnet-canister-revisions.json",
+    "mainnet-icos-images.bzl",
 ])
-
-jq_dep(
-    name = "mainnet_nns_subnet_revision",
-    json_path = ".subnets.\\\"tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe\\\"",
-    source = "mainnet-subnet-revisions.json",
-    target = "mainnet_nns_subnet_revision.txt",
-)
-
-filegroup(
-    name = "mainnet_subnet_revisions",
-    srcs = ["mainnet-subnet-revisions.json"],
-)
 
 alias(
     name = "buildifier",
