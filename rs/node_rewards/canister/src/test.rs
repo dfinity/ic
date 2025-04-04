@@ -175,13 +175,10 @@ fn test_rewards_calculation() {
     let test_at_version =
         |registry_version: Option<u64>, expected: Result<BTreeMap<&str, u64>, String>| {
             let request = GetNodeProvidersMonthlyXdrRewardsRequest { registry_version };
-            let result = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-                &CANISTER,
-                client.clone(),
-                request,
-            )
-            .now_or_never()
-            .unwrap();
+            let result =
+                NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request)
+                    .now_or_never()
+                    .unwrap();
 
             let expected_result = match expected {
                 Ok(rewards) => {

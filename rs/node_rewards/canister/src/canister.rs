@@ -19,19 +19,33 @@ pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
 }
 
+/// Internal methods
 impl NodeRewardsCanister {
     pub fn new(registry_client: Arc<dyn CanisterRegistryClient>) -> Self {
         Self { registry_client }
+    }
+
+    /// Gets Arc reference to RegistryClient
+    pub fn get_registry_client(&self) -> Arc<dyn CanisterRegistryClient> {
+        self.registry_client.clone()
+    }
+
+    // Test only methods
+    pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
+        self.registry_client
+            .get_value(key.as_ref(), self.registry_client.get_latest_version())
+            .map_err(|e| format!("Failed to get registry value: {:?}", e))
     }
 }
 
 // Exposed API Methods
 impl NodeRewardsCanister {
     pub async fn get_node_providers_monthly_xdr_rewards(
-        _canister: &LocalKey<RefCell<NodeRewardsCanister>>,
-        registry_client: Arc<dyn CanisterRegistryClient>,
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersMonthlyXdrRewardsRequest,
     ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
+        let registry_client = canister.with(|canister| canister.borrow().get_registry_client());
+
         // Main impl below
         return match inner_get_node_providers_monthly_xdr_rewards(registry_client, request).await {
             Ok((rewards, latest_version)) => GetNodeProvidersMonthlyXdrRewardsResponse {
@@ -114,14 +128,4 @@ fn decoded_key_value_pairs_for_prefix<T: prost::Message + Default>(
                 .map(|record| (k.strip_prefix(key_prefix).unwrap().to_string(), record))
         })
         .collect::<Result<Vec<_>, String>>()
-}
-
-/// Internal methods
-impl NodeRewardsCanister {
-    // Test only methods
-    pub fn get_registry_value(&self, key: String) -> Result<Option<Vec<u8>>, String> {
-        self.registry_client
-            .get_value(key.as_ref(), self.registry_client.get_latest_version())
-            .map_err(|e| format!("Failed to get registry value: {:?}", e))
-    }
 }

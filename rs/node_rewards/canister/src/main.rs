@@ -72,12 +72,7 @@ fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
 async fn get_node_providers_monthly_xdr_rewards(
     request: GetNodeProvidersMonthlyXdrRewardsRequest,
 ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
-    NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
-        &CANISTER,
-        REGISTRY_STORE.with(|s| s.clone()),
-        request,
-    )
-    .await
+    NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request).await
 }
 
 #[cfg(test)]
