@@ -51,7 +51,6 @@ use ic_nns_governance_api::pb::v1::{
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_node_rewards_canister_api::lifecycle_args::InitArgs;
 use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
@@ -627,7 +626,7 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
 }
 
 #[allow(dead_code)]
-fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine, init: InitArgs) {
+fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine) {
     let canister_id = ensure_canister_id_exists_at_position(
         machine,
         NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
@@ -645,7 +644,7 @@ fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine, init:
             canister_id,
             CanisterInstallMode::Install,
             build_node_rewards_wasm().bytes(),
-            Encode!(&init).unwrap(),
+            Encode!().unwrap(),
         )
         .unwrap();
 }
