@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$CI_PROJECT_DIR"
 
 # run full release build on "protected" branches
-if [[ $BRANCH_NAME =~ ^master$|^rc--|^hotfix-|^master-private$ ]]; then
+if [[ $RELEASE_BUILD == "true" ]]; then
     ci/container/build-ic.sh -i -c -b
     exit 0
 fi

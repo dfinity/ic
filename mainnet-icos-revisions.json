@@ -7,8 +7,8 @@
   },
   "hostos": {
     "latest_release": {
-      "version": "43670245ed6919790e7858813c7e838c6fbcedf5",
-      "update_img_hash": "2215971a35d6bed1b876fb1da4c6a4382e10e592dd4e6585aa1769877bc976b8"
+      "version": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
+      "update_img_hash": "a1829593ec84a02980be7d3f54dc00fd52a05e207667e7a58ba67269380d57e0"
     }
   }
 }

@@ -1,6 +1,12 @@
 name: 'Bazel-Test-All'
 description: 'Run Bazel Test'
 inputs:
+  diff-only:
+    required: false
+    default: false
+  release-build:
+    required: false
+    default: true
   BAZEL_COMMAND:
     required: true
     default: 'test'
@@ -58,37 +64,8 @@ runs:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
           run: |
 
-            # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
-            release_build="false"
-            diff_only="false"
-
-            # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
-            # the full build to occur (including versioning)
-            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
-            for pattern in "${protected_branches[@]}"; do
-                if [[ "$BRANCH_NAME" =~ $pattern ]]; then
-                    IS_PROTECTED_BRANCH="true"
-                    break
-                fi
-            done
-
-            if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
-                # if we are on a "protected" branch or targeting an rc branch we
-                # upload all artifacts and run a release build (with versioning)
-                release_build="true"
-                diff_only="false"
-            elif [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
-                # on a merge group, we don't upload the artifacts (i.e. no release
-                # build) but we ensure all targets are built (no diff)
-                release_build="false"
-                diff_only="false"
-            elif [[ "${RUN_ON_DIFF_ONLY:-}" == "false" ]]; then
-                # if "RUN_ON_DIFF_ONLY" is false, assume it means
-                # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
-                # branch
-                release_build="true"
-                diff_only="false"
-            fi
+            diff_only='${{ inputs.diff-only }}'
+            release_build='${{ inputs.release-build }}'
 
             bazel_args=( )
 
