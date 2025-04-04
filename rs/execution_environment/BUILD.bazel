@@ -36,7 +36,6 @@ DEPENDENCIES = [
     "//rs/utils",
     "//rs/utils/lru_cache",
     "//rs/utils/thread",
-    "//rs/wasm_transform",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
@@ -57,6 +56,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tracing",
+    "@crate_index//:wasmparser",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -84,7 +84,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:regex",
     "@crate_index//:rstest",
-    "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]
 

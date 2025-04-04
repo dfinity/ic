@@ -53,7 +53,6 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
 };
-use ic_wasm_transform::Module;
 use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
@@ -485,13 +484,15 @@ impl CanisterManager {
             }
         };
 
-        let module = match Module::parse(decoded_wasm_module.as_slice(), false) {
-            Ok(module) => module,
-            Err(_err) => {
-                return false;
+        let parser = wasmparser::Parser::new(0);
+        for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
+            if let wasmparser::Payload::MemorySection(reader) = section {
+                if let Some(memory) = reader.into_iter().flatten().next() {
+                    return memory.memory64;
+                }
             }
-        };
-        module.memories.first().is_some_and(|m| m.memory64)
+        }
+        false
     }
 
     /// Installs code to a canister.
