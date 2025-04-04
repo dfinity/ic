@@ -21,7 +21,7 @@ fn check_message_memory_limits_are_respected(
         seeds.as_slice(),
         config,
     ) {
-        unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
+        unreachable!("\nerr_msg: {err_msg}\n{:#?}\n{:#?}", nfo.traps, nfo.records);
     }
 }
 
@@ -121,7 +121,7 @@ fn check_calls_conclude_with_migrating_canister(
         100, // shutdown_phase_max_rounds
         seed, config,
     ) {
-        unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
+        unreachable!("\nerr_msg: {err_msg}\n{:#?}\n{:#?}", nfo.traps, nfo.records);
     }
 }
 
@@ -143,7 +143,8 @@ fn bla() {
         check_calls_conclude_with_migrating_canister_impl(10, 100, 100, seed, config)
     {
         unreachable!(
-            "\nerr_msg: {err_msg}\n{:#?}\n{:#?}",
+            "\nerr_msg: {err_msg}\n{:#?}\n{:#?}\n{:#?}",
+            nfo.traps,
             nfo.records,
             nfo.subnets.remote_env.get_latest_state()
         );
@@ -230,7 +231,7 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling(
         seeds.as_slice(),
         config,
     ) {
-        unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
+        unreachable!("\nerr_msg: {err_msg}\n{:#?}\n{:#?}", nfo.traps, nfo.records);
     }
 }
 

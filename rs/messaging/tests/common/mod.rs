@@ -566,6 +566,7 @@ impl SubnetPair {
         Err((
             reason.into(),
             DebugInfo {
+                traps: self.gather_canister_trap_messages(),
                 records: self
                     .canisters()
                     .iter()
@@ -575,11 +576,25 @@ impl SubnetPair {
             },
         ))
     }
+
+    /// Returns a vector of non-empty canister trap error messages
+    /// together with the corresponding canister ID.
+    pub fn gather_canister_trap_messages(&self) -> Vec<(CanisterId, String)> {
+        self
+            .canisters()
+            .iter()
+            .filter_map(|canister| {
+                let err_msg: String = self.force_query(canister, "heartbeat_trap_msg");
+                (!err_msg.is_empty()).then_some((*canister, err_msg))
+            })
+            .collect()
+    }
 }
 
 /// Returned by `SubnetPair::failed_with_reason()`.
 #[allow(dead_code)]
 pub struct DebugInfo {
+    pub traps: Vec<(CanisterId, String)>,
     pub records: BTreeMap<CanisterId, BTreeMap<u32, CanisterRecord>>,
     pub subnets: SubnetPair,
 }
