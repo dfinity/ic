@@ -28,10 +28,7 @@ use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
 
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron::SetFollowing,
-    neuron::FolloweesForTopic,
-    proposal::Action,
-    topics::Topic,
+    manage_neuron::SetFollowing, neuron::FolloweesForTopic, proposal::Action, topics::Topic,
     Followee, Proposal, UpgradeSnsControlledCanister,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
