@@ -88,12 +88,11 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
                 .update(wasm().call(management::canister_status(canister_id)))
                 .await
                 .map(|res| {
-                    let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+                    let res = Decode!(res.as_slice(), CanisterStatusResultV2).unwrap();
 
                     // Verify that controllers are returned as expected.
-                    assert_eq!(res.controller, wallet_canister.canister_id());
                     assert_eq!(
-                        res.settings.controllers(),
+                        res.settings().controllers(),
                         vec![to_principal_id(&wallet_canister.canister_id())]
                     );
                 })
@@ -263,11 +262,10 @@ pub fn create_canister_with_one_controller(env: TestEnv) {
                 .update(wasm().call(management::canister_status(canister_b)))
                 .await
                 .map(|res| {
-                    let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+                    let res = Decode!(res.as_slice(), CanisterStatusResultV2).unwrap();
                     // Verify that controllers are returned as expected.
-                    assert_eq!(res.controller, canister_a.canister_id());
                     assert_eq!(
-                        res.settings.controllers(),
+                        res.settings().controllers(),
                         vec![to_principal_id(&canister_a.canister_id())]
                     );
                 })
@@ -319,11 +317,10 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .update(wasm().call(management::canister_status(canister_c)))
                 .await
                 .map(|res| {
-                    let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+                    let res = Decode!(res.as_slice(), CanisterStatusResultV2).unwrap();
                     // Verify that controllers are returned as expected.
-                    assert_eq!(res.controller, canister_a.canister_id());
                     assert_eq!(
-                        res.settings.controllers(),
+                        res.settings().controllers(),
                         vec![to_principal_id(&canister_a.canister_id())]
                     );
                 })
@@ -373,15 +370,10 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .update(wasm().call(management::canister_status(canister_c)))
                 .await
                 .map(|res| {
-                    let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+                    let res = Decode!(res.as_slice(), CanisterStatusResultV2).unwrap();
                     // Verify that controllers are returned as expected.
-                    assert_eq!(
-                        res.controller,
-                        Principal::from_text("ifxlm-aqaaa-multi-pleco-ntrol-lersa-h3ae").unwrap()
-                    );
-
                     // Use a set to not worry about ordering.
-                    let result = res.settings.controllers();
+                    let result = res.settings().controllers();
                     let expected = controllers
                         .iter()
                         .map(to_principal_id)
@@ -503,15 +495,10 @@ pub fn create_canister_with_multiple_controllers(env: TestEnv) {
                 .update(wasm().call(management::canister_status(canister_c)))
                 .await
                 .map(|res| {
-                    let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+                    let res = Decode!(res.as_slice(), CanisterStatusResultV2).unwrap();
                     // Verify that controllers are returned as expected.
-                    assert_eq!(
-                        res.controller,
-                        Principal::from_text("ifxlm-aqaaa-multi-pleco-ntrol-lersa-h3ae").unwrap()
-                    );
-
                     // Check result matches the expected value.
-                    let result = res.settings.controllers();
+                    let result = res.settings().controllers();
                     let expected = controllers
                         .iter()
                         .map(to_principal_id)
@@ -525,15 +512,10 @@ pub fn create_canister_with_multiple_controllers(env: TestEnv) {
                 .update(wasm().call(management::canister_status(canister_c)))
                 .await
                 .map(|res| {
-                    let res = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+                    let res = Decode!(res.as_slice(), CanisterStatusResultV2).unwrap();
                     // Verify that controllers are returned as expected.
-                    assert_eq!(
-                        res.controller,
-                        Principal::from_text("ifxlm-aqaaa-multi-pleco-ntrol-lersa-h3ae").unwrap()
-                    );
-
                     // Use a set to not worry about ordering.
-                    let result = res.settings.controllers();
+                    let result = res.settings().controllers();
                     let expected = controllers
                         .iter()
                         .map(to_principal_id)
