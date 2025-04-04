@@ -29,7 +29,6 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_layout",
     "//rs/sys",
-    "//rs/system_api",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -37,7 +36,6 @@ DEPENDENCIES = [
     "//rs/utils",
     "//rs/utils/lru_cache",
     "//rs/utils/thread",
-    "//rs/wasm_transform",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
@@ -58,12 +56,14 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tracing",
+    "@crate_index//:wasmparser",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/test_utils/vetkd",
     "//rs/interfaces/state_manager/mocks",
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
@@ -84,7 +84,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:regex",
     "@crate_index//:rstest",
-    "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]
 
@@ -171,6 +170,7 @@ BENCH_DEPENDENCIES = [
     "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
+    "//rs/embedders",
     "//rs/interfaces",
     "//rs/limits",
     "//rs/monitoring/logger",
@@ -179,7 +179,6 @@ BENCH_DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/rust_canisters/canister_test",
-    "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/state",

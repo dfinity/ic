@@ -18,6 +18,7 @@ use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
+use ic_node_rewards_canister_api::lifecycle_args::InitArgs as NodeRewardsInitArgs;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_wasm::init::{SnsWasmCanisterInitPayload, SnsWasmCanisterInitPayloadBuilder};
 use ic_utils::byte_slice_fmt::truncate_and_format;
@@ -42,6 +43,7 @@ pub struct NnsInitPayloads {
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
     pub index: ic_icp_index::InitArg,
+    pub node_rewards: NodeRewardsInitArgs,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -225,14 +227,6 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_sns_wasm_allowed_principals(
-        &mut self,
-        allowed_principals: Vec<PrincipalId>,
-    ) -> &mut Self {
-        self.sns_wasms.with_allowed_principals(allowed_principals);
-        self
-    }
-
     pub fn with_exchange_rate_canister(
         &mut self,
         exchange_rate_canister_id: CanisterId,
@@ -289,6 +283,7 @@ impl NnsInitPayloadsBuilder {
             genesis_token: self.genesis_token.build(),
             sns_wasms: self.sns_wasms.build(),
             index: self.index.clone(),
+            node_rewards: NodeRewardsInitArgs {},
         }
     }
 }

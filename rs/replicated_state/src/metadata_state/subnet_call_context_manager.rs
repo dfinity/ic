@@ -459,6 +459,14 @@ impl SubnetCallContextManager {
             .map(|(cid, context)| (*cid, context.clone()))
             .collect()
     }
+
+    pub fn vetkd_derive_key_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| context.is_vetkd())
+            .map(|(cid, context)| (*cid, context.clone()))
+            .collect()
+    }
 }
 
 impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {

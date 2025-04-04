@@ -11,6 +11,7 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
+    wasmtime_embedder::system_api::InstructionLimits,
     WasmtimeEmbedder,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -52,7 +53,6 @@ use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -2201,6 +2201,16 @@ impl ExecutionTestBuilder {
         cycles_account_manager_config: CyclesAccountManagerConfig,
     ) -> Self {
         self.cycles_account_manager_config = Some(cycles_account_manager_config);
+        self
+    }
+
+    pub fn with_snapshot_metadata_download(mut self) -> Self {
+        self.execution_config.canister_snapshot_download = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_snapshot_metadata_upload(mut self) -> Self {
+        self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
         self
     }
 

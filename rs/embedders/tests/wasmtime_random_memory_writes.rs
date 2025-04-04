@@ -3,15 +3,19 @@ use ic_config::{
     flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::wasm_utils::compile;
-use ic_embedders::WasmtimeEmbedder;
+use ic_embedders::{
+    wasm_utils::compile,
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
+        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
+    },
+    WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
-use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
@@ -482,13 +486,13 @@ mod tests {
 
     use ic_embedders::{
         wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
-        wasm_utils::instrumentation::WasmMemoryType, wasmtime_embedder::CanisterMemoryType,
+        wasm_utils::instrumentation::WasmMemoryType,
+        wasmtime_embedder::system_api::ModificationTracking, wasmtime_embedder::CanisterMemoryType,
     };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{PageIndex, PageMap};
-    use ic_system_api::ModificationTracking;
     use ic_test_utilities_types::ids::canister_test_id;
     use proptest::strategy::ValueTree;
 
