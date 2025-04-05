@@ -34,14 +34,14 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tokio::sync::OnceCell;
+use tokio::sync::watch;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
@@ -52,7 +52,7 @@ pub struct CanisterReadStateServiceBuilder {
     log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
@@ -71,7 +71,7 @@ impl CanisterReadStateServiceBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     ) -> Self {
         Self {
             log,
@@ -151,7 +151,7 @@ pub(crate) async fn canister_read_state(
         return (status, text).into_response();
     }
 
-    let delegation_from_nns = delegation_from_nns.get().cloned();
+    let delegation_from_nns = delegation_from_nns.borrow().clone();
 
     // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
