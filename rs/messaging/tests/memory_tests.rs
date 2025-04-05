@@ -66,7 +66,7 @@ fn check_message_memory_limits_are_respected_impl(
     config.receivers = subnets.canisters();
 
     // Send configs to canisters, seed the rng.
-    for (index, canister) in subnets.canisters().into_iter().enumerate() {
+    for (index, canister) in subnets.canisters().iter().enumerate() {
         subnets.set_config(canister, config.clone());
         subnets.seed_rng(canister, seeds[index]);
     }
@@ -85,7 +85,7 @@ fn check_message_memory_limits_are_respected_impl(
 
     // Shut down chatter by putting a canister into `Stopping` state every 10 ticks until they are
     // all `Stopping` or `Stopped`.
-    for canister in subnets.canisters().into_iter() {
+    for canister in subnets.canisters().iter() {
         subnets.stop_chatter(canister);
         subnets.stop_canister_non_blocking(canister);
         for _ in 0..10 {
@@ -101,7 +101,7 @@ fn check_message_memory_limits_are_respected_impl(
     }
 
     // Tick until all calls have concluded; or else fail the test.
-    subnets.tick_to_conclusion(shutdown_phase_max_rounds, |subnets| {
+    subnets.tick_to_conclusion_with_checks(shutdown_phase_max_rounds, || {
         subnets.expect_message_memory_taken_at_most(
             "Wrap up",
             LOCAL_MESSAGE_MEMORY_CAPACITY,
@@ -159,16 +159,16 @@ fn check_calls_conclude_with_migrating_canister_impl(
     let migrating_canister = *subnets.local_canisters.first().unwrap();
 
     // Send config to `migrating_canister` and seed its rng.
-    subnets.set_config(migrating_canister, config);
-    subnets.seed_rng(migrating_canister, seed);
+    subnets.set_config(&migrating_canister, config);
+    subnets.seed_rng(&migrating_canister, seed);
 
     // Stop all canisters except `migrating_canister`.
     for canister in subnets.canisters() {
         if canister != migrating_canister {
             // Make sure the canister doesn't make calls when it is
             // put into running state to read its records.
-            subnets.stop_chatter(canister);
-            subnets.stop_canister_non_blocking(canister);
+            subnets.stop_chatter(&canister);
+            subnets.stop_canister_non_blocking(&canister);
         }
     }
     // Make calls on `migrating_canister`.
@@ -177,11 +177,11 @@ fn check_calls_conclude_with_migrating_canister_impl(
     }
 
     // Stop making calls and migrate `migrating_canister`.
-    subnets.stop_chatter(migrating_canister);
-    subnets.migrate_canister(migrating_canister);
+    subnets.stop_chatter(&migrating_canister);
+    subnets.migrate_canister(&migrating_canister);
 
     // Tick until all calls have concluded; or else fail the test.
-    subnets.tick_to_conclusion(shutdown_phase_max_rounds, |_| Ok(()))
+    subnets.tick_to_conclusion(shutdown_phase_max_rounds)
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
@@ -230,29 +230,29 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
     let local_canister = *subnets.local_canisters.first().unwrap();
     let remote_canister = *subnets.remote_canisters.first().unwrap();
 
-    subnets.seed_rng(local_canister, seeds[0]);
-    subnets.seed_rng(remote_canister, seeds[1]);
+    subnets.seed_rng(&local_canister, seeds[0]);
+    subnets.seed_rng(&remote_canister, seeds[1]);
 
     // Set the local `config` adapted such that only best-effort calls are made.
     subnets.set_config(
-        local_canister,
+        &local_canister,
         CanisterConfig {
             best_effort_call_percentage: 100,
             ..config.clone()
         },
     );
     // Set the remote `config` as is.
-    subnets.set_config(remote_canister, config);
+    subnets.set_config(&remote_canister, config);
 
     // Make calls on both canisters.
     for _ in 0..chatter_phase_round_count {
         subnets.tick();
     }
     // Stop chatter on the local canister.
-    subnets.stop_chatter(local_canister);
+    subnets.stop_chatter(&local_canister);
 
     // Put local canister into `Stopping` state.
-    let msg_id = subnets.stop_canister_non_blocking(local_canister);
+    let msg_id = subnets.stop_canister_non_blocking(&local_canister);
 
     // Tick for up to `shutdown_phase_max_rounds` times on the local subnet only
     // or until the local canister has stopped.

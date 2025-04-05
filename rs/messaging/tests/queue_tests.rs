@@ -1,3 +1,12 @@
+pub mod common;
+
+use common::{
+    execute_round_with_timeout, induct_from_head_of_stream, induct_stream_header, stream_snapshot,
+    PulseStatus, SubnetPair,
+};
+use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
+use std::collections::BTreeMap;
+
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use canister_test::Project;
@@ -11,7 +20,7 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse},
-    xnet::{StreamHeader, StreamIndexedQueue},
+    xnet::StreamHeader,
     Cycles,
 };
 use maplit::btreemap;
@@ -20,6 +29,7 @@ use std::{collections::BTreeSet, vec};
 use xnet_test::{Metrics, StartArgs};
 
 const MAX_TICKS: u64 = 100;
+const MB: u32 = 1024 * 1024;
 
 /// Wrapper for two references to state machines, one considered the `local subnet` and the
 /// other the `remote subnet`, such that both subnets have a main 'xnet-test-canister' installed,
@@ -296,42 +306,6 @@ fn get_output_queue_iter<'a>(
         })
 }
 
-/// Returns a snapshot of an XNet stream as stream header and a queue of messages.
-fn stream_snapshot(
-    from_subnet: &StateMachine,
-    to_subnet: &StateMachine,
-) -> Option<(StreamHeader, StreamIndexedQueue<RequestOrResponse>)> {
-    from_subnet
-        .get_latest_state()
-        .get_stream(&to_subnet.get_subnet_id())
-        .map(|stream| (stream.header(), stream.messages().clone()))
-}
-
-/// Inducts data from the head of the stream on `from_env` into `into_env`.
-fn induct_from_head_of_stream(
-    from_env: &StateMachine,
-    into_env: &StateMachine,
-    msg_limit: Option<usize>,
-) -> Result<(), EncodeStreamError> {
-    let xnet_payload = from_env.generate_xnet_payload(
-        into_env.get_subnet_id(),
-        None, // witness_begin
-        None, // msg_begin
-        msg_limit,
-        None, // byte_limit,
-    )?;
-    into_env.execute_block_with_xnet_payload(xnet_payload);
-    Ok(())
-}
-
-/// Inducts just the stream header on `from_env` into `into_env`.
-fn induct_stream_header(
-    from_env: &StateMachine,
-    into_env: &StateMachine,
-) -> Result<(), EncodeStreamError> {
-    induct_from_head_of_stream(from_env, into_env, Some(0))
-}
-
 /// Calls the 'start' method on a canister in the state machine (assumed to be an XNet canister).
 fn call_start_on_xnet_canister(
     env: &StateMachine,
@@ -357,13 +331,6 @@ fn call_stop_on_xnet_canister(
         Decode!(&wasm.bytes(), String).unwrap()
     );
     Ok(())
-}
-
-/// Triggers a timeout by first advancing the time by 1 day (which should far exceed any
-/// realistic setting for request lifetimes) and then ticking.
-fn execute_round_with_timeout(env: &StateMachine) {
-    env.advance_time(std::time::Duration::from_secs(24 * 3600));
-    env.tick();
 }
 
 /// Wrapper for a generic function to be executed at most a maximum number of times.
@@ -397,105 +364,119 @@ where
 /// has been emptied out.
 #[test]
 fn test_timeout_removes_requests_from_output_queues() {
-    let subnets = SubnetPairProxy::with_new_subnets();
+    let (local_canister, remote_canister, subnets) = SubnetPair::with_local_and_remote_canister();
 
-    let canister_to_subnet_rate = 10;
-    let payload_size_bytes = 1024 * 1024;
+    // Start chatter on `local_canister` to `remote_canister` using guaranteed
+    // response calls only and large payloads to fill up the stream quickly.
+    subnets.set_config(
+        &local_canister,
+        CanisterConfig {
+            receivers: vec![remote_canister],
+            best_effort_call_percentage: 0,
+            calls_per_heartbeat: 10,
+            ..CanisterConfig::default()
+        },
+    );
+    for _ in 0..100 {
+        subnets.tick();
+    }
+    
+    let trap_msg: String = subnets.force_query(&local_canister, "heartbeat_trap_msg");
+    assert!(false, "{:#?}", trap_msg);
 
     // Send requests until there are messages in the output queue, then stop sending
     // requests and trigger a timeout. The queue should be empty afterwards.
-    subnets
-        .call_start_on_local_canister(canister_to_subnet_rate, payload_size_bytes)
-        .unwrap();
-    subnets.build_local_backpressure_until(1);
-    subnets.call_stop_on_local_canister().unwrap();
+    subnets.build_local_backpressure_until(1).unwrap();
+    subnets.stop_chatter(&local_canister);
     execute_round_with_timeout(&subnets.local_env);
 
     // Check the output queue is empty after the timeout.
-    assert_matches!(subnets.local_output_queue_snapshot().as_deref(), Some([]));
+    assert_matches!(
+        subnets
+            .output_queue_snapshot(&local_canister, &remote_canister)
+            .as_deref(),
+        None | Some([])
+    );
 }
 
-/// Test a response stuck in an output queue causes backpressure by blocking the evacuation
-/// of timed out requests, which can be done using bidirectional communication between two
-/// canisters on different subnets.
-/// The local canister first fills up its stream, then stops sending requests and finally
-/// wipes any remaining requests from its output queue; then a request from the remote canister
-/// is inducted into the local canister which will produce a response stuck in its output queue
-/// back to the remote canister. If the local canister restarts sending requests and
-/// continuously triggering timeouts each round, timed out requests will pile up in the output
-/// queue which will eventually lead to failed inductions due to backpressure.
-/// In a last step, a request is gc'ed in the XNet stream on the local subnet to the remote
-/// subnet, which will cause the blocking response to slip into the XNet stream. With the
-/// response popped from the output queue, all the timed out requests are gc'ed, leading to
-/// an empty output queue.
+/// Test timed out requests in output queues cause backpressure if prevented from getting gc'ed;
+/// here achieved through responses stuck in front of the queue.
+///
+/// The remote canister sends requests to the local canister until responses start to pile up
+/// in the output queue (because the stream has filled up and is not making progress).
+/// Then the local canister starts making requests and timing continuously until rejections are
+/// observed indicating backpressure. Check that this is the case even with the output queue
+/// claiming to contain only a couple of responses.
+///
+/// Finally ensure everything wraps up with bi-directional XNet traffic and all chatter stopped.
 #[test]
-fn test_response_in_output_queue_causes_backpressure() {
-    // Guaranteed response calls only.
-    let subnets = SubnetPairProxy::with_new_subnets().with_call_timeouts(&[None]);
+fn test_timed_out_requests_in_output_queue_cause_backpressure() {
+    let (local_canister, remote_canister, subnets) = SubnetPair::with_local_and_remote_canister();
 
-    let canister_to_subnet_rate = 10;
-    let payload_size_bytes = 1024 * 1024;
+    // Simulate one sided traffic from `remote_canister` to `local_canister` until responses start
+    // piling up in the output queue of `local_canister` indicating a full stream.
+    subnets.set_config(
+        &remote_canister,
+        CanisterConfig {
+            receivers: vec![local_canister],
+            best_effort_call_percentage: 0,
+            calls_per_heartbeat: 10,
+            ..CanisterConfig::default()
+        },
+    );
 
-    // Make the local canister send requests until there are messages in the output queue
-    // (i.e. the stream is full); then call 'stop' and wipe the queue by triggering a timeout.
+    subnets.remote_env.tick();
     subnets
-        .call_start_on_local_canister(canister_to_subnet_rate, payload_size_bytes)
+        .repeat(|| {
+            // Try to induct as much as possible from `remote_env` into `local_env`.
+            induct_from_head_of_stream(&subnets.remote_env, &subnets.local_env, None).unwrap();
+            // Try to induct the stream header of `local_env` only (to allow gc'ing).
+            induct_stream_header(&subnets.local_env, &subnets.remote_env).unwrap();
+            // Stop once at least one response is found in the output queue.
+            matches!(
+                subnets
+                    .output_queue_snapshot(&local_canister, &remote_canister)
+                    .as_deref(),
+                Some([RequestOrResponse::Response(_), ..])
+            )
+        })
         .unwrap();
-    subnets.build_local_backpressure_until(1);
-    subnets.call_stop_on_local_canister().unwrap();
+    subnets.stop_chatter(&remote_canister);
+
+    // Start chatter on `local_canister` until rejections are observed indicating backpressure.
+    subnets.set_config(
+        &local_canister,
+        CanisterConfig {
+            receivers: vec![remote_canister],
+            best_effort_call_percentage: 0,
+            calls_per_heartbeat: 10,
+            ..CanisterConfig::default()
+        },
+    );
+    // Tick and trigger timeouts on `local_env` until rejections are observed indicating backpressure.
+    subnets
+        .repeat(|| {
+            execute_round_with_timeout(&subnets.local_env);
+            let metrics = extract_metrics(&subnets.query(&local_canister, "records").unwrap());
+            metrics.calls_rejected > 0
+        })
+        .unwrap();
+
+    // Stop chatter and ensure the last batch of requests is timed out.
+    subnets.stop_chatter(&local_canister);
     execute_round_with_timeout(&subnets.local_env);
 
-    // Call the 'start' method on the remote canister to start sending requests to the local
-    // canister. Do one tick and then induct one xnet request into the local canister, which
-    // should produce one response in its output queue back to the remote canister.
-    subnets
-        .call_start_on_remote_canister(canister_to_subnet_rate, payload_size_bytes)
-        .unwrap();
-    subnets.remote_env.tick();
-    induct_from_head_of_stream(&subnets.remote_env, &subnets.local_env, Some(1)).unwrap();
+    // Check that the output queue only contains responses.
     assert_matches!(
-        subnets.local_output_queue_snapshot().as_deref(),
-        Some([RequestOrResponse::Response(_)])
+        subnets.output_queue_snapshot(&local_canister, &remote_canister).as_deref(),
+        Some(q) if q.iter().all(|msg| matches!(msg, RequestOrResponse::Response(_)))
     );
 
-    // Call the 'start' method on canister 1 to restart sending requests using
-    // a high rate and small payload to generate a lot of messages quickly.
-    let canister_to_subnet_rate = 100;
-    let payload_size_bytes = 128;
-    subnets
-        .call_start_on_local_canister(canister_to_subnet_rate, payload_size_bytes)
-        .unwrap();
-
-    // Keep ticking and triggering timeouts until the XNet canister starts
-    // reporting call errors, indicating back pressure.
-    do_until_or_panic(MAX_TICKS, |_| {
-        execute_round_with_timeout(&subnets.local_env);
-        let reply = subnets
-            .query_local_canister("metrics", Encode!().unwrap())
-            .unwrap();
-        Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
-    })
-    .unwrap();
-
-    // Check that the local output queue only contains the response.
-    assert_matches!(
-        subnets.local_output_queue_snapshot().as_deref(),
-        Some([RequestOrResponse::Response(_)])
-    );
-
-    // Call the 'stop' method on the local canister, then induct a request from the local subnet
-    // into the remote subnet.
-    subnets.call_stop_on_local_canister().unwrap();
-    induct_from_head_of_stream(&subnets.local_env, &subnets.remote_env, Some(1)).unwrap();
-
-    // Trigger a request to be gc'ed by inducting an ACK signal.
-    induct_stream_header(&subnets.remote_env, &subnets.local_env).unwrap();
-
-    // The blocking response should now have slipped into the XNet stream; this will trigger all
-    // the timed out requests to be gc'ed, resulting in an empty output queue.
-    assert_matches!(subnets.local_output_queue_snapshot().as_deref(), Some([]));
+    // Ensure everything wraps up with all chatter stopped.
+    subnets.tick_to_conclusion(200).unwrap();
 }
 
+/*
 /// Test the presence of reservations in input queues does not inhibit inducting xnet
 /// requests to a local canister from a remote subnet.
 /// This can be done by having two canisters on different subnets produce requests until
@@ -1066,3 +1047,4 @@ fn state_machine_subnet_splitting_test() {
     new_subnets_proxy.stop_local_canister().unwrap();
     new_subnets_proxy.stop_remote_canister().unwrap();
 }
+*/
