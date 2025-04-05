@@ -55,7 +55,8 @@ candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 ic-cdk = { workspace = true }
-ic-error-types = { path = "../../packages/ic-error-types" }
+ic-error-types = { path = "../ic-error-types" }
+ic-vetkd-utils = { path = "../ic-vetkd-utils" }
 k256 = { workspace = true }
 lazy_static = { workspace = true }
 wat = { workspace = true }
