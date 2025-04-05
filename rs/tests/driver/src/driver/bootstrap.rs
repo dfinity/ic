@@ -11,7 +11,7 @@ use crate::{
         nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
         node_software_version::NodeSoftwareVersion,
         port_allocator::AddrType,
-        resource::AllocatedVm,
+        resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
@@ -616,7 +616,6 @@ pub fn configure_setupos_image(
     let nested_vm = env.get_nested_vm(name)?;
 
     let mac = nested_vm.get_vm()?.mac6;
-    let memory = "16";
     let cpu = "kvm";
 
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
@@ -677,9 +676,11 @@ pub fn configure_setupos_image(
         .arg("--ipv6-gateway")
         .arg(&gateway)
         .arg("--memory-gb")
-        .arg(memory)
+        .arg((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).to_string())
         .arg("--cpu")
         .arg(cpu)
+        .arg("--nr-of-vcpus")
+        .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
         .arg("--nns-url")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")

@@ -11,6 +11,7 @@
   },
   "resources": {
     "memory": "490",
-    "cpu": "kvm"
+    "cpu": "kvm",
+    "nr_of_vcpus": 64
   }
 }
