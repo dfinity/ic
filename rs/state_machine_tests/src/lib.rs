@@ -1890,6 +1890,7 @@ impl StateMachine {
             ingress_verifier.clone(),
             metrics_registry.clone(),
             subnet_id,
+            nodes[0].node_id,
             replica_logger.clone(),
             state_manager.clone(),
             cycles_account_manager,
