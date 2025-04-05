@@ -579,6 +579,7 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_pre
         minter,
         true,
         mainnet_on_prev_version,
+        true,
     );
 }
 
@@ -803,9 +804,10 @@ fn icrc1_test_metrics_while_migrating_from_v2() {
 
 #[test]
 fn icrc1_test_upgrade_from_v1_not_possible() {
-    ic_ledger_suite_state_machine_tests::test_upgrade_from_v1_not_possible(
+    ic_ledger_suite_state_machine_tests::test_upgrade_not_possible(
         ledger_mainnet_v1_wasm(),
         ledger_wasm(),
+        "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.",
         encode_init_args,
     );
 }
