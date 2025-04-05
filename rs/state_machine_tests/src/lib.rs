@@ -2848,10 +2848,7 @@ impl StateMachine {
             ic_types::Height::new(0),
         )
         .expect("failed to obtain tip");
-        let tip_canister_layout = tip
-            .canister(&canister_id)
-            .expect("failed to obtain canister layout");
-        std::fs::create_dir_all(tip_canister_layout.raw_path())
+        std::fs::create_dir_all(tip.canister_path_unchecked(&canister_id))
             .expect("Failed to create checkpoint dir");
 
         fn copy_as_writeable(src: &Path, dst: &Path) {
@@ -2876,7 +2873,8 @@ impl StateMachine {
             let entry = entry.expect("failed to get directory entry");
             copy_as_writeable(
                 &entry.path(),
-                &tip_canister_layout.raw_path().join(entry.file_name()),
+                &tip.canister_path_unchecked(&canister_id)
+                    .join(entry.file_name()),
             );
         }
 
@@ -2889,8 +2887,8 @@ impl StateMachine {
         }
 
         let mut canister_state = ic_state_manager::checkpoint::load_canister_state(
-            &tip_canister_layout,
             &canister_id,
+            &tip,
             ic_types::Height::new(0),
             self.state_manager.get_fd_factory(),
             &StrictCheckpointLoadingMetrics,
@@ -2979,9 +2977,7 @@ impl StateMachine {
                     .state_layout()
                     .checkpoint_verified(height)
                     .unwrap()
-                    .canister(&canister_id)
-                    .unwrap()
-                    .raw_path(),
+                    .canister_path_unchecked(&canister_id),
                 canister_id,
             );
 
