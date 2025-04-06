@@ -357,7 +357,11 @@ async fn heartbeat() {
                 RejectCode::SysFatal | RejectCode::CanisterError
             ) =>
         {
-            HEARTBEAT_TRAP_MSG.replace(rejection.reject_message().to_string());
+            if !rejection.reject_message().contains("is not running")
+                && !rejection.reject_message().contains("Out of memory")
+            {
+                HEARTBEAT_TRAP_MSG.replace(rejection.reject_message().to_string());
+            }
         }
         Err(CallError::CandidDecodeFailed(err_msg)) => {
             HEARTBEAT_TRAP_MSG.replace(err_msg);

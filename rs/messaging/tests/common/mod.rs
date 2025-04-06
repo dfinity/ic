@@ -9,7 +9,6 @@ use ic_config::{
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::{
@@ -445,7 +444,7 @@ impl SubnetPair {
 
     /// Repeatedly calls `f()` until it returns `Ok(true)` indicating 'job done' or else
     /// the job is considered failed after `max_ticks` iterations.
-    pub fn repeat<F>(&self, label: &str, max_ticks: usize, f: F) -> Result<(), (String, DebugInfo)>
+    pub fn repeat<F>(&self, max_ticks: usize, f: F) -> Result<(), (String, DebugInfo)>
     where
         F: Fn() -> Result<bool, (String, DebugInfo)>,
     {
@@ -454,7 +453,7 @@ impl SubnetPair {
                 return Ok(());
             }
         }
-        self.failed_with_reason(format!("{label}: no exit condition in {max_ticks} ticks"))
+        self.failed_with_reason(format!("no exit condition in {max_ticks} ticks"))
     }
 
     /// Ticks until all calls have concluded; i.e. there are no more open call contexts.
@@ -472,7 +471,7 @@ impl SubnetPair {
         F: Fn() -> Result<(), (String, DebugInfo)>,
     {
         // Tick until no more call contexts are observed.
-        self.repeat("tick_to_conclusion", max_ticks, || {
+        self.repeat(max_ticks, || {
             self.tick();
 
             perform_checks()?;
@@ -496,11 +495,11 @@ impl SubnetPair {
         self.tick();
 
         // After the fact, all memory is freed and back to 0.
-        return self.expect_message_memory_taken_at_most(
+        self.expect_message_memory_taken_at_most(
             "Message memory used despite no open call contexts",
             0,
             0,
-        );
+        )
     }
 
     /// Migrates `canister` from `local_env` to `remote_env`.
@@ -523,44 +522,6 @@ impl SubnetPair {
         assert!(self.remote_canisters.insert(*canister));
     }
 
-    /// Check there are no messages addressed to `canister` on `local_env`
-    /// in output queues or in the stream.
-    pub fn try_complete_local_canister_migration(&self, canister: &CanisterId) -> bool {
-        // Check for messages in the stream.
-        if let Some((_, messages)) = stream_snapshot(&self.local_env, &self.remote_env) {
-            if messages.iter().any(|msg| msg.receiver() == *canister) {
-                return false;
-            }
-        }
-
-        // Check messages in output queues on `local_env`.
-        if self
-            .local_env
-            .get_latest_state()
-            .canister_states
-            .values()
-            .any(|canister_state| {
-                canister_state
-                    .system_state
-                    .queues()
-                    .output_queue_iter_for_testing(canister)
-                    .map_or(false, |mut iter| iter.next().is_some())
-            })
-        {
-            return false;
-        }
-
-        // No in-flight messages found on previous subnet, complete migration.
-        for env in [&self.local_env, &self.remote_env] {
-            env.complete_canister_migrations(
-                *canister..=*canister,
-                vec![LOCAL_SUBNET_ID, REMOTE_SUBNET_ID],
-            );
-        }
-
-        true
-    }
-
     /// Returns the canister records, the latest local state and the latest remote state.
     pub fn failed_with_reason(&self, reason: impl Into<String>) -> Result<(), (String, DebugInfo)> {
         Err((
@@ -580,8 +541,7 @@ impl SubnetPair {
     /// Returns a vector of non-empty canister trap error messages
     /// together with the corresponding canister ID.
     pub fn gather_canister_trap_messages(&self) -> Vec<(CanisterId, String)> {
-        self
-            .canisters()
+        self.canisters()
             .iter()
             .filter_map(|canister| {
                 let err_msg: String = self.force_query(canister, "heartbeat_trap_msg");

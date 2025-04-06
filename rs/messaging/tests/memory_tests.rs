@@ -1,6 +1,10 @@
 pub mod common;
 
-use common::{arb_canister_config, DebugInfo, SubnetPair, SubnetPairConfig, KB, MB};
+use assert_matches::assert_matches;
+use common::{
+    arb_canister_config, induct_from_head_of_stream, stream_snapshot, DebugInfo, SubnetPair,
+    SubnetPairConfig, KB, MB,
+};
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
@@ -117,7 +121,6 @@ fn check_calls_conclude_with_migrating_canister(
 ) {
     if let Err((err_msg, nfo)) = check_calls_conclude_with_migrating_canister_impl(
         10,  // chatter_phase_round_count
-        100, // migration_phase_max_rounds
         100, // shutdown_phase_max_rounds
         seed, config,
     ) {
@@ -140,7 +143,7 @@ fn bla() {
     };
 
     if let Err((err_msg, nfo)) =
-        check_calls_conclude_with_migrating_canister_impl(10, 100, 100, seed, config)
+        check_calls_conclude_with_migrating_canister_impl(10, 100, seed, config)
     {
         unreachable!(
             "\nerr_msg: {err_msg}\n{:#?}\n{:#?}\n{:#?}",
@@ -152,29 +155,26 @@ fn bla() {
 }
 
 /// Runs a state machine test with two subnets, a local subnet with 2 canisters installed and a
-/// remote subnet with 5 canisters installed. All canisters, except one local canister referred to
-/// as `migrating_canister`, are stopped.
+/// remote subnet with 5 canisters installed. All remote canisters are stopped.
 ///
-/// In the first phase a number of rounds are executed on both subnets, including XNet traffic with
-/// the `migrating_canister` making random calls to all installed canisters (since all calls are
-/// rejected except those to self).
+/// In the first phase a number of rounds are executed on the local subnet only to accumulate
+/// requests in the stream to the remote subnet.
 ///
-/// For the second phase, `migrating_canister` stops making calls and is then migrated to the
-/// remote subnet. Since all other canisters are stopped, there are bound to be a number of reject
-/// signals for requests in the stream to the local_subnet. But since we migrated the `migrating_canister`
-/// to the remote subnet, the locally generated reject responses fail to induct and are rerouted into the
-/// stream to the remote subnet. The remote subnet eventually picks them up and inducts them into
-/// `migrating_canister` after which the migration can be completed.
+/// For the second phase, the messages in the stream are inducted into the remote subnet. This will
+/// generate reject signals for requests because all remote canisters are stopped.
+/// Then the first local canister is migrated from the local subnet to the remote subnet.
+/// Finally the reverse stream header is inducted which triggers reject responses, some of which
+/// can not be inducted because the corresponding canister was just migrated.
 ///
-/// Finally all calls on `migrating_canister` must successfully conclude after a number of
-/// additional ticks (including the self-calls made by the heartbeat).
+/// For the third phase all local canisters and the migrated canister stop making calls; then
+/// regular XNet traffic is simulated until all calls have concluded (including self-calls
+/// made from the heartbeat by the random traffic canister).
 ///
 /// If there are pending calls after a threshold number of rounds, there is most likely a bug
 /// connected to reject signals for requests, specifically with the corresponding exceptions due to
 /// canister migration.
 fn check_calls_conclude_with_migrating_canister_impl(
     chatter_phase_round_count: usize,
-    migration_phase_max_rounds: usize,
     shutdown_phase_max_rounds: usize,
     seed: u64,
     mut config: CanisterConfig,
@@ -187,36 +187,45 @@ fn check_calls_conclude_with_migrating_canister_impl(
 
     config.receivers = subnets.canisters();
 
-    let migrating_canister = *subnets.local_canister();
-
-    // Send config to `migrating_canister` and seed its rng.
-    subnets.set_config(&migrating_canister, config);
-    subnets.seed_rng(&migrating_canister, seed);
-
-    // Stop all canisters except `migrating_canister`.
-    for canister in subnets.canisters().iter() {
-        if *canister != migrating_canister {
-            // Make sure the canister doesn't make calls when it is
-            // put into running state to read its records.
-            subnets.stop_chatter(canister);
-            subnets.stop_canister_non_blocking(canister);
-        }
+    // Stop all remote canisters.
+    for canister in subnets.remote_canisters.iter() {
+        subnets.remote_env.stop_canister(*canister).unwrap();
     }
-    // Make calls on `migrating_canister`.
+
+    // Send `config` to local canisters and seed the rng..
+    for canister in subnets.local_canisters.iter() {
+        subnets.set_config(canister, config.clone());
+        subnets.seed_rng(canister, seed)
+    }
+
+    // Tick on `local_env` only to accumulate messages in the stream to `remote_subnet`.
     for _ in 0..chatter_phase_round_count {
-        subnets.tick();
+        subnets.local_env.tick();
     }
+    // Induct the stream into `remote_env` and ensure there are reject signals in the reverse
+    // stream header.
+    induct_from_head_of_stream(&subnets.local_env, &subnets.remote_env, None).unwrap();
+    assert_matches!(
+        stream_snapshot(&subnets.remote_env, &subnets.local_env),
+        Some((header, _)) if !header.reject_signals().is_empty()
+    );
 
-    // Migrate the canister.
+    // Migrate the first local canister.
+    let migrating_canister = *subnets.local_canister();
     subnets.migrate_local_canister_to_remote_env(&migrating_canister);
 
-    // Tick and try to complete the canister migration until it succeeds.
-    subnets.repeat("try_complete_migration", migration_phase_max_rounds, || {
-        subnets.tick();
-        Ok(subnets.try_complete_local_canister_migration(&migrating_canister))
-    })?;
+    // Induct the reverse stream header of `remote_env` to trigger gc.
+    induct_from_head_of_stream(&subnets.remote_env, &subnets.local_env, None).unwrap();
 
-    // Tick until all calls have concluded; or else fail the test.
+    // Stop chatter on all local canisters and the migrating canister; then tick until all calls
+    // have concluded.
+    for canister in subnets
+        .local_canisters
+        .iter()
+        .chain(std::iter::once(&migrating_canister))
+    {
+        subnets.stop_chatter(canister);
+    }
     subnets.tick_to_conclusion(shutdown_phase_max_rounds, || Ok(()))
 }
 
