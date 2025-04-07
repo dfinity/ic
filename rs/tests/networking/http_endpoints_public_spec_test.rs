@@ -83,10 +83,6 @@ fn test(env: TestEnv) {
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::System)
         .expect("Failed to find system subnet");
-    let sys_node = sys_subnet
-        .nodes()
-        .next()
-        .expect("Failed to find node in system subnet");
     let sys_subnet_canister_id_range = sys_subnet.subnet_canister_ranges()[0];
     let sys_uc1_id = sys_subnet_canister_id_range
         .generate_canister_id(None)
@@ -113,11 +109,9 @@ fn test(env: TestEnv) {
 
     block_on(async {
         // Create three universal canister, two on the system sybnet, one on the app subnet
-        let sys_uc1 =
-            UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger).await;
-        let sys_uc2 =
-            UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger).await;
-        let app_uc = UniversalCanister::new_with_retries(&app_agent, app_uc_id, &logger).await;
+        UniversalCanister::new_with_retries(&sys_agent, sys_uc1_id.into(), &logger).await;
+        UniversalCanister::new_with_retries(&sys_agent, sys_uc2_id.into(), &logger).await;
+        UniversalCanister::new_with_retries(&app_agent, app_uc_id, &logger).await;
 
         let test_canister_ids: [CanisterId; 4] = [
             // Valid destination on same subnet
@@ -182,13 +176,6 @@ fn test(env: TestEnv) {
         // Test read state requests
 
         // Test that well formed read state requests work
-        let response =
-            CanisterReadState::new(vec![Path::from(Label::from("time"))], sys_uc1_id.into())
-                .read_state(sys_socket_addr)
-                .await;
-        let status = inspect_response(response, "ReadState", &logger).await;
-        // TODO: Check status
-
         let response = CanisterReadState::new(
             vec![Path::from(vec![
                 Label::from("canister"),
@@ -200,13 +187,42 @@ fn test(env: TestEnv) {
         .read_state(sys_socket_addr)
         .await;
         let status = inspect_response(response, "ReadState", &logger).await;
-        // TODO: Check status
+        assert!((200..300).contains(&status));
 
-        // Test that
+        // Test that malformed read_state requests are rejected
+        for effective_canister_id in test_canister_ids {
+            let response = CanisterReadState::new(
+                vec![Path::from(vec![
+                    Label::from("canister"),
+                    Label::from(effective_canister_id),
+                    Label::from("controllers"),
+                ])],
+                sys_uc1_id.into(),
+            )
+            .read_state(sys_socket_addr)
+            .await;
+            let status = inspect_response(response, "ReadState", &logger).await;
+            assert!((400..500).contains(&status));
+        }
 
-        // TODO
+        // Test that calling "time" path on the existing canister id works
+        let response =
+            CanisterReadState::new(vec![Path::from(Label::from("time"))], sys_uc1_id.into())
+                .read_state(sys_socket_addr)
+                .await;
+        let status = inspect_response(response, "ReadState", &logger).await;
+        assert!((200..300).contains(&status));
+
+        // Test that calling "time" on the management canister gets rejected
+        let response = CanisterReadState::new(
+            vec![Path::from(Label::from("time"))],
+            CanisterId::ic_00().into(),
+        )
+        .read_state(sys_socket_addr)
+        .await;
+        let status = inspect_response(response, "ReadState", &logger).await;
+        assert!((400..500).contains(&status));
     });
-    todo!()
 }
 
 async fn inspect_response(response: Response, typ: &str, logger: &Logger) -> u16 {
