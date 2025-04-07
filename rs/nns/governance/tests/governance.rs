@@ -4655,7 +4655,8 @@ proptest! {
     cases: 100, .. ProptestConfig::default()
 })]
 #[test]
-fn test_topic_weights(stake in 1u64..1_000_000_000) {
+fn test_topic_weights(stake in 1u64..1_000_000_000, minimum_dissolve_delay_to_vote in proptest::prop_oneof![Just(3 * ONE_MONTH_SECONDS), Just(6 * ONE_MONTH_SECONDS)]) {
+    let not_dissolving_min_dissolve_delay = Some(DissolveState::DissolveDelaySeconds(minimum_dissolve_delay_to_vote));
     // Check that voting on
     // 1. a governance proposal yields 20 times the voting power
     // 2. an exchange rate proposal yields 0.01 times the voting power
@@ -4668,7 +4669,7 @@ fn test_topic_weights(stake in 1u64..1_000_000_000) {
     // First neuron gets 1/2.02 * 100 = 49.5 truncated to 49.
     // Second neuron gets 0.01/2.02 * 100 = 0.495 truncated to 0.
     assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-N", "-PE"], USUAL_REWARD_POT_E8S),
+        compute_maturities(vec![stake, stake], vec!["P-N", "-PE"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
         vec![49, 0]
     );
 
@@ -4679,7 +4680,7 @@ fn test_topic_weights(stake in 1u64..1_000_000_000) {
     // First neuron gets 20/42 * 100 = 47.61 truncated to 47.
     // Second neuron gets 1/42 * 100 = 2.38 truncated to 2.
     assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PN"], USUAL_REWARD_POT_E8S),
+        compute_maturities(vec![stake, stake], vec!["P-G", "-PN"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
         vec![47, 2],
     );
 
@@ -4691,17 +4692,17 @@ fn test_topic_weights(stake in 1u64..1_000_000_000) {
     // Note that compute_maturities returns the resulting maturities
     // when 100 e8s of voting rewards are distributed.
     assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PN", "-PN", "-PN", "-PN", "-PN"], USUAL_REWARD_POT_E8S),
+        compute_maturities(vec![stake, stake], vec!["P-G", "-PN", "-PN", "-PN", "-PN", "-PN"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
         vec![40, 10],
     );
     // Make sure that, when voting on proposals of the same type in
     // the ratio 1:4, they get voting rewards in the ratio 1:4.
     assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-N", "-PN", "-PN", "-PN", "-PN"], USUAL_REWARD_POT_E8S),
+        compute_maturities(vec![stake, stake], vec!["P-N", "-PN", "-PN", "-PN", "-PN"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
         vec![10, 40],
     );
     assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PG", "-PG", "-PG", "-PG"], USUAL_REWARD_POT_E8S),
+        compute_maturities(vec![stake, stake], vec!["P-G", "-PG", "-PG", "-PG", "-PG"], USUAL_REWARD_POT_E8S,not_dissolving_min_dissolve_delay),
         vec![10, 40],
     );
 }
@@ -4709,7 +4710,18 @@ fn test_topic_weights(stake in 1u64..1_000_000_000) {
 }
 
 #[test]
-fn test_random_voting_rewards_scenarios() {
+fn test_random_voting_rewards_scenarios_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_random_voting_rewards_scenarios(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_random_voting_rewards_scenarios_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_random_voting_rewards_scenarios(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
+fn run_random_voting_rewards_scenarios(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     fn helper(seed: u64) -> Vec<fake::ProposalNeuronBehavior> {
         let mut rng = StdRng::seed_from_u64(seed);
         let neuron_weights = vec![200, 500, 300]; // Notice that the shares are 20%, 50%, and 30%.
@@ -4795,8 +4807,12 @@ fn test_random_voting_rewards_scenarios() {
         }
 
         // Assert that governance generates the same result (but more complicated-ly).
-        let all_observed_voting_rewards_e8s =
-            compute_maturities(neuron_weights, proposals.clone(), REWARD_POT_E8S);
+        let all_observed_voting_rewards_e8s = compute_maturities(
+            neuron_weights,
+            proposals.clone(),
+            REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay,
+        );
         assert_eq!(
             all_observed_voting_rewards_e8s.len(),
             3,
@@ -4869,74 +4885,205 @@ fn test_random_voting_rewards_scenarios() {
     assert_eq!(unique_scenarios.len(), len);
 }
 
+#[test]
+fn test_maturities_are_invariant_by_stake_scaling_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_maturities_are_invariant_by_stake_scalin(Some(DissolveState::DissolveDelaySeconds(
+        THREE_MONTHS,
+    )));
+}
+
+#[test]
+fn test_maturities_are_invariant_by_stake_scaling_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_maturities_are_invariant_by_stake_scalin(Some(DissolveState::DissolveDelaySeconds(
+        SIX_MONTHS,
+    )));
+}
+
 /// Check that, if all stakes are scaled uniformly, the maturities are
 /// unchanged.
+fn run_maturities_are_invariant_by_stake_scaling(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
+    assert_eq!(
+        compute_maturities(
+            vec![1],
+            vec!["P"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![100]
+    );
+    assert_eq!(
+        compute_maturities(
+            vec![2],
+            vec!["P"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![100]
+    );
+    assert_eq!(
+        compute_maturities(
+            vec![43_330],
+            vec!["P"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![100]
+    );
+}
+
 #[test]
-fn test_maturities_are_invariant_by_stake_scaling() {
-    assert_eq!(
-        compute_maturities(vec![1], vec!["P"], USUAL_REWARD_POT_E8S),
-        vec![100]
-    );
-    assert_eq!(
-        compute_maturities(vec![2], vec!["P"], USUAL_REWARD_POT_E8S),
-        vec![100]
-    );
-    assert_eq!(
-        compute_maturities(vec![43_330], vec!["P"], USUAL_REWARD_POT_E8S),
-        vec![100]
-    );
+fn test_no_maturity_increase_if_no_proposal_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_no_maturity_increase_if_no_proposal(Some(DissolveState::DissolveDelaySeconds(
+        THREE_MONTHS,
+    )));
+}
+
+#[test]
+fn test_no_maturity_increase_if_no_proposal_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_no_maturity_increase_if_no_proposal(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
 /// Check that, if there is no proposal in the reward period, maturities do not
 /// increase.
-#[test]
-fn test_no_maturity_increase_if_no_proposal() {
+fn run_no_maturity_increase_if_no_proposal(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     // Single neuron
     assert_eq!(
-        compute_maturities(vec![1], Vec::<&str>::new(), USUAL_REWARD_POT_E8S),
+        compute_maturities(
+            vec![1],
+            Vec::<&str>::new(),
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
         vec![0]
     );
     // Two neurons
     assert_eq!(
-        compute_maturities(vec![1, 5], Vec::<&str>::new(), USUAL_REWARD_POT_E8S),
+        compute_maturities(
+            vec![1, 5],
+            Vec::<&str>::new(),
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
         vec![0, 0],
     );
 }
 
+#[test]
+fn test_passive_neurons_dont_get_mature_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_passive_neurons_dont_get_mature(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_passive_neurons_dont_get_mature_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_passive_neurons_dont_get_mature(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// In this test, one neuron does nothing. It should get no maturity.
 /// The other neuron does vote and thus receives 50 out 100.
-#[test]
-fn test_passive_neurons_dont_get_mature() {
+fn run_passive_neurons_dont_get_mature(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     assert_eq!(
-        compute_maturities(vec![1, 1], vec!["P-"], USUAL_REWARD_POT_E8S),
+        compute_maturities(
+            vec![1, 1],
+            vec!["P-"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
         vec![50, 0]
     );
     assert_eq!(
-        compute_maturities(vec![1, 1], vec!["-P"], USUAL_REWARD_POT_E8S),
+        compute_maturities(
+            vec![1, 1],
+            vec!["-P"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
         vec![0, 50]
     );
 }
 
+#[test]
+fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_proposing_voting_yes_voting_no_are_equivalent_for_rewards(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[test]
+fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_proposing_voting_yes_voting_no_are_equivalent_for_rewards(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
 /// Tests that proposing, voting yes, and voting no all result in the same
 /// maturity increase
+fn run_proposing_voting_yes_voting_no_are_equivalent_for_rewards(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
+    assert_eq!(
+        compute_maturities(
+            vec![1, 1],
+            vec!["Py"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![50, 50]
+    );
+    assert_eq!(
+        compute_maturities(
+            vec![1, 1],
+            vec!["Pn"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![50, 50]
+    );
+    assert_eq!(
+        compute_maturities(
+            vec![1, 1],
+            vec!["yP"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![50, 50]
+    );
+    assert_eq!(
+        compute_maturities(
+            vec![1, 1],
+            vec!["nP"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![50, 50]
+    );
+}
+
 #[test]
-fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards() {
-    assert_eq!(
-        compute_maturities(vec![1, 1], vec!["Py"], USUAL_REWARD_POT_E8S),
-        vec![50, 50]
-    );
-    assert_eq!(
-        compute_maturities(vec![1, 1], vec!["Pn"], USUAL_REWARD_POT_E8S),
-        vec![50, 50]
-    );
-    assert_eq!(
-        compute_maturities(vec![1, 1], vec!["yP"], USUAL_REWARD_POT_E8S),
-        vec![50, 50]
-    );
-    assert_eq!(
-        compute_maturities(vec![1, 1], vec!["nP"], USUAL_REWARD_POT_E8S),
-        vec![50, 50]
-    );
+fn test_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[test]
+fn test_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
 }
 
 /// In this test, there are 4 neurons, which are not always active: they
@@ -4945,64 +5092,122 @@ fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards() {
 /// Total maturity is 100 and we have 4 neurons and 4 proposals. Hence every vote is worth
 /// 100/(4*4)=6.25
 /// Thus a neuron that votes 3 times, receives 3*6.25 = 18.75 truncated to 18.
-#[test]
-fn test_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter() {
+fn run_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     assert_eq!(
         compute_maturities(
             vec![1, 1, 1, 1],
             vec!["-Pyn", "P-yn", "Py-n", "Pyn-"],
-            USUAL_REWARD_POT_E8S
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
         ),
-        vec![18, 18, 18, 18]
+        vec![18, 18, 18, 18],
     );
+}
+
+#[test]
+fn test_active_neuron_gets_more_mature_than_less_active_one_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_active_neuron_gets_more_mature_than_less_active_one(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[test]
+fn test_active_neuron_gets_more_mature_than_less_active_one_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_active_neuron_gets_more_mature_than_less_active_one(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
 }
 
 /// In this test, one neuron is always active, but the other not always. The
 /// more active neuron should get more maturity.
-#[test]
-fn test_active_neuron_gets_more_mature_than_less_active_one() {
+fn run_active_neuron_gets_more_mature_than_less_active_one(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     assert_eq!(
-        compute_maturities(vec![1, 1], vec!["P-", "P-", "yP"], USUAL_REWARD_POT_E8S),
+        compute_maturities(
+            vec![1, 1],
+            vec!["P-", "P-", "yP"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
         // We have 2 neurons (with stake 1 each) and 3 proposals
         // Thus, out of 100 maturity, one vote is worth 100/(2*3)=16.6
-        vec![50, 16] // first neuron voted 3 times, second 1 time
+        vec![50, 16], // first neuron voted 3 times, second 1 time
     );
     assert_eq!(
         compute_maturities(
             vec![2, 1, 1], // First neuron has more stake not to trigger wait for quiet.
             vec!["P--", "P--", "Py-", "P-y", "Pn-", "P-n", "Pyn"],
             USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
         ),
         // We have a total stake of 4 and 7 proposals.
         // Thus, out of 100 maturity, one vote is worth 100/(4*7)=3.57
         // The first neuron (with a stake of 2) votes 7 times and thus receives 2*7*100/(4*7)=50
         // The second neuron (with a stake of 1) votes 3 times and thus receives 1*3*100/(4*7)=10.71
         // The third neuron votes like the second neuron.
-        vec![50, 10, 10]
+        vec![50, 10, 10],
     );
 }
 
 #[test]
-fn test_more_stakes_gets_more_maturity() {
+fn test_more_stakes_gets_more_maturity_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_more_stakes_gets_more_maturity(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_more_stakes_gets_more_maturity_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_more_stakes_gets_more_maturity(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
+fn run_more_stakes_gets_more_maturity(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     assert_eq!(
-        compute_maturities(vec![3, 1], vec!["Py"], USUAL_REWARD_POT_E8S),
-        vec![75, 25]
+        compute_maturities(
+            vec![3, 1],
+            vec!["Py"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![75, 25],
     );
     assert_eq!(
-        compute_maturities(vec![3, 1], vec!["yP"], USUAL_REWARD_POT_E8S),
-        vec![75, 25]
+        compute_maturities(
+            vec![3, 1],
+            vec!["yP"],
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
+        ),
+        vec![75, 25],
     );
+}
+
+#[test]
+fn test_reward_complex_scenario_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_reward_complex_scenario(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_reward_complex_scenario_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_reward_complex_scenario(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
 /// This test combines differences in activity and differences in stakes to
 /// compute rewards.
-#[test]
-fn test_reward_complex_scenario() {
+fn run_reward_complex_scenario(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     assert_eq!(
         compute_maturities(
             vec![3, 1, 1],
             vec!["-P-", "--P", "y-P", "P-n"],
-            USUAL_REWARD_POT_E8S
+            USUAL_REWARD_POT_E8S,
+            not_dissolving_min_dissolve_delay
         ),
         // First neuron voted twice, 2 * 3 = 6 used voting rights
         // Second neuron voted once, 1 * 1 = 1 used voting rights
@@ -5012,7 +5217,7 @@ fn test_reward_complex_scenario() {
         // is worth 100/(4*5) = 5.
         // As a consequence the first neuron receives 6 * 5 = 30, the second 1*5 and
         // the third neuron 3*5=15.
-        vec![30, 5, 15]
+        vec![30, 5, 15],
     );
 }
 
@@ -13060,10 +13265,21 @@ fn run_wfq_real_data(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     );
 }
 
+#[test]
+fn test_wfq_constant_flipping_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_wfq_constant_flipping(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_wfq_constant_flipping_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_wfq_constant_flipping(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// Tests a situation in which the majority changes with every vote, with a vote
 /// every 20s.
-#[test]
-fn test_wfq_constant_flipping() {
+fn run_wfq_constant_flipping(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     let initial_expiration_seconds = 4 * ONE_DAY_SECONDS;
     let mut neuron_votes: Vec<NeuronVote> = vec![NeuronVote {
         vote_and_time: Some((Vote::Yes, 1)),
@@ -13077,8 +13293,11 @@ fn test_wfq_constant_flipping() {
             stake: 20,
         })
     }
-    let (gov, pid, initial_deadline_seconds) =
-        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let (gov, pid, initial_deadline_seconds) = wait_for_quiet_test_helper(
+        initial_expiration_seconds,
+        &mut neuron_votes,
+        not_dissolving_min_dissolve_delay,
+    );
     let deadline_after_test = gov
         .get_proposal_data(pid)
         .unwrap()
