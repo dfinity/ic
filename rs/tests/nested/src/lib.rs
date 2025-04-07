@@ -152,10 +152,13 @@ pub fn upgrade_hostos(env: TestEnv) {
         vec![node_id],
     ));
 
+    info!(logger, "Orchestrator dashboard initial health check...");
+    host.await_orchestrator_dashboard_accessible().unwrap();
+
     // The HostOS upgrade is applied with a reboot to the host machine.
-    // Wait for the host to reboot before checking Orchestrator dashboard status
+    // Wait for the host to reboot causing the Orchestrator dashboard to be inaccessible.
     info!(logger, "Waiting for the HostOS upgrade to apply...");
-    std::thread::sleep(std::time::Duration::from_secs(180));
+    host.await_orchestrator_dashboard_inaccessible().unwrap();
 
     info!(logger, "Waiting for Orchestrator dashboard...");
     host.await_orchestrator_dashboard_accessible().unwrap();
