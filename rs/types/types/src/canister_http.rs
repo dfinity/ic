@@ -775,26 +775,24 @@ mod tests {
 #[cfg(test)]
 mod validate_http_headers_and_body_tests {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_management_canister_types_private::HttpHeader;
 
     #[test]
-    fn test_valid_request() {
-        // Basic request is valid.
-        {
-            let headers = vec![HttpHeader {
-                name: "Content-Type".to_string(),
-                value: "application/json".to_string(),
-            }];
-            let body = b"Hello";
-            assert!(validate_http_headers_and_body(&headers, body).is_ok());
-        }
+    fn test_empty_request() {
+        let empty_headers: Vec<HttpHeader> = vec![];
+        let empty_body = b"";
+        assert!(validate_http_headers_and_body(&empty_headers, empty_body).is_ok());
+    }
 
-        // Empty request is also valid.
-        {
-            let empty_headers: Vec<HttpHeader> = vec![];
-            let empty_body = b"";
-            assert!(validate_http_headers_and_body(&empty_headers, empty_body).is_ok());
-        }
+    #[test]
+    fn test_valid_request() {
+        let headers = vec![HttpHeader {
+            name: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+        }];
+        let body = b"Hello";
+        assert!(validate_http_headers_and_body(&headers, body).is_ok());
     }
 
     #[test]
@@ -841,7 +839,17 @@ mod validate_http_headers_and_body_tests {
     #[test]
     fn test_headers_at_max_total_size() {
         // Create headers that sum up exactly to the maximum total size
-        let total_size = MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE;
+        // let headers_count =  MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / (2 * MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE);
+        // let headers = (0..headers_count)
+        //     .map(|i| {
+        //         let mock_header_name_and_value = format!("Header-{}", i);
+        //         HttpHeader {
+        //             name: mock_header_name_and_value.clone(),
+        //             value: mock_header_name_and_value.clone(),
+        //         }
+        //     })
+        //     .collect::<Vec<_>>();
+        // let total_size = MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE;
 
         let headers = vec![
             HttpHeader {
@@ -875,14 +883,11 @@ mod validate_http_headers_and_body_tests {
         let body = b"";
 
         let result = validate_http_headers_and_body(&headers, body);
-        assert!(result.is_err());
-        assert!(matches!(
+        assert_matches!(
             result,
-            Err(CanisterHttpRequestContextError::TooManyHeaders(_))
-        ));
-        if let Err(CanisterHttpRequestContextError::TooManyHeaders(count)) = result {
-            assert_eq!(count, MAX_CANISTER_HTTP_HEADER_NUM + 1);
-        }
+            Err(CanisterHttpRequestContextError::TooManyHeaders(count))
+            if count == MAX_CANISTER_HTTP_HEADER_NUM + 1
+        );
     }
 
     #[test]
@@ -895,14 +900,11 @@ mod validate_http_headers_and_body_tests {
         let body = b"";
 
         let result = validate_http_headers_and_body(&headers, body);
-        assert!(result.is_err());
-        assert!(matches!(
+        assert_matches!(
             result,
-            Err(CanisterHttpRequestContextError::TooLongHeaderName(_))
-        ));
-        if let Err(CanisterHttpRequestContextError::TooLongHeaderName(size)) = result {
-            assert_eq!(size, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1);
-        }
+            Err(CanisterHttpRequestContextError::TooLongHeaderName(size))
+            if size == MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1
+        );
     }
 
     #[test]
@@ -915,14 +917,11 @@ mod validate_http_headers_and_body_tests {
         let body = b"";
 
         let result = validate_http_headers_and_body(&headers, body);
-        assert!(result.is_err());
-        assert!(matches!(
+        assert_matches!(
             result,
-            Err(CanisterHttpRequestContextError::TooLongHeaderValue(_))
-        ));
-        if let Err(CanisterHttpRequestContextError::TooLongHeaderValue(size)) = result {
-            assert_eq!(size, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1);
-        }
+            Err(CanisterHttpRequestContextError::TooLongHeaderValue(size))
+            if size == MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1
+        );
     }
 
     #[test]
@@ -945,13 +944,10 @@ mod validate_http_headers_and_body_tests {
 
         let result = validate_http_headers_and_body(&headers, body);
 
-        assert!(result.is_err());
-        assert!(matches!(
+        assert_matches!(
             result,
-            Err(CanisterHttpRequestContextError::TooLargeHeaders(_))
-        ));
-        if let Err(CanisterHttpRequestContextError::TooLargeHeaders(size)) = result {
-            assert!(size > MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE);
-        }
+            Err(CanisterHttpRequestContextError::TooLargeHeaders(size))
+            if size > MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE
+        );
     }
 }
