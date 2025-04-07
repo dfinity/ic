@@ -189,7 +189,7 @@ impl ReplicatedStateFixture {
     }
 
     /// Push the message to a stream.
-    fn push_to_streams(&mut self, msgs: Vec<RequestOrResponse>) {
+    fn push_to_stream(&mut self, msgs: Vec<RequestOrResponse>) {
         let mut streams = self.state.take_streams();
         for msg in msgs.into_iter() {
             streams.entry(SUBNET_ID).or_default().push(msg);
@@ -197,8 +197,8 @@ impl ReplicatedStateFixture {
         self.state.put_streams(streams);
     }
 
-    /// Discard the next `count` messages from the same stream as `push_to_streams` uses.
-    fn discard_from_streams(&mut self, count: u64) {
+    /// Discard the next `count` messages from the same stream as `push_to_stream` uses.
+    fn discard_from_stream(&mut self, count: u64) {
         let mut streams = self.state.take_streams();
         let stream = streams.entry(SUBNET_ID).or_default();
         let old_begin = stream.messages_begin();
@@ -986,7 +986,7 @@ fn split() {
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.
-    fixture.push_to_streams(vec![
+    fixture.push_to_stream(vec![
         request_to(CANISTER_1).into(),
         request_to(CANISTER_2).into(),
     ]);
@@ -1168,23 +1168,23 @@ fn ready_for_migration() {
     assert!(fixture.state.ready_for_migration(&CANISTER_ID));
 
     // Put best-effort response into the stream, still ready for migration.
-    fixture.push_to_streams(vec![response]);
+    fixture.push_to_stream(vec![response]);
     assert!(fixture.state.ready_for_migration(&CANISTER_ID));
 
     // Put a guaranteed response from a different canister into the stream, still ready for migration.
-    fixture.push_to_streams(vec![response_from(OTHER_CANISTER_ID).into()]);
+    fixture.push_to_stream(vec![response_from(OTHER_CANISTER_ID).into()]);
     assert!(fixture.state.ready_for_migration(&CANISTER_ID));
 
     // Put a guaranteed response from the canister into the stream, not ready for migration.
-    fixture.push_to_streams(vec![response_to(OTHER_CANISTER_ID).into()]);
+    fixture.push_to_stream(vec![response_to(OTHER_CANISTER_ID).into()]);
     assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
 
     // Remove some messages from the stream, but not the guaranteed response, still not ready for migration.
-    fixture.discard_from_streams(2);
+    fixture.discard_from_stream(2);
     assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
 
     // Remove the guaranteed response from the stream, ready for migration.
-    fixture.discard_from_streams(1);
+    fixture.discard_from_stream(1);
     assert!(fixture.state.ready_for_migration(&CANISTER_ID));
 }
 
