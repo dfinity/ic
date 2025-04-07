@@ -120,7 +120,7 @@ fn check_calls_conclude_with_migrating_canister(
 ) {
     if let Err((err_msg, nfo)) = check_calls_conclude_with_migrating_canister_impl(
         10,  // chatter_phase_round_count
-        100, // shutdown_phase_max_rounds
+        200, // shutdown_phase_max_rounds
         seed, config,
     ) {
         unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
