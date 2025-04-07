@@ -54,6 +54,10 @@ prop_compose! {
 
 /// Config for `SubnetPair` including message memory limits
 /// and number of canisters for each subnet.
+///
+/// Note: low values for `*_max_instructions_per_round` can lead to continuous resets on the
+/// heartbeat, leading to the canister apparently doing nothing at all; probably caused due
+/// to the candid encoding taking too long when generating the futures in `pulse()`.
 #[derive(Debug)]
 pub struct SubnetPairConfig {
     pub local_canisters_count: u64,
@@ -68,10 +72,10 @@ impl Default for SubnetPairConfig {
     fn default() -> Self {
         Self {
             local_canisters_count: 2,
-            local_max_instructions_per_round: 1_000_000_000,
+            local_max_instructions_per_round: 3_000_000_000,
             local_message_memory_capacity: 100 * MB,
             remote_canisters_count: 1,
-            remote_max_instructions_per_round: 1_000_000_000,
+            remote_max_instructions_per_round: 3_000_000_000,
             remote_message_memory_capacity: 50 * MB,
         }
     }
