@@ -23,10 +23,10 @@ pub struct VotingPowerSnapshot {
     total_potential_voting_power: u64,
 }
 
-#[cfg(any(test, feature = "canbench-rs"))]
 impl VotingPowerSnapshot {
     /// Although the snapshot should only be computed by the neuron store, we need to
     /// create it for testing purposes.
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn new_for_test(
         voting_power_map: HashMap<u64, u64>,
         total_potential_voting_power: u64,
@@ -37,6 +37,10 @@ impl VotingPowerSnapshot {
             total_deciding_voting_power,
             total_potential_voting_power,
         }
+    }
+
+    pub fn total_potential_voting_power(&self) -> u64 {
+        self.total_potential_voting_power
     }
 }
 

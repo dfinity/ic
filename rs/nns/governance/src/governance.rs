@@ -67,6 +67,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
+    storage::VOTING_POWER_SNAPSHOTS,
     use_node_provider_reward_canister,
 };
 use async_trait::async_trait;
@@ -5498,7 +5499,7 @@ impl Governance {
             }
         }
 
-        let (ballots, total_potential_voting_power) =
+        let (ballots, total_potential_voting_power, previous_ballots_timestamp_seconds) =
             self.compute_ballots_for_new_proposal(&action, proposer_id, now_seconds)?;
 
         if ballots.is_empty() {
@@ -5568,6 +5569,7 @@ impl Governance {
             ballots,
             wait_for_quiet_state,
             total_potential_voting_power: Some(total_potential_voting_power),
+            previous_ballots_timestamp_seconds,
             ..Default::default()
         };
 
@@ -5625,13 +5627,21 @@ impl Governance {
     /// vote, and they all get 1 voting power, regardless of refresh. Also,
     /// these proposals have no rewards. Therefore, in the case of ManageNeuron,
     /// this returns ballots_len.
+    #[allow(clippy::type_complexity)]
     fn compute_ballots_for_new_proposal(
         &mut self,
         action: &Action,
         proposer_id: &NeuronId,
         now_seconds: u64,
-    ) -> Result<(HashMap<u64, Ballot>, u64 /*potential_voting_power*/), GovernanceError> {
-        let (ballots, potential_voting_power) = match *action {
+    ) -> Result<
+        (
+            HashMap<u64, Ballot>,
+            u64,         /*potential_voting_power*/
+            Option<u64>, /*previous_ballots_timestamp_seconds*/
+        ),
+        GovernanceError,
+    > {
+        match *action {
             // A neuron can be managed only by its followees on the
             // 'manage neuron' topic.
             Action::ManageNeuron(ref manage_neuron) => {
@@ -5679,25 +5689,53 @@ impl Governance {
                     .collect();
                 // Conversion is safe because usize is u32, and in far future perhaps u64
                 let potential_voting_power = ballots.len() as u64;
-                (ballots, potential_voting_power)
+                let previous_ballots_timestamp_seconds = None;
+                Ok((
+                    ballots,
+                    potential_voting_power,
+                    previous_ballots_timestamp_seconds,
+                ))
             }
-            // For normal proposals, every neuron with a
-            // dissolve delay over six months is allowed to
-            // vote, with a voting power determined at the
-            // time of the proposal (i.e., now).
+            // For normal proposals, every neuron with a dissolve delay over six months is allowed
+            // to vote, with a voting power determined at the time of the proposal (i.e., now).
             _ => {
-                let voting_power_snapshot = self
+                let current_voting_power_snapshot = self
                     .neuron_store
                     .compute_voting_power_snapshot_for_standard_proposal(
                         self.voting_power_economics(),
                         now_seconds,
                     )?;
 
-                <(HashMap<u64, Ballot>, u64)>::from(voting_power_snapshot)
-            }
-        };
+                // Check if there is a voting power spike. If there is, then the return value here
+                // will be `Some(...)`.
+                let maybe_previous_ballots_if_voting_power_spike_detected = VOTING_POWER_SNAPSHOTS
+                    .with_borrow(|snapshots| {
+                        snapshots.previous_ballots_if_voting_power_spike_detected(
+                            current_voting_power_snapshot.total_potential_voting_power(),
+                        )
+                    });
 
-        Ok((ballots, potential_voting_power))
+                let (voting_power_snapshot, previous_ballots_timestamp_seconds) =
+                    match maybe_previous_ballots_if_voting_power_spike_detected {
+                        // This is the extraordinary case - we have a voting power spike, and we
+                        // need to use the previous snapshot.
+                        Some((previous_snapshot_timestamp, previous_snapshot)) => {
+                            (previous_snapshot, Some(previous_snapshot_timestamp))
+                        }
+                        // This is the normal case - we have no voting power spike, so we use the
+                        // current snapshot.
+                        None => (current_voting_power_snapshot, None),
+                    };
+
+                let (ballots, total_potential_voting_power) =
+                    <(HashMap<u64, Ballot>, u64)>::from(voting_power_snapshot);
+                Ok((
+                    ballots,
+                    total_potential_voting_power,
+                    previous_ballots_timestamp_seconds,
+                ))
+            }
+        }
     }
 
     /// Calculate the reject_cost_e8s of a proposal. This value is set in `ProposalData` and

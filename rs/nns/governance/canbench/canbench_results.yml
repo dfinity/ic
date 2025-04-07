@@ -63,7 +63,7 @@ benches:
     total:
       instructions: 1790506
       heap_increase: 0
-      stable_memory_increase: 0
+      stable_memory_increase: 128
     scopes: {}
   distribute_rewards_with_stable_neurons:
     total:
