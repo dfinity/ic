@@ -17,8 +17,6 @@ use ic_types::{
     xnet::StreamHeader,
     Cycles,
 };
-use ic_management_canister_types_private::{FetchCanisterLogsRequest, FetchCanisterLogsResponse, CanisterLogRecord};
-//use types::management_canister_types::{};
 use proptest::prop_compose;
 use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
 use std::collections::{BTreeMap, BTreeSet};
@@ -338,23 +336,20 @@ impl SubnetPair {
         }
     }
 
-    //pub fn fetch_canister_logs(&self, canister: &CanisterId) -> Vec<String> {
-    pub fn fetch_canister_logs(&self, canister: &CanisterId) -> Vec<CanisterLogRecord> {
-        let reply = self
+    /// Returns the canister logs for `canister` as a vector of error messages.
+    pub fn canister_logs(&self, canister: &CanisterId) -> Vec<String> {
+        self
             .get_env(canister)
-            .query(
-                CanisterId::ic_00(),
-                "fetch_canister_logs",
-                candid::Encode!(&FetchCanisterLogsRequest::new(*canister)).unwrap(),
-            )
-            .unwrap();
-        candid::Decode!(&reply.bytes(), FetchCanisterLogsResponse)
-            .unwrap()
-            .canister_log_records
+            .canister_log(*canister)
+            .records()
+            .iter()
+            .map(|record| String::from_utf8(record.content.clone()).unwrap())
+            .collect()
+
+//            .fetch_canister_logs(*canister)
+//            .unwrap()
 //            .into_iter()
-//            .map(|record| {
-//                String::from_utf8(record.content).unwrap()
-//            })
+//            .map(|record| String::from_utf8(record.content).unwrap())
 //            .collect()
     }
 
@@ -576,6 +571,9 @@ impl SubnetPair {
     /// Asserts no critical errors were recorded in the metrics; and checks canisters did not
     /// record any trap messages.
     pub fn assert_no_critical_errors(&self) -> Result<(), (String, DebugInfo)> {
+        self.local_env.check_critical_errors();
+        self.remote_env.check_critical_errors();
+
         for env in [&self.local_env, &self.remote_env] {
             for metric in [
                 "mr_bad_reject_signal_for_response",

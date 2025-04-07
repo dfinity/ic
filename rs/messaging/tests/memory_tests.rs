@@ -203,7 +203,9 @@ fn check_calls_conclude_with_migrating_canister_impl(
     for _ in 0..chatter_phase_round_count {
         subnets.local_env.tick();
     }
-    let logs = subnets.fetch_canister_logs(subnets.local_canister());
+    //let log = subnets.local_env.canister_log(*subnets.local_canister());
+    //assert!(false, "{:#?}", log);
+    let logs = subnets.canister_logs(subnets.local_canister());
     assert!(false, "{:#?}", logs);
 
 
@@ -238,7 +240,7 @@ fn check_calls_conclude_with_migrating_canister_impl(
    
 
     if let Err(_) = subnets.tick_to_conclusion(shutdown_phase_max_rounds, || Ok(())) {
-        let logs = subnets.fetch_canister_logs(&migrating_canister);
+        let logs = subnets.canister_logs(&migrating_canister);
         assert!(false, "{:#?}", logs);
         for _ in 0..20000 {
             subnets.tick();

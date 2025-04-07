@@ -3590,18 +3590,18 @@ impl StateMachine {
     }
 
     /// Calls the `fetch_canister_logs` endpoint on the management canister.
-    pub fn canister_logs(
+    pub fn fetch_canister_logs(
         &self,
         canister_id: CanisterId,
     ) -> Result<Vec<CanisterLogRecord>, UserError> {
-        self.canister_logs_as(PrincipalId::new_anonymous(), canister_id)
+        self.fetch_canister_logs_as(PrincipalId::new_anonymous(), canister_id)
     }
 
     /// Calls the 'fetch_canister_logs' endpoint on the managenent canister of the specified
     /// sender.
     ///
     /// Use this if the `canister_id` is controlled by `sender`.
-    pub fn canister_logs_as(
+    pub fn fetch_canister_logs_as(
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
