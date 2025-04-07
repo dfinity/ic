@@ -311,15 +311,13 @@ async fn set_custom_sns_topics_test() {
 
         let proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
 
-        let proposal_data = sns::governance::wait_for_proposal_execution(
+        sns::governance::wait_for_proposal_execution(
             &pocket_ic,
             sns.governance.canister_id,
             proposal_id,
         )
         .await
         .unwrap();
-
-        panic!("proposal_data = {:#?}", proposal_data);
     }
 
     // Assert that the intended changes took place in the list of topics.
