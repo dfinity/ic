@@ -112,7 +112,7 @@ pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
         return false;
     }
 
-    let bytes : [u8; 48] = bytes.try_into().expect("Size already checked");
+    let bytes: [u8; 48] = bytes.try_into().expect("Size already checked");
 
     option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some()
 }
