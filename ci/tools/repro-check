@@ -269,7 +269,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
                         progressbar(sofar / length)
                     if interrupted:
                         tmp_file.unlink()
-                        return Path
+                        return dest_path
         if length is not None and length != sofar:
             raise RuntimeError(
                 "Error downloading %s -> %s. File is supposed to be %s bytes, is %s bytes.",
