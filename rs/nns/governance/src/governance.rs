@@ -92,8 +92,8 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     pb::v1::{
@@ -105,6 +105,9 @@ use ic_nns_governance_api::{
     },
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
+};
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -7787,7 +7790,62 @@ impl Governance {
     async fn get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister(
         &self,
     ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
-        unimplemented!()
+        let response: Vec<u8> = self.env.call_canister_method(
+            NODE_REWARDS_CANISTER_ID,
+            "get_node_providers_monthly_xdr_rewards",
+            Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {registry_version: None }).unwrap(),
+        ).await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
+                        code, msg
+                    ),
+                )
+            })?;
+
+        let response =
+            Decode!(&response, GetNodeProvidersMonthlyXdrRewardsResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Cannot decode return type from get_node_providers_monthly_xdr_rewards \
+                        as GetNodeProvidersMonthlyXdrRewardsResponse'. Error: {}",
+                        err,
+                    ),
+                )
+            })?;
+
+        let GetNodeProvidersMonthlyXdrRewardsResponse { rewards, error } = response;
+
+        if let Some(err_msg) = error {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Error calling 'get_node_providers_monthly_xdr_rewards': {}",
+                    err_msg
+                ),
+            ));
+        }
+
+        if let Some(rewards) = rewards {
+            let ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+                rewards,
+                registry_version,
+            } = rewards;
+            let rewards = rewards
+                .into_iter()
+                .map(|(principal, amount)| (PrincipalId::from(principal), amount))
+                .collect();
+            return Ok((rewards, registry_version));
+        }
+
+        return Err(GovernanceError::new_with_message(
+            ErrorType::Unspecified,
+            "get_node_providers_monthly_xdr_rewards returned empty response, \
+                which should be impossible.",
+        ));
     }
 
     /// A helper to get the node provider rewards from registry (instead of Node Provider Reward Canister)

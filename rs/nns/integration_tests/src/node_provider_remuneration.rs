@@ -290,8 +290,14 @@ fn test_automated_node_provider_remuneration() {
 fn test_automated_node_provider_remuneration_with_node_reward_canister() {
     // This test can pass after we get the integration working with the NR canister
 
-    // that requires fixing the test setup function so that the canister exists
-    // Then the implementation in governance that makes the request needs to be done.
+    // DONE: Then the implementation in governance that makes the request needs to be done.
+
+    // that requires fixing the test setup function so that the canister exists.
+    // Ideally, this can be done for any "nns" setup.
+
+    // These tests may need some attention:
+    //  test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewards
+    //     test_mint_monthly_node_provider_rewards
 
     do_test_automated_node_provider_remuneration(&["test"]);
 }

@@ -28,10 +28,11 @@ use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
-    NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
-    SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
@@ -68,7 +69,10 @@ use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
 use ic_types::{ingress::WasmResult, Cycles};
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
+use icp_ledger::{
+    AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
+    SendArgs, Tokens,
+};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
@@ -570,6 +574,24 @@ pub fn setup_nns_governance_with_correct_canister_id(
         .unwrap();
 }
 
+pub fn setup_nns_ledger_canister_with_correct_canister_id(
+    machine: &StateMachine,
+    init_payload: LedgerCanisterInitPayload,
+) {
+    let canister_id =
+        ensure_canister_id_exists_at_position(machine, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, None);
+
+    let wasm = build_ledger_wasm();
+    machine
+        .install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Install,
+            wasm.bytes(),
+            Encode!(&init_payloads.ledger).unwrap(),
+        )
+        .unwrap();
+}
+
 pub fn setup_nns_root_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: RootCanisterInitPayload,
@@ -670,22 +692,14 @@ pub fn setup_nns_canisters_with_features(
                 .build(),
         ),
     );
+    // IF everything worked perfectly, this would work fine
+    ensure_canister_id_exists_at_position(machine, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, None);
+
     assert_eq!(registry_canister_id, REGISTRY_CANISTER_ID);
 
     setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance, features);
 
-    let ledger_canister_id = create_canister(
-        machine,
-        build_ledger_wasm(),
-        Some(Encode!(&init_payloads.ledger).unwrap()),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation_of(LEDGER_CANISTER_ID))
-                .with_controllers(vec![ROOT_CANISTER_ID.get()])
-                .build(),
-        ),
-    );
-    assert_eq!(ledger_canister_id, LEDGER_CANISTER_ID);
+    setup_nns_ledger_canister_with_correct_canister_id(machine, init_payloads.ledger);
 
     setup_nns_root_with_correct_canister_id(machine, init_payloads.root);
 
