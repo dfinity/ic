@@ -88,6 +88,7 @@ mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 rcgen = { workspace = true }
+reqwest = { workspace = true }
 rstest = { workspace = true }
 rustls = { workspace = true }
 serde_bytes = { workspace = true }

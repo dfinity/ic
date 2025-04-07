@@ -9160,6 +9160,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "rcgen",
+ "reqwest 0.12.12",
  "rstest",
  "rustls 0.23.22",
  "serde",
