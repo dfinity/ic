@@ -196,7 +196,7 @@ fn check_calls_conclude_with_migrating_canister_impl(
         subnets.remote_env.stop_canister(*canister).unwrap();
     }
 
-    // Send `config` to local canisters and seed the rng..
+    // Send `config` to local canisters and seed the rng.
     for canister in subnets.local_canisters.iter() {
         subnets.set_config(canister, config.clone());
         subnets.seed_rng(canister, seed)
