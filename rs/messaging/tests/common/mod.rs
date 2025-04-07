@@ -9,7 +9,6 @@ use ic_config::{
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_test_utilities_metrics::fetch_counter_vec;
 use ic_types::{
@@ -19,7 +18,7 @@ use ic_types::{
 };
 use proptest::prop_compose;
 use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const LOCAL_SUBNET_ID: SubnetId = ic_test_utilities_types::ids::SUBNET_0;
@@ -34,7 +33,7 @@ prop_compose! {
     pub fn arb_canister_config(max_payload_bytes: u32, max_calls_per_heartbeat: u32)(
         max_call_bytes in 0..=max_payload_bytes,
         max_reply_bytes in 0..=max_payload_bytes,
-        calls_per_heartbeat in 0..=max_calls_per_heartbeat,
+        calls_per_heartbeat in 1..=max_calls_per_heartbeat,
         max_timeout_secs in 10..=100_u32,
         downstream_call_percentage in 0..=100_u32,
         best_effort_call_percentage in 0..=100_u32,
@@ -69,10 +68,10 @@ impl Default for SubnetPairConfig {
     fn default() -> Self {
         Self {
             local_canisters_count: 2,
-            local_max_instructions_per_round: 100_000_000,
+            local_max_instructions_per_round: 1_000_000_000,
             local_message_memory_capacity: 100 * MB,
             remote_canisters_count: 1,
-            remote_max_instructions_per_round: 100_000_000,
+            remote_max_instructions_per_round: 1_000_000_000,
             remote_message_memory_capacity: 50 * MB,
         }
     }
@@ -137,9 +136,7 @@ impl SubnetPairConfig {
 #[derive(Debug, Clone)]
 pub struct SubnetPair {
     pub local_env: Arc<StateMachine>,
-    pub local_canisters: BTreeSet<CanisterId>,
     pub remote_env: Arc<StateMachine>,
-    pub remote_canisters: BTreeSet<CanisterId>,
 }
 
 impl SubnetPair {
@@ -158,9 +155,9 @@ impl SubnetPair {
             .with_routing_table(routing_table.clone())
             .with_config(Some(config.local_state_machine_config()))
             .build();
-        let local_canisters = (0..config.local_canisters_count)
-            .map(|_| install_canister(&local_env, wasm.clone()))
-            .collect();
+        for _ in 0..config.local_canisters_count {
+            install_canister(&local_env, wasm.clone());
+        }
 
         // Generate remote environment and install canisters.
         let remote_env = StateMachineBuilder::new()
@@ -169,15 +166,13 @@ impl SubnetPair {
             .with_routing_table(routing_table.clone())
             .with_config(Some(config.remote_state_machine_config()))
             .build();
-        let remote_canisters = (0..config.remote_canisters_count)
-            .map(|_| install_canister(&remote_env, wasm.clone()))
-            .collect();
+        for _ in 0..config.remote_canisters_count {
+            install_canister(&remote_env, wasm.clone());
+        }
 
         Self {
             local_env: local_env.into(),
-            local_canisters,
             remote_env: remote_env.into(),
-            remote_canisters,
         }
     }
 
@@ -191,70 +186,106 @@ impl SubnetPair {
             remote_canisters_count: 1,
             ..SubnetPairConfig::default()
         });
-        (
-            *subnets.local_canister(),
-            *subnets.remote_canister(),
-            subnets,
-        )
+        (subnets.local_canister(), subnets.remote_canister(), subnets)
     }
 
-    /// Returns all canisters installed in the fixture, local canisters first.
-    pub fn canisters(&self) -> Vec<CanisterId> {
-        self.local_canisters
-            .iter()
+    /// Returns the local canisters installed in `self`.
+    pub fn local_canisters(&self) -> Vec<CanisterId> {
+        self.local_env
+            .get_latest_state()
+            .canister_states
+            .keys()
             .cloned()
-            .chain(self.remote_canisters.iter().cloned())
             .collect()
     }
 
+    /// Returns the local canisters installed in `self`.
+    pub fn remote_canisters(&self) -> Vec<CanisterId> {
+        self.remote_env
+            .get_latest_state()
+            .canister_states
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    /// Returns all canisters installed in the `self`, local canisters first.
+    pub fn canisters(&self) -> Vec<CanisterId> {
+        let mut canisters = self.local_canisters();
+        canisters.append(&mut self.remote_canisters());
+        canisters
+    }
+
     /// Returns a reference to the first local canister ID. Note: Even though more complex
-    /// traffic can be simulated with multiple canisters installed on `Self`, it is enough
+    /// traffic can be simulated with multiple canisters installed on `self`, it is enough
     /// for most purposes to look at the first local canister.
     ///
     /// # Panics
     ///
     /// This function panics of no canisters exist on the `local_env`.
-    pub fn local_canister(&self) -> &CanisterId {
-        self.local_canisters.first().unwrap()
+    pub fn local_canister(&self) -> CanisterId {
+        *self
+            .local_env
+            .get_latest_state()
+            .canister_states
+            .keys()
+            .next()
+            .unwrap()
     }
 
     /// Returns a reference to the first remote canister ID. Note: Even though more complex
-    /// traffic can be simulated with multiple canisters installed on `Self`, it is enough
+    /// traffic can be simulated with multiple canisters installed on `self`, it is enough
     /// for most purposes to look at the first remote canister.
     ///
     /// # Panics
     ///
     /// This function panics of no canisters exist on the `remote_env`.
-    pub fn remote_canister(&self) -> &CanisterId {
-        self.remote_canisters.first().unwrap()
+    pub fn remote_canister(&self) -> CanisterId {
+        *self
+            .remote_env
+            .get_latest_state()
+            .canister_states
+            .keys()
+            .next()
+            .unwrap()
     }
 
     /// Returns a reference to `self.local_env` if `canister` is installed on it.
     /// Else a reference to `self.remote_env` if `canister` is installed on it.
     ///
     /// Panics if `canister` is not installed on either env.
-    pub fn get_env(&self, canister: &CanisterId) -> &StateMachine {
-        if self.local_canisters.contains(canister) {
+    pub fn get_env(&self, canister: CanisterId) -> &StateMachine {
+        if self
+            .local_env
+            .get_latest_state()
+            .canister_states
+            .contains_key(&canister)
+        {
             return &self.local_env;
         }
-        if self.remote_canisters.contains(canister) {
+        if self
+            .remote_env
+            .get_latest_state()
+            .canister_states
+            .contains_key(&canister)
+        {
             return &self.remote_env;
         }
-        unreachable!();
+        unreachable!("{canister} not found on the `SubnetPair`");
     }
 
     /// Helper function for update calls to `canister`; returns the current `T` as it was before
     /// this call.
     ///
     /// Panics if `canister` is not installed in `self`.
-    fn set_canister_state<T>(&self, canister: &CanisterId, method: &str, item: T) -> T
+    fn set_canister_state<T>(&self, canister: CanisterId, method: &str, item: T) -> T
     where
         T: candid::CandidType + for<'a> candid::Deserialize<'a>,
     {
         let msg = candid::Encode!(&item).unwrap();
         let reply = self
             .get_env(canister)
-            .execute_ingress(*canister, method, msg)
+            .execute_ingress(canister, method, msg)
             .unwrap();
         candid::Decode!(&reply.bytes(), T).unwrap()
     }
@@ -262,25 +293,25 @@ impl SubnetPair {
     /// Sets the `CanisterConfig` in `canister`; returns the current config.
     ///
     /// Panics if `canister` is not installed in `self`.
-    pub fn set_config(&self, canister: &CanisterId, config: CanisterConfig) -> CanisterConfig {
+    pub fn set_config(&self, canister: CanisterId, config: CanisterConfig) -> CanisterConfig {
         self.set_canister_state(canister, "set_config", config)
     }
 
     /// Seeds the `Rng` in `canister`.
     ///
     /// Panics if `canister` is not installed in `self`.
-    pub fn seed_rng(&self, canister: &CanisterId, seed: u64) {
+    pub fn seed_rng(&self, canister: CanisterId, seed: u64) {
         let msg = candid::Encode!(&seed).unwrap();
         self.get_env(canister)
-            .execute_ingress(*canister, "seed_rng", msg)
+            .execute_ingress(canister, "seed_rng", msg)
             .unwrap();
     }
 
     /// Starts `canister`.
     ///
     /// Panics if `canister` is not installed in `self`.
-    pub fn start_canister(&self, canister: &CanisterId) {
-        self.get_env(canister).start_canister(*canister).unwrap();
+    pub fn start_canister(&self, canister: CanisterId) {
+        self.get_env(canister).start_canister(canister).unwrap();
     }
 
     /// Puts `canister` into `Stopping` state.
@@ -289,17 +320,17 @@ impl SubnetPair {
     /// that can be awaited later with [await_ingress].
     ///
     /// Panics if `canister` is not installed in `self`.
-    pub fn stop_canister_non_blocking(&self, canister: &CanisterId) -> MessageId {
-        self.get_env(canister).stop_canister_non_blocking(*canister)
+    pub fn stop_canister_non_blocking(&self, canister: CanisterId) -> MessageId {
+        self.get_env(canister).stop_canister_non_blocking(canister)
     }
 
     /// Calls the `stop_chatter()` function on `canister`.
     ///
     /// This stops the canister from making calls, downstream and from the heartbeat.
-    pub fn stop_chatter(&self, canister: &CanisterId) -> CanisterConfig {
+    pub fn stop_chatter(&self, canister: CanisterId) -> CanisterConfig {
         let reply = self
             .get_env(canister)
-            .execute_ingress(*canister, "stop_chatter", candid::Encode!().unwrap())
+            .execute_ingress(canister, "stop_chatter", candid::Encode!().unwrap())
             .unwrap();
         candid::Decode!(&reply.bytes(), CanisterConfig).unwrap()
     }
@@ -309,22 +340,23 @@ impl SubnetPair {
     /// Panics if `canister` is not installed in `self`.
     pub fn query<T: candid::CandidType + for<'a> candid::Deserialize<'a>>(
         &self,
-        canister: &CanisterId,
+        canister: CanisterId,
         method: &str,
     ) -> Result<T, UserError> {
         let reply = self
             .get_env(canister)
-            .query(*canister, method, candid::Encode!().unwrap())?;
+            .query(canister, method, candid::Encode!().unwrap())?;
         Ok(candid::Decode!(&reply.bytes(), T).unwrap())
     }
 
-    /// Force queries `canister` for `method` by first attempting to a normal query; if it fails, start
-    /// the canister and try again.
+    /// Force queries `canister` for `method` by first attempting a normal query; if it fails, start
+    /// the `canister` and try again.
     ///
-    /// Panics if `canister` is not installed in `self`.
+    /// # Panics if `canister` is not installed in `self`; or if the query fails after starting the
+    /// canister.
     pub fn force_query<T: candid::CandidType + for<'a> candid::Deserialize<'a>>(
         &self,
-        canister: &CanisterId,
+        canister: CanisterId,
         method: &str,
     ) -> T {
         match self.query::<T>(canister, method) {
@@ -336,21 +368,14 @@ impl SubnetPair {
         }
     }
 
-    /// Returns the canister logs for `canister` as a vector of error messages.
-    pub fn canister_logs(&self, canister: &CanisterId) -> Vec<String> {
+    /// Returns the `canister` logs as a vector of error messages.
+    pub fn canister_logs(&self, canister: CanisterId) -> Vec<String> {
         self.get_env(canister)
-            .canister_log(*canister)
+            .canister_log(canister)
             .records()
             .iter()
             .map(|record| String::from_utf8(record.content.clone()).unwrap())
             .collect()
-    }
-
-    /// Returns the latest state `canister` is located on.
-    ///
-    /// Panics if `canister` is not installed on either env.
-    pub fn get_latest_state(&self, canister: &CanisterId) -> Arc<ReplicatedState> {
-        self.get_env(canister).get_latest_state()
     }
 
     /// Returns the bytes consumed by guaranteed response messages: `(local_env, remote_env)`.
@@ -424,7 +449,8 @@ impl SubnetPair {
             .into_iter()
             .map(|canister| {
                 let count = self
-                    .get_latest_state(&canister)
+                    .get_env(canister)
+                    .get_latest_state()
                     .canister_states
                     .get(&canister)
                     .unwrap()
@@ -493,7 +519,7 @@ impl SubnetPair {
         // Check the records agree on 'no pending calls'.
         if self
             .canisters()
-            .iter()
+            .into_iter()
             .map(|canister| extract_metrics(&self.force_query(canister, "records")))
             .any(|metrics| metrics.pending_calls != 0)
         {
@@ -519,21 +545,14 @@ impl SubnetPair {
     /// Migrates `canister` from `local_env` to `remote_env`.
     ///
     /// # Panics if `canister` does not exist on `local_env`.
-    pub fn migrate_local_canister_to_remote_env(&mut self, canister: &CanisterId) {
+    pub fn migrate_local_canister_to_remote_env(&self, canister: CanisterId) {
         for env in [&self.local_env, &self.remote_env] {
-            env.prepare_canister_migrations(
-                *canister..=*canister,
-                LOCAL_SUBNET_ID,
-                REMOTE_SUBNET_ID,
-            );
-            env.reroute_canister_range(*canister..=*canister, REMOTE_SUBNET_ID);
+            env.prepare_canister_migrations(canister..=canister, LOCAL_SUBNET_ID, REMOTE_SUBNET_ID);
+            env.reroute_canister_range(canister..=canister, REMOTE_SUBNET_ID);
         }
         self.local_env
-            .move_canister_state_to(&self.remote_env, *canister)
+            .move_canister_state_to(&self.remote_env, canister)
             .unwrap();
-
-        assert!(self.local_canisters.remove(canister));
-        assert!(self.remote_canisters.insert(*canister));
     }
 
     /// Returns the canister records, the latest local state and the latest remote state.
@@ -545,8 +564,8 @@ impl SubnetPair {
             DebugInfo {
                 records: self
                     .canisters()
-                    .iter()
-                    .map(|canister| (*canister, self.force_query(canister, "records")))
+                    .into_iter()
+                    .map(|canister| (canister, self.force_query(canister, "records")))
                     .collect(),
                 subnets: self.clone(),
             },
@@ -560,7 +579,7 @@ impl SubnetPair {
             .into_iter()
             .filter_map(|canister| {
                 let log = self
-                    .get_env(&canister)
+                    .get_env(canister)
                     .canister_log(canister)
                     .records()
                     .iter()
@@ -569,13 +588,14 @@ impl SubnetPair {
                         err_msg.contains("[TRAP]").then_some(err_msg)
                     })
                     .collect::<Vec<_>>();
+
                 (!log.is_empty()).then_some((canister, log))
             })
             .collect()
     }
 
     /// Asserts no critical errors were recorded in the metrics; and checks canisters did not
-    /// record any trap messages.
+    /// log any trap messages.
     pub fn check_critical_errors_and_traps(&self) -> Result<(), (String, DebugInfo)> {
         // Checks for critical errors on the `metrics_registry`.
         fn check_critical_errors(env: &StateMachine) -> Result<(), String> {
@@ -615,7 +635,7 @@ pub fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
         .expect("Installing random-traffic-test-canister failed")
 }
 
-/// Returns a snapshot of an XNet stream as stream header and a vec of messages.
+/// Returns a snapshot of an XNet stream as a stream header and a vec of messages.
 pub fn stream_snapshot(
     from_subnet: &StateMachine,
     to_subnet: &StateMachine,

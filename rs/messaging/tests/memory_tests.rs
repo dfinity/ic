@@ -69,7 +69,7 @@ fn check_message_memory_limits_are_respected_impl(
     config.receivers = subnets.canisters();
 
     // Send configs to canisters, seed the rng.
-    for (index, canister) in subnets.canisters().iter().enumerate() {
+    for (index, canister) in subnets.canisters().into_iter().enumerate() {
         subnets.set_config(canister, config.clone());
         subnets.seed_rng(canister, seeds[index]);
     }
@@ -88,7 +88,7 @@ fn check_message_memory_limits_are_respected_impl(
 
     // Shut down chatter by putting a canister into `Stopping` state every 10 ticks until they are
     // all `Stopping` or `Stopped`.
-    for canister in subnets.canisters().iter() {
+    for canister in subnets.canisters().into_iter() {
         subnets.stop_chatter(canister);
         subnets.stop_canister_non_blocking(canister);
         for _ in 0..10 {
@@ -119,42 +119,11 @@ fn check_calls_conclude_with_migrating_canister(
     #[strategy(arb_canister_config(KB as u32, 10))] config: CanisterConfig,
 ) {
     if let Err((err_msg, nfo)) = check_calls_conclude_with_migrating_canister_impl(
-        10,  // chatter_phase_round_count
-        200, // shutdown_phase_max_rounds
+        30,  // msgs_in_stream_min_count
+        300, // shutdown_phase_max_rounds
         seed, config,
     ) {
         unreachable!("\nerr_msg: {err_msg}\n{:#?}", nfo.records);
-    }
-}
-
-#[test]
-fn bla() {
-    let seed = 14145790411184754753;
-    let config = CanisterConfig {
-        receivers: vec![],
-        call_bytes_range: (0, 0),
-        reply_bytes_range: (0, 179),
-        instructions_count_range: (0, 0),
-        timeout_secs_range: (0, 75),
-        calls_per_heartbeat: 8,
-        downstream_call_percentage: 61,
-        //best_effort_call_percentage: 33,
-        best_effort_call_percentage: 0,
-    };
-
-    if let Err((err_msg, nfo)) =
-        check_calls_conclude_with_migrating_canister_impl(10, 200, seed, config)
-    {
-        unreachable!(
-            "\nerr_msg: {err_msg}\n{:#?}\n{:#?}",
-            nfo.records,
-            //nfo.subnets.remote_env.get_latest_state()
-            nfo.subnets
-                .local_env
-                .get_latest_state()
-                .canister_states
-                .get(nfo.subnets.local_canister())
-        );
     }
 }
 
@@ -162,7 +131,7 @@ fn bla() {
 /// remote subnet with 5 canisters installed. All remote canisters are stopped.
 ///
 /// In the first phase a number of rounds are executed on the local subnet only to accumulate
-/// requests in the stream to the remote subnet.
+/// at least `msgs_in_stream_min_count` requests in the stream to the remote subnet.
 ///
 /// For the second phase, the messages in the stream are inducted into the remote subnet. This will
 /// generate reject signals for requests because all remote canisters are stopped.
@@ -171,19 +140,18 @@ fn bla() {
 /// can not be inducted because the corresponding canister was just migrated.
 ///
 /// For the third phase all local canisters and the migrated canister stop making calls; then
-/// regular XNet traffic is simulated until all calls have concluded (including self-calls
-/// made from the heartbeat by the random traffic canister).
+/// regular XNet traffic is simulated until all calls have concluded.
 ///
 /// If there are pending calls after a threshold number of rounds, there is most likely a bug
 /// connected to reject signals for requests, specifically with the corresponding exceptions due to
 /// canister migration.
 fn check_calls_conclude_with_migrating_canister_impl(
-    chatter_phase_round_count: usize,
+    msgs_in_stream_min_count: usize,
     shutdown_phase_max_rounds: usize,
     seed: u64,
     mut config: CanisterConfig,
 ) -> Result<(), (String, DebugInfo)> {
-    let mut subnets = SubnetPair::new(SubnetPairConfig {
+    let subnets = SubnetPair::new(SubnetPairConfig {
         local_canisters_count: 2,
         remote_canisters_count: 5,
         ..SubnetPairConfig::default()
@@ -192,20 +160,25 @@ fn check_calls_conclude_with_migrating_canister_impl(
     config.receivers = subnets.canisters();
 
     // Stop all remote canisters.
-    for canister in subnets.remote_canisters.iter() {
-        subnets.remote_env.stop_canister(*canister).unwrap();
+    for canister in subnets.remote_canisters() {
+        subnets.remote_env.stop_canister(canister).unwrap();
     }
 
     // Send `config` to local canisters and seed the rng.
-    for canister in subnets.local_canisters.iter() {
+    for canister in subnets.local_canisters() {
         subnets.set_config(canister, config.clone());
         subnets.seed_rng(canister, seed)
     }
 
-    // Tick on `local_env` only to accumulate messages in the stream to `remote_subnet`.
-    for _ in 0..chatter_phase_round_count {
+    // Tick on `local_env` only until at least `msgs_in_stream_min_count` messages
+    // are accumulated in the stream from `local_env` to `remote_env`.
+    subnets.repeat(3 * msgs_in_stream_min_count, || {
         subnets.local_env.tick();
-    }
+        Ok(matches!(
+            stream_snapshot(&subnets.local_env, &subnets.remote_env),
+            Some((_, messages)) if messages.len() >= msgs_in_stream_min_count
+        ))
+    })?;
 
     // Induct the stream into `remote_env` and ensure there are reject signals in the reverse
     // stream header.
@@ -214,13 +187,13 @@ fn check_calls_conclude_with_migrating_canister_impl(
     }
     if let Some((header, _)) = stream_snapshot(&subnets.remote_env, &subnets.local_env) {
         if header.reject_signals().is_empty() {
-            return subnets.failed_with_reason("no reject signals in reverse stream");
+            return subnets.failed_with_reason("no reject signals in the reverse stream");
         }
     }
 
     // Migrate the first local canister.
-    let migrating_canister = *subnets.local_canister();
-    subnets.migrate_local_canister_to_remote_env(&migrating_canister);
+    let migrating_canister = subnets.local_canister();
+    subnets.migrate_local_canister_to_remote_env(migrating_canister);
 
     // Induct the reverse stream header of `remote_env` to trigger gc.
     induct_from_head_of_stream(&subnets.remote_env, &subnets.local_env, None).unwrap();
@@ -228,9 +201,9 @@ fn check_calls_conclude_with_migrating_canister_impl(
     // Stop chatter on all local canisters and the migrating canister; then tick until all calls
     // have concluded.
     for canister in subnets
-        .local_canisters
-        .iter()
-        .chain(std::iter::once(&migrating_canister))
+        .local_canisters()
+        .into_iter()
+        .chain(std::iter::once(migrating_canister))
     {
         subnets.stop_chatter(canister);
     }
@@ -275,29 +248,29 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
     let (local_canister, remote_canister, subnets) = SubnetPair::with_local_and_remote_canister();
     config.receivers = subnets.canisters();
 
-    subnets.seed_rng(&local_canister, seeds[0]);
-    subnets.seed_rng(&remote_canister, seeds[1]);
+    subnets.seed_rng(local_canister, seeds[0]);
+    subnets.seed_rng(remote_canister, seeds[1]);
 
     // Set the local `config` adapted such that only best-effort calls are made.
     subnets.set_config(
-        &local_canister,
+        local_canister,
         CanisterConfig {
             best_effort_call_percentage: 100,
             ..config.clone()
         },
     );
     // Set the remote `config` as is.
-    subnets.set_config(&remote_canister, config);
+    subnets.set_config(remote_canister, config);
 
     // Make calls on both canisters.
     for _ in 0..chatter_phase_round_count {
         subnets.tick();
     }
     // Stop chatter on the local canister.
-    subnets.stop_chatter(&local_canister);
+    subnets.stop_chatter(local_canister);
 
     // Put local canister into `Stopping` state.
-    let msg_id = subnets.stop_canister_non_blocking(&local_canister);
+    let msg_id = subnets.stop_canister_non_blocking(local_canister);
 
     // Tick for up to `shutdown_phase_max_rounds` times on the local subnet only
     // or until the local canister has stopped.
