@@ -8,7 +8,6 @@ index 7e98e0226..b942d0d4a 100644
  pub use rex::RexFlags;
  
 -/// List the files generated to create this assembler.
--#[must_use]
 -pub fn generated_files() -> Vec<std::path::PathBuf> {
 -    include!(concat!(env!("OUT_DIR"), "/generated-files.rs"))
 +/// Return the contents of `assembler-definitions.isle` which is needed to
