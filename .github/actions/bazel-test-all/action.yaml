@@ -116,7 +116,7 @@ runs:
             echo "Bazel version: $(bazel version)"
 
             if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
+              faketime '2027-12-24 08:15:42' bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
             else
-              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+              faketime '2027-12-24 08:15:42' bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
             fi
