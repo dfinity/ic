@@ -17,12 +17,6 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-BUILD_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
 ALIASES = {}
 
 rust_library(
