@@ -94,7 +94,7 @@ impl OrchestratorMetrics {
                 "The duration of the last fstrim call, in milliseconds",
             ),
             critical_error_task_panicked: metrics_registry.int_counter_vec(
-                "orchestrator_task_panicked",
+                "orchestrator_tasks_panicked_total",
                 "Number of times a task panicked, grouped by the task name",
                 &["task_name"],
             ),
