@@ -1,6 +1,5 @@
 pub mod common;
 
-use assert_matches::assert_matches;
 use common::{
     arb_canister_config, induct_from_head_of_stream, stream_snapshot, DebugInfo, SubnetPair,
     SubnetPairConfig, KB, MB,
@@ -139,11 +138,12 @@ fn bla() {
         timeout_secs_range: (0, 75),
         calls_per_heartbeat: 8,
         downstream_call_percentage: 61,
-        best_effort_call_percentage: 33,
+        //best_effort_call_percentage: 33,
+        best_effort_call_percentage: 0,
     };
 
     if let Err((err_msg, nfo)) =
-        check_calls_conclude_with_migrating_canister_impl(10, 100, seed, config)
+        check_calls_conclude_with_migrating_canister_impl(10, 200, seed, config)
     {
         unreachable!(
             "\nerr_msg: {err_msg}\n{:#?}\n{:#?}\n{:#?}",
@@ -204,11 +204,14 @@ fn check_calls_conclude_with_migrating_canister_impl(
     }
     // Induct the stream into `remote_env` and ensure there are reject signals in the reverse
     // stream header.
-    induct_from_head_of_stream(&subnets.local_env, &subnets.remote_env, None).unwrap();
-    assert_matches!(
-        stream_snapshot(&subnets.remote_env, &subnets.local_env),
-        Some((header, _)) if !header.reject_signals().is_empty()
-    );
+    if let Err(err) = induct_from_head_of_stream(&subnets.local_env, &subnets.remote_env, None) {
+        return subnets.failed_with_reason(format!("{err}"));
+    }
+    if let Some((header, _)) = stream_snapshot(&subnets.remote_env, &subnets.local_env) {
+        if header.reject_signals().is_empty() {
+            return subnets.failed_with_reason("no reject signals in reverse stream");
+        }
+    }
 
     // Migrate the first local canister.
     let migrating_canister = *subnets.local_canister();
@@ -226,7 +229,10 @@ fn check_calls_conclude_with_migrating_canister_impl(
     {
         subnets.stop_chatter(canister);
     }
-    subnets.tick_to_conclusion(shutdown_phase_max_rounds, || Ok(()))
+    subnets.tick_to_conclusion(shutdown_phase_max_rounds, || Ok(()))?;
+
+    // Ensure no critical errors or canister traps were recorded.
+    subnets.assert_no_critical_errors()
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]

@@ -11,6 +11,7 @@ use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
+use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::{
     messages::{MessageId, RequestOrResponse},
     xnet::StreamHeader,
@@ -548,6 +549,33 @@ impl SubnetPair {
                 (!err_msg.is_empty()).then_some((*canister, err_msg))
             })
             .collect()
+    }
+
+    /// Asserts no critical errors were recorded in the metrics; and checks canisters did not
+    /// record any trap messages.
+    pub fn assert_no_critical_errors(&self) -> Result<(), (String, DebugInfo)> {
+        for env in [&self.local_env, &self.remote_env] {
+            for metric in [
+                "mr_bad_reject_signal_for_response",
+                "mr_sender_subnet_mismatch",
+                "mr_receiver_subnet_mismatch",
+                "mr_request_misrouted",
+                "mr_induct_response_failed",
+            ] {
+                if let Some(counter @ 1..) = fetch_int_counter(&env.metrics_registry, metric) {
+                    return self.failed_with_reason(format!(
+                        "critical error counter '{metric}' is {counter}"
+                    ));
+                }
+            }
+        }
+
+        let traps = self.gather_canister_trap_messages();
+        if !traps.is_empty() {
+            return self.failed_with_reason(format!("got canister traps: {:?}", traps));
+        }
+
+        Ok(())
     }
 }
 
