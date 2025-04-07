@@ -465,8 +465,8 @@ impl CanisterSnapshot {
         size: u64,
     ) -> Result<Vec<u8>, CanisterSnapshotError> {
         let module_bytes = self.execution_snapshot.wasm_binary.as_slice();
-        let end = u64::min(module_bytes.len() as u64, offset + size);
-        if end < offset {
+        let end = offset + size;
+        if end > module_bytes.len() as u64 {
             return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
         }
         Ok(module_bytes[(offset as usize)..(end as usize)].to_vec())

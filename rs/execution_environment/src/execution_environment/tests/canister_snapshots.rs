@@ -23,6 +23,7 @@ use ic_replicated_state::{
     },
     CanisterState, ExecutionState, SchedulerState,
 };
+use ic_sys::PAGE_SIZE;
 use ic_test_utilities_execution_environment::{
     cycles_reserved_for_app_and_verified_app_subnets, get_output_messages, ExecutionTest,
     ExecutionTestBuilder,
@@ -2260,14 +2261,6 @@ fn read_canister_snapshot_data_succeeds() {
     let stable_pages = 65;
     let payload = wasm().stable64_grow(stable_pages).reply().build();
     test.ingress(canister_id, "update", payload).unwrap();
-    // Set some cert data
-    let cert_data = [42];
-    let payload = wasm().certified_data_set(&cert_data).reply().build();
-    test.ingress(canister_id, "update", payload).unwrap();
-    // Set a global timer
-    let timestamp = 43;
-    let payload = wasm().api_global_timer_set(timestamp).reply().build();
-    test.ingress(canister_id, "update", payload).unwrap();
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -2292,7 +2285,7 @@ fn read_canister_snapshot_data_succeeds() {
         ..
     } = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
 
-    // Test geting all binary snapshot data
+    // Test getting all binary snapshot data
     // wasm module
     test_data_wasm_module(
         &mut test,
@@ -2351,7 +2344,7 @@ fn test_data_wasm_module(
         snapshot_id,
         CanisterSnapshotDataKind::WasmModule {
             offset: 0,
-            // currently about 184k, so it fits in a single 2MB message
+            // currently about 184k, so it fits in a single 2MB slice
             size: wasm_module_size,
         },
     );
@@ -2365,7 +2358,7 @@ fn test_data_wasm_heap(
     snapshot_id: SnapshotId,
     wasm_memory_size: u64,
 ) {
-    // wasm_memory_size ~ 3_276_800 does not fit into one slice
+    // wasm_memory_size ~ 3_276_800 does not fit into one 2MB slice
     let max_chunk_size = 2 * 1000 * 1000;
     let rest = wasm_memory_size - max_chunk_size;
     let args_main = ReadCanisterSnapshotDataArgs::new(
@@ -2398,7 +2391,7 @@ fn test_data_stable_memory(
     stable_memory_size: u64,
     stable_pages: u64,
 ) {
-    // stable_memory_size ~ 4259840 does not fit into one slice
+    // stable_memory_size ~ 4259840 does not fit into one 2MB slice
     let max_chunk_size = 2 * 1000 * 1000;
     let mut total_len = 0;
     let rest = stable_memory_size - max_chunk_size * 2;
@@ -2438,6 +2431,115 @@ fn test_data_stable_memory(
     let chunk = read_canister_snapshot_data(test, &args_stable);
     total_len += chunk.len();
     assert_eq!(total_len, stable_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
+}
+
+#[test]
+fn read_canister_snapshot_data_fails_bad_slice() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshot_metadata_download()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+    // Create new canister.
+    let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let canister_id = test
+        .canister_from_cycles_and_binary(
+            Cycles::new(1_000_000_000_000_000),
+            uni_canister_wasm.clone(),
+        )
+        .unwrap();
+    // Grow the stable memory
+    let stable_pages = 3;
+    let payload = wasm().stable64_grow(stable_pages).reply().build();
+    test.ingress(canister_id, "update", payload).unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // get metadata
+    let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let WasmResult::Reply(bytes) = test
+        .subnet_message("read_canister_snapshot_metadata", args.encode())
+        .unwrap()
+    else {
+        panic!("expected WasmResult::Reply")
+    };
+    let md = Decode!(&bytes, ReadCanisterSnapshotMetadataResponse).unwrap();
+
+    // wasm module bad slice fails
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmModule {
+            offset: 0,
+            size: 1 + uni_canister_wasm.len() as u64,
+        },
+    );
+    let Err(err) = test.subnet_message("read_canister_snapshot_data", args_module.encode()) else {
+        panic!("Expected Err(e)");
+    };
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    let max_slice_size = 2 * 1000 * 1000;
+    // wasm heap bad slice fails: slice too large
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory {
+            offset: 0,
+            size: 1 + max_slice_size,
+        },
+    );
+    let Err(err) = test.subnet_message("read_canister_snapshot_data", args_module.encode()) else {
+        panic!("Expected Err(e)");
+    };
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    // wasm heap bad slice fails: exceeds last page
+    let pages = md.wasm_memory_size / PAGE_SIZE as u64;
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory {
+            offset: (pages - 1) * PAGE_SIZE as u64,
+            size: PAGE_SIZE as u64 + 1000,
+        },
+    );
+    let Err(err) = test.subnet_message("read_canister_snapshot_data", args_module.encode()) else {
+        panic!("Expected Err(e)");
+    };
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    // stable memory bad slice fails: slice too large
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: 0,
+            size: 1 + max_slice_size,
+        },
+    );
+    let Err(err) = test.subnet_message("read_canister_snapshot_data", args_module.encode()) else {
+        panic!("Expected Err(e)");
+    };
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
+    // stable memory bad slice fails: execeeds last page
+    let pages = md.stable_memory_size / PAGE_SIZE as u64;
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: (pages - 1) * PAGE_SIZE as u64,
+            size: PAGE_SIZE as u64 + 1000,
+        },
+    );
+    let Err(err) = test.subnet_message("read_canister_snapshot_data", args_module.encode()) else {
+        panic!("Expected Err(e)");
+    };
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
 }
 
 #[test]
