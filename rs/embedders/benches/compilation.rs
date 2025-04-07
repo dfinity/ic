@@ -271,12 +271,10 @@ fn execution(c: &mut Criterion) {
     }
 }
 
-criterion_group!(
-    benchmarks,
-    compilation_cost,
-    wasm_compilation,
-    wasm_deserialization,
-    wasm_validation_instrumentation,
-    execution,
-);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = compilation_cost, wasm_compilation, wasm_deserialization,
+        wasm_validation_instrumentation, execution
+}
 criterion_main!(benchmarks);

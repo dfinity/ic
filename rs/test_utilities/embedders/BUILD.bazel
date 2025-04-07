@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/state",
     "//rs/test_utilities/types",

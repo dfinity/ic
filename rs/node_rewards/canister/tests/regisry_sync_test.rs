@@ -4,7 +4,6 @@ use ic_nns_test_utils::common::{build_node_rewards_test_wasm, NnsInitPayloadsBui
 use ic_nns_test_utils::state_test_helpers::{
     query, setup_nns_canisters, state_machine_builder_for_nns_tests,
 };
-use ic_node_rewards_canister_api::lifecycle_args::InitArgs;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_keys::make_subnet_record_key;
 use ic_types::{PrincipalId, SubnetId};
@@ -22,7 +21,7 @@ fn test_registry_value_syncing() {
     let wasm = build_node_rewards_test_wasm();
 
     let canister_id = state_machine
-        .install_canister(wasm.bytes(), Encode!(&InitArgs {}).unwrap(), None)
+        .install_canister(wasm.bytes(), Encode!().unwrap(), None)
         .unwrap();
 
     // This is the value from invariant_compliant_mutation
