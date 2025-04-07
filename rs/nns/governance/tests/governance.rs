@@ -250,11 +250,6 @@ fn check_proposal_status_after_voting_and_after_expiration_new(
     nns
 }
 
-const NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE: Option<DissolveState> =
-    Some(DissolveState::DissolveDelaySeconds(
-        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
-    ));
-
 const NOTDISSOLVING_MAX_DISSOLVE_DELAY: Option<DissolveState> = Some(
     DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS),
 );
@@ -271,10 +266,21 @@ fn tests_must_be_run_with_test_feature_enabled() {
 }
 
 #[test]
-fn test_single_neuron_proposal_new() {
+fn test_single_neuron_proposal_new_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_single_neuron_proposal_new(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_single_neuron_proposal_new_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_single_neuron_proposal_new(DissolveState::DissolveDelaySeconds(SIX_MONTHS));
+}
+
+fn run_single_neuron_proposal_new(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     let mut nns = check_proposal_status_after_voting_and_after_expiration_new(
         vec![Neuron {
-            dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+            dissolve_state: not_dissolving_min_dissolve_delay,
             cached_neuron_stake_e8s: 1,
             ..Neuron::default()
         }],
@@ -665,13 +671,24 @@ fn check_proposal_status_after_voting_and_after_expiration(
     );
 }
 
+#[test]
+fn test_single_neuron_proposal_new_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_single_neuron_proposal_new_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// Here we test that, if there is a single neuron, any proposed proposal is
 /// accepted.
-#[test]
-fn test_single_neuron_proposal() {
+fn run_single_neuron_proposal(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     check_proposal_status_after_voting_and_after_expiration(
         vec![Neuron {
-            dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+            dissolve_state: not_dissolving_min_dissolve_delay,
             cached_neuron_stake_e8s: 1,
             ..Neuron::default()
         }],
@@ -681,19 +698,36 @@ fn test_single_neuron_proposal() {
     );
 }
 
+#[test]
+fn test_two_neuron_agreement_proposal_should_be_accepted_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_two_neuron_agreement_proposal_should_be_accepted(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[test]
+fn test_two_neuron_agreement_proposal_should_be_accepted_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_two_neuron_agreement_proposal_should_be_accepted(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
 // Here one neuron proposes and another votes yes -- the proposal should be
 // accepted.
-#[test]
-fn test_two_neuron_agreement_proposal_should_be_accepted() {
+fn run_two_neuron_agreement_proposal_should_be_accepted(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -704,19 +738,36 @@ fn test_two_neuron_agreement_proposal_should_be_accepted() {
     );
 }
 
+#[test]
+fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[test]
+fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
 /// Here two neurons with identical stake, age, and dissolve delay disagree. The
 /// proposal should be rejected.
-#[test]
-fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected() {
+fn run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -727,20 +778,38 @@ fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected()
     );
 }
 
+#[test]
+fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration_3_months(
+) {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[test]
+fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration_6_months(
+) {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
 // Tests that, upon proposal expiration, proposals are rejected if they have not
 // reached absolute majority, counting the eligible neurons that did not vote.
-#[test]
-fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration(
+fn run_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
 ) {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 40,
                 ..Neuron::default()
             },
@@ -751,19 +820,36 @@ fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_sh
     );
 }
 
+#[test]
+fn test_two_neuron_disagree_largest_stake_wins_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_largest_stake_wins(Some(DissolveState::DissolveDelaySeconds(
+        THREE_MONTHS,
+    )));
+}
+
+#[test]
+fn test_two_neuron_disagree_largest_stake_wins_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_largest_stake_wins(Some(DissolveState::DissolveDelaySeconds(
+        SIX_MONTHS,
+    )));
+}
+
 /// Here 2 neurons with same age, same dissolve period, but different stakes.
 /// The one with the largest stake should win.
-#[test]
-fn test_two_neuron_disagree_largest_stake_wins() {
+fn run_two_neuron_disagree_largest_stake_wins(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 8,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 7,
                 ..Neuron::default()
             },
@@ -775,12 +861,12 @@ fn test_two_neuron_disagree_largest_stake_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 400,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 7,
                 ..Neuron::default()
             },
@@ -792,12 +878,12 @@ fn test_two_neuron_disagree_largest_stake_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 400,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 7,
                 ..Neuron::default()
             },
@@ -808,10 +894,27 @@ fn test_two_neuron_disagree_largest_stake_wins() {
     );
 }
 
+#[test]
+fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_identical_stake_longer_dissolve_wins(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[test]
+fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_two_neuron_disagree_identical_stake_longer_dissolve_wins(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
 /// Here 2 neurons with same age and same stake disagree. The one with the
 /// longest dissolve period should win.
-#[test]
-fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
+fn run_two_neuron_disagree_identical_stake_longer_dissolve_wins(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
@@ -820,7 +923,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -837,7 +940,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
@@ -854,7 +957,7 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins() {
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 1,
                 ..Neuron::default()
             },
