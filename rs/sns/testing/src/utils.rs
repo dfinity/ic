@@ -252,12 +252,17 @@ pub async fn validate_target_canister<C: CallCanisters>(
 
 pub async fn transfer_icp_from_treasury<C: CallCanisters + BuildEphemeralAgent>(
     agent: &C,
+    use_ephemeral_icp_treasury: bool,
     to: AccountIdBlob,
     amount: Tokens,
 ) -> Result<u64, TransferError> {
-    let treasury_agent = agent.build_ephemeral_agent(TREASURY_SECRET_KEY.clone());
+    let treasury_agent = if use_ephemeral_icp_treasury {
+        &agent.build_ephemeral_agent(TREASURY_SECRET_KEY.clone())
+    } else {
+        agent
+    };
     transfer(
-        &treasury_agent,
+        treasury_agent,
         TransferArgs {
             to,
             amount,

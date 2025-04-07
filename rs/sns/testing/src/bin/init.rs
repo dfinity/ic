@@ -23,12 +23,18 @@ async fn nns_init(args: NnsInitArgs) {
     let initial_mutations = load_registry_mutations(registry_proto_path);
     let dev_principal_id = get_identity_principal(&args.dev_identity).unwrap();
 
+    let treasury_principal_id = if let Some(icp_treasury_identity) = args.icp_treasury_identity {
+        get_identity_principal(&icp_treasury_identity).unwrap()
+    } else {
+        *TREASURY_PRINCIPAL_ID
+    };
+
     bootstrap_nns(
         &pocket_ic,
         vec![initial_mutations],
         vec![
             (
-                (*TREASURY_PRINCIPAL_ID).into(),
+                treasury_principal_id.into(),
                 Tokens::from_tokens(10_000_000).unwrap(),
             ),
             (dev_principal_id.into(), Tokens::from_tokens(100).unwrap()),

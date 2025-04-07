@@ -87,7 +87,9 @@ async fn validate_network(network: String) {
 }
 
 async fn swap_complete(network: String, args: SwapCompleteArgs) {
-    let agent = get_agent(&network, None).await.unwrap();
+    let agent = get_agent(&network, args.icp_treasury_identity.clone())
+        .await
+        .unwrap();
 
     // Normally, SNSes would have different names, so the vector below would have a single element.
     let target_snses = find_sns_by_name(&agent, args.sns_name.clone()).await;
@@ -113,7 +115,14 @@ async fn swap_complete(network: String, args: SwapCompleteArgs) {
                 };
             neurons_to_follow.extend(principal_neurons);
         }
-        if let Err(e) = complete_sns_swap(&agent, sns.swap, sns.governance, neurons_to_follow).await
+        if let Err(e) = complete_sns_swap(
+            &agent,
+            args.icp_treasury_identity.is_none(),
+            sns.swap,
+            sns.governance,
+            neurons_to_follow,
+        )
+        .await
         {
             eprintln!("Failed to complete swap for SNS {}: {}", args.sns_name, e);
             exit(1);
@@ -154,7 +163,9 @@ async fn sns_proposal_upvote(network: String, args: SnsProposalUpvoteArgs) {
 }
 
 pub async fn transfer_icp(network: String, args: TransferICPArgs) {
-    let agent = get_agent(&network, None).await.unwrap();
+    let agent = get_agent(&network, args.icp_treasury_identity.clone())
+        .await
+        .unwrap();
     let recipient = match args.recipient {
         TransferRecipientArg::Account { account } => account.0,
         TransferRecipientArg::Principal {
@@ -162,9 +173,14 @@ pub async fn transfer_icp(network: String, args: TransferICPArgs) {
             subaccount,
         } => AccountIdentifier::new(principal_id, subaccount.map(|a| Subaccount(a.0))).to_address(),
     };
-    transfer_icp_from_treasury(&agent, recipient, args.amount.0)
-        .await
-        .unwrap();
+    transfer_icp_from_treasury(
+        &agent,
+        args.icp_treasury_identity.is_none(),
+        recipient,
+        args.amount.0,
+    )
+    .await
+    .unwrap();
 }
 
 #[tokio::main]
