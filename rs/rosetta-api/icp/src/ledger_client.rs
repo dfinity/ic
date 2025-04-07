@@ -660,7 +660,6 @@ impl LedgerClient {
                 canister_id,
                 request_id,
                 request_type,
-                start_time,
                 deadline,
                 read_state_http_body,
             )
@@ -712,7 +711,6 @@ impl LedgerClient {
         canister_id: CanisterId,
         request_id: MessageId,
         request_type: RequestType,
-        start_time: Instant,
         deadline: Instant,
         read_state_http_body: SignedRequestBytes,
     ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
@@ -725,7 +723,7 @@ impl LedgerClient {
             let agent = &self.canister_access.as_ref().unwrap().agent;
             let status = agent
                 .request_status_signed(
-                    &RequestId::new(&request_id.as_bytes()),
+                    &RequestId::new(request_id.as_bytes()),
                     canister_id.get().0,
                     read_state_http_body.clone().into(),
                 )
