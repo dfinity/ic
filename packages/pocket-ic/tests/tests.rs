@@ -1150,9 +1150,8 @@ fn test_ecdsa_disabled() {
 fn test_vetkd() {
     use ic_vetkd_utils::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 
-    // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
+    // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
-        .with_nns_subnet()
         .with_ii_subnet() // this subnet has threshold keys
         .with_application_subnet()
         .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
