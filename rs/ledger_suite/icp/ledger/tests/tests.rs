@@ -1234,7 +1234,7 @@ fn test_upgrade_from_prev_not_possible() {
     ic_ledger_suite_state_machine_tests::test_upgrade_not_possible(
         ledger_wasm_prev_version(),
         ledger_wasm(),
-        "Migration to stable structures not supported in this version, please upgrade to git revision 3ae3649a2366aaca83404b692fc58e4c6e604a25 first.",
+        "Migration to stable structures not supported in this version, please upgrade to git revision 3ae3649a2366aaca83404b692fc58e4c6e604a25 (https://github.com/dfinity/ic/releases/tag/ledger-suite-icp-2025-03-26) first.",
         encode_init_args,
     );
 }
