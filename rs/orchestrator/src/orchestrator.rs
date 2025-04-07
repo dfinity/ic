@@ -335,8 +335,10 @@ impl Orchestrator {
         })
     }
 
-    /// Starts four asynchronous tasks:
+    /// Starts asynchronous tasks and waits until they all complete. The tasks can be
+    /// cancelled at any time by setting `exit_signal` to `true`.
     ///
+    /// The following tasks are started:
     /// 1. One that constantly monitors for a new CUP pointing to a newer
     ///    replica version and executes the upgrade to this version if such a
     ///    CUP was found.
@@ -354,7 +356,7 @@ impl Orchestrator {
     /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
     ///    and it is also time to rotate the iDKG encryption key, instruct crypto
     ///    to do the rotation and attempt to register the rotated key.
-    pub async fn spawn_tasks(&mut self, exit_signal: Receiver<bool>) {
+    pub async fn start_tasks(&mut self, exit_signal: Receiver<bool>) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut upgrade: Upgrade,
@@ -587,6 +589,8 @@ impl Orchestrator {
     }
 }
 
+/// A structure which keeps track of the tasks spawned by the Orchestrator and monitors
+/// the completions of the tasks.
 struct TaskTracker {
     tasks: JoinSet<()>,
     task_names: HashMap<tokio::task::Id, String>,
@@ -595,6 +599,7 @@ struct TaskTracker {
 }
 
 impl TaskTracker {
+    /// Creates an empty [`TaskTracker`] without spawning any tasks.
     fn new(metrics: Arc<OrchestratorMetrics>, logger: ReplicaLogger) -> Self {
         Self {
             tasks: JoinSet::new(),
@@ -604,22 +609,35 @@ impl TaskTracker {
         }
     }
 
-    fn spawn(&mut self, task_name: &str, future: impl Future<Output = ()> + Send + 'static) {
+    /// Spawns the provided task on the [`JoinSet`] and updates the [`Self::task_names`] field.
+    /// The task will immediately start running in the background when this method is called.
+    fn spawn(&mut self, task_name: &str, task: impl Future<Output = ()> + Send + 'static) {
         info!(self.logger, "Spawning the task `{task_name}`");
-        let id = self.tasks.spawn(future).id();
+        let id = self.tasks.spawn(task).id();
         self.task_names.insert(id, task_name.to_string());
         info!(self.logger, "Task `{task_name}` spawned");
     }
 
+    /// Waits until all the tasks complete.
+    ///
+    /// If any of the tracked tasks panics it will be caught here and
+    /// [`OrchestratorMetrics::critical_error_task_panicked`] will be incremented.
+    /// TODO(CON-1488): consider restarting a task if it panics.
+    ///
+    /// # Cancel Safety
+    ///
+    /// This method is cancel safe. If `join_all` is used as an event in a `tokio::select!`
+    /// statement and some other branch completes first, it is guaranteed that no non-completed
+    /// tasks were removed from this [`TaskTracker`].
     async fn join_all(&mut self) {
         while let Some(join_result) = self.tasks.join_next_with_id().await {
             match join_result {
                 Ok((id, ())) => {
-                    let task_name = self.task_name(&id);
+                    let task_name = self.take_task_name(&id);
                     info!(self.logger, "Task `{task_name}` finished gracefully");
                 }
                 Err(err) => {
-                    let task_name = self.task_name(&err.id());
+                    let task_name = self.take_task_name(&err.id());
 
                     if err.is_panic() {
                         error!(self.logger, "Task `{task_name}` panicked: {err}");
@@ -635,10 +653,11 @@ impl TaskTracker {
         }
     }
 
-    fn task_name(&self, id: &tokio::task::Id) -> String {
+    /// Removes the `id` from the  [`Self::task_names`] and returns the removed task name.
+    /// If there is no task with the given `id` in the map, returns "unknown".
+    fn take_task_name(&mut self, id: &tokio::task::Id) -> String {
         self.task_names
-            .get(id)
-            .cloned()
+            .remove(id)
             .unwrap_or_else(|| String::from("unknown"))
     }
 }
