@@ -95,7 +95,7 @@ impl OrchestratorMetrics {
             ),
             critical_error_task_panicked: metrics_registry.int_counter_vec(
                 "orchestrator_task_panicked",
-                "Number of times a task panicked, grouped by the a task name",
+                "Number of times a task panicked, grouped by the task name",
                 &["task_name"],
             ),
         }
