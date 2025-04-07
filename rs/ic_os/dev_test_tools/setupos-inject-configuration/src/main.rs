@@ -78,6 +78,10 @@ struct DeploymentConfig {
     #[arg(long)]
     cpu: Option<String>,
 
+    /// If None, is treated as 64.
+    #[arg(long)]
+    nr_of_vcpus: Option<u32>,
+
     #[arg(long)]
     mgmt_mac: Option<String>,
 
@@ -254,6 +258,10 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
 
     if let Some(cpu) = &cfg.cpu {
         deployment_json.resources.cpu = Some(cpu.to_owned());
+    }
+
+    if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
+        deployment_json.resources.nr_of_vcpus = Some(nr_of_vcpus.to_owned());
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
