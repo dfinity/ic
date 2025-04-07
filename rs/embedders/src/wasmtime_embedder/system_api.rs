@@ -64,7 +64,7 @@ fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData
                 message: _,
                 backtrace,
             } => {
-                *backtrace = Some(convert_backtrace(&WasmBacktrace::capture(store)));
+                *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
             }
             _ => {}
         }
