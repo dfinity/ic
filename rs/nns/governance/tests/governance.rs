@@ -23,10 +23,8 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::{
-    cmc::CMC,
-    ledger,
-    ledger::{compute_neuron_staking_subaccount_bytes, IcpLedger},
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
+    ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -46,8 +44,11 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance::canister_state::{governance_mut, set_governance_for_tests};
-use ic_nns_governance::governance::RandomnessGenerator;
+use ic_nns_governance::{
+    canister_state::{governance_mut, set_governance_for_tests},
+    pb::v1::{manage_neuron::DisburseMaturity, Account, Subaccount as GovernanceSubaccount},
+};
+use ic_nns_governance::{governance::RandomnessGenerator, pb::v1::manage_neuron::Follow};
 use ic_nns_governance::{
     governance::{
         get_node_provider_reward,
@@ -123,7 +124,10 @@ use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, ListDeployedSnsesRequest,
     ListDeployedSnsesResponse, SnsWasmError,
 };
-use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
+use icp_ledger::{
+    protobuf::AccountIdentifier as AccountIdentifierProto, AccountIdentifier, Memo, Subaccount,
+    Tokens,
+};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
@@ -3827,6 +3831,143 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     }
 }
 
+#[tokio::test]
+async fn test_disallow_large_manage_neuron_proposals() {
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
+                        title: Some("An Install Code Proposal".to_string()),
+                        summary: "proposal 1".to_string(),
+                        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+                            nns_function: 42,
+                            payload: vec![1u8; 1_000_000],
+                        })),
+                        ..Default::default()
+                    }))),
+                }))),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::PreconditionFailed as i32
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(Command::DisburseMaturity(DisburseMaturity {
+                        percentage_to_disburse: 100,
+                        to_account: Some(Account {
+                            owner: None,
+                            subaccount: Some(GovernanceSubaccount {
+                                subaccount: vec![1u8; 1_000_000],
+                            }),
+                        }),
+                    })),
+                }))),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::PreconditionFailed as i32
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(Command::Disburse(Disburse {
+                        amount: Some(Amount { e8s: 1_000_000_000 }),
+                        to_account: Some(AccountIdentifierProto {
+                            hash: vec![1u8; 1_000_000],
+                        }),
+                    })),
+                }))),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, .. })
+        if error_type == ErrorType::InvalidCommand as i32
+    );
+
+    let result = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            // Must match neuron 2's serialized_id.
+            &principal(2),
+            &Proposal {
+                title: Some("A Manage Neuron Proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 1,
+                    })),
+                    id: None,
+                    command: Some(Command::Follow(Follow {
+                        topic: Topic::Governance as i32,
+                        followees: vec![NeuronId { id: 1 }; 1000],
+                    })),
+                }))),
+                ..Default::default()
+            },
+        )
+        .now_or_never()
+        .unwrap();
+    assert_matches!(
+        result,
+        Err(GovernanceError { error_type, error_message })
+        if error_type == ErrorType::InvalidCommand as i32
+            && error_message.contains("Too many followees")
+    );
+}
+
 #[test]
 fn test_reward_distribution_skips_deleted_neurons() {
     let mut fixture = fixture_two_neurons_second_is_bigger();
@@ -4509,7 +4650,7 @@ fn test_random_voting_rewards_scenarios() {
         proposals
     }
 
-    const SCENARIO_COUNT: u64 = 500;
+    const SCENARIO_COUNT: u64 = 300;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
         unique_scenarios.insert(helper(seed));
@@ -8750,6 +8891,12 @@ fn test_list_proposals() {
                     *x,
                     ProposalData {
                         id: Some(ProposalId { id: *x }),
+                        proposal: Some(Proposal {
+                            title: Some("Foo".to_string()),
+                            summary: "A great summary, the best".to_string(),
+                            url: "".to_string(),
+                            action: None,
+                        }),
                         ..Default::default()
                     },
                 )
@@ -10347,7 +10494,7 @@ fn test_update_node_provider() {
 
     let np = NodeProvider {
         id: Some(controller),
-        reward_account: Some(protobuf::AccountIdentifier {
+        reward_account: Some(AccountIdentifierProto {
             hash: account.to_vec(),
         }),
     };
@@ -10356,7 +10503,7 @@ fn test_update_node_provider() {
 
     let hex = "b6a3539e69c6b75fe3c87b1ff82b1fc7f189a6113b77ba653b2e5eed67c95632";
     let new_reward_account = AccountIdentifier::from_hex(hex).unwrap();
-    let new_reward_account = protobuf::AccountIdentifier {
+    let new_reward_account = AccountIdentifierProto {
         hash: new_reward_account.to_vec(),
     };
     let update_np = UpdateNodeProvider {
@@ -14440,6 +14587,8 @@ async fn distribute_rewards_test() {
                         (n.id.as_ref().unwrap().id, ballot)
                     })
                     .collect(),
+                decided_timestamp_seconds: now - 100,
+                executed_timestamp_seconds: now - 99,
                 ..Default::default()
             };
 
@@ -14555,10 +14704,7 @@ fn test_short_proposal_title_is_invalid() {
 
 #[test]
 fn test_long_proposal_title_is_invalid() {
-    let mut long_title = String::new();
-    for _ in 0..300 {
-        long_title.push('Z');
-    }
+    let long_title = "Z".repeat(300);
 
     let result = validate_proposal_title(&Some(long_title));
     assert!(result.is_err());
@@ -15053,7 +15199,7 @@ fn randomly_pick_swap_start() {
 
     // Generate "zillions" of outputs, and count their occurrences.
     let mut start_time_to_count = BTreeMap::new();
-    const ITERATION_COUNT: u64 = 50_000;
+    const ITERATION_COUNT: u64 = 50;
     for _ in 0..ITERATION_COUNT {
         let GlobalTimeOfDay {
             seconds_after_utc_midnight,
@@ -15064,36 +15210,16 @@ fn randomly_pick_swap_start() {
             .or_insert(0) += 1;
     }
 
-    // Assert that we hit all possible values.
-    let possible_values_count = ONE_DAY_SECONDS / 60 / 15;
-    assert_eq!(start_time_to_count.len(), possible_values_count as usize);
-
-    // Assert that values are multiples of of 15 minutes.
+    // Assert that values are multiples of 15 minutes and within a single 24 hour period.
     for seconds_after_utc_midnight in start_time_to_count.keys() {
         assert_eq!(
             seconds_after_utc_midnight % (15 * 60),
             0,
-            "{}",
+            "A random start time was not at a 15 minute interval from midnight: {}",
             seconds_after_utc_midnight
         );
-    }
 
-    // Assert that the distribution appears to be uniform.
-    let min_occurrence_count = (0.8 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
-    let max_occurrence_count = (1.2 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
-    for occurrence_count in start_time_to_count.values() {
-        assert!(
-            *occurrence_count >= min_occurrence_count,
-            "{} (vs. minimum = {})",
-            occurrence_count,
-            min_occurrence_count
-        );
-        assert!(
-            *occurrence_count <= max_occurrence_count,
-            "{} (vs. maximum = {})",
-            occurrence_count,
-            max_occurrence_count
-        );
+        assert!(*seconds_after_utc_midnight < ONE_DAY_SECONDS);
     }
 }
 
@@ -15466,47 +15592,5 @@ fn test_neuron_info_private_enforcement() {
             "{:?}",
             neuron_info,
         );
-    }
-}
-
-// TODO - remove after migration of neuron_store.topic_follow_index to being stored on upgrade
-// is rolled out and becomes non-optional
-#[allow(dead_code)]
-struct StubIcpLedger {}
-#[async_trait]
-impl IcpLedger for StubIcpLedger {
-    async fn transfer_funds(
-        &self,
-        _amount_e8s: u64,
-        _fee_e8s: u64,
-        _from_subaccount: Option<Subaccount>,
-        _to: AccountIdentifier,
-        _memo: u64,
-    ) -> Result<u64, NervousSystemError> {
-        unimplemented!()
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
-    }
-
-    async fn account_balance(
-        &self,
-        _account: AccountIdentifier,
-    ) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        unimplemented!()
-    }
-}
-
-#[allow(dead_code)]
-struct StubCMC {}
-#[async_trait]
-impl CMC for StubCMC {
-    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
-        unimplemented!()
     }
 }

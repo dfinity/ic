@@ -10,9 +10,12 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
+    "//rs/registry/transport",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:mockall",
+    "@crate_index//:prost",
 ]
 
 MACRO_DEPENDENCIES = [

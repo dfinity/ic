@@ -7,7 +7,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "single_large_node",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "k8s",
@@ -26,7 +25,6 @@ system_test(
 
 system_test(
     name = "single_app_large_node",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "k8s",
@@ -44,7 +42,6 @@ system_test(
 
 system_test_nns(
     name = "single_app_large_node_with_nns",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "k8s",
@@ -63,7 +60,6 @@ system_test_nns(
 
 system_test(
     name = "single_app_small_node",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "k8s",
@@ -81,7 +77,6 @@ system_test(
 
 system_test_nns(
     name = "small",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -99,7 +94,6 @@ system_test_nns(
 
 system_test_nns(
     name = "small_bitcoin",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -118,7 +112,6 @@ system_test_nns(
 
 system_test_nns(
     name = "small_high_perf",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -138,7 +131,6 @@ system_test_nns(
 system_test(
     name = "from_config",
     env = NNS_CANISTER_ENV,
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -155,14 +147,19 @@ system_test(
 
 system_test_nns(
     name = "small_nns",
-    flaky = False,
+    env = {
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     tags = [
         "dynamic_testnet",
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
-        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@subnet_rental_canister//file",
@@ -179,7 +176,6 @@ system_test_nns(
 
 system_test_nns(
     name = "small_with_api_bn",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -209,7 +205,6 @@ system_test_nns(
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -238,7 +233,6 @@ system_test_nns(
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -263,7 +257,6 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -287,7 +280,6 @@ system_test_nns(
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -318,7 +310,6 @@ system_test_nns(
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
-    flaky = False,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -357,7 +348,6 @@ system_test(
     },
     env = NNS_CANISTER_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
-    flaky = True,
     tags = [
         "dynamic_testnet",
         "local",

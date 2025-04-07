@@ -1,21 +1,17 @@
 use ic_base_types::PrincipalId;
+use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        self, await_with_timeout, hash_sns_wasms, nns,
-        sns::{
-            self,
-            governance::{
-                set_automatically_advance_target_version_flag,
-                EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
-            },
+        self, hash_sns_wasms, nns, sns,
+        sns::governance::{
+            set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
+            EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
         },
-        upgrade_nns_canister_to_tip_of_master_or_panic,
     },
     SectionTimer,
 };
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
 use ic_sns_governance_api::pb::v1::upgrade_journal_entry;
 use ic_sns_swap::pb::v1::Lifecycle;
@@ -29,9 +25,6 @@ pub async fn test_sns_upgrade(
 
     let (pocket_ic, initial_sns_version) =
         pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
-
-    // TODO[NNS1-3657]: Do not upgrade SNS-W, use the mainnet version.
-    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
 
     let create_service_nervous_system = {
         let _timer = SectionTimer::new("Creating SNS");

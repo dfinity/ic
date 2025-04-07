@@ -26,7 +26,6 @@ DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
-    "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/types/types",
@@ -60,7 +59,6 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rust_canisters/dfn_macro",
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
 ]
@@ -196,7 +194,6 @@ rust_test_suite_with_extra_srcs(
         "tests/system_tests/common/*.rs",
         "tests/system_tests/test_cases/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:4"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,

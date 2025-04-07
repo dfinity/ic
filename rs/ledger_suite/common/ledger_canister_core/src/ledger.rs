@@ -1,6 +1,6 @@
 use crate::{
     archive::ArchiveCanisterWasm,
-    blockchain::{BlockData, Blockchain},
+    blockchain::{BlockDataContainer, Blockchain},
     range_utils,
     runtime::Runtime,
 };
@@ -146,7 +146,7 @@ pub trait LedgerData: LedgerContext {
     type Transaction: LedgerTransaction<AccountId = Self::AccountId, Tokens = Self::Tokens>
         + Ord
         + Clone;
-    type BlockData: BlockData + Serialize + Default + for<'a> Deserialize<'a>;
+    type BlockDataContainer: BlockDataContainer + Default;
 
     // Purge configuration
 
@@ -170,10 +170,11 @@ pub trait LedgerData: LedgerContext {
 
     // Ledger data structures
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData>;
+    fn blockchain(&self)
+        -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
     fn blockchain_mut(
         &mut self,
-    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockData>;
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
     fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
@@ -496,14 +497,54 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
 
     let archive = ledger.blockchain().archive.read().unwrap();
 
+    // Collect the ranges of blocks stored in the archive canisters. The archives are sorted, so
+    // that the oldest archive (with the lowest block IDs) is first, and the newest archive (with
+    // the highest block IDs) is last. Iterate over the archives in reverse order since we are
+    // removing overlapping suffixes from the ranges, starting from the latest blocks stored in the
+    // ledger.
+    let mut later_range = None;
     let archived_blocks: Vec<_> = archive
         .iter()
         .flat_map(|archive| archive.index().into_iter())
+        .rev()
         .filter_map(|((from, to), canister_id)| {
-            let slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
+            let mut slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
+            if !slice.is_empty() {
+                match &later_range {
+                    None => {
+                        // Remove the intersection of the local block range from the current range.
+                        range_utils::remove_suffix(&mut slice, &local_blocks);
+                    }
+                    Some(later_range) => {
+                        // Remove the intersection of the previous archive range from the current range.
+                        range_utils::remove_suffix(&mut slice, later_range);
+                    }
+                }
+                later_range = Some(slice.clone());
+            }
             (!slice.is_empty()).then_some((canister_id, slice))
         })
         .collect();
+    // Reverse the order of the archived blocks to return the oldest archive first.
+    let archived_blocks: Vec<_> = archived_blocks.into_iter().rev().collect();
+
+    debug_assert!(
+        !range_utils::contains_intersections(
+            [
+                [&local_blocks].as_slice(),
+                archived_blocks
+                    .iter()
+                    .map(|(_canister_id, archived_blocks_range)| archived_blocks_range)
+                    .collect::<Vec<_>>()
+                    .as_slice()
+            ]
+            .concat()
+            .as_slice()
+        ),
+        "overlapping block ranges - local_blocks: {:?}, archived_blocks: {:?}",
+        local_blocks,
+        archived_blocks
+    );
 
     BlockLocations {
         local_blocks,

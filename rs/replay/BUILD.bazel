@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/consensus",
+    "//rs/consensus/certification",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
     "//rs/crypto",
@@ -52,6 +53,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
 ]

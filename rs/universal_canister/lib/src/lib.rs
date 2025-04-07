@@ -7,7 +7,6 @@
 
 pub mod management;
 
-use ic_types::Cycles;
 use lazy_static::lazy_static;
 use universal_canister::Ops;
 
@@ -26,7 +25,8 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
-    ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM)
+    use sha2::{Digest, Sha256};
+    *Sha256::digest(UNIVERSAL_CANISTER_WASM.as_ref() as &[u8]).as_ref()
 }
 
 pub fn get_universal_canister_serialized_module() -> Vec<u8> {
@@ -35,6 +35,13 @@ pub fn get_universal_canister_serialized_module() -> Vec<u8> {
     std::fs::read(&serialized_module_path).unwrap_or_else(|e| {
         panic!("Could not read serialized module from from {serialized_module_path:?}: {e:?}")
     })
+}
+
+fn cycles_into_parts<Cycles: Into<u128>>(cycles: Cycles) -> (u64, u64) {
+    let amount = cycles.into();
+    let high = (amount >> 64) as u64;
+    let low = (amount & 0xffff_ffff_ffff_ffff) as u64;
+    (high, low)
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -62,7 +69,7 @@ pub fn call_args() -> CallArgs {
 
 enum CallCycles {
     Zero,
-    Cycles(Cycles),
+    Cycles(u128),
     Max,
 }
 
@@ -295,14 +302,20 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn call_with_cycles<P: AsRef<[u8]>, S: ToString>(
+    pub fn call_with_cycles<P: AsRef<[u8]>, S: ToString, Cycles: Into<u128>>(
         mut self,
         callee: P,
         method: S,
         call_args: CallArgs,
         cycles: Cycles,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, CallCycles::Cycles(cycles), None);
+        self = self.call_helper(
+            callee,
+            method,
+            call_args,
+            CallCycles::Cycles(cycles.into()),
+            None,
+        );
         self
     }
 
@@ -316,7 +329,11 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn call_simple_with_cycles_and_best_effort_response<P: AsRef<[u8]>, S: ToString>(
+    pub fn call_simple_with_cycles_and_best_effort_response<
+        P: AsRef<[u8]>,
+        S: ToString,
+        Cycles: Into<u128>,
+    >(
         mut self,
         callee: P,
         method: S,
@@ -328,7 +345,7 @@ impl PayloadBuilder {
             callee,
             method,
             call_args,
-            CallCycles::Cycles(cycles),
+            CallCycles::Cycles(cycles.into()),
             Some(timeout_seconds),
         );
         self
@@ -383,7 +400,7 @@ impl PayloadBuilder {
             CallCycles::Cycles(cycles) => {
                 self.0.extend_from_slice(payload);
                 self.0.push(Ops::CallDataAppend as u8);
-                let (high_amount, low_amount) = cycles.into_parts();
+                let (high_amount, low_amount) = cycles_into_parts(cycles);
                 self = self.push_int64(high_amount);
                 self = self.push_int64(low_amount);
                 self.0.push(Ops::CallCyclesAdd128 as u8);
@@ -538,24 +555,24 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn accept_cycles(mut self, cycles: Cycles) -> Self {
-        let (amount_high, amount_low) = cycles.into_parts();
+    pub fn accept_cycles<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
+        let (amount_high, amount_low) = cycles_into_parts(cycles.into());
         self = self.push_int64(amount_high);
         self = self.push_int64(amount_low);
         self.0.push(Ops::AcceptCycles128 as u8);
         self
     }
 
-    pub fn mint_cycles128(mut self, amount: Cycles) -> Self {
-        let (amount_high, amount_low) = amount.into_parts();
+    pub fn mint_cycles128<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
+        let (amount_high, amount_low) = cycles_into_parts(cycles.into());
         self = self.push_int64(amount_high);
         self = self.push_int64(amount_low);
         self.0.push(Ops::MintCycles128 as u8);
         self
     }
 
-    pub fn cycles_burn128(mut self, amount: Cycles) -> Self {
-        let (amount_high, amount_low) = amount.into_parts();
+    pub fn cycles_burn128<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
+        let (amount_high, amount_low) = cycles_into_parts(cycles.into());
         self = self.push_int64(amount_high);
         self = self.push_int64(amount_low);
         self.0.push(Ops::CyclesBurn128 as u8);
@@ -565,13 +582,8 @@ impl PayloadBuilder {
     pub fn call<C: Into<Call>>(mut self, call: C) -> Self {
         let call = call.into();
         let call_args = call.get_call_args();
-        let (cycles_high, cycles_low) = call.cycles;
-        self = self.call_with_cycles(
-            call.callee,
-            call.method,
-            call_args,
-            Cycles::from_parts(cycles_high, cycles_low),
-        );
+        let cycles = call.cycles;
+        self = self.call_with_cycles(call.callee, call.method, call_args, cycles);
         self
     }
 
@@ -721,10 +733,10 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn cost_vetkd_derive_encrypted_key(mut self, data: &[u8], curve: u32) -> Self {
+    pub fn cost_vetkd_derive_key(mut self, data: &[u8], curve: u32) -> Self {
         self = self.push_bytes(data);
         self = self.push_int(curve);
-        self.0.push(Ops::CostVetkdDeriveEncryptedKey as u8);
+        self.0.push(Ops::CostVetkdDeriveKey as u8);
         self
     }
 
@@ -768,7 +780,7 @@ pub struct Call {
     callee: Vec<u8>,
     method: String,
     args: CallArgs,
-    cycles: (u64, u64),
+    cycles: u128,
 }
 
 impl CallInterface for Call {
@@ -785,7 +797,7 @@ impl Call {
             callee: callee_vec,
             method: method.into(),
             args: CallArgs::default(),
-            cycles: (0, 0),
+            cycles: 0,
         }
     }
 
@@ -797,11 +809,11 @@ impl Call {
 pub trait CallInterface {
     fn call(&mut self) -> &mut Call;
 
-    fn cycles(mut self, cycles: (u64, u64)) -> Self
+    fn cycles<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self
     where
         Self: std::marker::Sized,
     {
-        self.call().cycles = cycles;
+        self.call().cycles = cycles.into();
         self
     }
 

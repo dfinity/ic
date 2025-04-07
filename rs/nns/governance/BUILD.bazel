@@ -235,6 +235,21 @@ rust_canbench(
     ],
 )
 
+# Used for benchmarking compilation/instrumentation/execution changes in the
+# embedders crate.
+rust_canister(
+    name = "governance-bench-canister",
+    srcs = ["canbench/main.rs"],
+    aliases = ALIASES,
+    compile_data = ["canbench/bench.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canbench/bench.did",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":governance--canbench_feature",
+    ],
+)
+
 rust_canister(
     name = "governance-canister",
     srcs = ["canister/canister.rs"],
@@ -344,6 +359,7 @@ rust_bench(
         # Keep sorted.
         ":governance",
         "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/canisters",
         "//rs/nervous_system/common",
         "//rs/nns/common",
         "//rs/types/base_types",

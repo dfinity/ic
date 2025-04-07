@@ -178,9 +178,11 @@ impl Setup {
     }
 
     fn upgrade_archive_canisters(&self, upgrade_to_version: UpgradeToVersion) {
-        let archive_wasm_bytes = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_archive_wasm().bytes(),
-            UpgradeToVersion::Latest => build_ledger_archive_wasm().bytes(),
+        let (archive_wasm_bytes, upgrade_arg) = match upgrade_to_version {
+            UpgradeToVersion::MainNet => (build_mainnet_ledger_archive_wasm().bytes(), vec![]),
+            UpgradeToVersion::Latest => {
+                (build_ledger_archive_wasm().bytes(), Encode!(&()).unwrap())
+            }
         };
         let mainnet_archive_module_hash = mainnet_archive_canister_sha256sum();
         let ledger_archives = archives(&self.pocket_ic);
@@ -192,10 +194,10 @@ impl Setup {
                 .upgrade_canister(
                     archive_canister_id,
                     archive_wasm_bytes.clone(),
-                    vec![],
+                    upgrade_arg.clone(),
                     None,
                 )
-                .unwrap();
+                .expect("failed to upgrade the archive canister");
 
             self.assert_canister_module_hash(
                 archive_canister_id,
