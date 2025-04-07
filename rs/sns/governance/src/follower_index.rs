@@ -129,7 +129,7 @@ pub fn add_neuron_to_follower_index(
 
 /// This is analogous to the legacy `build_function_followee_index` function, but for topic
 /// following.
-pub fn build_follower_index(
+pub(crate) fn build_follower_index(
     neurons: &BTreeMap<String, Neuron>,
 ) -> BTreeMap<Topic, BTreeMap<String, BTreeSet<NeuronId>>> {
     let mut function_followee_index = BTreeMap::new();
@@ -152,7 +152,7 @@ pub(crate) mod legacy {
     ///
     /// The index is built from the `neurons` in the `Governance` struct, which map followers
     /// (the neuron ID) to a set of followees per function.
-    pub fn build_function_followee_index(
+    pub(crate) fn build_function_followee_index(
         id_to_nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
         neurons: &BTreeMap<String, Neuron>,
     ) -> BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>> {
