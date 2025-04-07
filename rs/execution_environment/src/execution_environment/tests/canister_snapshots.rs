@@ -2287,7 +2287,7 @@ fn read_canister_snapshot_data_succeeds() {
 
     // Test getting all binary snapshot data
     // wasm module
-    test_data_wasm_module(
+    verify_data_wasm_module(
         &mut test,
         canister_id,
         snapshot_id,
@@ -2296,10 +2296,10 @@ fn read_canister_snapshot_data_succeeds() {
     );
 
     // canister heap
-    test_data_wasm_heap(&mut test, canister_id, snapshot_id, wasm_memory_size);
+    verify_data_wasm_heap(&mut test, canister_id, snapshot_id, wasm_memory_size);
 
     // stable memory
-    test_data_stable_memory(
+    verify_data_stable_memory(
         &mut test,
         canister_id,
         snapshot_id,
@@ -2332,7 +2332,7 @@ fn read_canister_snapshot_data_succeeds() {
     assert_eq!(original, returned);
 }
 
-fn test_data_wasm_module(
+fn verify_data_wasm_module(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
     snapshot_id: SnapshotId,
@@ -2352,7 +2352,7 @@ fn test_data_wasm_module(
     assert_eq!(chunk, uni_canister_wasm);
 }
 
-fn test_data_wasm_heap(
+fn verify_data_wasm_heap(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
     snapshot_id: SnapshotId,
@@ -2384,7 +2384,7 @@ fn test_data_wasm_heap(
     assert_eq!(chunk.len(), rest as usize);
 }
 
-fn test_data_stable_memory(
+fn verify_data_stable_memory(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
     snapshot_id: SnapshotId,
