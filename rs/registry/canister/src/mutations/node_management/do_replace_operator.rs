@@ -266,26 +266,31 @@ mod tests {
     use ic_stable_structures::Storable;
     use ic_types::{crypto::KeyPurpose, CanisterId, NodeId, PrincipalId, ReplicaVersion};
 
-    use crate::registry::Registry;
+    use crate::{
+        common::test_helpers::{
+            invariant_compliant_registry, prepare_registry_with_nodes_and_node_operator_id,
+        },
+        registry::Registry,
+    };
     use prost::Message;
 
-    fn operator(n: u64) -> PrincipalId {
-        PrincipalId::new_user_test_id(n)
+    fn operator(operator_index: u64) -> PrincipalId {
+        PrincipalId::new_user_test_id(operator_index)
     }
 
     // To differentiate between `operator(1)` and `provider(1)`.
-    fn provider(n: u64) -> PrincipalId {
-        PrincipalId::new_user_test_id(u64::MAX - n)
+    fn provider(provider_index: u64) -> PrincipalId {
+        PrincipalId::new_user_test_id(u64::MAX - provider_index)
     }
 
     // Convenience function for readability of
     // the test.
-    fn caller(n: u64) -> PrincipalId {
-        provider(n)
+    fn caller(provider_index: u64) -> PrincipalId {
+        provider(provider_index)
     }
 
-    fn node(n: u64) -> NodeId {
-        NodeId::new(PrincipalId::new_node_test_id(n))
+    fn node(node_index: u64) -> NodeId {
+        NodeId::new(PrincipalId::new_node_test_id(node_index))
     }
 
     fn payload(
@@ -562,38 +567,28 @@ mod tests {
 
     #[test]
     fn update_all_records_correctly() {
-        let mut registry = Registry::new();
+        let mut registry = invariant_compliant_registry(0);
 
-        let first_node = generate_valid_node_id();
-        let second_node = generate_valid_node_id();
-        let third_node = generate_valid_node_id();
-        registry.apply_mutations_for_test(
-            vec![
-                upsert_dc_mutation("dc1"),
-                upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
-                upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
-                upsert_node_mutation(first_node.node_id(), operator(1)),
-                upsert_node_mutation(second_node.node_id(), operator(1)),
-                upsert_node_mutation(third_node.node_id(), operator(1)),
-            ]
-            .into_iter()
-            // These are the mutations required to have a compliant registry
-            .chain(get_mutations_to_achieve_invariancy(&[
-                &first_node,
-                &second_node,
-                &third_node,
-            ]))
-            .collect(),
-        );
+        let (atomic_request, mut node_ids) =
+            prepare_registry_with_nodes_and_node_operator_id(1, 3, operator(1));
+
+        registry.maybe_apply_mutation_internal(atomic_request.mutations);
+        let nodes_latest_version = registry.latest_version();
+
+        registry.maybe_apply_mutation_internal(vec![
+            upsert_dc_mutation("dc1"),
+            upsert_node_operator_mutation(operator(1), provider(1), 10, "dc1"),
+            upsert_node_operator_mutation(operator(2), provider(1), 10, "dc1"),
+        ]);
+
+        let first_node = node_ids.pop_first().map(|(key, _)| key).unwrap();
+        let second_node = node_ids.pop_first().map(|(key, _)| key).unwrap();
+        let third_node = node_ids.pop_first().map(|(key, _)| key).unwrap();
 
         let version_before = registry.latest_version();
         registry
             .do_replace_operator_with_caller(
-                payload(
-                    operator(1),
-                    operator(2),
-                    &[first_node.node_id(), second_node.node_id()],
-                ),
+                payload(operator(1), operator(2), &[first_node, second_node]),
                 caller(1),
             )
             .assert_ok();
@@ -605,7 +600,7 @@ mod tests {
             registry.latest_version()
         );
 
-        for node_id in &[first_node.node_id(), second_node.node_id()] {
+        for node_id in &[first_node, second_node] {
             let node = registry
                 .get(
                     make_node_record_key(*node_id).as_bytes(),
@@ -614,22 +609,42 @@ mod tests {
                 .unwrap();
 
             let decoded = NodeRecord::decode(node.value.as_slice()).unwrap();
-            assert_eq!(node.version, version_before + 1);
-            assert_eq!(decoded.node_operator_id, operator(2).as_slice())
+            assert_eq!(
+                node.version,
+                version_before + 1,
+                "Node {} version didn't progress",
+                node_id
+            );
+            assert_eq!(
+                decoded.node_operator_id,
+                operator(2).as_slice(),
+                "Node {} doesn't have expected node operator id: It has {} but should have {}",
+                node_id,
+                PrincipalId::new_self_authenticating(&decoded.node_operator_id),
+                operator(2)
+            )
         }
 
         let third_untouched_node = registry
             .get(
-                make_node_record_key(third_node.node_id()).as_bytes(),
+                make_node_record_key(third_node).as_bytes(),
                 registry.latest_version(),
             )
             .unwrap();
         let third_untouched_decoded_node =
             NodeRecord::decode(third_untouched_node.value.as_slice()).unwrap();
-        assert_eq!(third_untouched_node.version, version_before);
+        assert_eq!(
+            third_untouched_node.version, nodes_latest_version,
+            "Node {} has version {} but should have version {} since its node operator shouldn't have been updated",
+            third_node, third_untouched_node.version, nodes_latest_version
+        );
         assert_eq!(
             third_untouched_decoded_node.node_operator_id,
-            operator(1).as_slice()
+            operator(1).as_slice(),
+            "Node {} has operator updated to {} but it should be {}",
+            third_node,
+            PrincipalId::new_self_authenticating(&third_untouched_decoded_node.node_operator_id),
+            operator(1)
         );
 
         for (operator, allowance) in &[(operator(1), 12), (operator(2), 8)] {
@@ -641,183 +656,12 @@ mod tests {
                 .unwrap();
 
             let decoded = NodeOperatorRecord::decode(operator_record.value.as_slice()).unwrap();
-            assert_eq!(operator_record.version, version_before + 1);
-            assert_eq!(decoded.node_allowance, *allowance);
-        }
-    }
-
-    // Functions below are used to create an invariants-compliant
-    // registry. They are not important for the tests above
-    fn get_mutations_to_achieve_invariancy(
-        valid_node_public_keys: &[&ValidNodePublicKeys],
-    ) -> Vec<RegistryMutation> {
-        let one_more_nns_node = generate_valid_node_id();
-        let mut mutations = vec![
-            upsert_routing_table_mutation(),
-            upsert_subnet_list_record(),
-            upsert_nns(one_more_nns_node.node_id()),
-            upsert_replica_version_mutation(),
-            upsert_blessed_replica_versions_mutation(),
-            upsert_node_mutation(one_more_nns_node.node_id(), operator(150)),
-        ];
-
-        let threshold_pk_and_cup_mutations =
-            create_subnet_threshold_signing_pubkey_and_cup_mutations(
-                PrincipalId::new_subnet_test_id(0).into(),
-                &vec![(
-                    one_more_nns_node.node_id(),
-                    one_more_nns_node.dkg_dealing_encryption_key().clone(),
-                )]
-                .into_iter()
-                .collect(),
+            assert_eq!(operator_record.version, version_before + 1, "Node operator version remained unchanged: Operator {} has version {} but it should be {}", operator, operator_record.version, version_before + 1);
+            assert_eq!(
+                decoded.node_allowance, *allowance,
+                "Node operator doesn't have correct allowance: Operator {} has {} but should be {}",
+                operator, decoded.node_allowance, allowance
             );
-        mutations.extend(threshold_pk_and_cup_mutations);
-
-        // One more node is required for
-        for node in valid_node_public_keys.iter().chain(&[&one_more_nns_node]) {
-            mutations.extend(vec![
-                upsert_key_mutation(
-                    node.node_id(),
-                    node.node_signing_key().key_value.clone(),
-                    KeyPurpose::NodeSigning,
-                ),
-                upsert_key_mutation(
-                    node.node_id(),
-                    node.committee_signing_key().key_value.clone(),
-                    KeyPurpose::CommitteeSigning,
-                ),
-                upsert_key_mutation(
-                    node.node_id(),
-                    node.dkg_dealing_encryption_key().key_value.clone(),
-                    KeyPurpose::DkgDealingEncryption,
-                ),
-                upsert_key_mutation(
-                    node.node_id(),
-                    node.idkg_dealing_encryption_key().key_value.clone(),
-                    KeyPurpose::IDkgMEGaEncryption,
-                ),
-                upsert_certificate_mutation(node.node_id(), node.tls_certificate().clone()),
-                upsert_unassigned_nodes_record(),
-            ]);
         }
-
-        mutations
-    }
-
-    fn upsert_routing_table_mutation() -> RegistryMutation {
-        let routing_table = RoutingTable {
-            entries: vec![Entry {
-                range: Some(CanisterIdRange {
-                    start_canister_id: Some(CanisterId::from(0).into()),
-                    end_canister_id: Some(CanisterId::from(100).into()),
-                }),
-                subnet_id: Some(SubnetId {
-                    principal_id: Some(PrincipalId::new_subnet_test_id(0).into()),
-                }),
-            }],
-        };
-
-        upsert(
-            make_routing_table_record_key().as_bytes(),
-            routing_table.encode_to_vec(),
-        )
-    }
-
-    fn generate_valid_node_id() -> ValidNodePublicKeys {
-        let (config, _tmp_dir) = CryptoConfig::new_in_temp_dir();
-        generate_node_keys_once(&config, None).unwrap()
-    }
-
-    fn upsert_key_mutation(node: NodeId, key: Vec<u8>, purpose: KeyPurpose) -> RegistryMutation {
-        let key = PublicKey {
-            version: 0,
-            algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: key,
-            proof_data: None,
-            timestamp: Some(42),
-        };
-
-        upsert(
-            make_crypto_node_key(node, purpose).as_bytes(),
-            key.encode_to_vec(),
-        )
-    }
-
-    fn upsert_certificate_mutation(
-        node_id: NodeId,
-        certificate: X509PublicKeyCert,
-    ) -> RegistryMutation {
-        upsert(
-            make_crypto_tls_cert_key(node_id).as_bytes(),
-            certificate.encode_to_vec(),
-        )
-    }
-
-    fn upsert_nns(node_id: NodeId) -> RegistryMutation {
-        let bytes = node_id.get().into_vec();
-        let replica_version = ReplicaVersion::default();
-        let subnet_record = SubnetRecord {
-            start_as_nns: true,
-            subnet_type: SubnetType::System as i32,
-            membership: vec![bytes],
-            replica_version_id: replica_version.to_string(),
-            ..Default::default()
-        };
-
-        upsert(
-            make_subnet_record_key(PrincipalId::new_subnet_test_id(0).into()).as_bytes(),
-            subnet_record.encode_to_vec(),
-        )
-    }
-
-    fn upsert_replica_version_mutation() -> RegistryMutation {
-        let replica_version_record = ReplicaVersionRecord {
-            release_package_sha256_hex:
-                "1816ff15e4f9a4937b246699ba9e72e59494eb6e29a71ee1757fb63f9f4ca3bd".to_string(),
-            release_package_urls: vec!["https://package.download".to_string()],
-            guest_launch_measurement_sha256_hex: None,
-        };
-        let replica_version = ReplicaVersion::default();
-
-        upsert(
-            make_replica_version_key(&replica_version).to_bytes(),
-            replica_version_record.encode_to_vec(),
-        )
-    }
-
-    fn upsert_blessed_replica_versions_mutation() -> RegistryMutation {
-        let replica_version = ReplicaVersion::default();
-        let blessed_versions_record = BlessedReplicaVersions {
-            blessed_version_ids: vec![replica_version.to_string()],
-        };
-
-        upsert(
-            make_blessed_replica_versions_key().to_bytes(),
-            blessed_versions_record.encode_to_vec(),
-        )
-    }
-
-    fn upsert_subnet_list_record() -> RegistryMutation {
-        let subnet_list_record = SubnetListRecord {
-            subnets: vec![PrincipalId::new_subnet_test_id(0).as_slice().to_vec()],
-        };
-
-        upsert(
-            make_subnet_list_record_key().as_bytes(),
-            subnet_list_record.encode_to_vec(),
-        )
-    }
-
-    fn upsert_unassigned_nodes_record() -> RegistryMutation {
-        let replica_version = ReplicaVersion::default();
-        let unassigned_record = UnassignedNodesConfigRecord {
-            ssh_readonly_access: vec![],
-            replica_version: replica_version.to_string(),
-        };
-
-        upsert(
-            make_unassigned_nodes_config_record_key().as_bytes(),
-            unassigned_record.encode_to_vec(),
-        )
     }
 }
