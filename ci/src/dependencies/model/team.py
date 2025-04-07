@@ -12,3 +12,4 @@ class Team(IntEnum):
     NNS_TEAM = 8
     CRYPTO_TEAM = 9
     IDENTITY_TEAM = 10
+    INTEGRATIONS_TEAM = 11
