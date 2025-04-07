@@ -274,7 +274,7 @@ fn test_single_neuron_proposal_new_3_months() {
 #[test]
 fn test_single_neuron_proposal_new_6_months() {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
-    run_single_neuron_proposal_new(DissolveState::DissolveDelaySeconds(SIX_MONTHS));
+    run_single_neuron_proposal_new(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
 fn run_single_neuron_proposal_new(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
@@ -672,13 +672,13 @@ fn check_proposal_status_after_voting_and_after_expiration(
 }
 
 #[test]
-fn test_single_neuron_proposal_new_3_months() {
+fn test_single_neuron_proposal_3_months() {
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
-fn test_single_neuron_proposal_new_6_months() {
+fn test_single_neuron_proposal_6_months() {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
@@ -968,23 +968,36 @@ fn run_two_neuron_disagree_identical_stake_longer_dissolve_wins(
     );
 }
 
+#[test]
+fn test_two_neuron_disagree_identical_stake_older_wins_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_two_neuron_disagree_identical_stake_older_wins_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// Here 2 neurons with same stake and same dissolve delay disagree. The oldest
 /// one should win, unless both are older than the age giving the max age bonus.
-#[test]
-fn test_two_neuron_disagree_identical_stake_older_wins() {
+fn run_two_neuron_disagree_identical_stake_older_wins(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     // The age bonus is 25% at most -- to make it detectable with integer voting
     // powers, stakes need to be at least 4 e8s.
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                 ..Neuron::default()
@@ -997,14 +1010,14 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 200,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                 ..Neuron::default()
@@ -1017,14 +1030,14 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 200,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS
                     - MAX_NEURON_AGE_FOR_AGE_BONUS,
                 ..Neuron::default()
             },
             Neuron {
-                dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+                dissolve_state: not_dissolving_min_dissolve_delay,
                 cached_neuron_stake_e8s: 4,
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                 ..Neuron::default()
@@ -1804,7 +1817,24 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
 }
 
 #[tokio::test]
-async fn test_manage_network_economics_change_one_deep_subfield() {
+async fn test_manage_network_economics_change_one_deep_subfield_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_change_one_deep_subfield(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[tokio::test]
+async fn test_manage_network_economics_change_one_deep_subfield_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_change_one_deep_subfield(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
+async fn run_manage_network_economics_change_one_deep_subfield(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     // Step 1: Prepare the world. All we need is a Governance with one neuron.
     // The neuron will be used to make a ManageNetworkEconomics proposal.
 
@@ -1813,7 +1843,7 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
         id: Some(NeuronId { id: 1 }),
         controller: Some(controller),
         account: vec![42_u8; 32],
-        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+        dissolve_state: not_dissolving_min_dissolve_delay,
         cached_neuron_stake_e8s: 100 * E8,
         ..Default::default()
     };
@@ -1919,7 +1949,24 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
 }
 
 #[tokio::test]
-async fn test_manage_network_economics_reject_invalid() {
+async fn test_manage_network_economics_reject_invalid_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_reject_invalid(Some(DissolveState::DissolveDelaySeconds(
+        THREE_MONTHS,
+    )));
+}
+
+#[tokio::test]
+async fn test_manage_network_economics_reject_invalid_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_reject_invalid(Some(DissolveState::DissolveDelaySeconds(
+        SIX_MONTHS,
+    )));
+}
+
+async fn run_manage_network_economics_reject_invalid(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     // Step 1: Prepare the world. We only really need a super basic Governance.
 
     let controller = PrincipalId::new_user_test_id(519_572_717);
@@ -1927,7 +1974,7 @@ async fn test_manage_network_economics_reject_invalid() {
         id: Some(NeuronId { id: 1 }),
         controller: Some(controller),
         account: vec![42_u8; 32],
-        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+        dissolve_state: not_dissolving_min_dissolve_delay,
         cached_neuron_stake_e8s: 100 * E8,
         ..Default::default()
     };
@@ -2039,8 +2086,26 @@ const NEW_MINIMUM_ICP_XDR_RATE: u64 = 500_000;
 const NEW_MAXIMUM_ICP_XDR_RATE: u64 = 499_000;
 
 #[tokio::test]
-async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first()
-{
+async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first_3_months(
+) {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[tokio::test]
+async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first_6_months(
+) {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
+async fn run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     let new_network_economics = test_manage_network_economics_revalidate_at_execution_time(
         |set_minimum_icp_xdr_rate_proposal_id, set_maximum_icp_xdr_rate_proposal_id| {
             (
@@ -2048,6 +2113,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_
                 set_maximum_icp_xdr_rate_proposal_id,
             )
         },
+        not_dissolving_min_dissolve_delay,
     )
     .await;
 
@@ -2075,8 +2141,26 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_
 }
 
 #[tokio::test]
-async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first()
-{
+async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first_3_months(
+) {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
+        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
+    ));
+}
+
+#[tokio::test]
+async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first_6_months(
+) {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
+        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
+    ));
+}
+
+async fn run_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first(
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
+) {
     let new_network_economics = test_manage_network_economics_revalidate_at_execution_time(
         |set_minimum_icp_xdr_rate_proposal_id, set_maximum_icp_xdr_rate_proposal_id| {
             (
@@ -2084,6 +2168,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
                 set_minimum_icp_xdr_rate_proposal_id,
             )
         },
+        not_dissolving_min_dissolve_delay,
     )
     .await;
 
@@ -2134,6 +2219,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         /* set_min_proposal_id */ ProposalId,
         /* set_max_proposal_id */ ProposalId,
     ) -> (ProposalId, ProposalId),
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
 ) -> NetworkEconomics {
     // Step 1: Prepare the world.
 
@@ -2155,7 +2241,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         id: Some(NeuronId { id: 1 }),
         controller: Some(controller),
         account: vec![42_u8; 32],
-        dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+        dissolve_state: not_dissolving_min_dissolve_delay,
         cached_neuron_stake_e8s: 100 * E8,
         ..Default::default()
     };
@@ -4451,6 +4537,7 @@ fn compute_maturities(
     stakes_e8s: Vec<u64>,
     proposals: Vec<impl Into<fake::ProposalNeuronBehavior>>,
     reward_pot_e8s: u64,
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
 ) -> Vec<u64> {
     reset_stable_memory();
     let proposals: Vec<fake::ProposalNeuronBehavior> =
@@ -4467,7 +4554,7 @@ fn compute_maturities(
             id: Some(NeuronId { id: i as u64 }),
             controller: Some(principal(i as u64)),
             cached_neuron_stake_e8s: *stake_e8s,
-            dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+            dissolve_state: not_dissolving_min_dissolve_delay,
             account: fake_driver
                 .random_byte_array()
                 .expect("Could not get random byte array")
@@ -12056,6 +12143,7 @@ struct NeuronVote {
 fn wait_for_quiet_test_helper(
     initial_expiration_seconds: u64,
     in_neuron_votes: &mut Vec<NeuronVote>,
+    not_dissolving_min_dissolve_delay: Option<DissolveState>,
 ) -> (Governance, ProposalId, u64) {
     let mut neuron_votes = vec![NeuronVote {
         vote_and_time: Some((Vote::Yes, 0)),
@@ -12076,7 +12164,7 @@ fn wait_for_quiet_test_helper(
         .map(|(i, neuron_vote)| Neuron {
             id: Some(NeuronId { id: i as u64 }),
             account: account(i as u64),
-            dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+            dissolve_state: not_dissolving_min_dissolve_delay,
             controller: Some(principal(i as u64)),
             cached_neuron_stake_e8s: neuron_vote.stake,
             ..Neuron::default()
@@ -12160,11 +12248,22 @@ fn wait_for_quiet_test_helper(
     (gov, pid, initial_deadline_seconds)
 }
 
+#[test]
+fn test_wfq_big_late_voter_delay_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_wfq_big_late_voter_delay(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_wfq_big_late_voter_delay_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_wfq_big_late_voter_delay(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// Simulates the situation in which there is a big voter close to the deadline
 /// that votes against the trend. Asserts the deadline has moved by at least
 /// half of the possible delay, but not more than the maximum.
-#[test]
-fn test_wfq_big_late_voter_delay() {
+fn run_wfq_big_late_voter_delay(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     let initial_expiration_seconds = 1000;
     let mut neuron_votes = vec![
         NeuronVote {
@@ -12180,8 +12279,11 @@ fn test_wfq_big_late_voter_delay() {
             stake: 10_000_000,
         },
     ];
-    let (gov, pid, initial_deadline_seconds) =
-        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let (gov, pid, initial_deadline_seconds) = wait_for_quiet_test_helper(
+        initial_expiration_seconds,
+        &mut neuron_votes,
+        not_dissolving_min_dissolve_delay,
+    );
     let deadline_after_test = gov
         .get_proposal_data(pid)
         .unwrap()
@@ -12198,11 +12300,22 @@ fn test_wfq_big_late_voter_delay() {
     );
 }
 
+#[test]
+fn test_wfq_majority_reached_no_delay_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_wfq_majority_reached_no_delay(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_wfq_majority_reached_no_delay_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_wfq_majority_reached_no_delay(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// Simulates a similar situation to the previous test, with the difference that
 /// the big voter reaches a majority, so there is no point in extending the
 /// deadline.
-#[test]
-fn test_wfq_majority_reached_no_delay() {
+fn run_wfq_majority_reached_no_delay(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     let initial_expiration_seconds = 1000;
     let mut neuron_votes = vec![
         NeuronVote {
@@ -12214,8 +12327,11 @@ fn test_wfq_majority_reached_no_delay() {
             stake: 200_000_000,
         },
     ];
-    let (gov, pid, initial_deadline_seconds) =
-        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let (gov, pid, initial_deadline_seconds) = wait_for_quiet_test_helper(
+        initial_expiration_seconds,
+        &mut neuron_votes,
+        not_dissolving_min_dissolve_delay,
+    );
     let deadline_after_test = gov
         .get_proposal_data(pid)
         .unwrap()
@@ -12229,11 +12345,22 @@ fn test_wfq_majority_reached_no_delay() {
     );
 }
 
+#[test]
+fn test_wfq_low_noise_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_wfq_low_noise(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_wfq_low_noise_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_wfq_low_noise(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// Simulates a situation in which most of the voting is done at the beginning of
 /// the interval and there is no controversy. In such situation there should be
 /// no effect on the deadline.
-#[test]
-fn test_wfq_low_noise() {
+fn run_wfq_low_noise(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     let initial_expiration_seconds = 1000;
     let mut neuron_votes = vec![
         NeuronVote {
@@ -12253,8 +12380,11 @@ fn test_wfq_low_noise() {
             stake: 500_000_000,
         },
     ];
-    let (gov, pid, initial_deadline_seconds) =
-        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let (gov, pid, initial_deadline_seconds) = wait_for_quiet_test_helper(
+        initial_expiration_seconds,
+        &mut neuron_votes,
+        not_dissolving_min_dissolve_delay,
+    );
     let deadline_after_test = gov
         .get_proposal_data(pid)
         .unwrap()
@@ -12265,11 +12395,22 @@ fn test_wfq_low_noise() {
     assert_eq!(deadline_after_test, initial_deadline_seconds);
 }
 
+#[test]
+fn test_wfq_multiple_delays_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_wfq_multiple_delays(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_wfq_multiple_delays_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_wfq_multiple_delays(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
 /// simulates a situation in which there are multiple swings close to the
 /// deadline, extending it several times. Checks that the deadline has been
 /// extended more than the maximum (thus has been extended several times).
-#[test]
-fn test_wfq_multiple_delays() {
+fn run_wfq_multiple_delays(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     let initial_expiration_seconds = 1000;
     let mut neuron_votes = vec![
         NeuronVote {
@@ -12293,8 +12434,11 @@ fn test_wfq_multiple_delays() {
             stake: 1_000_000,
         },
     ];
-    let (gov, pid, initial_deadline_seconds) =
-        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let (gov, pid, initial_deadline_seconds) = wait_for_quiet_test_helper(
+        initial_expiration_seconds,
+        &mut neuron_votes,
+        not_dissolving_min_dissolve_delay,
+    );
     let deadline_after_test = gov
         .get_proposal_data(pid)
         .unwrap()
@@ -12307,9 +12451,20 @@ fn test_wfq_multiple_delays() {
     );
 }
 
-/// Real voting data
 #[test]
-fn test_wfq_real_data() {
+fn test_wfq_real_data_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_wfq_real_data(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+}
+
+#[test]
+fn test_wfq_real_data_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_wfq_real_data(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+}
+
+/// Real voting data
+fn run_wfq_real_data(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
     let initial_expiration_seconds = ONE_DAY_SECONDS;
     let mut neuron_votes = {
         vec![
@@ -12887,8 +13042,11 @@ fn test_wfq_real_data() {
             },
         ]
     };
-    let (gov, pid, initial_deadline_seconds) =
-        wait_for_quiet_test_helper(initial_expiration_seconds, &mut neuron_votes);
+    let (gov, pid, initial_deadline_seconds) = wait_for_quiet_test_helper(
+        initial_expiration_seconds,
+        &mut neuron_votes,
+        not_dissolving_min_dissolve_delay,
+    );
     let deadline_after_test = gov
         .get_proposal_data(pid)
         .unwrap()
