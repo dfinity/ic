@@ -5257,14 +5257,15 @@ fn governance_with_staked_neuron(
 ///
 /// If `dissolved` is true, the returned neuron is in the "dissolved" state,
 /// otherwise the returned neuron is in the "not-dissolving" state.
-fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuron) {
+fn create_mature_neuron(
+    dissolved: bool,
+    dissolve_delay_seconds: u64,
+) -> (fake::FakeDriver, Governance, Neuron) {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
     let nonce = 1234u64;
 
     let block_height = 543212234;
-    let dissolve_delay_seconds =
-        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
     let neuron_stake_e8s = 100_000_000;
 
     let (mut driver, mut gov, id, to_subaccount) = governance_with_staked_neuron(
@@ -5317,9 +5318,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             .expect("Neuron not found")
             .expect("Configure neuron failed.");
         // Advance the time in the env
-        driver.advance_time_by(
-            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1,
-        );
+        driver.advance_time_by(dissolve_delay_seconds + 1);
 
         // The neuron state should now be "Dissolved", meaning we can
         // now disburse the neuron.
@@ -5338,9 +5337,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             NeuronState::Dissolved
         );
     } else {
-        driver.advance_time_by(
-            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS + 1,
-        );
+        driver.advance_time_by(dissolve_delay_seconds + 1);
     }
 
     gov.neuron_store
@@ -5361,8 +5358,20 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
-fn test_neuron_lifecycle() {
-    let (driver, mut gov, neuron) = create_mature_neuron(true);
+fn test_neuron_lifecycle_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_neuron_lifecycle(THREE_MONTHS);
+}
+
+#[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
+fn test_neuron_lifecycle_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_neuron_lifecycle(SIX_MONTHS);
+}
+
+fn run_neuron_lifecycle(minimum_dissolve_delay_to_vote: u64) {
+    let (driver, mut gov, neuron) = create_mature_neuron(true, minimum_dissolve_delay_to_vote);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -5399,8 +5408,20 @@ fn test_neuron_lifecycle() {
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
-fn test_disburse_to_subaccount() {
-    let (driver, mut gov, neuron) = create_mature_neuron(true);
+fn test_disburse_to_subaccount_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_disburse_to_subaccount(THREE_MONTHS);
+}
+
+#[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
+fn test_disburse_to_subaccount_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_disburse_to_subaccount(SIX_MONTHS);
+}
+
+fn run_disburse_to_subaccount(minimum_dissolve_delay_to_vote: u64) {
+    let (driver, mut gov, neuron) = create_mature_neuron(true, minimum_dissolve_delay_to_vote);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -5442,8 +5463,19 @@ fn test_disburse_to_subaccount() {
 }
 
 #[test]
-fn test_nns1_520() {
-    let (driver, mut gov, neuron) = create_mature_neuron(true);
+fn test_nns1_520_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_nns1_520(THREE_MONTHS);
+}
+
+#[test]
+fn test_nns1_520_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_nns1_520(SIX_MONTHS);
+}
+
+fn run_nns1_520(minimum_dissolve_delay_to_vote: u64) {
+    let (driver, mut gov, neuron) = create_mature_neuron(true, minimum_dissolve_delay_to_vote);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -5493,8 +5525,20 @@ fn test_nns1_520() {
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
-fn test_disburse_to_main_account() {
-    let (driver, mut gov, neuron) = create_mature_neuron(true);
+fn test_disburse_to_main_account_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_disburse_to_main_account(THREE_MONTHS);
+}
+
+#[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
+fn test_disburse_to_main_account_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_disburse_to_main_account(SIX_MONTHS);
+}
+
+fn run_disburse_to_main_account(minimum_dissolve_delay_to_vote: u64) {
+    let (driver, mut gov, neuron) = create_mature_neuron(true, minimum_dissolve_delay_to_vote);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -5904,8 +5948,20 @@ fn test_refresh_neuron_by_subaccount_by_proxy() {
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
-fn test_claim_or_refresh_neuron_does_not_overflow() {
-    let (mut driver, mut gov, neuron) = create_mature_neuron(true);
+fn test_claim_or_refresh_neuron_does_not_overflow_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_claim_or_refresh_neuron_does_not_overflow(THREE_MONTHS);
+}
+
+#[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
+fn test_claim_or_refresh_neuron_does_not_overflow_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_claim_or_refresh_neuron_does_not_overflow(SIX_MONTHS);
+}
+
+fn run_claim_or_refresh_neuron_does_not_overflow(minimum_dissolve_delay_to_vote: u64) {
+    let (mut driver, mut gov, neuron) = create_mature_neuron(true, minimum_dissolve_delay_to_vote);
     let nid = neuron.id.unwrap();
     let subaccount = Subaccount::try_from(&neuron.account[..]).unwrap();
 
@@ -6110,8 +6166,20 @@ fn run_rate_limiting_neuron_creation(minimum_dissolve_delay_to_vote: u64) {
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
-fn test_cant_disburse_without_paying_fees() {
-    let (driver, mut gov, neuron) = create_mature_neuron(true);
+fn test_cant_disburse_without_paying_fees_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_cant_disburse_without_paying_fees(THREE_MONTHS);
+}
+
+#[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
+fn test_cant_disburse_without_paying_fees_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_cant_disburse_without_paying_fees(SIX_MONTHS);
+}
+
+fn run_cant_disburse_without_paying_fees(minimum_dissolve_delay_to_vote: u64) {
+    let (driver, mut gov, neuron) = create_mature_neuron(true, minimum_dissolve_delay_to_vote);
 
     let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
@@ -10711,8 +10779,19 @@ fn run_stop_dissolving_panics(minimum_dissolve_delay: u64) {
 }
 
 #[test]
-fn test_update_node_provider() {
-    let (_, mut gov, neuron) = create_mature_neuron(false);
+fn test_update_node_provider_3_months() {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+    run_update_node_provider(THREE_MONTHS);
+}
+
+#[test]
+fn test_update_node_provider_6_months() {
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+    run_update_node_provider(SIX_MONTHS);
+}
+
+fn run_update_node_provider(minimum_dissolve_delay_to_vote: u64) {
+    let (_, mut gov, neuron) = create_mature_neuron(false, minimum_dissolve_delay_to_vote);
     let id = neuron.id.unwrap();
     let neuron = gov
         .neuron_store
