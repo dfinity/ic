@@ -11,7 +11,7 @@ use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
-use ic_test_utilities_metrics::fetch_int_counter;
+use ic_test_utilities_metrics::fetch_counter_vec;
 use ic_types::{
     messages::{MessageId, RequestOrResponse},
     xnet::StreamHeader,
@@ -338,19 +338,12 @@ impl SubnetPair {
 
     /// Returns the canister logs for `canister` as a vector of error messages.
     pub fn canister_logs(&self, canister: &CanisterId) -> Vec<String> {
-        self
-            .get_env(canister)
+        self.get_env(canister)
             .canister_log(*canister)
             .records()
             .iter()
             .map(|record| String::from_utf8(record.content.clone()).unwrap())
             .collect()
-
-//            .fetch_canister_logs(*canister)
-//            .unwrap()
-//            .into_iter()
-//            .map(|record| String::from_utf8(record.content).unwrap())
-//            .collect()
     }
 
     /// Returns the latest state `canister` is located on.
@@ -517,7 +510,10 @@ impl SubnetPair {
             "Message memory used despite no open call contexts",
             0,
             0,
-        )
+        )?;
+
+        // Consistency check.
+        self.check_critical_errors_and_traps()
     }
 
     /// Migrates `canister` from `local_env` to `remote_env`.
@@ -541,11 +537,12 @@ impl SubnetPair {
     }
 
     /// Returns the canister records, the latest local state and the latest remote state.
+    ///
+    /// # Panics if any critical errors were raised.
     pub fn failed_with_reason(&self, reason: impl Into<String>) -> Result<(), (String, DebugInfo)> {
         Err((
             reason.into(),
             DebugInfo {
-                traps: self.gather_canister_trap_messages(),
                 records: self
                     .canisters()
                     .iter()
@@ -556,43 +553,49 @@ impl SubnetPair {
         ))
     }
 
-    /// Returns a vector of non-empty canister trap error messages
-    /// together with the corresponding canister ID.
-    pub fn gather_canister_trap_messages(&self) -> Vec<(CanisterId, String)> {
+    /// Gathers trap messages from the canisters logs of each canister and return it as map of
+    /// canister ID to logs (decoded into strings).
+    pub fn gather_canister_traps(&self) -> BTreeMap<CanisterId, Vec<String>> {
         self.canisters()
-            .iter()
+            .into_iter()
             .filter_map(|canister| {
-                let err_msg: String = self.force_query(canister, "heartbeat_trap_msg");
-                (!err_msg.is_empty()).then_some((*canister, err_msg))
+                let log = self
+                    .get_env(&canister)
+                    .canister_log(canister)
+                    .records()
+                    .iter()
+                    .filter_map(|record| {
+                        let err_msg = String::from_utf8(record.content.clone()).unwrap();
+                        err_msg.contains("[TRAP]").then_some(err_msg)
+                    })
+                    .collect::<Vec<_>>();
+                (!log.is_empty()).then_some((canister, log))
             })
             .collect()
     }
 
     /// Asserts no critical errors were recorded in the metrics; and checks canisters did not
     /// record any trap messages.
-    pub fn assert_no_critical_errors(&self) -> Result<(), (String, DebugInfo)> {
-        self.local_env.check_critical_errors();
-        self.remote_env.check_critical_errors();
-
-        for env in [&self.local_env, &self.remote_env] {
-            for metric in [
-                "mr_bad_reject_signal_for_response",
-                "mr_sender_subnet_mismatch",
-                "mr_receiver_subnet_mismatch",
-                "mr_request_misrouted",
-                "mr_induct_response_failed",
-            ] {
-                if let Some(counter @ 1..) = fetch_int_counter(&env.metrics_registry, metric) {
-                    return self.failed_with_reason(format!(
-                        "critical error counter '{metric}' is {counter}"
-                    ));
-                }
+    pub fn check_critical_errors_and_traps(&self) -> Result<(), (String, DebugInfo)> {
+        // Checks for critical errors on the `metrics_registry`.
+        fn check_critical_errors(env: &StateMachine) -> Result<(), String> {
+            let error_counter_vec = fetch_counter_vec(&env.metrics_registry, "critical_errors");
+            match error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
+                Some((metric, _)) => Err(metric.get("error").unwrap().to_string()),
+                None => Ok(()),
             }
         }
 
-        let traps = self.gather_canister_trap_messages();
+        if let Err(err) = check_critical_errors(&self.local_env) {
+            return self.failed_with_reason(format!("critical_error on `local_env`: {err}"));
+        }
+        if let Err(err) = check_critical_errors(&self.remote_env) {
+            return self.failed_with_reason(format!("critical_error on `remote_env`: {err}"));
+        }
+
+        let traps = self.gather_canister_traps();
         if !traps.is_empty() {
-            return self.failed_with_reason(format!("got canister traps: {:?}", traps));
+            return self.failed_with_reason(format!("{:#?}", traps));
         }
 
         Ok(())
@@ -602,7 +605,6 @@ impl SubnetPair {
 /// Returned by `SubnetPair::failed_with_reason()`.
 #[allow(dead_code)]
 pub struct DebugInfo {
-    pub traps: Vec<(CanisterId, String)>,
     pub records: BTreeMap<CanisterId, BTreeMap<u32, CanisterRecord>>,
     pub subnets: SubnetPair,
 }
