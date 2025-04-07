@@ -1,5 +1,5 @@
 use crate::{
-    decoder_config,
+    are_nf_fund_proposals_disabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -1669,13 +1669,8 @@ impl Governance {
         // the rest live in heap.
 
         // Note: We do not carry over the RNG seed in new governance, only in restored governance.
-        let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
+        let (neurons, heap_governance_proto, _maybe_rng_seed) =
             split_governance_proto(governance_proto);
-
-        assert!(
-            topic_followee_index.is_empty(),
-            "Topic followee index should be empty when initializing for the first time"
-        );
 
         // Step 3: Final assembly.
         Self {
@@ -1708,7 +1703,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
+        let (heap_neurons, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
@@ -1719,7 +1714,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
+            neuron_store: NeuronStore::new_restored(heap_neurons),
             env,
             ledger,
             cmc,
@@ -1737,28 +1732,17 @@ impl Governance {
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let neuron_store = std::mem::take(&mut self.neuron_store);
-        let (neurons, heap_topic_followee_index) = neuron_store.take();
+        let neurons = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(
-            neurons,
-            heap_topic_followee_index,
-            heap_governance_proto,
-            rng_seed,
-        )
+        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
         let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(
-            neurons,
-            heap_topic_followee_index,
-            heap_governance_proto,
-            rng_seed,
-        )
+        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
@@ -2068,7 +2052,7 @@ impl Governance {
     /// Neurons that directly follow the `followees` w.r.t. the
     /// topic `NeuronManagement`.
     pub fn get_managed_neuron_ids_for(&self, followees: Vec<NeuronId>) -> Vec<NeuronId> {
-        // Tap into the `topic_followee_index` for followers of level zero neurons.
+        // Tap into the neuron followee index for followers of level zero neurons.
         let mut managed: Vec<NeuronId> = followees.clone();
         for followee in followees {
             managed.extend(
@@ -5267,10 +5251,21 @@ impl Governance {
         let conversion_result = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
             create_service_nervous_system.clone(),
         ));
-        if let Err(err) = conversion_result {
+
+        let validated = conversion_result.map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid CreateServiceNervousSystem: {}", e),
+            )
+        })?;
+
+        if are_nf_fund_proposals_disabled()
+            && validated.neurons_fund_participation.unwrap_or_default()
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Invalid CreateServiceNervousSystem: {}", err),
+                "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed \
+                as decided by motion proposal 135970: https://dashboard.internetcomputer.org/proposal/135970.",
             ));
         }
 
@@ -5853,10 +5848,6 @@ impl Governance {
         caller: &PrincipalId,
         follow_request: &manage_neuron::Follow,
     ) -> Result<(), GovernanceError> {
-        // The implementation of this method is complicated by the
-        // fact that we have to maintain a reverse index of all follow
-        // relationships, i.e., the `topic_followee_index`.
-
         // Find the neuron to modify.
         let (is_neuron_controlled_by_caller, is_caller_authorized_to_vote) =
             self.with_neuron(id, |neuron| {
