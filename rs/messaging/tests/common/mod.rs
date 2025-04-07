@@ -17,6 +17,8 @@ use ic_types::{
     xnet::StreamHeader,
     Cycles,
 };
+use ic_management_canister_types_private::{FetchCanisterLogsRequest, FetchCanisterLogsResponse, CanisterLogRecord};
+//use types::management_canister_types::{};
 use proptest::prop_compose;
 use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
 use std::collections::{BTreeMap, BTreeSet};
@@ -334,6 +336,26 @@ impl SubnetPair {
             }
             Ok(records) => records,
         }
+    }
+
+    //pub fn fetch_canister_logs(&self, canister: &CanisterId) -> Vec<String> {
+    pub fn fetch_canister_logs(&self, canister: &CanisterId) -> Vec<CanisterLogRecord> {
+        let reply = self
+            .get_env(canister)
+            .query(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                candid::Encode!(&FetchCanisterLogsRequest::new(*canister)).unwrap(),
+            )
+            .unwrap();
+        candid::Decode!(&reply.bytes(), FetchCanisterLogsResponse)
+            .unwrap()
+            .canister_log_records
+//            .into_iter()
+//            .map(|record| {
+//                String::from_utf8(record.content).unwrap()
+//            })
+//            .collect()
     }
 
     /// Returns the latest state `canister` is located on.

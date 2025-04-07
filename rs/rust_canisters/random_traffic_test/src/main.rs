@@ -311,6 +311,7 @@ fn update_record(result: &CallResult<Reply>, index: u32) {
 /// Returns the number of successful calls (i.e. calls that got a reply).
 #[update]
 async fn pulse(calls_count: u32) -> u32 {
+    assert!(false, "BUZZ OFF");
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
     for _ in 0..calls_count {
         let (future, index) = setup_call(next_call_tree_id(), 0);

@@ -149,7 +149,8 @@ fn bla() {
             "\nerr_msg: {err_msg}\n{:#?}\n{:#?}\n{:#?}",
             nfo.traps,
             nfo.records,
-            nfo.subnets.remote_env.get_latest_state()
+            //nfo.subnets.remote_env.get_latest_state()
+            nfo.subnets.local_env.get_latest_state().canister_states.get(nfo.subnets.local_canister())
         );
     }
 }
@@ -202,6 +203,10 @@ fn check_calls_conclude_with_migrating_canister_impl(
     for _ in 0..chatter_phase_round_count {
         subnets.local_env.tick();
     }
+    let logs = subnets.fetch_canister_logs(subnets.local_canister());
+    assert!(false, "{:#?}", logs);
+
+
     // Induct the stream into `remote_env` and ensure there are reject signals in the reverse
     // stream header.
     if let Err(err) = induct_from_head_of_stream(&subnets.local_env, &subnets.remote_env, None) {
@@ -229,7 +234,23 @@ fn check_calls_conclude_with_migrating_canister_impl(
     {
         subnets.stop_chatter(canister);
     }
-    subnets.tick_to_conclusion(shutdown_phase_max_rounds, || Ok(()))?;
+    //subnets.tick_to_conclusion(shutdown_phase_max_rounds, || Ok(()))?;
+   
+
+    if let Err(_) = subnets.tick_to_conclusion(shutdown_phase_max_rounds, || Ok(())) {
+        let logs = subnets.fetch_canister_logs(&migrating_canister);
+        assert!(false, "{:#?}", logs);
+        for _ in 0..20000 {
+            subnets.tick();
+            //subnets.remote_env.tick();
+        }
+        assert!(false, "{:#?}", subnets.open_call_contexts_count());
+//        let state_1 = subnets.remote_env.get_latest_state();
+//        subnets.tick();
+//        let state_2 = subnets.remote_env.get_latest_state();
+    
+//        assert_eq!(state_1, state_2);
+    }
 
     // Ensure no critical errors or canister traps were recorded.
     subnets.assert_no_critical_errors()
