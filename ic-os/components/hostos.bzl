@@ -10,8 +10,6 @@ component_files = {
     Label("hostos-scripts/guestos/start-guestos.sh"): "/opt/ic/bin/start-guestos.sh",
     Label("hostos-scripts/guestos/stop-guestos.sh"): "/opt/ic/bin/stop-guestos.sh",
     Label("hostos-scripts/guestos/guestos.xml.template"): "/opt/ic/share/guestos.xml.template",
-    Label("hostos-scripts/guestos/kvm-cpu.xml"): "/opt/ic/share/kvm-cpu.xml",
-    Label("hostos-scripts/guestos/qemu-cpu.xml"): "/opt/ic/share/qemu-cpu.xml",
     Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
