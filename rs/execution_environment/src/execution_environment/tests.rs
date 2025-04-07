@@ -3663,7 +3663,7 @@ fn test_vetkd_public_key_api_is_enabled() {
     let response = test.xnet_messages()[1].clone();
     assert_eq!(
         get_reject_message(response),
-        "failed to retrieve VetKD public key: InvalidPublicKey",
+        "Invalid VetKD subnet key: InvalidPublicKey",
     )
 }
 
