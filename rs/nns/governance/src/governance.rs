@@ -67,6 +67,7 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
+    use_node_provider_reward_canister,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -120,6 +121,7 @@ use registry_canister::{
 };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{
     borrow::Cow,
@@ -7721,8 +7723,7 @@ impl Governance {
         let mut rewards = vec![];
 
         // Maps node providers to their rewards in XDR
-        let xdr_permyriad_rewards: NodeProvidersMonthlyXdrRewards =
-            self.get_node_providers_monthly_xdr_rewards().await?;
+        let (reg_rewards, maybe_version) = self.get_node_providers_monthly_xdr_rewards().await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
@@ -7742,9 +7743,7 @@ impl Governance {
         // `rewards`
         for np in &self.heap_data.node_providers {
             if let Some(np_id) = &np.id {
-                let np_id_str = np_id.to_string();
-                let xdr_permyriad_reward =
-                    *xdr_permyriad_rewards.rewards.get(&np_id_str).unwrap_or(&0);
+                let xdr_permyriad_reward = *reg_rewards.get(&np_id).unwrap_or(&0);
 
                 if let Some(reward_node_provider) =
                     get_node_provider_reward(np, xdr_permyriad_reward, xdr_permyriad_per_icp)
@@ -7759,7 +7758,7 @@ impl Governance {
             xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
         };
 
-        let registry_version = xdr_permyriad_rewards.registry_version.unwrap();
+        let registry_version = maybe_version.unwrap();
 
         Ok(MonthlyNodeProviderRewards {
             timestamp: self.env.now(),
@@ -7774,8 +7773,28 @@ impl Governance {
 
     /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
     async fn get_node_providers_monthly_xdr_rewards(
-        &mut self,
-    ) -> Result<NodeProvidersMonthlyXdrRewards, GovernanceError> {
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
+        if use_node_provider_reward_canister() {
+            self.get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister()
+                .await
+        } else {
+            self.get_node_providers_monthly_xdr_rewards_from_registry()
+                .await
+        }
+    }
+
+    async fn get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister(
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
+        unimplemented!()
+    }
+
+    /// A helper to get the node provider rewards from registry (instead of Node Provider Reward Canister)
+    /// This will be removed once the Node Provider Reward Canister is in use.
+    async fn get_node_providers_monthly_xdr_rewards_from_registry(
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
         let registry_response:
             Vec<u8> = self
             .env
@@ -7796,14 +7815,35 @@ impl Governance {
             })?;
 
         Decode!(&registry_response, Result<NodeProvidersMonthlyXdrRewards, String>)
-            .map_err(|err| GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
-                    err,
-                ),
-            ))?
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
+                        err,
+                    ),
+                )
+            })?
             .map_err(|msg| GovernanceError::new_with_message(ErrorType::External, msg))
+            .map(|response| {
+                let NodeProvidersMonthlyXdrRewards {
+                    rewards,
+                    registry_version,
+                } = response;
+
+                let rewards = rewards
+                    .into_iter()
+                    .map(|(principal_str, amount)| {
+                        (
+                            PrincipalId::from_str(&principal_str)
+                                .expect("Could not get principal from string"),
+                            amount,
+                        )
+                    })
+                    .collect();
+
+                (rewards, registry_version)
+            })
     }
 
     /// A helper for the CMC's get_average_icp_xdr_conversion_rate method

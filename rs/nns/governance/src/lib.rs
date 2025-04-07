@@ -212,6 +212,9 @@ thread_local! {
 
     static IS_DISBURSE_MATURITY_ENABLED: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
+
+    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -315,6 +318,20 @@ pub fn temporarily_enable_disburse_maturity() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_disburse_maturity() -> Temporary {
     Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, false)
+}
+
+pub fn use_node_provider_reward_canister() -> bool {
+    USE_NODE_PROVIDER_REWARD_CANISTER.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_node_provider_reward_canister() -> Temporary {
+    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_node_provider_reward_canister() -> Temporary {
+    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
