@@ -2306,18 +2306,13 @@ fn read_canister_snapshot_data_succeeds() {
     test_data_wasm_heap(&mut test, canister_id, snapshot_id, wasm_memory_size);
 
     // stable memory
-    let args_stable = ReadCanisterSnapshotDataArgs::new(
+    test_data_stable_memory(
+        &mut test,
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::StableMemory {
-            offset: 0,
-            // 4259840
-            size: stable_memory_size,
-        },
+        stable_memory_size,
+        stable_pages,
     );
-    let chunk = read_canister_snapshot_data(&mut test, &args_stable);
-    assert_eq!(chunk.len(), stable_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
-    println!("stable memory ok");
 
     // chunk store
     assert_eq!(wasm_chunk_store.len(), 2);
@@ -2362,7 +2357,6 @@ fn test_data_wasm_module(
     );
     let chunk = read_canister_snapshot_data(test, &args_module);
     assert_eq!(chunk, uni_canister_wasm);
-    println!("wasm module ok");
 }
 
 fn test_data_wasm_heap(
@@ -2395,7 +2389,55 @@ fn test_data_wasm_heap(
     );
     let chunk = read_canister_snapshot_data(test, &args_main);
     assert_eq!(chunk.len(), rest as usize);
-    println!("heap ok");
+}
+
+fn test_data_stable_memory(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    stable_memory_size: u64,
+    stable_pages: u64,
+) {
+    // stable_memory_size ~ 4259840 does not fit into one slice
+    let max_chunk_size = 2 * 1000 * 1000;
+    let mut total_len = 0;
+    let rest = stable_memory_size - max_chunk_size * 2;
+    // slice 1
+    let args_stable = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: 0,
+            size: max_chunk_size,
+        },
+    );
+    let chunk = read_canister_snapshot_data(test, &args_stable);
+    assert_eq!(chunk.len(), max_chunk_size as usize);
+    total_len += chunk.len();
+    // slice 2
+    let args_stable = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: max_chunk_size,
+            size: max_chunk_size,
+        },
+    );
+    let chunk = read_canister_snapshot_data(test, &args_stable);
+    assert_eq!(chunk.len(), max_chunk_size as usize);
+    total_len += chunk.len();
+    // slice 3
+    let args_stable = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::StableMemory {
+            offset: max_chunk_size * 2,
+            size: rest,
+        },
+    );
+    let chunk = read_canister_snapshot_data(test, &args_stable);
+    total_len += chunk.len();
+    assert_eq!(total_len, stable_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
 }
 
 #[test]
