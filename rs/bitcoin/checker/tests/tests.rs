@@ -430,7 +430,7 @@ fn test_check_transaction_passed() {
     env.upgrade_canister(
         setup.btc_checker_canister,
         btc_checker_wasm(),
-        Encode!(&()).unwrap(),
+        Encode!().unwrap(),
         Some(setup.controller),
     )
     .unwrap();
