@@ -23,7 +23,8 @@ pub mod proposal_info_response;
 
 use candid::{Decode, Encode};
 use core::ops::Deref;
-use ic_agent::agent::{RejectCode, RejectResponse};
+use ic_agent::agent::{RejectCode, RejectResponse, RequestStatusResponse};
+use ic_agent::RequestId;
 use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::{
     convert::TryFrom,
@@ -121,7 +122,6 @@ pub trait LedgerAccess {
 pub struct LedgerClient {
     ledger_blocks_synchronizer: LedgerBlocksSynchronizer<CanisterAccess>,
     canister_id: CanisterId,
-    root_key: Option<ThresholdSigPublicKey>,
     governance_canister_id: CanisterId,
     canister_access: Option<Arc<CanisterAccess>>,
     ic_url: Url,
@@ -198,7 +198,6 @@ impl LedgerClient {
         Ok(Self {
             ledger_blocks_synchronizer,
             canister_id,
-            root_key,
             token_symbol,
             governance_canister_id,
             canister_access,
@@ -511,10 +510,6 @@ fn update_path(cid: CanisterId) -> String {
     format!("api/v2/canister/{}/call", cid)
 }
 
-fn read_state_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/read_state", cid)
-}
-
 impl LedgerClient {
     // Exponential backoff from 100ms to 10s with a multiplier of 1.3.
     const MIN_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -667,7 +662,6 @@ impl LedgerClient {
                 request_type,
                 start_time,
                 deadline,
-                http_client,
                 read_state_http_body,
             )
             .await
@@ -720,7 +714,6 @@ impl LedgerClient {
         request_type: RequestType,
         start_time: Instant,
         deadline: Instant,
-        http_client: &Client,
         read_state_http_body: SignedRequestBytes,
     ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
         // Cut&paste from canister_client Agent.
@@ -728,87 +721,40 @@ impl LedgerClient {
         while Instant::now() + poll_interval < deadline {
             debug!("Waiting {} ms for response", poll_interval.as_millis());
             actix_rt::time::sleep(poll_interval).await;
-            let wait_timeout = Self::TIMEOUT - start_time.elapsed();
-            let url = self
-                .ic_url
-                .join(&read_state_path(canister_id))
-                .expect("URL join failed");
 
-            match send_post_request(
-                http_client,
-                url.as_str(),
-                read_state_http_body.clone().into(),
-                wait_timeout,
-            )
-            .await
-            {
-                Err(err) => {
-                    // Retry client-side errors.
-                    error!("Error while reading the IC state: {}.", err);
+            let agent = &self.canister_access.as_ref().unwrap().agent;
+            let status = agent
+                .request_status_signed(
+                    &RequestId::new(&request_id.as_bytes()),
+                    canister_id.get().0,
+                    read_state_http_body.clone().into(),
+                )
+                .await
+                .map_err(|err| format!("While parsing the read state response: {}", err))?
+                .0;
+
+            debug!("Read state response: {:?}", status);
+
+            match status {
+                RequestStatusResponse::Replied(reply_response) => {
+                    return self.handle_reply(&request_type, reply_response.arg);
                 }
-                Ok((body, status)) => {
-                    if status.is_success() {
-                        let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
-                            .map_err(|err| format!("While parsing the status body: {}", err))?;
-
-                        let status = ic_read_state_response_parser::parse_read_state_response(
-                            &request_id,
-                            &canister_id,
-                            self.root_key.as_ref(),
-                            cbor,
-                        )
-                        .map_err(|err| format!("While parsing the read state response: {}", err))?;
-
-                        debug!("Read state response: {:?}", status);
-
-                        match status.status.as_ref() {
-                            "replied" => match status.reply {
-                                Some(bytes) => {
-                                    return self.handle_reply(&request_type, bytes);
-                                }
-                                None => {
-                                    return Err("Send returned with no result.".to_owned());
-                                }
-                            },
-                            "unknown" | "received" | "processing" => {}
-                            "rejected" => {
-                                return Ok(Err(ApiError::TransactionRejected(
-                                    false,
-                                    status
-                                        .reject_message
-                                        .unwrap_or_else(|| "(no message)".to_owned())
-                                        .into(),
-                                )));
-                            }
-                            "done" => {
-                                return Err(
-                                        "The call has completed but the reply/reject data has been pruned."
-                                            .to_string(),
-                                    );
-                            }
-                            _ => {
-                                return Err(format!(
-                                    "Send returned unexpected result: {:?} - {:?}",
-                                    status.status, status.reject_message
-                                ))
-                            }
-                        }
-                    } else {
-                        let body =
-                            String::from_utf8(body).unwrap_or_else(|_| "<undecodable>".to_owned());
-                        let err = format!(
-                            "HTTP error {} while reading the IC state: {}.",
-                            status, body
-                        );
-                        if status.is_server_error() {
-                            // Retry on 5xx errors.
-                            error!("{}", err);
-                        } else {
-                            return Err(err);
-                        }
-                    }
+                RequestStatusResponse::Unknown
+                | RequestStatusResponse::Received
+                | RequestStatusResponse::Processing => {}
+                RequestStatusResponse::Rejected(reject_response) => {
+                    return Ok(Err(ApiError::TransactionRejected(
+                        false,
+                        reject_response.reject_message.into(),
+                    )));
                 }
-            };
+                RequestStatusResponse::Done => {
+                    return Err(
+                        "The call has completed but the reply/reject data has been pruned."
+                            .to_string(),
+                    );
+                }
+            }
 
             // Bump the poll interval and compute the next poll time (based on current
             // wall time, so we don't spin without delay after a
