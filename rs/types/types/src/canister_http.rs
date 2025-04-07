@@ -839,32 +839,25 @@ mod validate_http_headers_and_body_tests {
     #[test]
     fn test_headers_at_max_total_size() {
         // Create headers that sum up exactly to the maximum total size
-        // let headers_count =  MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / (2 * MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE);
-        // let headers = (0..headers_count)
-        //     .map(|i| {
-        //         let mock_header_name_and_value = format!("Header-{}", i);
-        //         HttpHeader {
-        //             name: mock_header_name_and_value.clone(),
-        //             value: mock_header_name_and_value.clone(),
-        //         }
-        //     })
-        //     .collect::<Vec<_>>();
-        // let total_size = MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE;
+        let header_name_and_value_size = 2 * MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
+        
+        // We'll assume for this test that this division has no remainder.
+        assert!(MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE % header_name_and_value_size == 0);
 
-        let headers = vec![
-            HttpHeader {
-                name: "a".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
-                value: "a".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
-            },
-            HttpHeader {
-                name: "b".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
-                value: "b".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
-            },
-            HttpHeader {
-                name: "c".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
-                value: "c".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
-            },
-        ];
+        let headers_count =  MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / header_name_and_value_size;
+        
+        // headers will be an array of headers that will be exactly at the size limit.
+        let headers = (0..headers_count)
+            .map(|i| {
+                // mock_letter will be 'a' for the first chunck, then 'b' and etc.
+                let mock_letter = ((b'a' + i as u8) as char).to_string();
+                let mock_header_name_and_value = mock_letter.repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH);
+                HttpHeader {
+                    name: mock_header_name_and_value.clone(),
+                    value: mock_header_name_and_value.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
         let body = b"";
 
         let result = validate_http_headers_and_body(&headers, body);
