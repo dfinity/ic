@@ -236,35 +236,15 @@ fn find_node_operator_record_for_provider<'a>(
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
-    use ic_config::crypto::CryptoConfig;
-    use ic_crypto_node_key_generation::generate_node_keys_once;
-    use ic_crypto_node_key_validation::ValidNodePublicKeys;
-    use ic_nns_test_utils::registry::create_subnet_threshold_signing_pubkey_and_cup_mutations;
-    use ic_protobuf::{
-        registry::{
-            crypto::v1::{AlgorithmId, PublicKey, X509PublicKeyCert},
-            dc::v1::DataCenterRecord,
-            node::v1::{ConnectionEndpoint, NodeRecord},
-            node_operator::v1::NodeOperatorRecord,
-            replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-            routing_table::v1::{routing_table::Entry, CanisterIdRange, RoutingTable},
-            subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
-            unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
-        },
-        types::v1::SubnetId,
+    use ic_protobuf::registry::{
+        dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord,
     };
     use ic_registry_canister_api::UpdateNodeOperatorPayload;
     use ic_registry_keys::{
-        make_blessed_replica_versions_key, make_crypto_node_key, make_crypto_tls_cert_key,
         make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
-        make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-        make_subnet_record_key, make_unassigned_nodes_config_record_key,
     };
     use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
-    use ic_stable_structures::Storable;
-    use ic_types::{crypto::KeyPurpose, CanisterId, NodeId, PrincipalId, ReplicaVersion};
+    use ic_types::{NodeId, PrincipalId};
 
     use crate::{
         common::test_helpers::{
@@ -355,28 +335,9 @@ mod tests {
         )
     }
 
-    thread_local! {
-        /// Needed for invariant checks of each node
-        /// because each node has to have unique xnet
-        /// and http endpoints
-        static NEXT_NODE_NUMBER: RefCell<u8> = const { RefCell::new(0) };
-    }
-
     fn upsert_node_mutation(node_id: NodeId, operator: PrincipalId) -> RegistryMutation {
-        let current_node_number = NEXT_NODE_NUMBER.with_borrow_mut(|next_node_number| {
-            *next_node_number += 1;
-            *next_node_number
-        });
         let node_record = NodeRecord {
             node_operator_id: operator.as_slice().to_vec(),
-            xnet: Some(ConnectionEndpoint {
-                ip_addr: format!("192.{current_node_number}.0.1"),
-                port: 8080,
-            }),
-            http: Some(ConnectionEndpoint {
-                ip_addr: format!("192.{current_node_number}.0.2"),
-                port: 8080,
-            }),
             ..Default::default()
         };
 
