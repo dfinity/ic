@@ -9,9 +9,4 @@ pub mod canister;
 pub mod storage;
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn dummy_test_to_confirm_tests_are_being_run() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+mod test;

@@ -295,7 +295,7 @@ impl pb::Governance {
 }
 
 impl pb::Topic {
-    fn is_critical(&self) -> bool {
+    pub fn is_critical(&self) -> bool {
         // Fall back to default proposal criticality (if a topic isn't defined).
         //
         // Handled explicitly to avoid any doubts.

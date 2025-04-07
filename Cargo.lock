@@ -10434,6 +10434,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "mockall",
+ "prost 0.13.4",
 ]
 
 [[package]]
@@ -11448,6 +11449,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "futures-util",
  "ic-cdk 0.17.1",
  "ic-cdk-timers",
  "ic-interfaces-registry",
@@ -11457,9 +11459,13 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
+ "ic-registry-node-provider-rewards",
+ "ic-registry-transport",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-types",
+ "maplit",
+ "prost 0.13.4",
 ]
 
 [[package]]
@@ -11809,6 +11815,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-types",
  "itertools 0.12.1",
+ "prost 0.13.4",
 ]
 
 [[package]]
@@ -12103,6 +12110,7 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-messaging",
  "ic-metrics",
@@ -17337,9 +17345,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.70"
+version = "0.10.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
+checksum = "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
 dependencies = [
  "bitflags 2.8.0",
  "cfg-if 1.0.0",
@@ -17378,9 +17386,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.105"
+version = "0.9.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
+checksum = "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
 dependencies = [
  "cc",
  "libc",
@@ -18154,6 +18162,7 @@ dependencies = [
  "ic-error-types",
  "ic-management-canister-types",
  "ic-transport-types",
+ "ic-vetkd-utils",
  "k256 0.13.4",
  "lazy_static",
  "reqwest 0.12.12",

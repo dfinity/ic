@@ -416,6 +416,12 @@ fn test_sign_with_threshold_key_fee_charged() {
             1_000_000,
             2_000_000,
         ),
+        (
+            Method::VetKdDeriveKey,
+            make_vetkd_key("some_key"),
+            1_000_000,
+            2_000_000,
+        ),
     ];
     for (method, key_id, fee, payment) in test_cases {
         let own_subnet = subnet_test_id(1);
@@ -426,6 +432,7 @@ fn test_sign_with_threshold_key_fee_charged() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
+            .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
             .build();
 
@@ -447,6 +454,7 @@ fn test_sign_with_threshold_key_fee_charged() {
         // Disable automatic signing to be able to read the request payment value.
         env.set_ecdsa_signing_enabled(false);
         env.set_schnorr_signing_enabled(false);
+        env.set_vetkd_enabled(false);
         env.tick();
 
         // Assert that the request payment is equal to the payment minus the fee.
@@ -462,6 +470,7 @@ fn test_sign_with_threshold_key_fee_charged() {
         // Enable automatic signing to complete the request.
         env.set_ecdsa_signing_enabled(true);
         env.set_schnorr_signing_enabled(true);
+        env.set_vetkd_enabled(true);
         let max_ticks = 100;
         let result = env.await_ingress(msg_id, max_ticks);
         let signature = match method {
@@ -489,6 +498,11 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             make_bip340_key("some_key"),
             2_000_000,
         ),
+        (
+            Method::VetKdDeriveKey,
+            make_vetkd_key("some_key"),
+            2_000_000,
+        ),
     ];
     for (method, key_id, fee) in test_cases {
         let own_subnet = subnet_test_id(1);
@@ -499,6 +513,7 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
+            .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
             .build();
 
@@ -807,6 +822,7 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
+            .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
             .build();
 

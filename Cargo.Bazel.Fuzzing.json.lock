@@ -1,5 +1,5 @@
 {
-  "checksum": "3920b19512da45d2b25affda53ab0e4643b3d06bce6841c92fafd9374f10c633",
+  "checksum": "a19f55602c933ed19f74373cf271fae7927c3afa4e38b687586ae806f8cc3811",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -42766,7 +42766,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -42812,7 +42812,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -49691,14 +49691,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl 0.10.70": {
+    "openssl 0.10.72": {
       "name": "openssl",
-      "version": "0.10.70",
+      "version": "0.10.72",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl/0.10.70/download",
-          "sha256": "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
+          "url": "https://static.crates.io/crates/openssl/0.10.72/download",
+          "sha256": "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
         }
       },
       "targets": [
@@ -49755,11 +49755,11 @@
               "target": "once_cell"
             },
             {
-              "id": "openssl 0.10.70",
+              "id": "openssl 0.10.72",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49776,7 +49776,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.70"
+        "version": "0.10.72"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -49788,7 +49788,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49945,14 +49945,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.105": {
+    "openssl-sys 0.9.107": {
       "name": "openssl-sys",
-      "version": "0.9.105",
+      "version": "0.9.107",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.105/download",
-          "sha256": "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.107/download",
+          "sha256": "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
         }
       },
       "targets": [
@@ -49993,14 +49993,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.105"
+        "version": "0.9.107"
       },
       "build_script_attrs": {
         "compile_data_glob": [

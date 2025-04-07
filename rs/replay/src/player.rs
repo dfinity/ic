@@ -28,7 +28,7 @@ use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
-use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
+use ic_logger::{new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -80,8 +80,10 @@ use tempfile::TempDir;
 use tokio::runtime::Runtime;
 use tower::ServiceExt;
 
-// Amount of time we are waiting for execution, after batches are delivered.
+/// Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
+/// The backoff duration when polling the [`StateManager`] for state hash.
+const STATE_HASH_BACKOFF_DURATION: Duration = Duration::from_secs(1);
 
 /// Represents the height, hash and registry version of the last execution state
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -110,7 +112,7 @@ pub type ReplayResult = Result<StateParams, ReplayError>;
 
 /// The main ic-replay component that sets up consensus and execution
 /// environment to replay past blocks.
-pub struct Player {
+pub(crate) struct Player {
     state_manager: Arc<StateManagerImpl>,
     message_routing: Arc<dyn MessageRouting>,
     consensus_pool: Option<ConsensusPoolImpl>,
@@ -138,7 +140,7 @@ pub struct Player {
 impl Player {
     /// Create and return a `Player` from a replica configuration object for
     /// restoring states from backups.
-    pub fn new_for_backup(
+    pub(crate) fn new_for_backup(
         mut cfg: Config,
         replica_version: ReplicaVersion,
         backup_spool_path: &Path,
@@ -210,7 +212,7 @@ impl Player {
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub fn new(cfg: Config, subnet_id: SubnetId) -> Self {
+    pub(crate) fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
@@ -608,7 +610,7 @@ impl Player {
             // We first check if `height` was executed. Otherwise the state manager
             // would return a permanent error on a too big height.
             if self.state_manager.latest_state_height() >= height {
-                if let Some(hash) = get_state_hash(&*self.state_manager, height) {
+                if let Some(hash) = self.get_state_hash(height) {
                     println!("Latest checkpoint at height: {}", height);
                     println!("Latest state hash: {}", hex::encode(hash.get().0));
                 };
@@ -1200,7 +1202,8 @@ impl Player {
         }
 
         // Verify state hash against the state hash in the CUP
-        if get_state_hash(&*self.state_manager, last_cup.height())
+        if self
+            .get_state_hash(last_cup.height())
             .expect("No state hash at a current CUP height found")
             != last_cup.content.state_hash
         {
@@ -1230,6 +1233,10 @@ impl Player {
         }
 
         Ok(())
+    }
+
+    fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
+        get_state_hash(self.state_manager.as_ref(), &self.log, height)
     }
 }
 
@@ -1404,17 +1411,25 @@ fn setup_registry(
     registry
 }
 
-// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-// or when transient error persists `None` is returned.
+/// Returns the state hash for the given height once it is computed. For non-checkpoints heights
+/// [`None`] is returned.
+///
+/// Panicks when a permanent error other than `StateNotFullyCertified` is returned.
 fn get_state_hash<T>(
-    state_manager: &dyn StateManager<State = T>,
+    state_manager: &impl StateManager<State = T>,
+    log: &ReplicaLogger,
     height: Height,
 ) -> Option<CryptoHashOfState> {
-    for _ in 0..120 {
+    loop {
         match state_manager.get_state_hash_at(height) {
             Ok(hash) => return Some(hash),
             Err(StateHashError::Transient(err)) => {
-                println!("Waiting for state hash: {:?}", err);
+                warn!(
+                    log,
+                    "Waiting for state hash: {}. Retrying in {} seconds.",
+                    err,
+                    STATE_HASH_BACKOFF_DURATION.as_secs_f32()
+                );
             }
             // This only happens for partially certified heights.
             Err(StateHashError::Permanent(PermanentStateHashError::StateNotFullyCertified(h)))
@@ -1423,16 +1438,18 @@ fn get_state_hash<T>(
                 return None
             }
             Err(err) => {
-                panic!("State computation failed: {:?}", err)
+                panic!("State hash computation failed: {}", err)
             }
         }
-        std::thread::sleep(WAIT_DURATION);
+
+        std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
     }
-    None
 }
 
 #[cfg(test)]
 mod tests {
+    use ic_interfaces_state_manager::TransientStateHashError;
+    use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
@@ -1559,5 +1576,57 @@ mod tests {
             CryptoHash(vec![3]).into(),
             f
         ));
+    }
+
+    #[test]
+    fn get_state_hash_returns_the_correct_hash_test() {
+        let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_get_state_hash_at()
+            .return_once(move |_| Ok(fake_state_hash()));
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert_eq!(state_hash, Some(fake_state_hash()));
+    }
+
+    #[test]
+    fn get_state_hash_retries_on_transient_errors_test() {
+        let mut counter = 0;
+        let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_get_state_hash_at()
+            .times(5)
+            .returning(move |_| {
+                counter += 1;
+                if counter < 5 {
+                    Err(StateHashError::Transient(
+                        TransientStateHashError::StateNotCommittedYet(Height::new(1)),
+                    ))
+                } else {
+                    Ok(fake_state_hash())
+                }
+            });
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert!(state_hash.is_some());
+    }
+
+    #[test]
+    #[should_panic(expected = "State hash computation failed")]
+    fn get_state_hash_panics_on_permanent_error_test() {
+        let mut state_manager = MockStateManager::new();
+        state_manager.expect_get_state_hash_at().return_once(|_| {
+            Err(StateHashError::Permanent(
+                PermanentStateHashError::StateRemoved(Height::new(1)),
+            ))
+        });
+
+        get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+    }
+
+    fn fake_state_hash() -> CryptoHashOfState {
+        CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))
     }
 }

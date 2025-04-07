@@ -67,8 +67,8 @@ impl std::fmt::Display for LogEntry {
 
 #[derive(Debug, PartialEq)]
 pub struct RewardsPerNodeProviderLog {
-    pub(crate) node_provider_id: PrincipalId,
-    pub(crate) entries: Vec<LogEntry>,
+    pub node_provider_id: PrincipalId,
+    pub entries: Vec<LogEntry>,
 }
 
 impl RewardsPerNodeProviderLog {
