@@ -2061,9 +2061,14 @@ impl CanisterManager {
                 snapshot_id,
             });
         }
-        let max_message_size_bytes = 2 * 1024 * 1024; // TODO: where is this constant defined?
+        // limit the allowed slice to 2MB, such that the candid-encoded
+        // return value does not exceed 2MiB.
+        let max_slice_size_bytes = 2 * 1000 * 1000;
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
+                if size > max_slice_size_bytes {
+                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
+                }
                 let stable_memory = snapshot.execution_snapshot().stable_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(stable_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -2071,6 +2076,9 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::MainMemory { offset, size } => {
+                if size > max_slice_size_bytes {
+                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
+                }
                 let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -2078,6 +2086,9 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::WasmModule { offset, size } => {
+                if size > max_slice_size_bytes {
+                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
+                }
                 match snapshot.get_wasm_module_chunk(offset, size) {
                     Ok(chunk) => Ok(chunk),
                     Err(e) => Err(e.into()),

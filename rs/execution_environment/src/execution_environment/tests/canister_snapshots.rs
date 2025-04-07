@@ -2294,32 +2294,16 @@ fn read_canister_snapshot_data_succeeds() {
 
     // Test geting all binary snapshot data
     // wasm module
-    let args_module = ReadCanisterSnapshotDataArgs::new(
+    test_data_wasm_module(
+        &mut test,
         canister_id,
         snapshot_id,
-        CanisterSnapshotDataKind::WasmModule {
-            offset: 0,
-            // currently about 184k, so it fits in a single 2MB message
-            size: wasm_module_size,
-        },
+        wasm_module_size,
+        uni_canister_wasm,
     );
-    let chunk = read_canister_snapshot_data(&mut test, &args_module);
-    assert_eq!(chunk, uni_canister_wasm);
-    println!("wasm module ok");
 
     // canister heap
-    let args_main = ReadCanisterSnapshotDataArgs::new(
-        canister_id,
-        snapshot_id,
-        CanisterSnapshotDataKind::MainMemory {
-            offset: 0,
-            // 3_276_800
-            size: wasm_memory_size,
-        },
-    );
-    let chunk = read_canister_snapshot_data(&mut test, &args_main);
-    assert_eq!(chunk.len(), wasm_memory_size as usize);
-    println!("heap ok");
+    test_data_wasm_heap(&mut test, canister_id, snapshot_id, wasm_memory_size);
 
     // stable memory
     let args_stable = ReadCanisterSnapshotDataArgs::new(
@@ -2353,9 +2337,65 @@ fn read_canister_snapshot_data_succeeds() {
     );
     let chunk_1 = read_canister_snapshot_data(&mut test, &args_chunk_1);
     let chunk_2 = read_canister_snapshot_data(&mut test, &args_chunk_2);
-    let original = { vec![chunk1, chunk2] }.sort();
-    let returned = { vec![chunk_1, chunk_2] }.sort();
+    let mut original = vec![chunk1, chunk2];
+    let mut returned = vec![chunk_1, chunk_2];
+    original.sort();
+    returned.sort();
     assert_eq!(original, returned);
+}
+
+fn test_data_wasm_module(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    wasm_module_size: u64,
+    uni_canister_wasm: Vec<u8>,
+) {
+    let args_module = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::WasmModule {
+            offset: 0,
+            // currently about 184k, so it fits in a single 2MB message
+            size: wasm_module_size,
+        },
+    );
+    let chunk = read_canister_snapshot_data(test, &args_module);
+    assert_eq!(chunk, uni_canister_wasm);
+    println!("wasm module ok");
+}
+
+fn test_data_wasm_heap(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    wasm_memory_size: u64,
+) {
+    // wasm_memory_size ~ 3_276_800 does not fit into one slice
+    let max_chunk_size = 2 * 1000 * 1000;
+    let rest = wasm_memory_size - max_chunk_size;
+    let args_main = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory {
+            offset: 0,
+            size: max_chunk_size,
+        },
+    );
+    let chunk = read_canister_snapshot_data(test, &args_main);
+    assert_eq!(chunk.len(), max_chunk_size as usize);
+    // second part
+    let args_main = ReadCanisterSnapshotDataArgs::new(
+        canister_id,
+        snapshot_id,
+        CanisterSnapshotDataKind::MainMemory {
+            offset: max_chunk_size,
+            size: rest,
+        },
+    );
+    let chunk = read_canister_snapshot_data(test, &args_main);
+    assert_eq!(chunk.len(), rest as usize);
+    println!("heap ok");
 }
 
 #[test]

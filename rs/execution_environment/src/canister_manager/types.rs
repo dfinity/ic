@@ -490,7 +490,6 @@ pub(crate) enum CanisterManagerError {
     InvalidSubslice {
         offset: u64,
         size: u64,
-        actual_size: u64,
     },
 }
 
@@ -997,10 +996,10 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
-            InvalidSubslice { offset, size, actual_size } => {
+            InvalidSubslice { offset, size } => {
                 Self::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!("Invalid subslice into wasm module / main memory / stable memory: offset {} + size {} > actual_size {}", offset, size, actual_size)
+                    format!("Invalid subslice into wasm module / main memory / stable memory: offset: {}, size: {}", offset, size)
                 )
             }
         }
@@ -1013,15 +1012,9 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
             CanisterSnapshotError::EmptyExecutionState(canister_id) => {
                 CanisterManagerError::CanisterSnapshotExecutionStateNotFound { canister_id }
             }
-            CanisterSnapshotError::InvalidSubslice {
-                offset,
-                size,
-                actual_size,
-            } => CanisterManagerError::InvalidSubslice {
-                offset,
-                size,
-                actual_size,
-            },
+            CanisterSnapshotError::InvalidSubslice { offset, size } => {
+                CanisterManagerError::InvalidSubslice { offset, size }
+            }
         }
     }
 }

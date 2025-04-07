@@ -467,11 +467,7 @@ impl CanisterSnapshot {
         let module_bytes = self.execution_snapshot.wasm_binary.as_slice();
         let end = u64::min(module_bytes.len() as u64, offset + size);
         if end < offset {
-            return Err(CanisterSnapshotError::InvalidSubslice {
-                offset,
-                size,
-                actual_size: module_bytes.len() as u64,
-            });
+            return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
         }
         Ok(module_bytes[(offset as usize)..(end as usize)].to_vec())
     }
@@ -485,11 +481,7 @@ impl CanisterSnapshot {
     ) -> Result<Vec<u8>, CanisterSnapshotError> {
         let page_map_size_bytes = (page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64;
         if offset + size > page_map_size_bytes {
-            return Err(CanisterSnapshotError::InvalidSubslice {
-                offset,
-                size,
-                actual_size: page_map_size_bytes,
-            });
+            return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
         }
         let memory_buffer = Buffer::new(page_memory.page_map);
         let mut dst = vec![0; size as usize];
@@ -504,11 +496,7 @@ pub enum CanisterSnapshotError {
     ///  The canister is missing the execution state because it's empty (newly created or uninstalled).
     EmptyExecutionState(CanisterId),
     /// The provided offset/size exceed the module's or memory's size.
-    InvalidSubslice {
-        offset: u64,
-        size: u64,
-        actual_size: u64,
-    },
+    InvalidSubslice { offset: u64, size: u64 },
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.
