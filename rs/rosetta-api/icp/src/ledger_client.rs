@@ -42,7 +42,7 @@ use ic_ledger_canister_blocks_synchronizer::{
     blocks::{Blocks, RosettaBlocksMode},
     canister_access::CanisterAccess,
     certification::VerificationInfo,
-    ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics},
+    ledger_blocks_sync::LedgerBlocksSynchronizer,
 };
 use ic_nns_governance_api::pb::v1::{
     manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo,
@@ -80,22 +80,6 @@ use self::{
     handle_list_neurons::handle_list_neurons, list_neurons_response::ListNeuronsResponse,
     proposal_info_response::ProposalInfoResponse,
 };
-
-struct LedgerBlocksSynchronizerMetricsImpl {}
-
-impl LedgerBlocksSynchronizerMetrics for LedgerBlocksSynchronizerMetricsImpl {
-    fn set_target_height(&self, height: u64) {
-        crate::rosetta_server::TARGET_HEIGHT.set(height as i64);
-    }
-
-    fn set_synced_height(&self, height: u64) {
-        crate::rosetta_server::SYNCED_HEIGHT.set(height as i64);
-    }
-
-    fn set_verified_height(&self, height: u64) {
-        crate::rosetta_server::VERIFIED_HEIGHT.set(height as i64);
-    }
-}
 
 #[async_trait]
 pub trait LedgerAccess {
@@ -190,7 +174,6 @@ impl LedgerClient {
             store_location,
             store_max_blocks,
             verification_info,
-            Box::new(LedgerBlocksSynchronizerMetricsImpl {}),
             enable_rosetta_blocks,
         )
         .await?;

@@ -11,6 +11,30 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-03-28: Proposal 136006
+
+http://dashboard.internetcomputer.org/proposal/136006
+
+## Added
+
+* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
+  removed in the future, giving clients time to migrate.
+
+## Changed
+
+* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
+* Increase the neurons limit to 500K now that neurons are stored in stable memory.
+
+# 2025-03-25: Proposal 135955
+
+https://dashboard.internetcomputer.org/proposal/135955
+
+## Security
+
+* Prevent large manage neuron proposals by making sure their proposal payloads are bounded, and
+  lower the maximum number of open manage neuron proposals. More details can be seen here:
+  https://forum.dfinity.org/t/nns-updates-2025-03-25-nns-governance-security-hotfix/42978.
+
 # 2025-03-21: Proposal 135933
 
 http://dashboard.internetcomputer.org/proposal/135933
@@ -19,6 +43,7 @@ http://dashboard.internetcomputer.org/proposal/135933
 
 * Refactor `prune_following` task to use the `timer_task` library, and therefore enables metrics to
   be collected about its execution.
+
 
 # 2025-03-17: Proposal 135847
 

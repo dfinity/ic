@@ -39,15 +39,12 @@ done
 
 log "Bazel wrapper starting"
 
-startup_options=(
-    --output_base=/var/tmp/bazel-output # Output base wiped after run
-)
+# All args, including the command
+bazel_args=( "$@" )
 
 # We've asserted there are no startup options, so this must be the command (like "build" or "run")
+# stored here again for easy access
 bazel_command="$1"
-shift
-
-bazel_args=( "$@" )
 
 
 # Unless explicitly provided, we set a default --repository_cache to a volume mounted inside our runners
@@ -61,6 +58,16 @@ fi
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)
     bazel_args+=(
+        --verbose_failures=true
+
+        # enables BES upload (see config)
+        --config=bes
+        # additionally, upload build events asynchronously
+        --bes_upload_mode=fully_async
+
+        # Upload build results to cache
+        --remote_upload_local_results=true
+
         --color=yes # Nice CI output
 
         # Write build events to the dedicated tempdir
@@ -114,10 +121,14 @@ bazel_bes() {
     return "$bazel_exitcode"
 }
 
-log bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+startup_options=(
+    --output_base=/var/tmp/bazel-output # Output base wiped after run
+)
+
+log bazel "${startup_options[@]}" "${bazel_args[@]}"
 
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
-    bazel_bes "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+    bazel_bes "${startup_options[@]}" "${bazel_args[@]}"
 else
-    bazel "${startup_options[@]}" "$bazel_command" "${bazel_args[@]}"
+    bazel "${startup_options[@]}" "${bazel_args[@]}"
 fi

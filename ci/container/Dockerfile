@@ -129,11 +129,11 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 
 # Install AFLplusplus
-ARG AFL_RELEASE_VERSION=v4.21c
+ARG AFLPLUSPLUS_RELEASE_VERSION=v4.21c
 RUN mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
-    git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
+    git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make install && \

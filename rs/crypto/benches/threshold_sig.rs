@@ -26,7 +26,7 @@ criterion_main!(benches);
 criterion_group!(
     benches,
     bench_threshold_sig_1_node_threshold_1,
-    bench_threshold_sig_28_nodes_threshold_10,
+    bench_threshold_sig_34_nodes_threshold_12,
     /* CRP-1176
      * bench_threshold_sig_100_nodes_threshold_34, */
 );
@@ -59,15 +59,15 @@ fn bench_threshold_sig_1_node_threshold_1(criterion: &mut Criterion) {
     }
 }
 
-fn bench_threshold_sig_28_nodes_threshold_10(criterion: &mut Criterion) {
+fn bench_threshold_sig_34_nodes_threshold_12(criterion: &mut Criterion) {
     for vault_type in VaultType::iter() {
         let group = &mut criterion.benchmark_group(format!(
-            "crypto_threshold_sig_28_nodes_threshold_10_{vault_type:?}"
+            "crypto_threshold_sig_34_nodes_threshold_12_{vault_type:?}"
         ));
         group.sample_size(25);
         group.measurement_time(Duration::from_secs(7));
         for message_size in [32, 1_000_000] {
-            bench_threshold_sig_n_nodes(group, 28, 10, message_size, vault_type);
+            bench_threshold_sig_n_nodes(group, 34, 12, message_size, vault_type);
         }
     }
 }

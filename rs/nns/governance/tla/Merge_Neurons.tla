@@ -1,20 +1,14 @@
 ---- MODULE Merge_Neurons ----
-EXTENDS TLC, Sequences, Integers, FiniteSets, FiniteSetsExt, Variants
+EXTENDS TLC, Sequences, Integers, FiniteSets, FiniteSetsExt, Variants, Common
 
 CONSTANTS
     Minting_Account_Id,
     Merge_Neurons_Process_Ids,
     TRANSACTION_FEE
 
-TRANSFER_OK == "Ok"
-TRANSFER_FAIL == "Err"
-DUMMY_ACCOUNT == ""
-
 \* @type: ($neurons, $neuronId) => Int;
 Minted_Stake(neuron, neuron_id) == LET diff == neuron[neuron_id].cached_stake - neuron[neuron_id].fees IN
     IF diff > 0 THEN diff ELSE 0
-request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
-transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to, amount |-> amount, fee |-> fee])
 
 \* @type: ($neurons, $neuronId, Int) => $neurons;
 Decrease_Stake(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].cached_stake = @ - amount]
@@ -112,6 +106,8 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
             \* Here, also we manually ensure that these neuron IDs differ.
             await source_nid /= target_nid;
 
+            await neuron[target_nid].state # SPAWNING;
+
             \* total stake cannot equal 0
             await (neuron[source_nid].cached_stake - neuron[source_nid].fees) +
                 (neuron[target_nid].cached_stake - neuron[target_nid].fees) /= 0;
@@ -188,13 +184,13 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "42a98cb5" /\ chksum(tla) = "efbe4adc")
-VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
-          ledger_to_governance, spawning_neurons, source_neuron_id, 
+\* BEGIN TRANSLATION (chksum(pcal) = "fb28d9a8" /\ chksum(tla) = "d20d2ee6")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
+          ledger_to_governance, spawning_neurons, source_neuron_id,
           target_neuron_id, fees_amount, amount_to_target
 
-vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger, 
-           ledger_to_governance, spawning_neurons, source_neuron_id, 
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
+           ledger_to_governance, spawning_neurons, source_neuron_id,
            target_neuron_id, fees_amount, amount_to_target >>
 
 ProcSet == (Merge_Neurons_Process_Ids)
@@ -219,6 +215,7 @@ MergeNeurons_Start(self) == /\ pc[self] = "MergeNeurons_Start"
                                \/ /\ \E source_nid \in DOMAIN(neuron) \ locks:
                                        \E target_nid \in DOMAIN(neuron) \ locks:
                                          /\ source_nid /= target_nid
+                                         /\ neuron[target_nid].state # SPAWNING
                                          /\   (neuron[source_nid].cached_stake - neuron[source_nid].fees) +
                                             (neuron[target_nid].cached_stake - neuron[target_nid].fees) /= 0
                                          /\ LET fa == neuron[source_nid].fees IN
@@ -255,8 +252,8 @@ MergeNeurons_Start(self) == /\ pc[self] = "MergeNeurons_Start"
                                                                    /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
                                                                    /\ pc' = [pc EXCEPT ![self] = "Done"]
                                                                    /\ UNCHANGED governance_to_ledger
-                            /\ UNCHANGED << neuron_id_by_account, 
-                                            ledger_to_governance, 
+                            /\ UNCHANGED << neuron_id_by_account,
+                                            ledger_to_governance,
                                             spawning_neurons >>
 
 MergeNeurons_Burn_WaitForTransfer(self) == /\ pc[self] = "MergeNeurons_Burn_WaitForTransfer"
@@ -269,7 +266,7 @@ MergeNeurons_Burn_WaitForTransfer(self) == /\ pc[self] = "MergeNeurons_Burn_Wait
                                                            /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
                                                            /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
                                                            /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                                           /\ UNCHANGED << neuron, 
+                                                           /\ UNCHANGED << neuron,
                                                                            governance_to_ledger >>
                                                       ELSE /\ LET source_nid == source_neuron_id[self] IN
                                                                 LET target_nid == target_neuron_id[self] IN
@@ -296,7 +293,7 @@ MergeNeurons_Burn_WaitForTransfer(self) == /\ pc[self] = "MergeNeurons_Burn_Wait
                                                                             /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
                                                                             /\ pc' = [pc EXCEPT ![self] = "Done"]
                                                                             /\ UNCHANGED governance_to_ledger
-                                           /\ UNCHANGED << neuron_id_by_account, 
+                                           /\ UNCHANGED << neuron_id_by_account,
                                                            spawning_neurons >>
 
 MergeNeurons_Stake_WaitForTransfer(self) == /\ pc[self] = "MergeNeurons_Stake_WaitForTransfer"
@@ -321,8 +318,8 @@ MergeNeurons_Stake_WaitForTransfer(self) == /\ pc[self] = "MergeNeurons_Stake_Wa
                                                                    /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
                                                                    /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
                                                                    /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                            /\ UNCHANGED << neuron_id_by_account, 
-                                                            governance_to_ledger, 
+                                            /\ UNCHANGED << neuron_id_by_account,
+                                                            governance_to_ledger,
                                                             spawning_neurons >>
 
 Merge_Neurons(self) == MergeNeurons_Start(self)

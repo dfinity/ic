@@ -82,6 +82,7 @@ impl GitRepository {
             .iter()
             .map(|canister| {
                 encode_upgrade_args(
+                    canister,
                     &self.candid_file(canister),
                     args.clone().unwrap_or(canister.default_upgrade_args()),
                 )

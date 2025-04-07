@@ -7,6 +7,7 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
 /// no effect on the behavior of the SNS.
@@ -294,7 +295,7 @@ impl pb::Governance {
 }
 
 impl pb::Topic {
-    fn is_critical(&self) -> bool {
+    pub fn is_critical(&self) -> bool {
         // Fall back to default proposal criticality (if a topic isn't defined).
         //
         // Handled explicitly to avoid any doubts.
@@ -328,6 +329,22 @@ impl pb::Topic {
                     .find(|native_function| action_code == *native_function)
                     .map(|_| Self::from(topic_info.topic))
             })
+    }
+}
+
+impl fmt::Display for pb::Topic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let topic_str = match self {
+            Self::Unspecified => "Unspecified",
+            Self::DaoCommunitySettings => "DaoCommunitySettings",
+            Self::SnsFrameworkManagement => "SnsFrameworkManagement",
+            Self::DappCanisterManagement => "DappCanisterManagement",
+            Self::ApplicationBusinessLogic => "ApplicationBusinessLogic",
+            Self::Governance => "Governance",
+            Self::TreasuryAssetManagement => "TreasuryAssetManagement",
+            Self::CriticalDappOperations => "CriticalDappOperations",
+        };
+        write!(f, "{}", topic_str)
     }
 }
 

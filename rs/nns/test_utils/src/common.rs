@@ -225,14 +225,6 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_sns_wasm_allowed_principals(
-        &mut self,
-        allowed_principals: Vec<PrincipalId>,
-    ) -> &mut Self {
-        self.sns_wasms.with_allowed_principals(allowed_principals);
-        self
-    }
-
     pub fn with_exchange_rate_canister(
         &mut self,
         exchange_rate_canister_id: CanisterId,
