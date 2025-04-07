@@ -102,9 +102,9 @@ pub enum HypervisorError {
     ToolchainContractViolation {
         error: String,
     },
-    /// System API contract was violated. They payload contains a
+    /// System API contract was violated. The payload contains a
     /// detailed explanation of the issue suitable for displaying it
-    /// to a user of IC.
+    /// to a user of the IC.
     UserContractViolation {
         error: String,
         suggestion: String,
@@ -112,9 +112,9 @@ pub enum HypervisorError {
     },
     /// Wasm execution consumed too many instructions.
     InstructionLimitExceeded(NumInstructions),
-    /// We could not validate the wasm module
+    /// We could not validate the wasm module.
     InvalidWasm(WasmValidationError),
-    /// We could not instrument the wasm module
+    /// We could not instrument the wasm module.
     InstrumentationFailed(WasmInstrumentationError),
     /// Canister Wasm trapped (e.g. by executing the `unreachable`
     /// instruction or dividing by zero).
