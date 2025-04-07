@@ -1050,6 +1050,8 @@ impl WasmExecutor for SandboxedExecutionController {
             match compilation_cache.get(&wasm_binary.binary) {
                 None => {
                     self.metrics.inc_cache_lookup(CACHE_MISS);
+                    // TODO(MR-651): This metric tracks the number of times execution reads wasm from disk.
+                    // Remove this once we roll out the lazy loading of wasm files.
                     if wasm_binary.binary.file().is_some() {
                         self.metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
                     }
@@ -1883,6 +1885,8 @@ fn open_wasm(
     let compilation = match compilation_cache.get(&wasm_binary.binary) {
         None => {
             metrics.inc_cache_lookup(CACHE_MISS);
+            // TODO(MR-651): This metric tracks the number of times execution reads wasm from disk.
+            // Remove this once we roll out the lazy loading of wasm files.
             if wasm_binary.binary.file().is_some() {
                 metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
             }
