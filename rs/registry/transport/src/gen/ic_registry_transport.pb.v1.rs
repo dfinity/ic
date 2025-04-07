@@ -150,6 +150,30 @@ pub struct RegistryValue {
     #[prost(bool, tag = "3")]
     pub deletion_marker: bool,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegistryValueV2 {
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    #[prost(oneof = "registry_value_v2::Content", tags = "1, 3, 4")]
+    pub content: ::core::option::Option<registry_value_v2::Content>,
+}
+/// Nested message and enum types in `RegistryValueV2`.
+pub mod registry_value_v2 {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Content {
+        #[prost(bytes, tag = "1")]
+        Value(::prost::alloc::vec::Vec<u8>),
+        #[prost(bool, tag = "3")]
+        DeletionMarker(bool),
+        #[prost(message, tag = "4")]
+        LargeValueChunkKeys(super::LargeValueChunkKeys),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LargeValueChunkKeys {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub chunk_content_sha256s: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
 /// A sequence of changes made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryDelta {
