@@ -104,7 +104,7 @@ RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/down
 
 # Add motoko compiler
 ARG motoko_version=0.14.7
-RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x64_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Add kubectl
 ARG KUBECTL_BIN="/usr/local/bin/kubectl"
