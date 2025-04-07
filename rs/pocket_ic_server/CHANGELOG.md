@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The II canister always belongs to the dedicated II subnet (the II canister used to belong to the NNS subnet if no II subnet was specified).
+- The II subnet size to be 34 nodes as on the ICP mainnet.
 
 
 

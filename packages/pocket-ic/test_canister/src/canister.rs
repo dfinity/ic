@@ -169,7 +169,7 @@ async fn sign_with_schnorr(
         Principal::management_canister(),
         "sign_with_schnorr",
         (request,),
-        25_000_000_000,
+        26_153_846_153,
     )
     .await
     .map_err(|e| format!("sign_with_schnorr failed {e:?}"))?;
@@ -307,7 +307,7 @@ async fn vetkd_derive_key(
         Principal::management_canister(),
         "vetkd_derive_key",
         (request,),
-        25_000_000_000,
+        26_153_846_153,
     )
     .await
     .map_err(|e| format!("vetkd_derive_key failed {e:?}"))?;

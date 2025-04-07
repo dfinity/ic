@@ -1150,7 +1150,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
         Fiduciary => 34,
         SNS => 34,
         Bitcoin => 13,
-        II => 31,
+        II => 34,
         NNS => 40,
         System => 13,
     }
