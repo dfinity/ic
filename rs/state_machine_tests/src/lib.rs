@@ -3571,7 +3571,7 @@ impl StateMachine {
     }
 
     /// Calls the `canister_status` endpoint on the management canister of the specified sender.
-    /// Use this if the `canister_id` is controlled by `sender`.
+    /// Use this if the `canister_id`` is controlled by `sender``.
     pub fn canister_status_as(
         &self,
         sender: PrincipalId,
@@ -3587,34 +3587,6 @@ impl StateMachine {
             WasmResult::Reply(reply) => Ok(Decode!(&reply, CanisterStatusResultV2).unwrap()),
             WasmResult::Reject(reject_msg) => Err(reject_msg),
         })
-    }
-
-    /// Calls the `fetch_canister_logs` endpoint on the management canister.
-    pub fn fetch_canister_logs(
-        &self,
-        canister_id: CanisterId,
-    ) -> Result<Vec<CanisterLogRecord>, UserError> {
-        self.fetch_canister_logs_as(PrincipalId::new_anonymous(), canister_id)
-    }
-
-    /// Calls the 'fetch_canister_logs' endpoint on the managenent canister of the specified
-    /// sender.
-    ///
-    /// Use this if the `canister_id` is controlled by `sender`.
-    pub fn fetch_canister_logs_as(
-        &self,
-        sender: PrincipalId,
-        canister_id: CanisterId,
-    ) -> Result<Vec<CanisterLogRecord>, UserError> {
-        let reply = self.query_as(
-            sender,
-            CanisterId::ic_00(),
-            "fetch_canister_logs",
-            FetchCanisterLogsRequest::new(canister_id).encode(),
-        )?;
-
-        FetchCanisterLogsResponse::decode(&reply.bytes()[..])
-            .map(|response| response.canister_log_records)
     }
 
     /// Deletes the canister with the specified ID.
