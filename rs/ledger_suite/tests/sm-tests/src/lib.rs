@@ -5186,7 +5186,7 @@ pub mod archiving {
             .expect("should return one archive info");
         let get_blocks_res = archive_get_blocks_fn(
             &env,
-            CanisterId::unchecked_from_principal(PrincipalId::from(archive_id.clone())),
+            CanisterId::unchecked_from_principal(PrincipalId::from(*archive_id)),
             0,
             1,
         );
@@ -5581,7 +5581,7 @@ pub mod archiving {
     }
 
     pub fn icrc_archives(env: &StateMachine, ledger_id: CanisterId) -> Vec<Principal> {
-        list_archives(&env, ledger_id)
+        list_archives(env, ledger_id)
             .into_iter()
             .map(|archive| archive.canister_id)
             .collect()
@@ -5731,7 +5731,7 @@ pub mod archiving {
         assert_eq!(range_utils::range_len(&archive_info.archived_range), 1);
         let archive_blocks_res = get_blocks_fn(
             env,
-            CanisterId::try_from(PrincipalId::from(archive_info.canister_id.clone())).unwrap(),
+            CanisterId::try_from(PrincipalId::from(archive_info.canister_id)).unwrap(),
             block_id,
             1,
         );
