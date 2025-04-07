@@ -622,7 +622,7 @@ impl TaskTracker {
                     let task_name = self.task_name(&err.id());
 
                     if err.is_panic() {
-                        error!(self.logger, "Task `{task_name}` panicked!");
+                        error!(self.logger, "Task `{task_name}` panicked: {err}");
                         self.metrics
                             .critical_error_task_panicked
                             .with_label_values(&[&task_name])
