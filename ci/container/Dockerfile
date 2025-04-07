@@ -91,7 +91,7 @@ RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/
 ARG MOLD_BIN="/usr/local/bin/mold"
 ARG MOLD_VERSION=2.37.1
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "cfdb6e82b5c906840e66304216b1b6e15766e4a7eac03893bbf2b41010f0a927  ${MOLD_BIN}" | shasum -a 256 -c - && \
+    echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 # Add IC SDK (dfx)
