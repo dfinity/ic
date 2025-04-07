@@ -62,7 +62,7 @@ use crate::{
             MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally,
+            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
@@ -3509,10 +3509,11 @@ impl Governance {
             Vote::Yes,
             function_id,
             &self.function_followee_index,
+            &self.topic_follower_index,
             &self.proto.neurons,
             now_seconds,
             &mut proposal_data.ballots,
-            proposal_criticality,
+            proposal_topic.unwrap_or_default(),
         );
 
         // Finally, add this proposal as an open proposal.
@@ -3537,12 +3538,13 @@ impl Governance {
         vote_of_neuron: Vote,
         function_id: u64,
         function_followee_index: &legacy::FollowerIndex,
+        topic_follower_index: &FollowerIndex,
         neurons: &BTreeMap<String, Neuron>,
         // As of Dec, 2023 (52eec5c), the next parameter is only used to populate Ballots. In
         // particular, this has no impact on how the implications of following are deduced.
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
-        proposal_criticality: ProposalCriticality,
+        topic: Topic,
     ) {
         let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
         assert!(function_id != fallback_pseudo_function_id);
@@ -3553,7 +3555,7 @@ impl Governance {
         // By default, followers on the specific function_id are reconsidered,
         // as well as followers have have general "catch-all" following. As an
         // optimization, catch-all followers are not considered when the
-        // proposal is not Critical.
+        // proposal is Critical.
         //
         // E.g. if Alice follows Bob on "catch-all", and Bob votes on a
         // TransferSnsTreasuryFunds proposal, then Alice will not be considered
@@ -3568,13 +3570,15 @@ impl Governance {
 
             push_member(function_id);
 
-            match proposal_criticality {
+            match topic.proposal_criticality() {
                 ProposalCriticality::Normal => push_member(fallback_pseudo_function_id),
                 ProposalCriticality::Critical => (), // Do not use catch-all/fallback following.
             }
 
             UnionMultiMap::new(members)
         };
+
+        let topic_followers = topic_follower_index.get(&topic);
 
         // Traverse the follow graph using breadth first search (BFS).
 
@@ -3623,6 +3627,15 @@ impl Governance {
 
                 // Take note of the followers of current_neuron_id, and add them
                 // to the next "tier" in the BFS.
+
+                if let Some(new_follower_neuron_ids) = topic_followers
+                    .and_then(|topic_followers| topic_followers.get(current_neuron_id))
+                {
+                    for follower_neuron_id in new_follower_neuron_ids {
+                        follower_neuron_ids.insert(follower_neuron_id.clone());
+                    }
+                }
+
                 if let Some(new_follower_neuron_ids) =
                     neuron_id_to_follower_neuron_ids.get(current_neuron_id)
                 {
@@ -3636,29 +3649,27 @@ impl Governance {
             // constructing the next BFS tier (from follower_neuron_ids).
             induction_votes.clear();
             for follower_neuron_id in follower_neuron_ids {
-                let follower_neuron = match neurons.get(&follower_neuron_id.to_string()) {
-                    Some(n) => n,
-                    None => {
-                        // This is a highly suspicious, because currently, we do not
-                        // delete neurons, which means that we have an invalid NeuronId
-                        // floating around in the system, which indicates that we have a
-                        // bug. For now, we deal with that by logging, and pretending like
-                        // we did not see follower_neuron_id.
-                        log!(
-                            ERROR,
-                            "Missing neuron {} while trying to record (and cascade) \
-                             a vote on proposal {:#?}.",
-                            follower_neuron_id,
-                            proposal_id,
-                        );
-                        continue;
-                    }
+                let Some(follower_neuron) = neurons.get(&follower_neuron_id.to_string()) else {
+                    // This is a highly suspicious, because currently, we do not
+                    // delete neurons, which means that we have an invalid NeuronId
+                    // floating around in the system, which indicates that we have a
+                    // bug. For now, we deal with that by logging, and pretending like
+                    // we did not see follower_neuron_id.
+                    log!(
+                        ERROR,
+                        "Missing neuron {} while trying to record (and cascade) \
+                            a vote on proposal {:#?}.",
+                        follower_neuron_id,
+                        proposal_id,
+                    );
+                    continue;
                 };
 
-                let follower_vote = follower_neuron.would_follow_ballots(
+                let follower_vote = follower_neuron.vote_from_ballots_following(
                     function_id,
+                    topic,
                     ballots,
-                    proposal_criticality,
+                    proposal_id,
                 );
 
                 if follower_vote != Vote::Unspecified {
@@ -3728,7 +3739,6 @@ impl Governance {
 
         // Take topic-based criticality as it was defined when the proposal was made.
         let proposal_topic = proposal.topic();
-        let proposal_criticality = proposal_topic.proposal_criticality();
 
         let vote = Vote::try_from(request.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
@@ -3761,16 +3771,22 @@ impl Governance {
 
         // Update ballots.
         let function_id = u64::from(action);
+        let proposal_topic = if proposal_topic == Topic::Unspecified {
+            None
+        } else {
+            Some(proposal_topic)
+        };
         Governance::cast_vote_and_cascade_follow(
             proposal_id,
             neuron_id,
             vote,
             function_id,
             &self.function_followee_index,
+            &self.topic_follower_index,
             &self.proto.neurons,
             now_seconds,
             &mut proposal.ballots,
-            proposal_criticality,
+            proposal_topic.unwrap_or_default(),
         );
 
         self.process_proposal(proposal_id.id);
@@ -3887,19 +3903,43 @@ impl Governance {
 
     fn set_following(
         &mut self,
-        _id: &NeuronId,
-        _caller: &PrincipalId,
+        id: &NeuronId,
+        caller: &PrincipalId,
         set_following: &SetFollowing,
     ) -> Result<(), GovernanceError> {
+        let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!("Follower neuron not found: {}", id),
+            )
+        })?;
+
+        // Check that the caller is authorized to change followers (same authorization
+        // as voting required).
+        neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
+
+        // First, validate the requested followee modifications in isolation.
+
         // TODO[NNS1-3708]: Avoid cloning the neuron commands.
-        let _set_following = ValidatedSetFollowing::try_from(set_following.clone())
+        let set_following = ValidatedSetFollowing::try_from(set_following.clone())
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
-        // TODO[NNS1-3582]: Enable following on topics.
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidCommand,
-            "SetFollowing is not supported yet.".to_string(),
-        ))
+        // Second, validate the requested followee modifications in composition with the neuron's
+        // old followees. If all validation steps succeed, save the new followees.
+        {
+            let old_topic_followees = neuron.topic_followees.clone();
+
+            let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
+                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+
+            neuron.topic_followees.replace(new_topic_followees);
+        }
+
+        // Third, update the followee index for this neuron.
+        remove_neuron_from_follower_index(&mut self.topic_follower_index, neuron);
+        add_neuron_to_follower_index(&mut self.topic_follower_index, neuron);
+
+        Ok(())
     }
 
     /// Configures a given neuron (specified by the given neuron id).
@@ -5892,8 +5932,10 @@ impl Governance {
             ));
         }
 
-        // Must NOT clobber followees.
-        if old_neuron.followees != neuron.followees {
+        // Must NOT clobber followees or topic_followees.
+        if old_neuron.followees != neuron.followees
+            || old_neuron.topic_followees != neuron.topic_followees
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot update neuron's followees via update_neuron.".to_string(),
@@ -6059,6 +6101,9 @@ fn get_neuron_id_from_memo_and_controller(
 
 #[cfg(test)]
 mod assorted_governance_tests;
+
+#[cfg(test)]
+mod cast_vote_and_cascade_follow_tests;
 
 #[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;

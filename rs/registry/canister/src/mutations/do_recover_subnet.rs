@@ -97,15 +97,6 @@ impl Registry {
                 RegistryVersion::new(pre_call_registry_version),
             );
 
-            let response_bytes = call(
-                CanisterId::ic_00(),
-                "setup_initial_dkg",
-                bytes,
-                Encode!(&request).unwrap(),
-            )
-            .await
-            .unwrap();
-
             let initial_chain_key_config =
                 payload
                     .chain_key_config
@@ -115,9 +106,18 @@ impl Registry {
                             .expect("Invalid InitialChainKeyConfig")
                     });
 
-            let chain_key_initializations = self
-                .get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, dkg_nodes)
-                .await;
+            // Call setup_initial_dkg and compute_initial_i_dkg_dealings in parallel.
+            // Since both calls may take up to 2 DKG intervals to complete, this speeds up generation of a recovery cup.
+            let (response_bytes, chain_key_initializations) = futures::join!(
+                call(
+                    CanisterId::ic_00(),
+                    "setup_initial_dkg",
+                    bytes,
+                    Encode!(&request).unwrap(),
+                ),
+                self.get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, dkg_nodes)
+            );
+            let response_bytes = response_bytes.unwrap();
 
             if let Some(initial_chain_key_config) = initial_chain_key_config {
                 // If chain key config is set, we must both update the subnet's chain_key_config

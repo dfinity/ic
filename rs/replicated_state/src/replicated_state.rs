@@ -20,6 +20,7 @@ use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
@@ -729,6 +730,26 @@ impl ReplicatedState {
         self.canisters_iter()
             .map(|canister| canister.scheduler_state.compute_allocation.as_percent())
             .sum()
+    }
+
+    /// Canister migrations require that a canister is stopped, has no guaranteed responses
+    /// in any outgoing stream, and nothing in the output queue (guaranteed or otherwise).
+    pub fn ready_for_migration(&self, canister: &CanisterId) -> bool {
+        let streams_flushed = || {
+            self.metadata
+                .streams
+                .iter()
+                .all(|(_, stream)| stream.guaranteed_response_counts().get(canister).is_none())
+        };
+
+        let canister_state = match self.canister_state(canister) {
+            Some(canister_state) => canister_state,
+            None => return false,
+        };
+
+        let stopped = canister_state.system_state.status() == CanisterStatusType::Stopped;
+
+        stopped && !canister_state.has_output() && streams_flushed()
     }
 
     /// Computes the memory taken by different types of memory resources.

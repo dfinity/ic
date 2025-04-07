@@ -648,3 +648,16 @@ To mine blocks with rewards credited to a given `bitcoin_address: String`, you c
 
 For an example of a test canister that can be deployed to an application subnet of the PocketIC instance,
 we refer to the basic bitcoin example canister in DFINITY's [examples](https://github.com/dfinity/examples/tree/master/rust/basic_bitcoin).
+
+## VetKd
+
+To test the VetKd feature, you need to create a PocketIC instance with II or fiduciary subnet and enable nonmainnet features:
+
+```rust
+    // We create a PocketIC instance consisting of the II and one application subnet.
+    let pic = PocketIcBuilder::new()
+        .with_ii_subnet()               // this subnet has threshold keys
+        .with_application_subnet()      // we deploy the dapp canister here
+        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
+        .build();
+```

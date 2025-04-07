@@ -4,6 +4,7 @@
 use async_trait::async_trait;
 use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
 use ic_types::registry::RegistryClientError;
+use ic_types::registry::RegistryClientError::DecodeError;
 use ic_types::RegistryVersion;
 
 mod stable_canister_client;
@@ -79,6 +80,12 @@ pub trait CanisterRegistryClient: Send + Sync {
         version: RegistryVersion,
     ) -> Result<Vec<String>, RegistryClientError>;
 
+    fn get_key_family_with_values(
+        &self,
+        key_prefix: &str,
+        version: RegistryVersion,
+    ) -> Result<Vec<(String, Vec<u8>)>, RegistryClientError>;
+
     /// Returns a particular value for a key at a given version.
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {
         self.get_versioned_value(key, version).map(|vr| vr.value)
@@ -93,4 +100,22 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
     /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
+}
+
+// Helpers
+
+/// Get the decoded value of a key from the registry.
+pub fn get_decoded_value<T: prost::Message + Default>(
+    registry_client: &dyn CanisterRegistryClient,
+    key: &str,
+    version: RegistryVersion,
+) -> RegistryClientResult<T> {
+    registry_client
+        .get_value(key, version)?
+        .map(|bytes| {
+            T::decode(bytes.as_slice()).map_err(|e| DecodeError {
+                error: format!("{:?}", e),
+            })
+        })
+        .transpose()
 }
