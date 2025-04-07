@@ -2054,7 +2054,7 @@ impl CanisterManager {
                 snapshot_id,
             });
         };
-        // Verify the provided `delete_snapshot_id` belongs to this canister.
+        // Verify the provided `snapshot_id` belongs to this canister.
         if snapshot.canister_id() != canister.canister_id() {
             return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
                 canister_id: canister.canister_id(),
