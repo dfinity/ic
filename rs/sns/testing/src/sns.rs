@@ -124,6 +124,7 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent
     let sns_swap = sns.swap;
     complete_sns_swap(
         neuron_agent,
+        true,
         sns_swap,
         sns_governance,
         if follow_dev_neuron {
@@ -186,16 +187,24 @@ async fn get_current_participation<C: CallCanisters>(
 
 // Completes the swap by transferring the required amount of ICP from the "treasury" account
 // and participating in the swap for each participant using agents provided as arguments:
-// 1) swap_treasury_agent - Agent for the identity that has sufficient amout of ICP tokens to close the swap.
-// 2) swap_participants_agents - Agents for the identities that will participate in the swap.
-// 3) swap_canister - SNS Swap canister IDs.
+// 1) agent - Agent that is used to provide IC network settings.
+// 2) use_ephemeral_icp_treasury - defines whether the identity of the 'agent' or 'TREASURY_PRINCIPAL_ID'.
+//    is used to transfer ICP to the swap participants.
+// 2) swap_canister - SNS Swap canister ID.
+// 3) governance_canister - SNS Governance canister ID.
+// 4) neurons_to_follow - SNS Neuron IDs that will be followed by the swap participants.
 pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent>(
     agent: &C,
+    use_ephemeral_icp_treasury: bool,
     swap_canister: SwapCanister,
     governance_canister: GovernanceCanister,
     neurons_to_follow: Vec<SnsNeuronId>,
 ) -> Result<(), String> {
-    let swap_treasury_agent = &agent.build_ephemeral_agent(TREASURY_SECRET_KEY.clone());
+    let swap_treasury_agent = if use_ephemeral_icp_treasury {
+        &agent.build_ephemeral_agent(TREASURY_SECRET_KEY.clone())
+    } else {
+        agent
+    };
 
     println!("Waiting for the swap to be open...");
     await_swap_lifecycle(agent, swap_canister, Lifecycle::Open, true).await?;
@@ -513,7 +522,6 @@ pub async fn propose_sns_controlled_test_canister_upgrade<C: CallCanisters + Pro
     .await
     .unwrap()
 }
-
 
 // Waits for the upgrade proposal to be adopted and executed and then waits for the canister to become available
 // after upgrade using arguments:

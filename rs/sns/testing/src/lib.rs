@@ -41,8 +41,8 @@ pub struct ValidateNetworkArgs {}
 
 #[derive(Debug, Parser)]
 pub struct RunBasicScenarioArgs {
-    /// The name of the 'dfx' identity to use for the scenario. This identity is used to submit NNS
-    /// proposal to create the new SNS and is added as an initial neuron in the new SNS.
+    /// The name of the 'dfx' identity to use for the scenario. The principal of this identity
+    /// is used to submit NNS proposal to create the new SNS and is added as an initial neuron in the new SNS.
     #[arg(long)]
     pub dev_identity: Option<String>,
     /// The ID of the canister to be controlled by the SNS created in the scenario.
@@ -56,6 +56,12 @@ pub struct SwapCompleteArgs {
     /// The name of the SNS to complete the swap for.
     #[arg(long)]
     pub sns_name: String,
+    /// The name of the 'dfx' identity. The principal of this identity is supposed to have
+    /// an account in the ICP ledger with sufficient balance to provide direct participations
+    /// for the SNS swap.
+    /// If not provided, the ephemeral identity with hardcoded principal will be used.
+    #[arg(long)]
+    pub icp_treasury_identity: Option<String>,
     /// The neuron that swap participants will follow.
     #[clap(long, group = "neuron-follow-selection")]
     pub follow_neuron: Option<ParsedSnsNeuron>,
@@ -128,6 +134,11 @@ pub struct TransferICPArgs {
     /// The amount of e8s to transfer.
     #[arg(long)]
     pub amount: ParsedTokens,
+    /// The name of the 'dfx' identity. The principal of this identity is supposed to
+    /// have an account in the ICP ledger with sufficient balance to perform the transfer.
+    /// If not provided, the ephemeral identity with hardcoded principal will be used.
+    #[arg(long)]
+    pub icp_treasury_identity: Option<String>,
 }
 
 /// A wrapper to parse ICP tokens from a decimal number.
@@ -220,4 +231,11 @@ pub struct NnsInitArgs {
     /// hotkey for the NNS neuron with the majority voting power.
     #[arg(long)]
     pub dev_identity: String,
+    /// The name of the 'dfx' identity. The principal of this identity will be added to the
+    /// ICP ledger with 10_000_000 ICP. This identity will be used to transfer ICP
+    /// to provide sufficient direct participations for the SNS swap or to transfer ICP
+    /// to the user provided account.
+    /// If not provided, the ephemeral identity with hardcoded principal will be used.
+    #[arg(long)]
+    pub icp_treasury_identity: Option<String>,
 }
