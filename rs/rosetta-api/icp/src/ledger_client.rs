@@ -24,12 +24,7 @@ pub mod proposal_info_response;
 use candid::{Decode, Encode};
 use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_crypto_tree_hash::{LabeledTree, LookupStatus};
 use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
-use ic_types::messages::HttpReadStateResponse;
-use serde::Deserialize;
-use serde_cbor::value::Value as CBOR;
-use std::collections::BTreeMap;
 use std::{
     convert::TryFrom,
     sync::{atomic::AtomicBool, Arc},
@@ -99,73 +94,6 @@ impl LedgerBlocksSynchronizerMetrics for LedgerBlocksSynchronizerMetricsImpl {
     fn set_verified_height(&self, height: u64) {
         crate::rosetta_server::VERIFIED_HEIGHT.set(height as i64);
     }
-}
-
-// An auxiliary structure that mirrors the request statuses
-// encoded in a certificate, starting from the root of the tree.
-#[derive(Debug, Deserialize)]
-struct RequestStatuses {
-    request_status: Option<BTreeMap<MessageId, RequestStatus>>,
-}
-
-#[derive(Eq, PartialEq, Debug, Deserialize)]
-pub struct RequestStatus {
-    pub status: String,
-    pub reply: Option<Vec<u8>>,
-    pub reject_message: Option<String>,
-}
-
-impl RequestStatus {
-    fn unknown() -> Self {
-        RequestStatus {
-            status: "unknown".to_string(),
-            reply: None,
-            reject_message: None,
-        }
-    }
-}
-
-// Copy&paste from canister_client
-pub fn parse_read_state_response(
-    request_id: &MessageId,
-    effective_canister_id: &CanisterId,
-    root_pk: Option<&ThresholdSigPublicKey>,
-    message: CBOR,
-) -> Result<RequestStatus, String> {
-    let response = serde_cbor::value::from_value::<HttpReadStateResponse>(message)
-        .map_err(|source| format!("decoding to HttpReadStateResponse failed: {}", source))?;
-
-    let certificate = match root_pk {
-        Some(pk) => {
-            ic_certification::verify_certificate(&response.certificate, effective_canister_id, pk)
-                .map_err(|source| format!("verifying certificate failed: {}", source))?
-        }
-        None => serde_cbor::from_slice(response.certificate.as_slice())
-            .map_err(|source| format!("decoding Certificate failed: {}", source))?,
-    };
-
-    match certificate
-        .tree
-        .lookup(&[&b"request_status"[..], request_id.as_ref()])
-    {
-        LookupStatus::Found(_) => (),
-        LookupStatus::Absent | LookupStatus::Unknown => return Ok(RequestStatus::unknown()),
-    }
-
-    // Parse the tree.
-    let tree = LabeledTree::try_from(certificate.tree)
-        .map_err(|e| format!("parsing tree in certificate failed: {:?}", e))?;
-
-    let request_statuses =
-        RequestStatuses::deserialize(tree_deserializer::LabeledTreeDeserializer::new(&tree))
-            .map_err(|err| format!("deserializing request statuses failed: {:?}", err))?;
-
-    Ok(match request_statuses.request_status {
-        Some(mut request_status_map) => request_status_map
-            .remove(request_id)
-            .unwrap_or_else(RequestStatus::unknown),
-        None => RequestStatus::unknown(),
-    })
 }
 
 #[async_trait]
@@ -823,7 +751,7 @@ impl LedgerClient {
                         let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
                             .map_err(|err| format!("While parsing the status body: {}", err))?;
 
-                        let status = parse_read_state_response(
+                        let status = ic_read_state_response_parser::parse_read_state_response(
                             &request_id,
                             &canister_id,
                             self.root_key.as_ref(),

@@ -12321,7 +12321,6 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-base-types",
- "ic-certification 0.9.0",
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
@@ -12345,6 +12344,7 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
+ "ic-read-state-response-parser",
  "ic-rosetta-test-utils",
  "ic-types",
  "icp-ledger",
@@ -12376,7 +12376,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "tree-deserializer",
  "url",
 ]
 
