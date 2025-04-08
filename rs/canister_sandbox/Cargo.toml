@@ -42,6 +42,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+tempfile = { workspace = true }
 threadpool = { workspace = true }
 which = "4.2.2"
 
@@ -61,7 +62,6 @@ rand = { workspace = true }
 rstest = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
-tempfile = { workspace = true }
 wat = { workspace = true }
 
 [features]
