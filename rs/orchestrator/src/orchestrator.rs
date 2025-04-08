@@ -36,7 +36,10 @@ use std::{
     thread,
     time::Duration,
 };
-use tokio::{sync::watch::Receiver, task::JoinSet};
+use tokio::{
+    sync::watch::Receiver,
+    task::{JoinHandle, JoinSet},
+};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
@@ -139,6 +142,12 @@ impl Orchestrator {
             UtilityCommand::notify_host(&message, 1);
         });
 
+        let slog_logger = logger.inner_logger.root.clone();
+        let (metrics, _metrics_runtime) =
+            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
+        let metrics = Arc::new(metrics);
+        let mut task_tracker = TaskTracker::new(metrics.clone(), logger.clone());
+
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
             Some(node_id),
@@ -147,11 +156,16 @@ impl Orchestrator {
 
         let (nns_urls, nns_pub_key) =
             registry_replicator.parse_registry_access_info_from_config(&config);
-        if let Err(err) = registry_replicator
+
+        match registry_replicator
             .start_polling(nns_urls, nns_pub_key)
             .await
         {
-            warn!(logger, "{}", err);
+            Ok(join_handle) => task_tracker.insert("registry_replicator", join_handle),
+            Err(err) => error!(
+                logger,
+                "Failed to start the registry replicator task: {err}"
+            ),
         }
 
         // Filesystem API to local registry copy
@@ -180,11 +194,6 @@ impl Orchestrator {
         })
         .await
         .unwrap();
-
-        let slog_logger = logger.inner_logger.root.clone();
-        let (metrics, _metrics_runtime) =
-            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
-        let metrics = Arc::new(metrics);
 
         metrics
             .orchestrator_info
@@ -315,8 +324,6 @@ impl Orchestrator {
             cup_provider,
             logger.clone(),
         ));
-
-        let task_tracker = TaskTracker::new(metrics, logger.clone());
 
         Ok(Self {
             logger,
@@ -618,6 +625,24 @@ impl TaskTracker {
         info!(self.logger, "Task `{task_name}` spawned");
     }
 
+    /// Inserts the provided [`JoinHandle`] into the [`JoinSet`] and updates the
+    /// [`Self::task_names`] field.
+    ///
+    /// TODO: use [`JoinSet::insert`] directly if it ever becomes public.
+    /// https://github.com/tokio-rs/tokio/issues/5924
+    fn insert(&mut self, task_name: &str, join_handle: JoinHandle<()>) {
+        let task = async {
+            match join_handle.await {
+                Err(err) if err.is_panic() => {
+                    std::panic::resume_unwind(err.into_panic());
+                }
+                _ => (),
+            }
+        };
+
+        self.spawn(task_name, task);
+    }
+
     /// Waits until all the tasks complete.
     ///
     /// If any of the tracked tasks panics it will be caught here and
@@ -698,6 +723,44 @@ mod tests {
             metrics
                 .critical_error_task_panicked
                 .get_metric_with_label_values(&["graceful"])
+                .unwrap()
+                .get(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn task_tracker_inserted_join_handle_panics_are_caught_test() {
+        let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
+        let mut task_tracker = TaskTracker::new(metrics.clone(), no_op_logger());
+
+        let join_handle = tokio::spawn(async { panic!("oups!") });
+        task_tracker.insert("panicky_join_handle", join_handle);
+        task_tracker.join_all().await;
+
+        assert_eq!(
+            metrics
+                .critical_error_task_panicked
+                .get_metric_with_label_values(&["panicky_join_handle"])
+                .unwrap()
+                .get(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn task_tracker_inserted_join_handle_graceful_completions_are_caught_test() {
+        let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
+        let mut task_tracker = TaskTracker::new(metrics.clone(), no_op_logger());
+
+        let join_handle = tokio::spawn(async { println!("all good!") });
+        task_tracker.insert("graceful_join_handle", join_handle);
+        task_tracker.join_all().await;
+
+        assert_eq!(
+            metrics
+                .critical_error_task_panicked
+                .get_metric_with_label_values(&["graceful_join_handle"])
                 .unwrap()
                 .get(),
             0
