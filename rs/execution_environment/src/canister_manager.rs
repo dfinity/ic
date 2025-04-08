@@ -64,6 +64,16 @@ use std::{convert::TryFrom, str::FromStr, sync::Arc};
 use types::*;
 pub(crate) mod types;
 
+/// Maximum binary slice size allowed per single message download.
+const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
+
+// Ensure the slice, with extra room for Candid encoding, fits within 2 MiB.
+const _CHECK_MAX_SLICE_SIZE: () = {
+    if MAX_SLICE_SIZE_BYTES > 2 * 1024 * 1024 {
+        panic!("MAX_SLICE_SIZE_BYTES exceeds 2MiB limit");
+    }
+};
+
 /// The entity responsible for managing canisters (creation, installing, etc.)
 pub(crate) struct CanisterManager {
     hypervisor: Arc<Hypervisor>,
@@ -2061,12 +2071,9 @@ impl CanisterManager {
                 snapshot_id,
             });
         }
-        // limit the allowed slice to 2MB, such that the candid-encoded
-        // return value does not exceed 2MiB.
-        let max_slice_size_bytes = 2 * 1000 * 1000;
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
-                if size > max_slice_size_bytes {
+                if size > MAX_SLICE_SIZE_BYTES {
                     return Err(CanisterManagerError::InvalidSubslice { offset, size });
                 }
                 let stable_memory = snapshot.execution_snapshot().stable_memory.clone();
@@ -2076,7 +2083,7 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::MainMemory { offset, size } => {
-                if size > max_slice_size_bytes {
+                if size > MAX_SLICE_SIZE_BYTES {
                     return Err(CanisterManagerError::InvalidSubslice { offset, size });
                 }
                 let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
@@ -2086,7 +2093,7 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataKind::WasmModule { offset, size } => {
-                if size > max_slice_size_bytes {
+                if size > MAX_SLICE_SIZE_BYTES {
                     return Err(CanisterManagerError::InvalidSubslice { offset, size });
                 }
                 match snapshot.get_wasm_module_chunk(offset, size) {
