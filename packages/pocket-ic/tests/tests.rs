@@ -2589,13 +2589,9 @@ fn state_handle() {
     assert!(pic.canister_exists(canister_id));
     let state = pic.drop_and_take_state().unwrap();
 
-    let pic1 = PocketIcBuilder::new()
-        .with_read_only_state_dir(&state)
-        .build();
+    let pic1 = PocketIcBuilder::new().with_read_only_state(&state).build();
     assert!(pic1.canister_exists(canister_id));
 
-    let pic2 = PocketIcBuilder::new()
-        .with_read_only_state_dir(&state)
-        .build();
+    let pic2 = PocketIcBuilder::new().with_read_only_state(&state).build();
     assert!(pic2.canister_exists(canister_id));
 }

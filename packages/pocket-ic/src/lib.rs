@@ -226,7 +226,7 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_read_only_state_dir(mut self, read_only_state_dir: &PocketIcState) -> Self {
+    pub fn with_read_only_state(mut self, read_only_state_dir: &PocketIcState) -> Self {
         self.read_only_state_dir = Some(read_only_state_dir.state_dir());
         self
     }
