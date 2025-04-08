@@ -108,7 +108,7 @@ fn main() -> Result<()> {
         .with_setup(canister_http::setup)
         .add_parallel(
             SystemTestSubGroup::new()
-                // .add_test(systest!(test_request_with_more_cycles_than_canister))
+                .add_test(systest!(test_request_with_more_cycles_than_canister))
                 .add_test(systest!(test_request_with_refund_expectation))
                 // .add_test(systest!(test_enforce_https))
                 // .add_test(systest!(test_transform_function_is_executed))
@@ -284,12 +284,13 @@ fn test_request_with_refund_expectation(env: TestEnv) {
         RemoteHttpRequest {
             request,
             // cycles: Cycles::new(100_000_000_000_000),
-            // cycles: 50_000_000_000_000,
-            cycles: 0,
+            cycles: 50_000_000_000_000,
+            // QUESTION: do I get CanisterReject if cycles here is 0?
+            // cycles: 0,
         },
     ));
 
-    assert_matches!(response, Err(RejectResponse {reject_code: RejectCode::CanisterReject, ..}));
+    assert_matches!(response, Ok(r) if r.status==200);
 
     let balance = block_on(get_balance(
         &Principal::from(get_proxy_canister_id(&env)),
