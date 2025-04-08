@@ -42,12 +42,13 @@ fn test_get_deployed_sns_by_proposal_id() {
         sns_init_payload,
     );
 
-    // SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 is the ID of the wallet canister
-    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let highest_nns_created_canister_index = SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root_canister_id = canister_test_id(highest_nns_created_canister_index + 1);
+    let governance_canister_id = canister_test_id(highest_nns_created_canister_index + 2);
+    let ledger_canister_id = canister_test_id(highest_nns_created_canister_index + 3);
+    let swap_canister_id = canister_test_id(highest_nns_created_canister_index + 4);
+    let index_canister_id = canister_test_id(highest_nns_created_canister_index + 5);
 
     assert_eq!(
         response,

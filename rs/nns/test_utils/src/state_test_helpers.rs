@@ -531,25 +531,29 @@ fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
 /// This approach is used because create_canister advances the canister ID counter in the underlying
 /// execution environment, which otherwise creates problems with creating other canisters
 /// with non-specified IDs.  If that bug is fixed, the behavior in this test helper can be changed.
-pub fn ensure_canister_id_exists_at_position(
+pub fn ensure_canister_id_exists_at_position_with_settings(
     machine: &StateMachine,
     position: u64,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
     let mut canister_id = CanisterId::from_u64(position);
-    if machine.canister_exists(canister_id) {
-        canister_id
-    } else {
-        canister_id = machine.create_canister(canister_settings.clone());
+    if !machine.canister_exists(canister_id) {
+        canister_id = machine.create_canister(None);
         while canister_id_to_u64(canister_id) < position {
             canister_id = machine.create_canister(canister_settings.clone());
         }
 
         // In case we tried using this when we are already past the sequence
         assert_eq!(canister_id_to_u64(canister_id), position);
-
-        canister_id
     }
+
+    if let Some(settings) = canister_settings {
+        machine
+            .update_settings(&canister_id, settings)
+            .expect("Canister settings could not be updated.");
+    };
+
+    canister_id
 }
 
 fn setup_nns_canister_at_position(
@@ -568,7 +572,8 @@ fn setup_nns_canister_at_position(
         .with_controllers(controllers)
         .build();
 
-    let canister_id = ensure_canister_id_exists_at_position(machine, index, Some(args));
+    let canister_id =
+        ensure_canister_id_exists_at_position_with_settings(machine, index, Some(args));
 
     machine
         .install_wasm_in_mode(
@@ -698,7 +703,11 @@ pub fn setup_nns_canisters_with_features(
 ) {
     setup_registry_with_correct_canister_id(machine, init_payloads.registry);
     // DO NOT MERGE: IF everything worked perfectly, this would work fine
-    ensure_canister_id_exists_at_position(machine, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, None);
+    ensure_canister_id_exists_at_position_with_settings(
+        machine,
+        NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+        None,
+    );
 
     setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance, features);
 
@@ -2161,7 +2170,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
 }
 
 pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &StateMachine) {
-    let canister_id = ensure_canister_id_exists_at_position(
+    let canister_id = ensure_canister_id_exists_at_position_with_settings(
         state_machine,
         SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
