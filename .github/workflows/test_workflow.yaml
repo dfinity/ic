@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   ci-main-internal:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
