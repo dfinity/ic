@@ -1,0 +1,12 @@
+name: Test Workflow
+on:
+  pull_request:
+
+jobs:
+  ci-main:
+    name: CI Main
+    uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
+    with:
+      runner: |
+        labels: dind-small
