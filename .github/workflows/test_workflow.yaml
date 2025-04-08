@@ -1,4 +1,4 @@
-name: Test Workflow
+name: Test Workflow Internal
 on:
   pull_request:
 
@@ -13,9 +13,3 @@ jobs:
     secrets: inherit
     with:
       runner: dind-small
-  ci-main-external:
-    name: CI Main
-    uses: ./.github/workflows/ci-main.yml
-    secrets: inherit
-    with:
-      runner: ubuntu-24-large
