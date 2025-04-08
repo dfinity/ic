@@ -7845,7 +7845,7 @@ impl Governance {
             ErrorType::Unspecified,
             "get_node_providers_monthly_xdr_rewards returned empty response, \
                 which should be impossible.",
-        ));
+        ))
     }
 
     /// A helper to get the node provider rewards from registry (instead of Node Provider Reward Canister)
