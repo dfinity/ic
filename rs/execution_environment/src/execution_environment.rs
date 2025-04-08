@@ -1674,14 +1674,13 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
-                // TODO: EXC-1957
                 #[allow(clippy::bind_instead_of_map)]
                 let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| {
                     match self.config.canister_snapshot_download {
                         FlagStatus::Disabled => Ok((vec![], None)),
                         FlagStatus::Enabled => {
                             let canister_id = args.get_canister_id();
-                            // TODO: do we need to account for copying the bytes -> costs and round_limits?
+                            // TODO: [EXC-2018] do we need to account for copying the bytes -> costs and round_limits?
                             self.read_snapshot_data(*msg.sender(), &state, args)
                                 .map(|res| (res, Some(canister_id)))
                         }
