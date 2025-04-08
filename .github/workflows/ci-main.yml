@@ -364,10 +364,7 @@ jobs:
           echo "Build Determinism Check Successful"
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    runs-on: ${{ inputs.runner }}
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
-    timeout-minutes: 30
+    runs-on: ${{ inputs.github_runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
