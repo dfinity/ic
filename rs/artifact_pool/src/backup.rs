@@ -100,7 +100,7 @@ const QUEUE_LENGTH: usize = 0;
 
 pub enum BackupRequest {
     Backup(Vec<ConsensusMessage>),
-    BackupCUP(Height, pb::CatchUpPackage),
+    BackupOriginalCUP(Height, pb::CatchUpPackage),
     Await(SyncSender<()>),
     Shutdown,
 }
@@ -162,6 +162,35 @@ impl BackupThread {
         (tx, handle)
     }
 
+    fn store_artifacts(&mut self, artifacts: Vec<BackupArtifact>) {
+        let result = artifacts
+            .into_iter()
+            .try_for_each(|artifact| artifact.write_to_disk(&self.version_path));
+        if let Err(err) = result {
+            error!(self.log, "Backup storing failed: {:?}", err);
+            self.metrics.io_errors.inc();
+        }
+
+        // If we didn't purge within the last PURGE_INTERVAL, trigger a new purge.
+        // This way we avoid a too frequent purging. We also block if the previous
+        // purging has not finished yet, which is not expected with sufficiently
+        // large PURGE_INTERVAL.
+        let time_of_last_purge = self.time_of_last_purge;
+        let time_now = self.time_source.get_relative_time();
+        if time_now >= time_of_last_purge + self.purge_interval {
+            if let Err(err) = self.purging_queue.send(PurgingRequest::Purge) {
+                error!(
+                    self.log,
+                    "Purging thread exited unexpectedly. This is a bug: {err}"
+                );
+                self.metrics.io_errors.inc();
+            }
+
+            // Set the time to current
+            self.time_of_last_purge = time_now;
+        }
+    }
+
     fn run(&mut self, rx: Receiver<BackupRequest>) {
         loop {
             match rx.recv() {
@@ -170,50 +199,28 @@ impl BackupThread {
                         .into_iter()
                         .flat_map(BackupArtifact::try_from)
                         .collect();
-                    if let Err(err) = store_artifacts(artifacts, &self.version_path) {
-                        error!(self.log, "Backup storing failed: {:?}", err);
-                        self.metrics.io_errors.inc();
-                    }
+                    self.store_artifacts(artifacts);
                 }
-                Ok(BackupRequest::BackupCUP(height, cup_proto)) => {
-                    if let Err(err) = store_artifacts(
-                        vec![BackupArtifact::CatchUpPackage(height, cup_proto)],
-                        &self.version_path,
-                    ) {
-                        error!(self.log, "Backup storing failed: {:?}", err);
-                        self.metrics.io_errors.inc();
-                    }
+                Ok(BackupRequest::BackupOriginalCUP(height, cup_proto)) => {
+                    self.store_artifacts(vec![BackupArtifact::CatchUpPackage(height, cup_proto)]);
                 }
                 Ok(BackupRequest::Await(tx)) => {
-                    self.purging_queue.send(PurgingRequest::Await(tx)).ok();
+                    if let Err(err) = self.purging_queue.send(PurgingRequest::Await(tx)) {
+                        error!(
+                            self.log,
+                            "Purging thread exited unexpectedly. This is a bug: {err}"
+                        );
+                        self.metrics.io_errors.inc();
+                    }
                 }
                 Ok(BackupRequest::Shutdown) => {
                     info!(self.log, "Shutting down the backup thread.");
                     break;
                 }
-                Err(_) => {
-                    error!(self.log, "Orphaned backup thread. This is a bug");
+                Err(err) => {
+                    error!(self.log, "Orphaned backup thread. This is a bug: {err}");
                     break;
                 }
-            }
-
-            // If we didn't purge within the last PURGE_INTERVAL, trigger a new purge.
-            // This way we avoid a too frequent purging. We also block if the previous
-            // purging has not finished yet, which is not expected with sufficiently
-            // large PURGE_INTERVAL.
-            let time_of_last_purge = self.time_of_last_purge;
-            let time_now = self.time_source.get_relative_time();
-            if time_now >= time_of_last_purge + self.purge_interval {
-                if self.purging_queue.send(PurgingRequest::Purge).is_err() {
-                    error!(
-                        self.log,
-                        "Purging thread exited unexpectedly. This is a bug."
-                    );
-                    self.metrics.io_errors.inc();
-                }
-
-                // Set the time to current
-                self.time_of_last_purge = time_now;
             }
         }
     }
@@ -318,8 +325,8 @@ impl PurgingThread {
                     info!(self.log, "Shutting down the purging thread.");
                     break;
                 }
-                Err(_) => {
-                    error!(self.log, "Orphaned purging thread. This is a bug");
+                Err(err) => {
+                    error!(self.log, "Orphaned purging thread. This is a bug: {err}");
                     break;
                 }
             }
@@ -339,7 +346,7 @@ impl BackupSender {
         if let Err(err) = self.backup_queue.send(request) {
             error!(
                 self.log,
-                "Backup thread exited unexpectedly. This is a bug. Error: {err}"
+                "Backup thread exited unexpectedly. This is a bug: {err}"
             );
             self.metrics.io_errors.inc();
         }
@@ -410,14 +417,6 @@ impl Backup {
             time_source,
         )
     }
-}
-
-// Write all backup files to the disk. For the sake of simplicity, we write all
-// artifacts sequentially.
-fn store_artifacts(artifacts: Vec<BackupArtifact>, path: &Path) -> Result<(), io::Error> {
-    artifacts
-        .into_iter()
-        .try_for_each(|artifact| artifact.write_to_disk(path))
 }
 
 /// Traverses the whole backup directory and finds all leaf directories

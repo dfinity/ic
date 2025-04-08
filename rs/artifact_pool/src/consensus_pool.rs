@@ -441,7 +441,7 @@ impl ConsensusPoolImpl {
         if let Some(backup) = pool.backup.as_ref() {
             let (artifacts, (height, cup)) = pool.get_all_persisted_artifacts();
             backup.send(BackupRequest::Backup(artifacts));
-            backup.send(BackupRequest::BackupCUP(height, cup));
+            backup.send(BackupRequest::BackupOriginalCUP(height, cup));
 
             let (tx, rx) = sync_channel(0);
             backup.send(BackupRequest::Await(tx));
