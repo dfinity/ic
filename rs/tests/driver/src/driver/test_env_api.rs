@@ -1540,7 +1540,7 @@ impl HasMetricsUrl for IcNodeSnapshot {
 /// Any entity (boundary node or IC node) that exposes a public API over http
 /// implements this trait.
 #[async_trait]
-pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
+pub trait HasPublicApiUrl: HasTestEnv + Send + Sync + SshSession {
     fn get_public_url(&self) -> Url;
 
     /// The ip address the domain in `get_public_url` should resolve to
@@ -1733,6 +1733,36 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
                     Err(anyhow::anyhow!(
                         "Orchestrator dashboard is still accessible"
                     ))
+                }
+            }
+        )
+    }
+
+    /// Waits until the boot ID changes from the given value
+    fn await_boot_id_change(&self, initial_boot_id: &str) -> anyhow::Result<()> {
+        retry_with_msg!(
+            &format!("await_boot_id_change for {}", self.get_public_addr().ip()),
+            self.test_env().logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || {
+                let session = self.block_on_ssh_session()?;
+                let mut channel = session.channel_session()?;
+                channel.exec("sudo journalctl --list-boots | tail -n1 | cut -d' ' -f4")?;
+                let mut s = String::new();
+                channel.read_to_string(&mut s)?;
+                channel.close().ok();
+                channel.wait_close().ok();
+
+                if channel.exit_status()? != 0 {
+                    return Err(anyhow::anyhow!("Failed to get boot ID"));
+                }
+
+                let current_boot_id = s.trim();
+                if current_boot_id != initial_boot_id {
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("Boot ID has not changed yet"))
                 }
             }
         )

@@ -45,6 +45,29 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
     s.trim().to_string()
 }
 
+/// Use an SSH channel to check the boot ID on the running HostOS.
+pub(crate) fn check_hostos_boot_id(node: &NestedVm) -> String {
+    let session = node
+        .block_on_ssh_session()
+        .expect("Could not reach HostOS VM.");
+    let mut channel = session.channel_session().unwrap();
+
+    channel
+        .exec("sudo journalctl --list-boots | tail -n1 | cut -d' ' -f4")
+        .unwrap();
+    let mut s = String::new();
+    channel.read_to_string(&mut s).unwrap();
+    channel.close().ok();
+    channel.wait_close().ok();
+
+    assert!(
+        channel.exit_status().unwrap() == 0,
+        "Checking boot ID failed."
+    );
+
+    s.trim().to_string()
+}
+
 /// Submit a proposal to elect a new HostOS version
 pub(crate) async fn elect_hostos_version(
     nns_node: &IcNodeSnapshot,

@@ -19,8 +19,8 @@ use slog::info;
 
 mod util;
 use util::{
-    check_hostos_version, elect_hostos_version, setup_nested_vm, start_nested_vm,
-    update_nodes_hostos_version,
+    check_hostos_boot_id, check_hostos_version, elect_hostos_version, setup_nested_vm,
+    start_nested_vm, update_nodes_hostos_version,
 };
 
 const HOST_VM_NAME: &str = "host-1";
@@ -125,6 +125,15 @@ pub fn upgrade_hostos(env: TestEnv) {
     let original_version = check_hostos_version(&host);
     info!(logger, "Version found is: '{}'", original_version);
 
+    // Check HostOS boot ID
+    info!(
+        logger,
+        "Checking boot ID via SSH on HostOS: '{}'",
+        host.get_vm().expect("Unable to get HostOS VM.").ipv6
+    );
+    let original_boot_id = check_hostos_boot_id(&host);
+    info!(logger, "Boot ID found is: '{}'", original_boot_id);
+
     let node_id = new_topology.unassigned_nodes().next().unwrap().node_id;
 
     // Elect target HostOS version
@@ -152,16 +161,11 @@ pub fn upgrade_hostos(env: TestEnv) {
         vec![node_id],
     ));
 
-    info!(logger, "Orchestrator dashboard initial health check...");
-    host.await_orchestrator_dashboard_accessible().unwrap();
-
     // The HostOS upgrade is applied with a reboot to the host machine.
-    // Wait for the host to reboot causing the Orchestrator dashboard to be inaccessible.
     info!(logger, "Waiting for the HostOS upgrade to apply...");
-    host.await_orchestrator_dashboard_inaccessible().unwrap();
-
-    info!(logger, "Waiting for Orchestrator dashboard...");
-    host.await_orchestrator_dashboard_accessible().unwrap();
+    // Wait for the boot ID to change, indicating the reboot has completed
+    info!(logger, "Waiting for HostOS boot ID to change...");
+    host.await_boot_id_change(&original_boot_id).unwrap();
 
     // Check the HostOS version again after upgrade
     info!(
@@ -171,6 +175,9 @@ pub fn upgrade_hostos(env: TestEnv) {
     );
     let new_version = check_hostos_version(&host);
     info!(logger, "Version found is: '{}'", new_version);
+
+    info!(logger, "Orchestrator dashboard health check...");
+    host.await_orchestrator_dashboard_accessible().unwrap();
 
     assert!(new_version != original_version);
 }
