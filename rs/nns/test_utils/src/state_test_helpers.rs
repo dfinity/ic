@@ -1,8 +1,7 @@
 use crate::common::{
-    build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm,
-    build_governance_wasm_with_features, build_ledger_wasm, build_lifeline_wasm,
-    build_node_rewards_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
-    NnsInitPayloads,
+    build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
+    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm, build_registry_wasm,
+    build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
@@ -30,14 +29,13 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET,
-    GENESIS_TOKEN_CANISTER_ID, GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET, GOVERNANCE_CANISTER_ID,
-    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET, GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_ID,
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LIFELINE_CANISTER_ID,
-    LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID,
-    NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, REGISTRY_CANISTER_ID,
-    REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
-    SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+    LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+    REGISTRY_CANISTER_ID, REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
+    ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
