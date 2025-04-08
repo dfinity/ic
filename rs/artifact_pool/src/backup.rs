@@ -166,40 +166,33 @@ impl BackupThread {
         loop {
             match rx.recv() {
                 Ok(BackupRequest::Backup(artifacts)) => {
-                    println!("RECEIVED BACKUP {artifacts:?}");
-                    let artifacts = artifacts
+                    let artifacts: Vec<BackupArtifact> = artifacts
                         .into_iter()
                         .flat_map(BackupArtifact::try_from)
                         .collect();
                     if let Err(err) = store_artifacts(artifacts, &self.version_path) {
                         error!(self.log, "Backup storing failed: {:?}", err);
-                        println!("Backup storing failed: {:?}", err);
                         self.metrics.io_errors.inc();
                     }
                 }
                 Ok(BackupRequest::BackupCUP(height, cup_proto)) => {
-                    println!("RECEIVED CUP {cup_proto:?}");
                     if let Err(err) = store_artifacts(
                         vec![BackupArtifact::CatchUpPackage(height, cup_proto)],
                         &self.version_path,
                     ) {
                         error!(self.log, "Backup storing failed: {:?}", err);
-                        println!("Backup storing failed: {:?}", err);
                         self.metrics.io_errors.inc();
                     }
                 }
                 Ok(BackupRequest::Await(tx)) => {
-                    println!("Received Backup AWAIT");
                     self.purging_queue.send(PurgingRequest::Await(tx)).ok();
                 }
                 Ok(BackupRequest::Shutdown) => {
                     info!(self.log, "Shutting down the backup thread.");
-                    println!("Shutting down the backup thread.");
                     break;
                 }
                 Err(_) => {
                     error!(self.log, "Orphaned backup thread. This is a bug");
-                    println!("Orphaned backup thread. This is a bug");
                     break;
                 }
             }
@@ -216,7 +209,6 @@ impl BackupThread {
                         self.log,
                         "Purging thread exited unexpectedly. This is a bug."
                     );
-                    println!("Purging thread exited unexpectedly. This is a bug.");
                     self.metrics.io_errors.inc();
                 }
 
@@ -310,7 +302,6 @@ impl PurgingThread {
             match rx.recv() {
                 Ok(PurgingRequest::Purge) => {
                     let start = std::time::Instant::now();
-                    println!("RECEIVED PURGE");
                     if let Err(err) = purge(
                         self.age_threshold,
                         &self.backup_path,
@@ -318,7 +309,6 @@ impl PurgingThread {
                         self.age.as_ref(),
                     ) {
                         error!(self.log, "Backup purging failed: {:?}", err);
-                        println!("Backup purging failed: {:?}", err);
                         self.metrics.io_errors.inc();
                     }
                     info!(self.log, "Backup purging finished in {:?}", start.elapsed());
