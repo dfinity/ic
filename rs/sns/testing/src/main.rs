@@ -17,7 +17,7 @@ use ic_sns_testing::utils::{
     TREASURY_PRINCIPAL_ID, TREASURY_SECRET_KEY,
 };
 use icp_ledger::Tokens;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIcBuilder, PocketIcState};
 use reqwest::Url;
 
 #[derive(Debug, Parser)]
@@ -69,7 +69,7 @@ struct NnsInitOpts {
 async fn nns_init(opts: NnsInitOpts) {
     let mut pocket_ic = PocketIcBuilder::new()
         .with_server_url(opts.server_url)
-        .with_state_dir(opts.state_dir.clone())
+        .with_state_dir(PocketIcState::new_from_path(opts.state_dir.clone()))
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()

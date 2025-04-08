@@ -88,6 +88,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use strum_macros::EnumIter;
+use tempfile::TempDir;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
@@ -104,13 +105,50 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
 const LOCALHOST: &str = "127.0.0.1";
 
+pub struct PocketIcState {
+    state_dir: PathBuf,
+    temp_dir: Option<TempDir>,
+}
+
+impl Default for PocketIcState {
+    fn default() -> Self {
+        let temp_dir = TempDir::new().unwrap();
+        let state_dir = temp_dir.path().to_path_buf();
+        Self {
+            state_dir,
+            temp_dir: Some(temp_dir),
+        }
+    }
+}
+
+impl PocketIcState {
+    pub fn new_from_path(state_dir: PathBuf) -> Self {
+        Self {
+            state_dir,
+            temp_dir: None,
+        }
+    }
+
+    pub fn to_path(mut self) -> PathBuf {
+        if let Some(temp_dir) = self.temp_dir.take() {
+            temp_dir.into_path()
+        } else {
+            self.state_dir
+        }
+    }
+
+    pub(crate) fn state_dir(&self) -> PathBuf {
+        self.state_dir.clone()
+    }
+}
+
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     read_only_state_dir: Option<PathBuf>,
-    state_dir: Option<PathBuf>,
+    state_dir: Option<PocketIcState>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -184,13 +222,13 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+    pub fn with_state_dir(mut self, state_dir: PocketIcState) -> Self {
         self.state_dir = Some(state_dir);
         self
     }
 
-    pub fn with_read_only_state_dir(mut self, read_only_state_dir: PathBuf) -> Self {
-        self.read_only_state_dir = Some(read_only_state_dir);
+    pub fn with_read_only_state_dir(mut self, read_only_state_dir: &PocketIcState) -> Self {
+        self.read_only_state_dir = Some(read_only_state_dir.state_dir());
         self
     }
 
@@ -402,7 +440,7 @@ impl PocketIc {
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
-        state_dir: Option<PathBuf>,
+        state_dir: Option<PocketIcState>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -437,6 +475,10 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    pub fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.pocket_ic.take_state_internal()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.

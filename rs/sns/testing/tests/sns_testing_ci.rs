@@ -16,7 +16,7 @@ use ic_sns_testing::utils::{
     SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
 };
 use icp_ledger::Tokens;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIcBuilder, PocketIcState};
 use tempfile::TempDir;
 
 #[tokio::test]
@@ -26,7 +26,7 @@ async fn test_sns_testing_basic_scenario() {
     let state_dir = state_dir.path().to_path_buf();
 
     let pocket_ic = PocketIcBuilder::new()
-        .with_state_dir(state_dir.clone())
+        .with_state_dir(PocketIcState::new_from_path(state_dir.clone()))
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
