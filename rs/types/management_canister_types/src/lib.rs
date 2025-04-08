@@ -3890,16 +3890,6 @@ pub enum OnLowWasmMemoryHookStatus {
     Executed,
 }
 
-impl From<OnLowWasmMemoryHookStatus> for i32 {
-    fn from(val: OnLowWasmMemoryHookStatus) -> i32 {
-        match val {
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => 1,
-            OnLowWasmMemoryHookStatus::Ready => 2,
-            OnLowWasmMemoryHookStatus::Executed => 3,
-        }
-    }
-}
-
 impl OnLowWasmMemoryHookStatus {
     pub fn update(&mut self, is_hook_condition_satisfied: bool) {
         *self = if is_hook_condition_satisfied {
