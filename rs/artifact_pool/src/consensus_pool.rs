@@ -1,4 +1,4 @@
-use crate::backup::BackupRequest;
+use crate::backup::{BackupRequest, BackupSender};
 use crate::height_index::HeightIndexedInstants;
 use crate::{
     consensus_pool_cache::{
@@ -26,7 +26,7 @@ use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
 use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -291,7 +291,7 @@ pub struct ConsensusPoolImpl {
 
     time_source: Arc<dyn TimeSource>,
     cache: Arc<ConsensusCacheImpl>,
-    backup: Option<SyncSender<BackupRequest>>,
+    backup: Option<BackupSender>,
     log: ReplicaLogger,
 }
 
@@ -420,7 +420,7 @@ impl ConsensusPoolImpl {
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
-        backup_sender: Option<SyncSender<BackupRequest>>,
+        backup_sender: Option<BackupSender>,
     ) -> ConsensusPoolImpl {
         let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
         Self::init_genesis(cup_proto, pool.validated.as_mut());
@@ -440,18 +440,11 @@ impl ConsensusPoolImpl {
         // the backup with the pool in a blocking manner.
         if let Some(backup) = pool.backup.as_ref() {
             let (artifacts, (height, cup)) = pool.get_all_persisted_artifacts();
-            if let Err(e) = backup.send(BackupRequest::Backup(artifacts)) {
-                error!(
-                    log,
-                    "Error sending persisted artifacts to backup thread: {e}"
-                );
-            }
-            if let Err(e) = backup.send(BackupRequest::BackupCUP(height, cup)) {
-                error!(log, "Error sending CUP to backup thread: {e}");
-            }
+            backup.send(BackupRequest::Backup(artifacts));
+            backup.send(BackupRequest::BackupCUP(height, cup));
+
             let (tx, rx) = sync_channel(0);
-            // NOTE: If we have an error here we will also have one in the next line
-            let _ = backup.send(BackupRequest::Await(tx));
+            backup.send(BackupRequest::Await(tx));
             if let Err(e) = rx.recv() {
                 error!(log, "Error while syncing the backup thread: {e}");
                 // self.metrics.io_errors.inc();
@@ -654,7 +647,7 @@ impl ConsensusPoolImpl {
     // block proposals with their notarizations that are now provably belong to the finalized chain.
     fn backup_artifacts(
         &self,
-        backup: &SyncSender<BackupRequest>,
+        backup: &BackupSender,
         latest_finalization_height: Height,
         mut artifacts_for_backup: Vec<ConsensusMessage>,
     ) {
@@ -706,12 +699,7 @@ impl ConsensusPoolImpl {
             }
         }
 
-        if let Err(e) = backup.send(BackupRequest::Backup(artifacts_for_backup)) {
-            error!(
-                self.log,
-                "Error sending new artifacts to backup thread: {e}"
-            );
-        }
+        backup.send(BackupRequest::Backup(artifacts_for_backup));
     }
 
     /// Record instant measurement for the given validated message, as long
@@ -1158,7 +1146,7 @@ mod tests {
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
-        backup: Option<SyncSender<BackupRequest>>,
+        backup: Option<BackupSender>,
     ) -> ConsensusPoolImpl {
         ConsensusPoolImpl::new(
             node_id,
@@ -1708,9 +1696,9 @@ mod tests {
         });
     }
 
-    fn sync_backup(sender: &SyncSender<BackupRequest>) {
+    fn sync_backup(sender: &BackupSender) {
         let (tx, rx) = sync_channel(0);
-        sender.send(BackupRequest::Await(tx)).unwrap();
+        sender.send(BackupRequest::Await(tx));
         rx.recv().unwrap();
     }
 
@@ -1728,7 +1716,7 @@ mod tests {
                 .join(ic_types::ReplicaVersion::default().to_string());
 
             let purging_interval = Duration::from_millis(100);
-            let (_backup, sender) = Backup::new(
+            let backup = Backup::new(
                 backup_dir.path().into(),
                 root_path.clone(),
                 // We purge all artifacts older than 5ms millisecond.
@@ -1746,7 +1734,7 @@ mod tests {
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
-                Some(sender.clone()),
+                Some(backup.backup_sender.clone()),
             );
 
             // All tests in this group work on artifacts inside the same group, so we extend
@@ -2084,7 +2072,7 @@ mod tests {
 
             let map: Arc<RwLock<HashMap<String, Duration>>> = Default::default();
             let purging_interval = Duration::from_millis(3000);
-            let (_backup, sender) = Backup::new_with_age_func(
+            let backup = Backup::new_with_age_func(
                 backup_dir.path().into(),
                 backup_dir.path().join(format!("{:?}", subnet_id)),
                 // Artifact retention time
@@ -2102,7 +2090,7 @@ mod tests {
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
-                Some(sender),
+                Some(backup.backup_sender.clone()),
             );
 
             // Insert a list of directory names into the fake age map.

@@ -151,7 +151,7 @@ pub fn construct_ic_stack(
         .backup_config
         .as_ref()
         .map(|config| {
-            Backup::new(
+            let backup = Backup::new(
                 config.spool_path.clone(),
                 config
                     .spool_path
@@ -162,7 +162,8 @@ pub fn construct_ic_stack(
                 metrics_registry.clone(),
                 log.clone(),
                 Arc::new(SysTimeSource::new()),
-            )
+            );
+            (backup, backup.backup_sender.clone())
         })
         .unzip();
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(

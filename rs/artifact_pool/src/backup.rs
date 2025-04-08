@@ -327,9 +327,27 @@ impl PurgingThread {
     }
 }
 
-pub struct Backup {
-    // The queue of the backup thread
+#[derive(Clone)]
+pub struct BackupSender {
     backup_queue: SyncSender<BackupRequest>,
+    metrics: Metrics,
+    log: ReplicaLogger,
+}
+
+impl BackupSender {
+    pub fn send(&self, request: BackupRequest) {
+        if let Err(err) = self.backup_queue.send(request) {
+            error!(
+                self.log,
+                "Backup thread exited unexpectedly. This is a bug. Error: {err}"
+            );
+            self.metrics.io_errors.inc();
+        }
+    }
+}
+
+pub struct Backup {
+    pub backup_sender: BackupSender,
     // Thread handle of the thread executing the backup.
     backup_thread: Option<thread::JoinHandle<()>>,
     log: ReplicaLogger,
@@ -347,7 +365,7 @@ impl Backup {
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
         time_source: Arc<dyn TimeSource>,
-    ) -> (Self, SyncSender<BackupRequest>) {
+    ) -> Self {
         let metrics = Metrics::new(&metrics_registry);
         let (backup_queue, backup_thread) = BackupThread::new(
             age_threshold,
@@ -360,13 +378,16 @@ impl Backup {
             log.clone(),
         )
         .start();
-        let backup = Self {
-            backup_queue: backup_queue.clone(),
+
+        Self {
+            backup_sender: BackupSender {
+                backup_queue,
+                metrics,
+                log: log.clone(),
+            },
             backup_thread: Some(backup_thread),
             log,
-        };
-
-        (backup, backup_queue)
+        }
     }
 
     pub fn new(
@@ -377,7 +398,7 @@ impl Backup {
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
-    ) -> (Self, SyncSender<BackupRequest>) {
+    ) -> Self {
         Self::new_with_age_func(
             backup_path,
             version_path,
@@ -464,7 +485,7 @@ fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
 
 impl Drop for Backup {
     fn drop(&mut self) {
-        let _ = self.backup_queue.send(BackupRequest::Shutdown);
+        self.backup_sender.send(BackupRequest::Shutdown);
         if self.backup_thread.take().unwrap().join().is_err() {
             error!(self.log, "Backup thread exited prematurely during shutdown");
         }
