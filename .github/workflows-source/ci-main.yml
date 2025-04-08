@@ -1,16 +1,6 @@
 name: CI Main
 
 on:
-  merge_group:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-  push:
-    branches:
-      - master
-      - 'dev-gh-*'
-  pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
     inputs:
