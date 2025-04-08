@@ -64,12 +64,10 @@ use std::{convert::TryFrom, str::FromStr, sync::Arc};
 use types::*;
 pub(crate) mod types;
 
-/// The maximum size of a slice of binary data that a user
-/// can download in one mwessage.
+/// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 
-// A slice must fit into the maximum 2MiB message size, with
-// a bit to spare for the candid encoding.
+// Ensure the slice, with extra room for Candid encoding, fits within 2 MiB.
 const _CHECK_MAX_SLICE_SIZE: () = {
     if MAX_SLICE_SIZE_BYTES > 2 * 1024 * 1024 {
         panic!("MAX_SLICE_SIZE_BYTES exceeds 2MiB limit");
