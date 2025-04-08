@@ -431,9 +431,13 @@ impl ConsensusPoolImpl {
             log.clone(),
             time_source.clone(),
         );
-        // If the back up directory is set, instantiate the backup component
-        // and create a subdirectory with the subnet id as directory name.
         pool.backup = backup_sender;
+        // Due to the fact that the backup is synced to the disk completely
+        // independently of the consensus pool and always after the consensus pool was
+        // mutated, we might run into an inconsistent state between the pool and the
+        // backup data if the replica gets killed by the orchestrator. To avoid this
+        // situation, on the instantiation of the consensus pool, we need to synchronize
+        // the backup with the pool in a blocking manner.
         if let Some(backup) = pool.backup.as_ref() {
             let (artifacts, (height, cup)) = pool.get_all_persisted_artifacts();
             if let Err(e) = backup.send(BackupRequest::Backup(artifacts)) {
