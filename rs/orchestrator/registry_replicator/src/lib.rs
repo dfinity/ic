@@ -53,7 +53,6 @@ use std::{
     },
     time::Duration,
 };
-use tokio::task::JoinHandle;
 use url::Url;
 
 pub mod args;
@@ -298,21 +297,6 @@ impl RegistryReplicator {
             self.logger,
             "Finished local store initialization at registry version: {}", registry_version
         );
-    }
-
-    /// Initializes the registry local store asynchronously and spawns a background task that
-    /// continuously polls for updates.
-    /// The background task is stopped when the object is dropped.
-    pub async fn start_polling_in_background(
-        &self,
-        nns_urls: Vec<Url>,
-        nns_pub_key: Option<ThresholdSigPublicKey>,
-    ) -> Result<JoinHandle<()>, Error> {
-        let future = self.start_polling(nns_urls, nns_pub_key).await?;
-
-        info!(self.logger, "Spawning background thread.");
-        let handle = tokio::spawn(future);
-        Ok(handle)
     }
 
     /// Initializes the registry local store asynchronously and returns future that

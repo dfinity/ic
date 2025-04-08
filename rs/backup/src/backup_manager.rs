@@ -86,10 +86,13 @@ impl BackupManager {
         let nns_urls = vec![config.nns_url.expect("Missing NNS Url")];
 
         info!(log, "Starting the registry replicator");
-        registry_replicator
-            .start_polling_in_background(nns_urls, Some(nns_public_key))
+        let registry_replicator_future = registry_replicator
+            .start_polling(nns_urls, Some(nns_public_key))
             .await
             .expect("Failed to start registry replicator");
+
+        info!(log, "Spawning the registry replicator background thread.");
+        tokio::spawn(registry_replicator_future);
 
         info!(log, "Fetch and start polling");
         if let Err(err) = registry_client.fetch_and_start_polling() {

@@ -464,11 +464,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     TokioScope::scope_and_block(move |s| {
         if let Some(v) = registry_replicator {
             s.spawn(async move {
-                v.start_polling_in_background(cli.registry.registry_nns_urls, nns_pub_key)
+                v.start_polling(cli.registry.registry_nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
-                    .await
-                    .context("registry replicator failed")?;
+                    .await;
 
                 Ok::<(), Error>(())
             });
