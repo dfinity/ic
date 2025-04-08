@@ -598,6 +598,18 @@ impl SubnetPair {
             .collect()
     }
 
+    /// Gathers the number of successful heartbeat invocations for each canister and returns it as
+    /// a map of canister ID to count.
+    pub fn gather_successful_heartbeat_invocations(&self) -> BTreeMap<CanisterId, u64> {
+        self.canisters()
+            .into_iter()
+            .map(|canister| {
+                let count = self.force_query::<u32>(canister, "successful_heartbeat_invocations");
+                (canister, count as u64)
+            })
+            .collect()
+    }
+
     /// Asserts no critical errors were recorded in the metrics; and checks canisters did not
     /// log any trap messages.
     pub fn check_critical_errors_and_traps(&self) -> Result<(), (String, DebugInfo)> {
@@ -620,6 +632,11 @@ impl SubnetPair {
         let traps = self.gather_canister_traps();
         if !traps.is_empty() {
             return self.failed_with_reason(format!("{:#?}", traps));
+        }
+
+        let invocations = self.gather_successful_heartbeat_invocations();
+        if invocations.into_iter().all(|(_, count)| count == 0) {
+            return self.failed_with_reason("no successful heartbeat invocations");
         }
 
         Ok(())
