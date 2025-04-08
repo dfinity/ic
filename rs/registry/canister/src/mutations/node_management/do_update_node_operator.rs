@@ -245,6 +245,9 @@ impl Registry {
 /// Helper function which tries to find find a single node operator record
 /// within an array of `operators`, returning either a reference to the found
 /// record or an error.
+///
+/// Only reason why this function borrows the `provider` principal is to print
+/// out a more meaningful error message.
 fn find_node_operator_record_for_provider<'a>(
     operators: &'a [NodeOperatorRecord],
     operator_id: &PrincipalId,
@@ -456,14 +459,16 @@ mod tests {
         ]);
 
         registry
-            .do_update_node_operator_with_caller(payload(operator(1), operator(2), &[node(1)]), caller(1))
+            .do_update_node_operator_with_caller(
+                payload(operator(1), operator(2), &[node(1)]),
+                caller(1),
+            )
             .assert_err_contains(&format!(
-                "Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}",
+                "Old node operator and new node operator are in different data centers. \
+                Old node operator {} is in dc1 but the new node operator {} is in dc2",
                 operator(1),
-                "dc1",
                 operator(2),
-                "dc2"
-        ));
+            ));
     }
 
     #[test]
@@ -583,13 +588,6 @@ mod tests {
             )
             .assert_ok();
 
-        assert!(
-            registry.latest_version() == version_before + 1,
-            "Expected registry version to increase. Before execution: {}, after execution: {}",
-            version_before,
-            registry.latest_version()
-        );
-
         for node_id in &[first_node, second_node] {
             let node = registry
                 .get(
@@ -646,12 +644,27 @@ mod tests {
                 .unwrap();
 
             let decoded = NodeOperatorRecord::decode(operator_record.value.as_slice()).unwrap();
-            assert_eq!(operator_record.version, version_before + 1, "Node operator version remained unchanged: Operator {} has version {} but it should be {}", operator, operator_record.version, version_before + 1);
+            assert_eq!(
+                operator_record.version,
+                version_before + 1,
+                "Node operator version remained unchanged: \
+                Operator {} has version {} but it should be {}",
+                operator,
+                operator_record.version,
+                version_before + 1
+            );
             assert_eq!(
                 decoded.node_allowance, *allowance,
                 "Node operator doesn't have correct allowance: Operator {} has {} but should be {}",
                 operator, decoded.node_allowance, allowance
             );
         }
+
+        assert!(
+            registry.latest_version() == version_before + 1,
+            "Expected registry version to increase. Before execution: {}, after execution: {}",
+            version_before,
+            registry.latest_version()
+        );
     }
 }
