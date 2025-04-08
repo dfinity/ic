@@ -1573,7 +1573,7 @@ fn test_icrc3_certificate() {
         legacy_certificate.certificate.clone().unwrap(),
         icrc3_certificate.certificate
     );
-    assert_eq!(icrc3_certificate.hash_tree, icrc3_certificate.hash_tree);
+    assert_eq!(legacy_certificate.hash_tree, icrc3_certificate.hash_tree);
 
     fn lookup_hashtree(
         hash_tree: serde_bytes::ByteBuf,
