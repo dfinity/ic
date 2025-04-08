@@ -3,7 +3,7 @@ name: CI PR Only
 
 on:
   merge_group:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 concurrency:
   # only triggered on PR, so head_ref will always be set
