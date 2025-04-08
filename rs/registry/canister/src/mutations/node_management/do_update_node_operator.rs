@@ -68,6 +68,16 @@ impl Registry {
             &new_operator_id,
         )?;
 
+        // This is the main source of mutations in this operation, where we update all
+        // node records that need to reference the new node operator ID. Each affected
+        // node results in a mutation to update its corresponding record.
+        //
+        // In total, there are only two other mutations outside of this:
+        //   1. Incrementing the allowance of the old node operator.
+        //   2. Decrementing the allowance of the new node operator.
+        //
+        // Together, these changes form the complete set of mutations required for
+        // reassigning nodes from one operator to another.
         let mut valid_mutations: Vec<_> = self
             .maybe_fetch_nodes_to_update(node_ids, &new_operator_id, &old_operator_id)?
             .into_iter()
@@ -143,7 +153,7 @@ impl Registry {
         new_operator_id: &PrincipalId,
         old_operator_id: &PrincipalId,
     ) -> Result<BTreeMap<NodeId, NodeRecord>, String> {
-        let mut node_records = BTreeMap::new();
+        let mut result = BTreeMap::new();
 
         for node_id in provided_node_ids {
             let node_record = self.get_node(*node_id).ok_or_else(|| {
@@ -153,7 +163,8 @@ impl Registry {
                 )
             })?;
 
-            if node_record.node_operator_id.eq(new_operator_id.as_slice()) {
+            if node_record.node_operator_id == new_operator_id.as_slice() {
+                // Skip nodes that are already under the new node operator.
                 println!(
                     "{}do_update_node_operator: Node {} already belongs to node operator {}",
                     LOG_PREFIX, node_id, new_operator_id
@@ -161,17 +172,17 @@ impl Registry {
                 continue;
             }
 
-            if node_record.node_operator_id.ne(old_operator_id.as_slice()) {
+            if node_record.node_operator_id != old_operator_id.as_slice() {
                 return Err(format!(
                     "{}do_update_node_operator: Node {} does not belong to node operator {}",
                     LOG_PREFIX, node_id, old_operator_id
                 ));
             }
 
-            node_records.insert(*node_id, node_record);
+            result.insert(*node_id, node_record);
         }
 
-        Ok(node_records)
+        Ok(result)
     }
 
     /// Fetches all the node operator records for a single
@@ -182,8 +193,10 @@ impl Registry {
     ) -> Result<Vec<NodeOperatorRecord>, String> {
         let operators: Vec<_> = self
             .get_node_operators_and_dcs_of_node_provider(*provider_id)
-            .map(|operators_and_dcs| operators_and_dcs.into_iter().map(|(_, o)| o).collect())
-            .map_err(|e| format!("{}do_update_node_operator: {:?}", LOG_PREFIX, e))?;
+            .map_err(|e| format!("{}do_update_node_operator: {:?}", LOG_PREFIX, e))?
+            .into_iter()
+            .map(|(_, o)| o)
+            .collect();
 
         if operators.is_empty() {
             return Err(format!(
