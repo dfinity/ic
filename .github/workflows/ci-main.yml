@@ -253,6 +253,7 @@ jobs:
   python-ci-tests:
     name: Python CI Tests
     runs-on: ${{ inputs.runner }}
+      label: dind-small
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     timeout-minutes: 30
