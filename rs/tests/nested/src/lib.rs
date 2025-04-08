@@ -176,8 +176,8 @@ pub fn upgrade_hostos(env: TestEnv) {
     let new_version = check_hostos_version(&host);
     info!(logger, "Version found is: '{}'", new_version);
 
+    assert!(new_version != original_version);
+
     info!(logger, "Orchestrator dashboard health check...");
     host.await_orchestrator_dashboard_accessible().unwrap();
-
-    assert!(new_version != original_version);
 }

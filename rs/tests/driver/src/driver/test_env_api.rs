@@ -1712,32 +1712,6 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync + SshSession {
         )
     }
 
-    /// Waits until the Orchestrator dashboard endpoint becomes inaccessible
-    fn await_orchestrator_dashboard_inaccessible(&self) -> anyhow::Result<()> {
-        retry_with_msg!(
-            &format!(
-                "await_orchestrator_dashboard_inaccessible for {}",
-                self.get_public_addr().ip()
-            ),
-            self.test_env().logger(),
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || {
-                let ip = match self.get_public_addr().ip() {
-                    IpAddr::V6(ip) => ip,
-                    IpAddr::V4(_) => panic!("Expected IPv6 address"),
-                };
-                if !Self::is_orchestrator_dashboard_accessible(ip, 5) {
-                    Ok(())
-                } else {
-                    Err(anyhow::anyhow!(
-                        "Orchestrator dashboard is still accessible"
-                    ))
-                }
-            }
-        )
-    }
-
     /// Waits until the boot ID changes from the given value
     fn await_boot_id_change(&self, initial_boot_id: &str) -> anyhow::Result<()> {
         retry_with_msg!(
