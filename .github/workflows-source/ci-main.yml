@@ -328,7 +328,7 @@ jobs:
       - name: Download SHA256SUMS (nocache)
         uses: actions/download-artifact@v4
         with:
-          name: execlog-bazel-build-ic
+          name: execlog-build-ic
           path: shasums-nocache
 
       - name: Build Determinism Test

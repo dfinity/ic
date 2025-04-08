@@ -73,6 +73,7 @@ runs:
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
 
 
+          # TODO: time this
     - name: Clean up execlog
       shell: bash
       if: (success() || failure()) && inputs.execlog-artifact-name != ''
@@ -85,7 +86,7 @@ runs:
 
         execlog_tmp=$(mktemp)
 
-        jq -cMr <"$execlog_path" \
+        time jq -cMr <"$execlog_path" \
             '. | .targetLabel as $targetLabel | select(.targetLabel | test(".*")) | .actualOutputs | map(. | {"path": .path, "hash": .digest.hash, "targetLabel": $targetLabel}) | .[] | .targetLabel+","+.path+","+.hash' > "$execlog_tmp"
 
         mv "$execlog_tmp" "$execlog_path"

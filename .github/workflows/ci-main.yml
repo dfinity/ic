@@ -320,6 +320,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-ic, bazel-test-all]
     steps:
+      # TODO: handle no artifact
       - name: Download SHA256SUMS (cache)
         uses: actions/download-artifact@v4
         with:
