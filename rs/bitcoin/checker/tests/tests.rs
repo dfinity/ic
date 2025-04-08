@@ -423,6 +423,18 @@ fn test_check_transaction_passed() {
     )
     .unwrap();
 
+    test_normal_operation("check_transaction_str", check_transaction_str_args.clone());
+
+    // Test empty argument upgrade
+    env.tick();
+    env.upgrade_canister(
+        setup.btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!().unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+
     test_normal_operation("check_transaction_str", check_transaction_str_args);
 }
 

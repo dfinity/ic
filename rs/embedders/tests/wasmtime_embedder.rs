@@ -6,13 +6,17 @@ use ic_config::{
 use ic_embedders::{
     wasm_utils::instrumentation::instruction_to_cost,
     wasm_utils::instrumentation::WasmMemoryType,
-    wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
+    wasmtime_embedder::{
+        system_api::{sandbox_safe_system_state::CallbackUpdate, ApiType},
+        system_api_complexity, CanisterMemoryType,
+    },
 };
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
 };
+use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::{
@@ -84,7 +88,7 @@ fn correctly_count_instructions() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -140,7 +144,7 @@ fn instruction_limit_traps() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -250,7 +254,7 @@ fn correctly_report_performance_counter() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -596,7 +600,7 @@ fn read_before_write_stats() {
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(direct_wat)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -624,7 +628,7 @@ fn read_before_write_stats() {
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(read_then_write_wat)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -668,8 +672,7 @@ fn stable_write_and_read() {
                 )
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -712,8 +715,7 @@ fn stable64_write_and_read() {
                 (table funcref (elem $test))
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -786,7 +788,7 @@ fn stable_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -794,7 +796,6 @@ fn stable_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -881,7 +882,7 @@ fn stable64_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -889,7 +890,6 @@ fn stable64_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -952,8 +952,7 @@ fn multiple_stable_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -1000,8 +999,7 @@ fn multiple_stable64_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -1096,10 +1094,7 @@ fn stable_read_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1248,10 +1243,7 @@ fn stable64_read_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // Native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1396,10 +1388,7 @@ fn stable_write_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -1548,9 +1537,7 @@ fn stable64_write_out_of_bounds() {
     };
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -2272,7 +2259,7 @@ fn wasm64_msg_caller_copy() {
 
     let caller = user_test_id(24).get();
     let payload = vec![0u8; 32];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2342,7 +2329,7 @@ fn wasm64_msg_arg_data_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2409,8 +2396,7 @@ fn wasm64_msg_method_name_copy() {
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
     let msg_name = "test".to_string();
-    let api =
-        ic_system_api::ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
+    let api = ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
@@ -2475,7 +2461,7 @@ fn wasm64_msg_reply_data_append() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2526,7 +2512,7 @@ fn wasm64_msg_reject() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2572,7 +2558,7 @@ fn wasm64_reject_msg_copy() {
 
     let caller = user_test_id(24).get();
     let reject_msg = "go away".to_string();
-    let api = ic_system_api::ApiType::reject_callback(
+    let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
         RejectContext::new(
@@ -2647,7 +2633,7 @@ fn wasm64_canister_self_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2718,7 +2704,7 @@ fn wasm64_subnet_self_size() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2772,7 +2758,7 @@ fn wasm64_subnet_self_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2847,7 +2833,7 @@ fn wasm64_trap() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         Vec::new(),
         Cycles::zero(),
@@ -2888,7 +2874,7 @@ fn wasm64_canister_cycle_balance128() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -2954,7 +2940,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -3024,7 +3010,7 @@ fn wasm64_msg_cycles_refunded128() {
 
     let caller = user_test_id(24).get();
     let reject_msg = "go away".to_string();
-    let api = ic_system_api::ApiType::reject_callback(
+    let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
         RejectContext::new(
@@ -3093,7 +3079,7 @@ fn wasm64_cycles_burn128() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -3168,7 +3154,7 @@ fn large_wasm64_memory_allocation_test() {
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -3228,13 +3214,12 @@ fn large_wasm64_stable_read_write_test() {
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     // Declare a large heap.
     config.max_wasm64_memory_size = NumBytes::from(10 * gb);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -3299,7 +3284,7 @@ fn wasm64_saturate_fun_index() {
             (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -3329,7 +3314,7 @@ fn wasm64_saturate_fun_index() {
         .unwrap()
         .clone();
     match callback_update {
-        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Register(_id, callback) => {
+        CallbackUpdate::Register(_id, callback) => {
             assert_eq!(
                 callback.on_reply,
                 WasmClosure {
@@ -3352,7 +3337,7 @@ fn wasm64_saturate_fun_index() {
                 })
             );
         }
-        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Unregister(_) => {
+        CallbackUpdate::Unregister(_) => {
             panic!("Expected registration of new calback")
         }
     }

@@ -133,7 +133,7 @@ struct Cli {
     cloudflare_api_url: String,
 
     #[arg(long)]
-    cloudflare_api_key_path: PathBuf,
+    cloudflare_api_key_path: Option<PathBuf>,
 
     #[arg(long, default_value = "60")]
     peek_sleep_sec: u64,
@@ -510,20 +510,24 @@ async fn main() -> Result<(), Error> {
     );
 
     // Cloudflare
-    let dns_creator = {
-        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path.clone())
-            .context("failed to open cloudflare api key file")?;
-        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
+    let cloudflare_api_key = if let Some(v) = &cli.cloudflare_api_key_path {
+        std::fs::read_to_string(v)
+            .context("unable to read Cloudflare key from file")?
+            .trim()
+            .to_string()
+    } else if let Ok(v) = std::env::var("CLOUDFLARE_API_KEY") {
+        v
+    } else {
+        return Err(anyhow!("Cloudflare API key wasn't provided"));
     };
+
+    let dns_creator = Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?;
     let dns_creator = WithMetrics(
         dns_creator,
         MetricParams::new(&registry, SERVICE_NAME, "dns_create", &["status"]),
     );
 
-    let dns_deleter = {
-        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path)?;
-        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
-    };
+    let dns_deleter = Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?;
     let dns_deleter = WithMetrics(
         dns_deleter,
         MetricParams::new(&registry, SERVICE_NAME, "dns_delete", &["status"]),

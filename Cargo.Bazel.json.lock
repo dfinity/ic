@@ -1,5 +1,5 @@
 {
-  "checksum": "6b5cac5f03c3f73653b9fcc13d0d44e0d958cc37cd309d006ec71b5733d99f13",
+  "checksum": "01abee1004cda795a1e7afabea0db4e41d95d02f5e4482262c69550734d59555",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1095,6 +1095,77 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "actix-web-prom 0.9.0": {
+      "name": "actix-web-prom",
+      "version": "0.9.0",
+      "package_url": "https://github.com/nlopes/actix-web-prom.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/actix-web-prom/0.9.0/download",
+          "sha256": "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "actix_web_prom",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "actix_web_prom",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "actix-web 4.9.0",
+              "target": "actix_web"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "prometheus 0.13.4",
+              "target": "prometheus"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "strfmt 0.2.4",
+              "target": "strfmt"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "addr 0.15.6": {
       "name": "addr",
@@ -20263,6 +20334,10 @@
               "target": "actix_web"
             },
             {
+              "id": "actix-web-prom 0.9.0",
+              "target": "actix_web_prom"
+            },
+            {
               "id": "addr 0.15.6",
               "target": "addr"
             },
@@ -20921,7 +20996,7 @@
               "target": "mockall"
             },
             {
-              "id": "mockito 1.2.0",
+              "id": "mockito 1.7.0",
               "target": "mockito"
             },
             {
@@ -31578,7 +31653,6 @@
           "common": [
             "client",
             "default",
-            "full",
             "h2",
             "http1",
             "http2",
@@ -42526,7 +42600,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -42572,7 +42646,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -46230,14 +46304,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "mockito 1.2.0": {
+    "mockito 1.7.0": {
       "name": "mockito",
-      "version": "1.2.0",
+      "version": "1.7.0",
       "package_url": "https://github.com/lipanski/mockito",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mockito/1.2.0/download",
-          "sha256": "f8d3038e23466858569c2d30a537f691fa0d53b51626630ae08262943e3bbb8b"
+          "url": "https://static.crates.io/crates/mockito/1.7.0/download",
+          "sha256": "7760e0e418d9b7e5777c0374009ca4c93861b9066f18cb334a20ce50ab63aa48"
         }
       },
       "targets": [
@@ -46263,7 +46337,8 @@
           "common": [
             "color",
             "colored",
-            "default"
+            "default",
+            "parking_lot"
           ],
           "selects": {}
         },
@@ -46274,23 +46349,43 @@
               "target": "assert_json_diff"
             },
             {
+              "id": "bytes 1.9.0",
+              "target": "bytes"
+            },
+            {
               "id": "colored 2.0.4",
               "target": "colored"
             },
             {
-              "id": "futures 0.3.31",
-              "target": "futures"
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "http 1.2.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.5.1",
               "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.10",
+              "target": "hyper_util"
             },
             {
               "id": "log 0.4.20",
               "target": "log"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.9.0",
               "target": "rand"
             },
             {
@@ -46317,7 +46412,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.2.0"
+        "version": "1.7.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -49436,14 +49531,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl 0.10.70": {
+    "openssl 0.10.72": {
       "name": "openssl",
-      "version": "0.10.70",
+      "version": "0.10.72",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl/0.10.70/download",
-          "sha256": "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
+          "url": "https://static.crates.io/crates/openssl/0.10.72/download",
+          "sha256": "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
         }
       },
       "targets": [
@@ -49500,11 +49595,11 @@
               "target": "once_cell"
             },
             {
-              "id": "openssl 0.10.70",
+              "id": "openssl 0.10.72",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49521,7 +49616,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.70"
+        "version": "0.10.72"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -49533,7 +49628,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49690,14 +49785,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.105": {
+    "openssl-sys 0.9.107": {
       "name": "openssl-sys",
-      "version": "0.9.105",
+      "version": "0.9.107",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.105/download",
-          "sha256": "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.107/download",
+          "sha256": "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
         }
       },
       "targets": [
@@ -49738,14 +49833,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.105"
+        "version": "0.9.107"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -74571,6 +74666,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "strfmt 0.2.4": {
+      "name": "strfmt",
+      "version": "0.2.4",
+      "package_url": "https://github.com/vitiral/strfmt",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/strfmt/0.2.4/download",
+          "sha256": "7a8348af2d9fc3258c8733b8d9d8db2e56f54b2363a4b5b81585c7875ed65e65"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "strfmt",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "strfmt",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.2.4"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
     "string_cache 0.8.7": {
       "name": "string_cache",
       "version": "0.8.7",
@@ -94159,6 +94292,7 @@
   "direct_deps": [
     "actix-rt 2.10.0",
     "actix-web 4.9.0",
+    "actix-web-prom 0.9.0",
     "addr 0.15.6",
     "aide 0.14.1",
     "anyhow 1.0.93",
@@ -94330,7 +94464,7 @@
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
     "mockall 0.13.0",
-    "mockito 1.2.0",
+    "mockito 1.7.0",
     "moka 0.12.8",
     "more-asserts 0.3.1",
     "nftables 0.4.1",

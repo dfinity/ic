@@ -1,12 +1,13 @@
 use crate::logs::ERROR;
 use crate::pb::v1::{self as pb, NervousSystemFunction};
-use crate::types::native_action_ids::{self, SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
+use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
 use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
 /// no effect on the behavior of the SNS.
@@ -74,7 +75,6 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                 native_functions: vec![
                     UPGRADE_SNS_TO_NEXT_VERSION,
                     ADVANCE_SNS_TARGET_VERSION,
-                    SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                 ],
             },
             is_critical: false,
@@ -131,6 +131,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     DEREGISTER_DAPP_CANISTERS,
                     ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+                    SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                 ],
             },
             is_critical: true,
@@ -294,7 +295,7 @@ impl pb::Governance {
 }
 
 impl pb::Topic {
-    fn is_critical(&self) -> bool {
+    pub fn is_critical(&self) -> bool {
         // Fall back to default proposal criticality (if a topic isn't defined).
         //
         // Handled explicitly to avoid any doubts.
@@ -328,6 +329,22 @@ impl pb::Topic {
                     .find(|native_function| action_code == *native_function)
                     .map(|_| Self::from(topic_info.topic))
             })
+    }
+}
+
+impl fmt::Display for pb::Topic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let topic_str = match self {
+            Self::Unspecified => "Unspecified",
+            Self::DaoCommunitySettings => "DaoCommunitySettings",
+            Self::SnsFrameworkManagement => "SnsFrameworkManagement",
+            Self::DappCanisterManagement => "DappCanisterManagement",
+            Self::ApplicationBusinessLogic => "ApplicationBusinessLogic",
+            Self::Governance => "Governance",
+            Self::TreasuryAssetManagement => "TreasuryAssetManagement",
+            Self::CriticalDappOperations => "CriticalDappOperations",
+        };
+        write!(f, "{}", topic_str)
     }
 }
 

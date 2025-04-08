@@ -19,6 +19,8 @@ ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-runtime = { path = "../runtime" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-registry-transport = { path = "../../registry/transport" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 mockall = { workspace = true }
+prost = { workspace = true }
