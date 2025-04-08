@@ -131,7 +131,7 @@ use icp_ledger::{
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
-use proptest::prelude::{proptest, ProptestConfig};
+use proptest::prelude::{prop_oneof, proptest, Just, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
@@ -971,13 +971,17 @@ fn run_two_neuron_disagree_identical_stake_longer_dissolve_wins(
 #[test]
 fn test_two_neuron_disagree_identical_stake_older_wins_3_months() {
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
-    run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
+    run_two_neuron_disagree_identical_stake_older_wins(Some(DissolveState::DissolveDelaySeconds(
+        THREE_MONTHS,
+    )));
 }
 
 #[test]
 fn test_two_neuron_disagree_identical_stake_older_wins_6_months() {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
-    run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
+    run_two_neuron_disagree_identical_stake_older_wins(Some(DissolveState::DissolveDelaySeconds(
+        SIX_MONTHS,
+    )));
 }
 
 /// Here 2 neurons with same stake and same dissolve delay disagree. The oldest
@@ -1821,7 +1825,7 @@ async fn test_manage_network_economics_change_one_deep_subfield_3_months() {
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_network_economics_change_one_deep_subfield(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
-    ));
+    )).await;
 }
 
 #[tokio::test]
@@ -1829,7 +1833,7 @@ async fn test_manage_network_economics_change_one_deep_subfield_6_months() {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_network_economics_change_one_deep_subfield(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
-    ));
+    )).await;
 }
 
 async fn run_manage_network_economics_change_one_deep_subfield(
@@ -1953,7 +1957,8 @@ async fn test_manage_network_economics_reject_invalid_3_months() {
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_network_economics_reject_invalid(Some(DissolveState::DissolveDelaySeconds(
         THREE_MONTHS,
-    )));
+    )))
+    .await;
 }
 
 #[tokio::test]
@@ -1961,7 +1966,8 @@ async fn test_manage_network_economics_reject_invalid_6_months() {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_network_economics_reject_invalid(Some(DissolveState::DissolveDelaySeconds(
         SIX_MONTHS,
-    )));
+    )))
+    .await;
 }
 
 async fn run_manage_network_economics_reject_invalid(
@@ -2091,7 +2097,8 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
-    ));
+    ))
+    .await;
 }
 
 #[tokio::test]
@@ -2100,7 +2107,8 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
-    ));
+    ))
+    .await;
 }
 
 async fn run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(
@@ -2144,18 +2152,20 @@ async fn run_manage_network_economics_revalidate_at_execution_time_set_minimum_i
 async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first_3_months(
 ) {
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
-    run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
+    run_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
-    ));
+    ))
+    .await;
 }
 
 #[tokio::test]
 async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first_6_months(
 ) {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
-    run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
+    run_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
-    ));
+    ))
+    .await;
 }
 
 async fn run_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first(
@@ -4655,7 +4665,7 @@ proptest! {
     cases: 100, .. ProptestConfig::default()
 })]
 #[test]
-fn test_topic_weights(stake in 1u64..1_000_000_000, minimum_dissolve_delay_to_vote in proptest::prop_oneof![Just(3 * ONE_MONTH_SECONDS), Just(6 * ONE_MONTH_SECONDS)]) {
+fn test_topic_weights(stake in 1u64..1_000_000_000, minimum_dissolve_delay_to_vote in prop_oneof![Just(3 * ONE_MONTH_SECONDS), Just(6 * ONE_MONTH_SECONDS)]) {
     let not_dissolving_min_dissolve_delay = Some(DissolveState::DissolveDelaySeconds(minimum_dissolve_delay_to_vote));
     // Check that voting on
     // 1. a governance proposal yields 20 times the voting power
@@ -4722,7 +4732,10 @@ fn test_random_voting_rewards_scenarios_6_months() {
 }
 
 fn run_random_voting_rewards_scenarios(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
-    fn helper(seed: u64) -> Vec<fake::ProposalNeuronBehavior> {
+    fn helper(
+        seed: u64,
+        not_dissolving_min_dissolve_delay: Option<DissolveState>,
+    ) -> Vec<fake::ProposalNeuronBehavior> {
         let mut rng = StdRng::seed_from_u64(seed);
         let neuron_weights = vec![200, 500, 300]; // Notice that the shares are 20%, 50%, and 30%.
         let total_neuron_weight: u64 = neuron_weights.iter().sum();
@@ -4859,7 +4872,7 @@ fn run_random_voting_rewards_scenarios(not_dissolving_min_dissolve_delay: Option
     const SCENARIO_COUNT: u64 = 300;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
-        unique_scenarios.insert(helper(seed));
+        unique_scenarios.insert(helper(seed, not_dissolving_min_dissolve_delay));
     }
 
     // Assert that many different scenarios were actually generated (to make
@@ -4888,7 +4901,7 @@ fn run_random_voting_rewards_scenarios(not_dissolving_min_dissolve_delay: Option
 #[test]
 fn test_maturities_are_invariant_by_stake_scaling_3_months() {
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
-    run_maturities_are_invariant_by_stake_scalin(Some(DissolveState::DissolveDelaySeconds(
+    run_maturities_are_invariant_by_stake_scaling(Some(DissolveState::DissolveDelaySeconds(
         THREE_MONTHS,
     )));
 }
@@ -4896,7 +4909,7 @@ fn test_maturities_are_invariant_by_stake_scaling_3_months() {
 #[test]
 fn test_maturities_are_invariant_by_stake_scaling_6_months() {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
-    run_maturities_are_invariant_by_stake_scalin(Some(DissolveState::DissolveDelaySeconds(
+    run_maturities_are_invariant_by_stake_scaling(Some(DissolveState::DissolveDelaySeconds(
         SIX_MONTHS,
     )));
 }
@@ -11047,13 +11060,13 @@ fn test_start_dissolving_panics() {
 #[test]
 fn test_stop_dissolving_3_months() {
     const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
-    run_start_dissolving(THREE_MONTHS);
+    run_stop_dissolving(THREE_MONTHS);
 }
 
 #[test]
 fn test_stop_dissolving_6_months() {
     const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
-    run_start_dissolving(SIX_MONTHS);
+    run_stop_dissolving(SIX_MONTHS);
 }
 
 /// Tests that a neuron in a dissolving state will stop dissolving if a
