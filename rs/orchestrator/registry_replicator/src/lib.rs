@@ -315,7 +315,7 @@ impl RegistryReplicator {
         Ok(handle)
     }
 
-    /// Initializes the registry local store asynchronously and returns future that
+    /// Initializes the registry local store asynchronously and returns a future that
     /// continuously polls for registry updates.
     pub async fn start_polling(
         &self,
