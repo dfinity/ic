@@ -225,7 +225,7 @@ fn test_request_with_more_cycles_than_canister(env: TestEnv) {
             // cycles: 100_000_000_000_000,
             // cycles: 99_999_999_999_999,
             // This seems to work as opposed to having values on the limit or closer to the limit
-            cycles: 50_000_000_000_000,
+            cycles: 10_000_000_000_000,
         },
     ));
 
@@ -279,12 +279,13 @@ fn test_request_with_refund_expectation(env: TestEnv) {
     println!("computed expected cost: {}", expected_cost);
     eprintln!("computed expected cost: {}", expected_cost);
 
+    // run #2
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request,
             // cycles: Cycles::new(100_000_000_000_000),
-            cycles: 50_000_000_000_000,
+            cycles: 20_000_000_000_000,
             // QUESTION: do I get CanisterReject if cycles here is 0?
             // cycles: 0,
         },
