@@ -108,13 +108,10 @@ impl TransportSecretKey {
 
 /// Return true iff the argument is a valid encoding of a transport public key
 pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
-    if bytes.len() != 48 {
-        return false;
+    match bytes.try_into() {
+        Ok(bytes) => option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some(),
+        Err(_) => false
     }
-
-    let bytes: [u8; 48] = bytes.try_into().expect("Size already checked");
-
-    option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some()
 }
 
 #[cfg_attr(feature = "js", wasm_bindgen)]
