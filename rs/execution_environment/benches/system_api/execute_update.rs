@@ -1092,7 +1092,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
 
     common::run_benchmarks(
         c,
-        "update",
+        "execution_environment:update",
         &benchmarks,
         |id: &str,
          exec_env: &ExecutionEnvironment,
