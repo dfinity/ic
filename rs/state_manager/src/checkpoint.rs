@@ -14,8 +14,8 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits,
-    CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
+    error::LayoutError, validate_wasm, AccessPolicy, CanisterLayout, CanisterSnapshotBits,
+    CanisterStateBits, CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -127,6 +127,15 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     )
     .into_iter()
     .try_for_each(identity)?;
+
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_wasm_files()?.into_iter(),
+        |wasm_file| validate_wasm(wasm_file),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
+
     if let Some(reference_state) = reference_state {
         validate_eq_checkpoint(
             checkpoint_layout,
