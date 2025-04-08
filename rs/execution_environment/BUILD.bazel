@@ -168,7 +168,6 @@ rust_ic_test(
     name = "dts_test",
     size = "large",
     srcs = ["tests/dts.rs"],
-    compile_data = glob(["tests/test-data/**"]),
     data = DATA + [
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
