@@ -180,6 +180,10 @@ const RANDOM_U64: u64 = 0_u64;
 
 const USUAL_REWARD_POT_E8S: u64 = 100;
 
+const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+
+const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+
 fn check_proposal_status_after_voting_and_after_expiration_new(
     neurons: impl IntoIterator<Item = Neuron>,
     behavior: impl Into<ProposalNeuronBehavior>,
@@ -267,13 +271,11 @@ fn tests_must_be_run_with_test_feature_enabled() {
 
 #[test]
 fn test_single_neuron_proposal_new_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_single_neuron_proposal_new(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_single_neuron_proposal_new_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_single_neuron_proposal_new(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -673,13 +675,11 @@ fn check_proposal_status_after_voting_and_after_expiration(
 
 #[test]
 fn test_single_neuron_proposal_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_single_neuron_proposal_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_single_neuron_proposal(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -700,7 +700,6 @@ fn run_single_neuron_proposal(not_dissolving_min_dissolve_delay: Option<Dissolve
 
 #[test]
 fn test_two_neuron_agreement_proposal_should_be_accepted_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_two_neuron_agreement_proposal_should_be_accepted(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ));
@@ -708,7 +707,6 @@ fn test_two_neuron_agreement_proposal_should_be_accepted_3_months() {
 
 #[test]
 fn test_two_neuron_agreement_proposal_should_be_accepted_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_two_neuron_agreement_proposal_should_be_accepted(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ));
@@ -740,7 +738,6 @@ fn run_two_neuron_agreement_proposal_should_be_accepted(
 
 #[test]
 fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ));
@@ -748,7 +745,6 @@ fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected_3
 
 #[test]
 fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ));
@@ -781,7 +777,6 @@ fn run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(
 #[test]
 fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration_3_months(
 ) {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ));
@@ -790,7 +785,6 @@ fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_sh
 #[test]
 fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration_6_months(
 ) {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ));
@@ -822,7 +816,6 @@ fn run_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_sho
 
 #[test]
 fn test_two_neuron_disagree_largest_stake_wins_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_largest_stake_wins(Some(DissolveState::DissolveDelaySeconds(
         THREE_MONTHS,
     )));
@@ -830,7 +823,6 @@ fn test_two_neuron_disagree_largest_stake_wins_3_months() {
 
 #[test]
 fn test_two_neuron_disagree_largest_stake_wins_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_largest_stake_wins(Some(DissolveState::DissolveDelaySeconds(
         SIX_MONTHS,
     )));
@@ -896,7 +888,6 @@ fn run_two_neuron_disagree_largest_stake_wins(
 
 #[test]
 fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_stake_longer_dissolve_wins(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ));
@@ -904,7 +895,6 @@ fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins_3_months() {
 
 #[test]
 fn test_two_neuron_disagree_identical_stake_longer_dissolve_wins_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_stake_longer_dissolve_wins(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ));
@@ -970,7 +960,6 @@ fn run_two_neuron_disagree_identical_stake_longer_dissolve_wins(
 
 #[test]
 fn test_two_neuron_disagree_identical_stake_older_wins_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_stake_older_wins(Some(DissolveState::DissolveDelaySeconds(
         THREE_MONTHS,
     )));
@@ -978,7 +967,6 @@ fn test_two_neuron_disagree_identical_stake_older_wins_3_months() {
 
 #[test]
 fn test_two_neuron_disagree_identical_stake_older_wins_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_two_neuron_disagree_identical_stake_older_wins(Some(DissolveState::DissolveDelaySeconds(
         SIX_MONTHS,
     )));
@@ -1822,18 +1810,18 @@ async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewar
 
 #[tokio::test]
 async fn test_manage_network_economics_change_one_deep_subfield_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_network_economics_change_one_deep_subfield(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
-    )).await;
+    ))
+    .await;
 }
 
 #[tokio::test]
 async fn test_manage_network_economics_change_one_deep_subfield_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_network_economics_change_one_deep_subfield(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
-    )).await;
+    ))
+    .await;
 }
 
 async fn run_manage_network_economics_change_one_deep_subfield(
@@ -1954,7 +1942,6 @@ async fn run_manage_network_economics_change_one_deep_subfield(
 
 #[tokio::test]
 async fn test_manage_network_economics_reject_invalid_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_network_economics_reject_invalid(Some(DissolveState::DissolveDelaySeconds(
         THREE_MONTHS,
     )))
@@ -1963,7 +1950,6 @@ async fn test_manage_network_economics_reject_invalid_3_months() {
 
 #[tokio::test]
 async fn test_manage_network_economics_reject_invalid_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_network_economics_reject_invalid(Some(DissolveState::DissolveDelaySeconds(
         SIX_MONTHS,
     )))
@@ -2094,7 +2080,6 @@ const NEW_MAXIMUM_ICP_XDR_RATE: u64 = 499_000;
 #[tokio::test]
 async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first_3_months(
 ) {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ))
@@ -2104,7 +2089,6 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_
 #[tokio::test]
 async fn test_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first_6_months(
 ) {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ))
@@ -2151,7 +2135,6 @@ async fn run_manage_network_economics_revalidate_at_execution_time_set_minimum_i
 #[tokio::test]
 async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first_3_months(
 ) {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ))
@@ -2161,7 +2144,6 @@ async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_
 #[tokio::test]
 async fn test_manage_network_economics_revalidate_at_execution_time_set_minimum_icp_xdr_rate_first_6_months(
 ) {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_network_economics_revalidate_at_execution_time_set_maximum_icp_xdr_rate_first(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ))
@@ -4721,13 +4703,11 @@ fn test_topic_weights(stake in 1u64..1_000_000_000, minimum_dissolve_delay_to_vo
 
 #[test]
 fn test_random_voting_rewards_scenarios_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_random_voting_rewards_scenarios(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_random_voting_rewards_scenarios_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_random_voting_rewards_scenarios(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -4900,7 +4880,6 @@ fn run_random_voting_rewards_scenarios(not_dissolving_min_dissolve_delay: Option
 
 #[test]
 fn test_maturities_are_invariant_by_stake_scaling_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_maturities_are_invariant_by_stake_scaling(Some(DissolveState::DissolveDelaySeconds(
         THREE_MONTHS,
     )));
@@ -4908,7 +4887,6 @@ fn test_maturities_are_invariant_by_stake_scaling_3_months() {
 
 #[test]
 fn test_maturities_are_invariant_by_stake_scaling_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_maturities_are_invariant_by_stake_scaling(Some(DissolveState::DissolveDelaySeconds(
         SIX_MONTHS,
     )));
@@ -4950,7 +4928,6 @@ fn run_maturities_are_invariant_by_stake_scaling(
 
 #[test]
 fn test_no_maturity_increase_if_no_proposal_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_no_maturity_increase_if_no_proposal(Some(DissolveState::DissolveDelaySeconds(
         THREE_MONTHS,
     )));
@@ -4958,7 +4935,6 @@ fn test_no_maturity_increase_if_no_proposal_3_months() {
 
 #[test]
 fn test_no_maturity_increase_if_no_proposal_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_no_maturity_increase_if_no_proposal(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -4991,13 +4967,11 @@ fn run_no_maturity_increase_if_no_proposal(
 
 #[test]
 fn test_passive_neurons_dont_get_mature_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_passive_neurons_dont_get_mature(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_passive_neurons_dont_get_mature_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_passive_neurons_dont_get_mature(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -5026,7 +5000,6 @@ fn run_passive_neurons_dont_get_mature(not_dissolving_min_dissolve_delay: Option
 
 #[test]
 fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_proposing_voting_yes_voting_no_are_equivalent_for_rewards(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ));
@@ -5034,7 +5007,6 @@ fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards_3_months() {
 
 #[test]
 fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_proposing_voting_yes_voting_no_are_equivalent_for_rewards(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ));
@@ -5085,7 +5057,6 @@ fn run_proposing_voting_yes_voting_no_are_equivalent_for_rewards(
 
 #[test]
 fn test_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ));
@@ -5093,7 +5064,6 @@ fn test_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter
 
 #[test]
 fn test_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ));
@@ -5121,7 +5091,6 @@ fn run_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter(
 
 #[test]
 fn test_active_neuron_gets_more_mature_than_less_active_one_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_active_neuron_gets_more_mature_than_less_active_one(Some(
         DissolveState::DissolveDelaySeconds(THREE_MONTHS),
     ));
@@ -5129,7 +5098,6 @@ fn test_active_neuron_gets_more_mature_than_less_active_one_3_months() {
 
 #[test]
 fn test_active_neuron_gets_more_mature_than_less_active_one_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_active_neuron_gets_more_mature_than_less_active_one(Some(
         DissolveState::DissolveDelaySeconds(SIX_MONTHS),
     ));
@@ -5169,13 +5137,11 @@ fn run_active_neuron_gets_more_mature_than_less_active_one(
 
 #[test]
 fn test_more_stakes_gets_more_maturity_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_more_stakes_gets_more_maturity(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_more_stakes_gets_more_maturity_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_more_stakes_gets_more_maturity(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -5202,13 +5168,11 @@ fn run_more_stakes_gets_more_maturity(not_dissolving_min_dissolve_delay: Option<
 
 #[test]
 fn test_reward_complex_scenario_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_reward_complex_scenario(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_reward_complex_scenario_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_reward_complex_scenario(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -5767,14 +5731,12 @@ fn create_mature_neuron(
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_lifecycle_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_neuron_lifecycle(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_lifecycle_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_neuron_lifecycle(SIX_MONTHS);
 }
 
@@ -5817,14 +5779,12 @@ fn run_neuron_lifecycle(minimum_dissolve_delay_to_vote: u64) {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_subaccount_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_disburse_to_subaccount(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_subaccount_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_disburse_to_subaccount(SIX_MONTHS);
 }
 
@@ -5872,13 +5832,11 @@ fn run_disburse_to_subaccount(minimum_dissolve_delay_to_vote: u64) {
 
 #[test]
 fn test_nns1_520_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_nns1_520(THREE_MONTHS);
 }
 
 #[test]
 fn test_nns1_520_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_nns1_520(SIX_MONTHS);
 }
 
@@ -5934,14 +5892,12 @@ fn run_nns1_520(minimum_dissolve_delay_to_vote: u64) {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_main_account_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_disburse_to_main_account(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_main_account_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_disburse_to_main_account(SIX_MONTHS);
 }
 
@@ -6357,14 +6313,12 @@ fn test_refresh_neuron_by_subaccount_by_proxy() {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_or_refresh_neuron_does_not_overflow_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_claim_or_refresh_neuron_does_not_overflow(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_or_refresh_neuron_does_not_overflow_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_claim_or_refresh_neuron_does_not_overflow(SIX_MONTHS);
 }
 
@@ -6436,13 +6390,11 @@ fn run_claim_or_refresh_neuron_does_not_overflow(minimum_dissolve_delay_to_vote:
 
 #[test]
 fn test_rate_limiting_neuron_creation_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_rate_limiting_neuron_creation(THREE_MONTHS);
 }
 
 #[test]
 fn test_rate_limiting_neuron_creation_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_rate_limiting_neuron_creation(SIX_MONTHS);
 }
 
@@ -6575,14 +6527,12 @@ fn run_rate_limiting_neuron_creation(minimum_dissolve_delay_to_vote: u64) {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_cant_disburse_without_paying_fees_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_cant_disburse_without_paying_fees(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_cant_disburse_without_paying_fees_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_cant_disburse_without_paying_fees(SIX_MONTHS);
 }
 
@@ -6681,14 +6631,12 @@ fn run_cant_disburse_without_paying_fees(minimum_dissolve_delay_to_vote: u64) {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_split_fails_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_neuron_split_fails(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_split_fails_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_neuron_split_fails(SIX_MONTHS);
 }
 
@@ -6835,14 +6783,12 @@ fn run_neuron_split_fails(minimum_dissolve_delay_to_vote: u64) {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_split_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_neuron_split(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_split_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_neuron_split(SIX_MONTHS);
 }
 
@@ -6973,14 +6919,12 @@ fn run_neuron_split(dissolve_delay_seconds: u64) {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_seed_neuron_split_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_seed_neuron_split(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_seed_neuron_split_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_seed_neuron_split(SIX_MONTHS);
 }
 
@@ -7070,14 +7014,12 @@ fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Gover
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_neuron_spawn(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_neuron_spawn(SIX_MONTHS);
 }
 
@@ -7277,14 +7219,12 @@ fn run_neuron_spawn(dissolve_delay_seconds: u64) {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn_with_subaccount_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_neuron_spawn_with_subaccount(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn_with_subaccount_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_neuron_spawn_with_subaccount(SIX_MONTHS);
 }
 
@@ -7445,13 +7385,11 @@ fn run_neuron_spawn_with_subaccount(dissolve_delay_seconds: u64) {
 
 #[test]
 fn test_maturity_correctly_reset_if_spawn_fails_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_maturity_correctly_reset_if_spawn_fails(THREE_MONTHS);
 }
 
 #[test]
 fn test_maturity_correctly_reset_if_spawn_fails_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_maturity_correctly_reset_if_spawn_fails(SIX_MONTHS);
 }
 
@@ -7579,25 +7517,21 @@ fn run_maturity_correctly_reset_if_spawn_fails(dissolve_delay_seconds: u64) {
 ///   to be spawned.
 #[test]
 fn test_neuron_spawn_partial_exact_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     assert_neuron_spawn_partial(240_000_000, 60, 144_000_000, 96_000_000, THREE_MONTHS);
 }
 
 #[test]
 fn test_neuron_spawn_partial_exact_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     assert_neuron_spawn_partial(240_000_000, 60, 144_000_000, 96_000_000, SIX_MONTHS);
 }
 
 #[test]
 fn test_neuron_spawn_partial_rounding_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     assert_neuron_spawn_partial(240_000_013, 51, 122_400_006, 117_600_007, THREE_MONTHS);
 }
 
 #[test]
 fn test_neuron_spawn_partial_rounding_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     assert_neuron_spawn_partial(240_000_013, 51, 122_400_006, 117_600_007, SIX_MONTHS);
 }
 
@@ -7739,13 +7673,11 @@ fn assert_neuron_spawn_partial(
 
 #[test]
 fn test_staked_maturity_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_staked_maturity(THREE_MONTHS);
 }
 
 #[test]
 fn test_staked_maturity_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_staked_maturity(SIX_MONTHS);
 }
 
@@ -7965,14 +7897,12 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_neuron_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_disburse_to_neuron(THREE_MONTHS);
 }
 
 #[test]
 #[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_disburse_to_neuron_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_disburse_to_neuron(SIX_MONTHS);
 }
 
@@ -8188,13 +8118,11 @@ fn governance_with_neurons(
 
 #[tokio::test]
 async fn test_not_for_profit_neurons_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_not_for_profit_neurons(THREE_MONTHS).await;
 }
 
 #[tokio::test]
 async fn test_not_for_profit_neurons_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_not_for_profit_neurons(SIX_MONTHS).await;
 }
 
@@ -8283,13 +8211,11 @@ async fn run_not_for_profit_neurons(dissolve_delay_seconds: u64) {
 
 #[test]
 fn test_hot_keys_cant_change_followees_of_manage_neuron_topic_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_hot_keys_cant_change_followees_of_manage_neuron_topic(THREE_MONTHS);
 }
 
 #[test]
 fn test_hot_keys_cant_change_followees_of_manage_neuron_topic_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_hot_keys_cant_change_followees_of_manage_neuron_topic(SIX_MONTHS);
 }
 
@@ -8373,13 +8299,11 @@ fn run_hot_keys_cant_change_followees_of_manage_neuron_topic(dissolve_delay_seco
 
 #[test]
 fn test_add_and_remove_hot_key_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_add_and_remove_hot_key(THREE_MONTHS);
 }
 
 #[test]
 fn test_add_and_remove_hot_key_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_add_and_remove_hot_key(SIX_MONTHS);
 }
 
@@ -8465,13 +8389,11 @@ fn run_add_and_remove_hot_key(dissolve_delay_seconds: u64) {
 
 #[test]
 fn test_manage_and_reward_node_providers_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_and_reward_node_providers(THREE_MONTHS);
 }
 
 #[test]
 fn test_manage_and_reward_node_providers_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_and_reward_node_providers(SIX_MONTHS);
 }
 
@@ -8830,13 +8752,11 @@ fn run_manage_and_reward_node_providers(dissolve_delay_seconds: u64) {
 
 #[test]
 fn test_manage_and_reward_multiple_node_providers_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_and_reward_multiple_node_providers(THREE_MONTHS);
 }
 
 #[test]
 fn test_manage_and_reward_multiple_node_providers_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_and_reward_multiple_node_providers(SIX_MONTHS);
 }
 
@@ -9220,13 +9140,11 @@ fn run_manage_and_reward_multiple_node_providers(minimum_dissolve_delay_to_vote:
 
 #[test]
 fn test_network_economics_proposal_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_network_economics_proposal(THREE_MONTHS);
 }
 
 #[test]
 fn test_network_economics_proposal_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_network_economics_proposal(SIX_MONTHS);
 }
 
@@ -10238,13 +10156,11 @@ fn test_filter_proposal_ballots() {
 
 #[tokio::test]
 async fn test_make_proposal_message_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_make_proposal_message(THREE_MONTHS).await;
 }
 
 #[tokio::test]
 async fn test_make_proposal_message_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_make_proposal_message(SIX_MONTHS).await;
 }
 
@@ -10831,13 +10747,11 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
 
 #[test]
 fn test_merge_maturity_returns_expected_error_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_merge_maturity_returns_expected_error(THREE_MONTHS);
 }
 
 #[test]
 fn test_merge_maturity_returns_expected_error_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_merge_maturity_returns_expected_error(SIX_MONTHS);
 }
 
@@ -10867,13 +10781,11 @@ fn run_merge_maturity_returns_expected_error(minimum_dissolve_delay_to_vote: u64
 
 #[test]
 fn test_manage_neuron_merge_maturity_returns_expected_error_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_manage_neuron_merge_maturity_returns_expected_error(THREE_MONTHS);
 }
 
 #[test]
 fn test_manage_neuron_merge_maturity_returns_expected_error_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_manage_neuron_merge_maturity_returns_expected_error(SIX_MONTHS);
 }
 
@@ -10950,13 +10862,11 @@ fn fixture_for_dissolving_neuron_tests(
 /// appropriately in both states.
 #[test]
 fn test_start_dissolving_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_start_dissolving(THREE_MONTHS);
 }
 
 #[test]
 fn test_start_dissolving_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_start_dissolving(SIX_MONTHS);
 }
 
@@ -11059,13 +10969,11 @@ fn test_start_dissolving_panics() {
 
 #[test]
 fn test_stop_dissolving_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_stop_dissolving(THREE_MONTHS);
 }
 
 #[test]
 fn test_stop_dissolving_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_stop_dissolving(SIX_MONTHS);
 }
 
@@ -11130,7 +11038,6 @@ fn run_stop_dissolving(minimum_dissolve_delay: u64) {
     expected = "Manage neuron failed: GovernanceError { error_type: RequiresDissolving, error_message: \"\" }"
 )]
 fn test_stop_dissolving_panics_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_stop_dissolving_panics(THREE_MONTHS);
 }
 
@@ -11139,7 +11046,6 @@ fn test_stop_dissolving_panics_3_months() {
     expected = "Manage neuron failed: GovernanceError { error_type: RequiresDissolving, error_message: \"\" }"
 )]
 fn test_stop_dissolving_panics_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_stop_dissolving_panics(SIX_MONTHS);
 }
 
@@ -11188,13 +11094,11 @@ fn run_stop_dissolving_panics(minimum_dissolve_delay: u64) {
 
 #[test]
 fn test_update_node_provider_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_update_node_provider(THREE_MONTHS);
 }
 
 #[test]
 fn test_update_node_provider_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_update_node_provider(SIX_MONTHS);
 }
 
@@ -11290,13 +11194,11 @@ fn increase_dissolve_delay(
 
 #[test]
 fn test_increase_dissolve_delay_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_increase_dissolve_delay(THREE_MONTHS);
 }
 
 #[test]
 fn test_increase_dissolve_delay_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_increase_dissolve_delay(SIX_MONTHS);
 }
 
@@ -12468,13 +12370,11 @@ fn wait_for_quiet_test_helper(
 
 #[test]
 fn test_wfq_big_late_voter_delay_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_wfq_big_late_voter_delay(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_wfq_big_late_voter_delay_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_wfq_big_late_voter_delay(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -12520,13 +12420,11 @@ fn run_wfq_big_late_voter_delay(not_dissolving_min_dissolve_delay: Option<Dissol
 
 #[test]
 fn test_wfq_majority_reached_no_delay_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_wfq_majority_reached_no_delay(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_wfq_majority_reached_no_delay_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_wfq_majority_reached_no_delay(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -12565,13 +12463,11 @@ fn run_wfq_majority_reached_no_delay(not_dissolving_min_dissolve_delay: Option<D
 
 #[test]
 fn test_wfq_low_noise_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_wfq_low_noise(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_wfq_low_noise_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_wfq_low_noise(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -12615,13 +12511,11 @@ fn run_wfq_low_noise(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
 
 #[test]
 fn test_wfq_multiple_delays_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_wfq_multiple_delays(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_wfq_multiple_delays_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_wfq_multiple_delays(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -12671,13 +12565,11 @@ fn run_wfq_multiple_delays(not_dissolving_min_dissolve_delay: Option<DissolveSta
 
 #[test]
 fn test_wfq_real_data_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_wfq_real_data(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_wfq_real_data_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_wfq_real_data(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
@@ -13280,13 +13172,11 @@ fn run_wfq_real_data(not_dissolving_min_dissolve_delay: Option<DissolveState>) {
 
 #[test]
 fn test_wfq_constant_flipping_3_months() {
-    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
     run_wfq_constant_flipping(Some(DissolveState::DissolveDelaySeconds(THREE_MONTHS)));
 }
 
 #[test]
 fn test_wfq_constant_flipping_6_months() {
-    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
     run_wfq_constant_flipping(Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS)));
 }
 
