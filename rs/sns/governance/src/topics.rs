@@ -6,7 +6,7 @@ use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
@@ -244,9 +244,10 @@ impl Governance {
 }
 
 impl pb::Governance {
-    /// For each custom function ID, returns a pair (`function_name`, `topic`).
-    pub fn custom_functions_to_topics(&self) -> BTreeMap<u64, (String, Option<pb::Topic>)> {
-        self.id_to_nervous_system_functions
+    fn custom_functions_to_topics_impl(
+        id_to_nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
+    ) -> BTreeMap<u64, (String, Option<pb::Topic>)> {
+        id_to_nervous_system_functions
             .iter()
             .filter_map(|(function_id, function)| {
                 let Some(FunctionType::GenericNervousSystemFunction(generic)) =
@@ -268,7 +269,7 @@ impl pb::Governance {
                         log!(
                             ERROR,
                             "Custom proposal ID {function_id}: Cannot interpret \
-                                {topic} as Topic: {err}",
+                            {topic} as Topic: {err}",
                         );
 
                         // This should never happen; if it somehow does, treat this
@@ -291,6 +292,31 @@ impl pb::Governance {
                 Some((*function_id, (function_name, specific_topic)))
             })
             .collect()
+    }
+
+    pub fn get_custom_functions_for_topic(
+        id_to_nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
+        topic: pb::Topic,
+    ) -> BTreeSet<u64> {
+        Self::custom_functions_to_topics_impl(id_to_nervous_system_functions)
+            .iter()
+            .filter_map(|(function_id, (_, this_topic))| {
+                let Some(this_topic) = this_topic else {
+                    return None;
+                };
+
+                if *this_topic == topic {
+                    Some(*function_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// For each custom function ID, returns a pair (`function_name`, `topic`).
+    pub fn custom_functions_to_topics(&self) -> BTreeMap<u64, (String, Option<pb::Topic>)> {
+        Self::custom_functions_to_topics_impl(&self.id_to_nervous_system_functions)
     }
 }
 

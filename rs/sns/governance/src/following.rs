@@ -21,7 +21,7 @@ pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 lazy_static! {
     /// All topics that are available for following.
     // One enum value is reserved for the unspecified topic.
-    static ref TOPICS: Vec<Topic> = Topic::iter().skip(1).collect::<Vec<_>>();
+    pub(crate) static ref TOPICS: BTreeSet<Topic> = Topic::iter().skip(1).collect();
 
     /// Number of topics that are available for following.
     static ref NUM_TOPICS: usize = TOPICS.len();
