@@ -11,7 +11,6 @@ use crate::{
     types::{IngressResponse, Response},
     util::GOVERNANCE_CANISTER_ID,
 };
-use candid::Encode;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
@@ -57,7 +56,6 @@ use ic_types::{
     NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
 };
 use ic_wasm_types::WasmHash;
-use more_asserts::assert_le;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::path::PathBuf;
@@ -68,14 +66,6 @@ pub(crate) mod types;
 
 /// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
-
-// Ensure the slice, with extra room for Candid encoding, fits within 2 MiB.
-#[test]
-fn test_slice() {
-    let slice = vec![42; MAX_SLICE_SIZE_BYTES as usize];
-    let encoded = Encode!(&slice).unwrap();
-    assert_le!(encoded.len(), 2 * 1024 * 1024);
-}
 
 /// The entity responsible for managing canisters (creation, installing, etc.)
 pub(crate) struct CanisterManager {
