@@ -34,7 +34,7 @@ env:
 jobs:
   config:
     name: Set Config
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-latest
     outputs:
       release_build: ${{ steps.config.outputs.release_build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
@@ -256,11 +256,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   python-ci-tests:
     name: Python CI Tests
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
-    timeout-minutes: 30
+    runs-on: ${{ inputs.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
