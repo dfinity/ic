@@ -465,7 +465,7 @@ impl CanisterSnapshot {
         size: u64,
     ) -> Result<Vec<u8>, CanisterSnapshotError> {
         let module_bytes = self.execution_snapshot.wasm_binary.as_slice();
-        let end = offset + size;
+        let end = offset.saturating_add(size);
         if end > module_bytes.len() as u64 {
             return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
         }
@@ -480,7 +480,7 @@ impl CanisterSnapshot {
         size: u64,
     ) -> Result<Vec<u8>, CanisterSnapshotError> {
         let page_map_size_bytes = (page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64;
-        if offset + size > page_map_size_bytes {
+        if offset.saturating_add(size) > page_map_size_bytes {
             return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
         }
         let memory_buffer = Buffer::new(page_memory.page_map);
