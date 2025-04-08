@@ -6,6 +6,8 @@ inputs:
     required: true
     description: |
       The commands to run. Will be evaluated with bash.
+  execlog-artifact-name:
+    required: false
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
@@ -69,6 +71,33 @@ runs:
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+
+
+    - name: Clean up execlog
+      shell: bash
+      if: (success() || failure()) && inputs.execlog-artifact-name != ''
+      run: |
+        # todo: extract this
+        execlog_path='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.json'
+        if ! [ -e "$execlog_path" ]; then
+          exit 0
+        fi
+
+        execlog_tmp=$(mktemp)
+
+        jq -cMr <"$execlog_path" \
+            '. | .targetLabel as $targetLabel | select(.targetLabel | test(".*")) | .actualOutputs | map(. | {"path": .path, "hash": .digest.hash, "targetLabel": $targetLabel}) | .[] | .targetLabel+","+.path+","+.hash' > "$execlog_tmp"
+
+        mv "$execlog_tmp" "$execlog_path"
+
+    - name: Upload execution log
+      if: (success() || failure()) && inputs.execlog-artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.execlog-artifact-name }}
+        if-no-files-found: ignore
+        path: |
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.json
 
     - name: Cleanup
       shell: bash

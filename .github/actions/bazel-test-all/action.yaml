@@ -7,6 +7,8 @@ inputs:
   release-build:
     required: false
     default: true
+  execlog-artifact-name:
+    required: false
   BAZEL_COMMAND:
     required: true
     default: 'test'
@@ -62,6 +64,7 @@ runs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          execlog-artifact-name: ${{ inputs.execlog-artifact-name }}
           run: |
             set -euo pipefail
 
