@@ -752,13 +752,13 @@ fn kill_gateway_with_sigterm() {
 
 fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a temporary state directory persisted throughout the test.
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir_path_buf = temp_dir.path().to_path_buf();
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with NNS and app subnets.
     let (server_url, child) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
-        .with_state_dir(PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_state_dir(state_dir_path_buf.clone())
         .with_server_url(server_url)
         .with_nns_subnet()
         .with_application_subnet()
@@ -768,7 +768,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // The registry version should be 5 as we have two subnets on the PocketIC instance,
     // every subnet creation bumps the registry version twice, and initial registry records
     // are added at a separate registry version.
-    let registry_proto_path = temp_dir_path_buf.join("registry.proto");
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
     assert_eq!(registry_data_provider.latest_version(), 5.into());
 
@@ -793,7 +793,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Check the registry version.
     // The registry version should be 7 as a new subnet has been created and
     // every subnet creation bumps the registry version twice.
-    let registry_proto_path = temp_dir_path_buf.join("registry.proto");
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
     assert_eq!(registry_data_provider.latest_version(), 7.into());
 
@@ -809,7 +809,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_state_dir(PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_state_dir(state_dir_path_buf.clone())
         .build();
 
     // Check that the topology has been properly restored.
@@ -845,13 +845,13 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
         .get(&nns_subnet)
         .unwrap()
         .subnet_seed;
-    let nns_state_dir = temp_dir_path_buf.join(hex::encode(nns_subnet_seed));
+    let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
     let app_subnet_seed = initial_topology
         .subnet_configs
         .get(&app_subnet)
         .unwrap()
         .subnet_seed;
-    let app_state_dir = temp_dir_path_buf.join(hex::encode(app_subnet_seed));
+    let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
     let pic = PocketIcBuilder::new()
         .with_server_url(newest_server_url)
         .with_nns_state(nns_state_dir)
@@ -889,16 +889,16 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Start a new PocketIC server.
     let (new_server_url, child) = start_server_helper(None, None, false, false);
 
-    // Create a new temporary state directory persisted throughout the rest of the test.
-    let new_temp_dir = TempDir::new().unwrap();
-    let new_temp_dir_path_buf = new_temp_dir.path().to_path_buf();
+    // Create a temporary state directory persisted throughout the rest of the test.
+    let write_state_dir = TempDir::new().unwrap();
+    let write_state_dir_path_buf = write_state_dir.path().to_path_buf();
 
     // Create a PocketIC instance mounting the (read-only) state created so far
     // and persisting the state in a separate (write) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state(&PocketIcState::new_from_path(temp_dir_path_buf.clone()))
-        .with_state_dir(PocketIcState::new_from_path(new_temp_dir_path_buf.clone()))
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
+        .with_state_dir(write_state_dir_path_buf.clone())
         .build();
 
     // Check that the topology has been properly restored.
@@ -932,7 +932,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the (read-only) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state(&PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
         .build();
 
     // Check that the canister states have not changed
@@ -962,7 +962,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the (read-only) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state(&PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
         .build();
 
     // Check that the canister states have not changed
@@ -979,7 +979,9 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the persisted state created so far.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state(&PocketIcState::new_from_path(new_temp_dir_path_buf.clone()))
+        .with_read_only_state(&PocketIcState::new_from_path(
+            write_state_dir_path_buf.clone(),
+        ))
         .build();
 
     // Check that the canister states have been changed in the persisted state
@@ -1004,13 +1006,13 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
 #[test]
 fn with_subnet_state() {
     // Create a temporary state directory persisted throughout the test.
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir_path_buf = temp_dir.path().to_path_buf();
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with NNS and app subnets.
     let (server_url, _) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
-        .with_state_dir(PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_state_dir(state_dir_path_buf.clone())
         .with_server_url(server_url.clone())
         .with_nns_subnet()
         .with_application_subnet()
@@ -1039,13 +1041,13 @@ fn with_subnet_state() {
             .get(&nns_subnet)
             .unwrap()
             .subnet_seed;
-        let nns_state_dir = temp_dir_path_buf.join(hex::encode(nns_subnet_seed));
+        let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
         let app_subnet_seed = topology
             .subnet_configs
             .get(&app_subnet)
             .unwrap()
             .subnet_seed;
-        let app_state_dir = temp_dir_path_buf.join(hex::encode(app_subnet_seed));
+        let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
         let pic = PocketIcBuilder::new()
             .with_server_url(server_url.clone())
             .with_nns_state(nns_state_dir)
@@ -1073,12 +1075,12 @@ fn with_subnet_state() {
 
 fn create_nns_subnet_state() -> (TempDir, PathBuf) {
     // Create a temporary state directory persisted throughout the test.
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir_path_buf = temp_dir.path().to_path_buf();
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with a single NNS subnet.
     let pic = PocketIcBuilder::new()
-        .with_state_dir(PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_state_dir(state_dir_path_buf.clone())
         .with_nns_subnet()
         .build();
 
@@ -1093,18 +1095,18 @@ fn create_nns_subnet_state() -> (TempDir, PathBuf) {
         .get(&nns_subnet)
         .unwrap()
         .subnet_seed;
-    let nns_state_dir = temp_dir_path_buf.join(hex::encode(nns_subnet_seed));
-    (temp_dir, nns_state_dir)
+    let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+    (state_dir, nns_state_dir)
 }
 
 fn create_app_subnet_state() -> (TempDir, PathBuf) {
     // Create a temporary state directory persisted throughout the test.
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir_path_buf = temp_dir.path().to_path_buf();
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with a single app subnet.
     let pic = PocketIcBuilder::new()
-        .with_state_dir(PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_state_dir(state_dir_path_buf.clone())
         .with_application_subnet()
         .build();
 
@@ -1119,8 +1121,8 @@ fn create_app_subnet_state() -> (TempDir, PathBuf) {
         .get(&app_subnet)
         .unwrap()
         .subnet_seed;
-    let app_state_dir = temp_dir_path_buf.join(hex::encode(app_subnet_seed));
-    (temp_dir, app_state_dir)
+    let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
+    (state_dir, app_state_dir)
 }
 
 #[test]
@@ -1521,12 +1523,12 @@ fn record_to_mutation(r: RegistryVersionedRecord<Vec<u8>>) -> RegistryMutation {
 #[test]
 fn registry_canister() {
     // Create a temporary state directory persisted throughout the test.
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir_path_buf = temp_dir.path().to_path_buf();
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with NNS, II and two app subnets.
     let pic = PocketIcBuilder::new()
-        .with_state_dir(PocketIcState::new_from_path(temp_dir_path_buf.clone()))
+        .with_state_dir(state_dir_path_buf.clone())
         .with_nns_subnet()
         .with_ii_subnet()
         .with_application_subnet()
@@ -1534,7 +1536,7 @@ fn registry_canister() {
         .build();
 
     // Encode the local registry into a registry canister initial payload.
-    let registry_proto_path = temp_dir_path_buf.join("registry.proto");
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
     let updates = registry_data_provider
         .get_updates_since(ZERO_REGISTRY_VERSION)

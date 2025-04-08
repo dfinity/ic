@@ -27,7 +27,7 @@ use ic_sns_cli::upgrade_sns_controlled_canister::{
 use ic_sns_governance_api::pb::v1::{proposal, ChunkedCanisterWasm, UpgradeSnsControlledCanister};
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::Tokens;
-use pocket_ic::{PocketIcBuilder, PocketIcState};
+use pocket_ic::PocketIcBuilder;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use url::Url;
@@ -55,7 +55,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     let state_dir = state_dir.path().to_path_buf();
 
     let pocket_ic = PocketIcBuilder::new()
-        .with_state_dir(PocketIcState::new_from_path(state_dir.clone()))
+        .with_state_dir(state_dir.clone())
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()

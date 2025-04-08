@@ -2581,11 +2581,11 @@ fn test_http_methods() {
 fn state_handle() {
     let state = PocketIcState::new();
 
-    let pic = PocketIcBuilder::new().with_state_dir(state).build();
+    let pic = PocketIcBuilder::new().with_state(state).build();
     let canister_id = pic.create_canister();
     let state = pic.drop_and_take_state().unwrap();
 
-    let pic = PocketIcBuilder::new().with_state_dir(state).build();
+    let pic = PocketIcBuilder::new().with_state(state).build();
     assert!(pic.canister_exists(canister_id));
     let state = pic.drop_and_take_state().unwrap();
 

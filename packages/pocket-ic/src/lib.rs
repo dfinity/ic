@@ -128,7 +128,7 @@ impl PocketIcState {
         }
     }
 
-    pub fn to_path(mut self) -> PathBuf {
+    pub fn into_path(mut self) -> PathBuf {
         if let Some(temp_dir) = self.temp_dir.take() {
             temp_dir.into_path()
         } else {
@@ -221,7 +221,12 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_state_dir(mut self, state_dir: PocketIcState) -> Self {
+    pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+        self.state_dir = Some(PocketIcState::new_from_path(state_dir));
+        self
+    }
+
+    pub fn with_state(mut self, state_dir: PocketIcState) -> Self {
         self.state_dir = Some(state_dir);
         self
     }
