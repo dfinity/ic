@@ -12,6 +12,4 @@ jobs:
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
-      runner: |
-        labels: dind-small
-      github_runner: ubuntu-latest
+      runner: dind-small
