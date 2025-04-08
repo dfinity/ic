@@ -235,27 +235,27 @@ pub struct UpdateNodeOperatorPayload {
 
 impl UpdateNodeOperatorPayload {
     pub fn validate(&self) -> Result<(), String> {
-        // Ensure all fields are specified
+        // Require all fields are specified.
         let (node_ids, old_operator_id, new_operator_id) =
             match (&self.node_ids, &self.old_operator_id, &self.new_operator_id) {
                 (Some(node_ids), Some(old_operator_id), Some(new_operator_id)) => {
                     (node_ids, old_operator_id, new_operator_id)
                 }
-                _ => return Err("Invalid data. Not all fields provided.".to_string()),
+                _ => return Err("Invalid payload. Not all fields provided.".to_string()),
             };
 
-        // Ensure there are some nodes sent
+        // Require there are some nodes sent.
         if node_ids.is_empty() {
             return Err("No nodes to update supplied.".to_string());
         }
 
-        // Ensure there are no duplicates
+        // Require there are no duplicates.
         let deduplicated_nodes: BTreeSet<_> = node_ids.iter().cloned().collect();
         if deduplicated_nodes.len() != node_ids.len() {
             return Err("Provided node ids contain duplicates.".to_string());
         }
 
-        // Ensure the node operators are different
+        // Require the node operators are different.
         if new_operator_id == old_operator_id {
             return Err("Old and new operator ids have to differ.".to_string());
         }
@@ -336,16 +336,30 @@ mod tests {
 
     #[test]
     fn disallow_missing_fields() {
-        let payload = UpdateNodeOperatorPayload {
-            node_ids: None,
-            new_operator_id: None,
-            old_operator_id: None,
-        };
+        let invalid_payloads = &[
+            UpdateNodeOperatorPayload {
+                node_ids: None,
+                new_operator_id: None,
+                old_operator_id: None,
+            },
+            UpdateNodeOperatorPayload {
+                node_ids: Some(vec![NodeId::new(PrincipalId::new_node_test_id(1))]),
+                new_operator_id: None,
+                old_operator_id: None,
+            },
+            UpdateNodeOperatorPayload {
+                node_ids: Some(vec![NodeId::new(PrincipalId::new_node_test_id(1))]),
+                new_operator_id: Some(PrincipalId::new_user_test_id(1)),
+                old_operator_id: None,
+            },
+        ];
 
-        let err = payload
-            .validate()
-            .expect_err("Payload should have been invalid.");
-        assert_eq!(err, "Invalid data. Not all fields provided.")
+        for invalid_payload in invalid_payloads {
+            let err = invalid_payload
+                .validate()
+                .expect_err("Payload should have been invalid.");
+            assert_eq!(err, "Invalid payload. Not all fields provided.")
+        }
     }
 
     #[test]
