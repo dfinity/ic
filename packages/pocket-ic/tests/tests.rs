@@ -16,7 +16,7 @@ use pocket_ic::{
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, RejectCode,
+    PocketIc, PocketIcBuilder, PocketIcState, RejectCode,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -2575,4 +2575,27 @@ fn test_http_methods() {
             assert_eq!(page, expected_page);
         }
     }
+}
+
+#[test]
+fn state_handle() {
+    let state = PocketIcState::new();
+
+    let pic = PocketIcBuilder::new().with_state_dir(state).build();
+    let canister_id = pic.create_canister();
+    let state = pic.drop_and_take_state().unwrap();
+
+    let pic = PocketIcBuilder::new().with_state_dir(state).build();
+    assert!(pic.canister_exists(canister_id));
+    let state = pic.drop_and_take_state().unwrap();
+
+    let pic1 = PocketIcBuilder::new()
+        .with_read_only_state_dir(&state)
+        .build();
+    assert!(pic1.canister_exists(canister_id));
+
+    let pic2 = PocketIcBuilder::new()
+        .with_read_only_state_dir(&state)
+        .build();
+    assert!(pic2.canister_exists(canister_id));
 }

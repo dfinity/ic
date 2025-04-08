@@ -156,7 +156,7 @@ impl PocketIc {
                 }
                 state_dir.clone()
             } else {
-                let state = PocketIcState::default();
+                let state = PocketIcState::new();
                 let dir = state.state_dir();
                 state_dir = Some(state);
                 dir

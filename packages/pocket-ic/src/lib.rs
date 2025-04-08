@@ -110,8 +110,9 @@ pub struct PocketIcState {
     temp_dir: Option<TempDir>,
 }
 
-impl Default for PocketIcState {
-    fn default() -> Self {
+impl PocketIcState {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
         let temp_dir = TempDir::new().unwrap();
         let state_dir = temp_dir.path().to_path_buf();
         Self {
@@ -119,9 +120,7 @@ impl Default for PocketIcState {
             temp_dir: Some(temp_dir),
         }
     }
-}
 
-impl PocketIcState {
     pub fn new_from_path(state_dir: PathBuf) -> Self {
         Self {
             state_dir,
