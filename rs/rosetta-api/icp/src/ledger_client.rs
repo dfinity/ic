@@ -24,7 +24,7 @@ pub mod proposal_info_response;
 use candid::{Decode, Encode};
 use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse, RequestStatusResponse};
-use ic_agent::RequestId;
+use ic_agent::{Agent, RequestId};
 use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::{
     convert::TryFrom,
@@ -40,7 +40,7 @@ use tracing::{debug, error, warn};
 
 use ic_ledger_canister_blocks_synchronizer::{
     blocks::{Blocks, RosettaBlocksMode},
-    canister_access::CanisterAccess,
+    canister_access::{make_agent, CanisterAccess},
     certification::VerificationInfo,
     ledger_blocks_sync::LedgerBlocksSynchronizer,
 };
@@ -111,6 +111,7 @@ pub struct LedgerClient {
     ic_url: Url,
     token_symbol: String,
     offline: bool,
+    agent_with_timeout: Option<Agent>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -165,6 +166,18 @@ impl LedgerClient {
             LedgerClient::check_ledger_symbol(&token_symbol, &canister_access).await?;
             Some(Arc::new(canister_access))
         };
+        let agent_with_timeout = if offline {
+            None
+        } else {
+            let agent = make_agent(
+                ic_url.clone(),
+                Some(Self::TIMEOUT),
+                root_key.map(public_key_to_der).transpose()?,
+            )
+            .await
+            .map_err(|e| ApiError::internal_error(format!("{}", e)))?;
+            Some(agent)
+        };
         let verification_info = root_key.map(|root_key| VerificationInfo {
             root_key,
             canister_id,
@@ -186,6 +199,7 @@ impl LedgerClient {
             canister_access,
             ic_url,
             offline,
+            agent_with_timeout,
         })
     }
 
@@ -703,7 +717,7 @@ impl LedgerClient {
             debug!("Waiting {} ms for response", poll_interval.as_millis());
             actix_rt::time::sleep(poll_interval).await;
 
-            let agent = &self.canister_access.as_ref().unwrap().agent;
+            let agent = self.agent_with_timeout.as_ref().unwrap();
             let status = agent
                 .request_status_signed(
                     &RequestId::new(request_id.as_bytes()),
