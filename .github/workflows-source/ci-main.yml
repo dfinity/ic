@@ -69,7 +69,7 @@ anchors:
 jobs:
   config:
     name: Set Config
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-latest
     outputs:
       release_build: ${{ steps.config.outputs.release_build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
@@ -271,7 +271,7 @@ jobs:
 
   python-ci-tests:
     name: Python CI Tests
-    <<: *dind-small-setup
+    runs-on: ${{ inputs.runner }}
     steps:
       - <<: *checkout
       - <<: *python-setup
