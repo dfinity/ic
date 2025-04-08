@@ -162,10 +162,16 @@ impl Orchestrator {
             .await
         {
             Ok(join_handle) => task_tracker.insert("registry_replicator", join_handle),
-            Err(err) => error!(
-                logger,
-                "Failed to start the registry replicator task: {err}"
-            ),
+            Err(err) => {
+                metrics
+                    .critical_error_task_panicked
+                    .with_label_values(&["registry_replicator"])
+                    .inc();
+                error!(
+                    logger,
+                    "Failed to start the registry replicator task: {err}"
+                )
+            }
         }
 
         // Filesystem API to local registry copy
