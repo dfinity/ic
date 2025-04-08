@@ -11,7 +11,7 @@ use crate::{
         },
         remove_neuron_from_follower_index, FollowerIndex,
     },
-    following::ValidatedSetFollowing,
+    following::{self, ValidatedSetFollowing},
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -51,7 +51,7 @@ use crate::{
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
             DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, Followee,
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
@@ -3805,6 +3805,7 @@ impl Governance {
     /// - the follower neuron exists
     /// - the caller has the permission to change followers (same authorization
     ///   as voting required, i.e., permission `Vote`)
+    /// - the follower neuron for not have topic-based following
     /// - the list of followers is not too long (does not exceed max_followees_per_function
     ///   as defined in the nervous system parameters)
     fn follow(
@@ -3816,13 +3817,76 @@ impl Governance {
         // The implementation of this method is complicated by the
         // fact that we have to maintain a reverse index of all follow
         // relationships, i.e., the `function_followee_index`.
-        let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(||
-            // The specified neuron is not present.
-            GovernanceError::new_with_message(ErrorType::NotFound, format!("Follower neuron not found: {}", id)))?;
+
+        let neuron_not_found_err = || {
+            let message = format!("Follower neuron not found: {}", id);
+            GovernanceError::new_with_message(ErrorType::NotFound, message)
+        };
+
+        let topic_followees = self
+            .proto
+            .neurons
+            .get(&id.to_string())
+            .ok_or_else(neuron_not_found_err)?
+            .topic_followees
+            .as_ref()
+            .map(|topic_followees| topic_followees.topic_id_to_followees.clone())
+            .unwrap_or_default();
+
+        let neuron = self
+            .proto
+            .neurons
+            .get_mut(&id.to_string())
+            .ok_or_else(neuron_not_found_err)?;
 
         // Check that the caller is authorized to change followers (same authorization
         // as voting required).
         neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
+
+        // If this neuron already has topic-based following, legacy following cannot be added.
+        if f.followees.len() > 0 && !topic_followees.is_empty() {
+            let topic_following = topic_followees
+                .iter()
+                .map(|(topic_id, followees_for_topic)| {
+                    let topic = Topic::try_from(*topic_id)
+                        .unwrap_or(Topic::Unspecified)
+                        .as_str_name();
+
+                    let followees = followees_for_topic
+                        .followees
+                        .iter()
+                        .map(|Followee { neuron_id, alias }| {
+                            let neuron_id = neuron_id
+                                .as_ref()
+                                .map(|neuron_id| neuron_id.to_string())
+                                .unwrap_or_else(|| "<Unknown neuron ID>".to_string());
+
+                            let alias = alias
+                                .as_ref()
+                                .map(|alias| format!(" ({})", alias))
+                                .unwrap_or_default();
+
+                            format!("{}{}", neuron_id, alias)
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    format!("following neurons {} on topic {}", followees, topic)
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+
+            let message = format!(
+                "Cannot add followees for a specific function ID {} since this neuron already has \
+                 topic-based following: {}",
+                f.function_id, topic_following,
+            );
+
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                message,
+            ));
+        }
 
         let max_followees_per_function = self
             .proto
@@ -3917,6 +3981,56 @@ impl Governance {
         // Check that the caller is authorized to change followers (same authorization
         // as voting required).
         neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
+
+        // If the user has legacy following, they must specify all topics the first time they run
+        // this command. This ensures that users have either legacy following or topic following,
+        // but not both.
+        if !neuron.followees.is_empty() {
+            let mentioned_topics = set_following
+                .topic_following
+                .iter()
+                .filter_map(|followees_for_topic| {
+                    followees_for_topic
+                        .topic
+                        .and_then(|topic_id| Topic::try_from(topic_id).ok())
+                })
+                .collect::<BTreeSet<_>>();
+
+            if mentioned_topics != *following::TOPICS {
+                let legacy_following = neuron
+                    .followees
+                    .iter()
+                    .map(|(function_id, followees)| {
+                        let followees = followees
+                            .followees
+                            .iter()
+                            .map(|neuron_id| format!("{}", neuron_id))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        format!(
+                            "following neurons {} on function ID {}",
+                            followees, function_id
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ");
+
+                let message = format!(
+                    "Please specify all topics to overwrite current legacy following: {}",
+                    legacy_following,
+                );
+
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    message,
+                ));
+            }
+            neuron.followees = BTreeMap::new();
+            legacy::remove_neuron_from_function_followee_index(
+                &mut self.function_followee_index,
+                neuron,
+            );
+        }
 
         // First, validate the requested followee modifications in isolation.
 
