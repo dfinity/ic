@@ -363,7 +363,7 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    <<: *dind-small-setup
+    runs-on: ${{ inputs.github_runner }}
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
