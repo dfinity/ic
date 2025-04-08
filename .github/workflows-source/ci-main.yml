@@ -17,9 +17,6 @@ on:
       runner:
         required: false
         type: string
-      github_runner:
-        required: false
-        type: string
 
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
@@ -53,7 +50,8 @@ anchors:
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
-    runs-on: ${{ inputs.runner }}
+    runs-on: 
+      labels: ${{ inputs.runner || 'ubuntu-24-large' }}
     container:
       <<: *image
     timeout-minutes: 30
@@ -366,7 +364,7 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    runs-on: ${{ inputs.github_runner }}
+    <<: *dind-small-setup
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
