@@ -147,7 +147,7 @@ pub fn construct_ic_stack(
         artifact_pool_config.persistent_pool_db_path(),
     );
 
-    let (backup, backup_sender) = artifact_pool_config
+    let (backup_sender, backup) = artifact_pool_config
         .backup_config
         .as_ref()
         .map(|config| {
@@ -163,7 +163,7 @@ pub fn construct_ic_stack(
                 log.clone(),
                 Arc::new(SysTimeSource::new()),
             );
-            (backup, backup.backup_sender.clone())
+            (backup.backup_sender.clone(), backup)
         })
         .unzip();
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
