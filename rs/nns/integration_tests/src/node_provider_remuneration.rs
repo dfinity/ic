@@ -288,10 +288,6 @@ fn test_automated_node_provider_remuneration() {
 
 #[test]
 fn test_automated_node_provider_remuneration_with_node_reward_canister() {
-    // These tests may need some attention:
-    //  test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewards
-    //     test_mint_monthly_node_provider_rewards
-
     do_test_automated_node_provider_remuneration(&["test"]);
 }
 
