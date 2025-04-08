@@ -17,8 +17,8 @@ pub use page_allocator::{
     PageDeltaSerialization, PageSerialization,
 };
 pub use storage::{
-    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
-    StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
+    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayoutR,
+    StorageLayoutW, StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
@@ -461,7 +461,7 @@ impl PageMap {
     ///
     /// Note that the file is assumed to be read-only.
     pub fn open(
-        storage_layout: Box<dyn StorageLayout + Send + Sync>,
+        storage_layout: Box<dyn StorageLayoutR + Send + Sync>,
         base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
@@ -546,7 +546,7 @@ impl PageMap {
     /// destination.
     pub fn persist_delta(
         &self,
-        storage_layout: &dyn StorageLayout,
+        storage_layout: &dyn StorageLayoutW,
         height: Height,
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
@@ -564,7 +564,7 @@ impl PageMap {
     /// destination.
     pub fn persist_unflushed_delta(
         &self,
-        storage_layout: &dyn StorageLayout,
+        storage_layout: &dyn StorageLayoutW,
         height: Height,
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
@@ -581,7 +581,7 @@ impl PageMap {
     fn persist_to_overlay(
         &self,
         page_delta: &PageDelta,
-        storage_layout: &dyn StorageLayout,
+        storage_layout: &dyn StorageLayoutW,
         height: Height,
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,

@@ -1,4 +1,4 @@
-use crate::page_map::storage::{Shard, StorageLayout, StorageResult};
+use crate::page_map::storage::{Shard, StorageLayoutR, StorageLayoutW, StorageResult};
 use ic_types::Height;
 use std::path::{Path, PathBuf};
 
@@ -8,13 +8,16 @@ pub struct TestStorageLayout {
     pub existing_overlays: Vec<PathBuf>,
 }
 
-impl StorageLayout for TestStorageLayout {
-    fn base(&self) -> PathBuf {
-        self.base.clone()
-    }
+impl StorageLayoutW for TestStorageLayout {
     fn overlay(&self, _height: Height, shard: Shard) -> PathBuf {
         assert_eq!(shard.get(), 0);
         self.overlay_dst.clone()
+    }
+}
+
+impl StorageLayoutR for TestStorageLayout {
+    fn base(&self) -> PathBuf {
+        self.base.clone()
     }
     fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
         Ok(self.existing_overlays.clone())
@@ -42,10 +45,7 @@ pub struct ShardedTestStorageLayout {
     pub overlay_suffix: String,
 }
 
-impl StorageLayout for ShardedTestStorageLayout {
-    fn base(&self) -> PathBuf {
-        self.base.clone()
-    }
+impl StorageLayoutW for ShardedTestStorageLayout {
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
         self.dir_path.join(format!(
             "{:06}_{:03}_{}",
@@ -53,6 +53,12 @@ impl StorageLayout for ShardedTestStorageLayout {
             shard.get(),
             self.overlay_suffix
         ))
+    }
+}
+
+impl StorageLayoutR for ShardedTestStorageLayout {
+    fn base(&self) -> PathBuf {
+        self.base.clone()
     }
     fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
         let mut result: Vec<_> = std::fs::read_dir(&self.dir_path)

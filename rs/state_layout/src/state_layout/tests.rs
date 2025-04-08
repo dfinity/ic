@@ -535,11 +535,13 @@ fn random_unique_snapshot_ids(
 
 #[test]
 fn overlay_height_test() {
-    let page_map_layout = PageMapLayout::<WriteOnly> {
+    let tmp = tmpdir("checkpoint");
+    let page_map_layout = PageMapLayout::<RwPolicy<()>> {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
-        _checkpoint: None,
+        _checkpoint: CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap(),
     };
 
     assert_eq!(
@@ -554,14 +556,16 @@ fn overlay_height_test() {
         .overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay"))
         .is_err());
     // Test that parsing is consistent with encoding.
-    let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout =
+        CheckpointLayout::<RwPolicy<()>>::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap();
     assert_eq!(
         page_map_layout
             .overlay_height(
-                &canister_layout
-                    .stable_memory()
+                &checkpoint_layout
+                    .canister_stable_memory(&canister_test_id(123))
+                    .unwrap()
                     .overlay(Height::new(100), Shard::new(3))
             )
             .unwrap(),
@@ -571,11 +575,13 @@ fn overlay_height_test() {
 
 #[test]
 fn overlay_shard_test() {
-    let page_map_layout = PageMapLayout::<WriteOnly> {
+    let tmp = tmpdir("checkpoint");
+    let page_map_layout = PageMapLayout::<RwPolicy<()>> {
         root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
-        _checkpoint: None,
+        _checkpoint: CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap(),
     };
 
     assert_eq!(
@@ -593,13 +599,15 @@ fn overlay_shard_test() {
         .is_err());
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+    let checkpoint_layout =
+        CheckpointLayout::<RwPolicy<()>>::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap();
     assert_eq!(
         page_map_layout
             .overlay_shard(
-                &canister_layout
-                    .stable_memory()
+                &checkpoint_layout
+                    .canister_stable_memory(&canister_test_id(123))
+                    .unwrap()
                     .overlay(Height::new(100), Shard::new(30))
             )
             .unwrap(),
@@ -616,13 +624,15 @@ fn test_all_existing_pagemaps() {
         .all_existing_pagemaps()
         .unwrap()
         .is_empty());
-    let canister_layout = checkpoint_layout.canister(&canister_test_id(123)).unwrap();
-    let canister_wasm_base = canister_layout.wasm_chunk_store().base();
+    let canister_wasm_base = checkpoint_layout
+        .canister_wasm_chunk_store(&canister_test_id(123))
+        .unwrap()
+        .base();
     File::create(&canister_wasm_base).unwrap();
-    let snapshot_layout = checkpoint_layout
-        .snapshot(&SnapshotId::from((canister_test_id(123), 4)))
+    let snapshot_stable_memory = checkpoint_layout
+        .snapshot_stable_memory(&SnapshotId::from((canister_test_id(123), 4)))
         .unwrap();
-    let snapshot_overlay = snapshot_layout.stable_memory().overlay(5.into(), 6.into());
+    let snapshot_overlay = snapshot_stable_memory.overlay(5.into(), 6.into());
     File::create(&snapshot_overlay).unwrap();
     let pagemaps = checkpoint_layout.all_existing_pagemaps().unwrap();
     assert_eq!(pagemaps.len(), 2);
@@ -641,11 +651,16 @@ fn read_back_wasm_memory_overlay_file_names(
     heights: Vec<Height>,
 ) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+
+    let checkpoint_layout =
+        CheckpointLayout::<RwPolicy<()>>::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap();
+    let vmemory = checkpoint_layout
+        .canister_vmemory_0(&canister_test_id(123))
+        .unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
-        .map(|h| canister_layout.vmemory_0().overlay(*h, Shard::new(0)))
+        .map(|h| vmemory.overlay(*h, Shard::new(0)))
         .collect();
 
     // Create the overlay files in the directory.
@@ -654,22 +669,30 @@ fn read_back_wasm_memory_overlay_file_names(
     }
 
     // Create some other files that should be ignored.
-    File::create(canister_layout.raw_path().join("otherfile")).unwrap();
     File::create(
-        canister_layout
-            .stable_memory()
+        checkpoint_layout
+            .canister_path(&canister_test_id(123))
+            .unwrap()
+            .join("otherfile"),
+    )
+    .unwrap();
+    File::create(
+        checkpoint_layout
+            .canister_stable_memory(&canister_test_id(123))
+            .unwrap()
             .overlay(Height::new(42), Shard::new(0)),
     )
     .unwrap();
     File::create(
-        canister_layout
-            .wasm_chunk_store()
+        checkpoint_layout
+            .canister_wasm_chunk_store(&canister_test_id(123))
+            .unwrap()
             .overlay(Height::new(42), Shard::new(0)),
     )
     .unwrap();
-    File::create(canister_layout.vmemory_0().base()).unwrap();
+    File::create(vmemory.base()).unwrap();
 
-    let existing_overlays = canister_layout.vmemory_0().existing_overlays().unwrap();
+    let existing_overlays = vmemory.existing_overlays().unwrap();
 
     // We expect the list of paths to be the same including ordering.
     prop_assert_eq!(overlay_names, existing_overlays);
@@ -683,11 +706,15 @@ fn read_back_stable_memory_overlay_file_names(
     heights: Vec<Height>,
 ) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+    let checkpoint_layout =
+        CheckpointLayout::<RwPolicy<()>>::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap();
+    let stable_memory = checkpoint_layout
+        .canister_stable_memory(&canister_test_id(123))
+        .unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
-        .map(|h| canister_layout.stable_memory().overlay(*h, Shard::new(0)))
+        .map(|h| stable_memory.overlay(*h, Shard::new(0)))
         .collect();
 
     // Create the overlay files in the directory.
@@ -696,22 +723,30 @@ fn read_back_stable_memory_overlay_file_names(
     }
 
     // Create some other files that should be ignored.
-    File::create(canister_layout.raw_path().join("otherfile")).unwrap();
     File::create(
-        canister_layout
-            .vmemory_0()
+        checkpoint_layout
+            .canister_path(&canister_test_id(123))
+            .unwrap()
+            .join("otherfile"),
+    )
+    .unwrap();
+    File::create(
+        checkpoint_layout
+            .canister_vmemory_0(&canister_test_id(123))
+            .unwrap()
             .overlay(Height::new(42), Shard::new(0)),
     )
     .unwrap();
     File::create(
-        canister_layout
-            .wasm_chunk_store()
+        checkpoint_layout
+            .canister_wasm_chunk_store(&canister_test_id(123))
+            .unwrap()
             .overlay(Height::new(42), Shard::new(0)),
     )
     .unwrap();
-    File::create(canister_layout.stable_memory().base()).unwrap();
+    File::create(stable_memory.base()).unwrap();
 
-    let existing_overlays = canister_layout.stable_memory().existing_overlays().unwrap();
+    let existing_overlays = stable_memory.existing_overlays().unwrap();
 
     // We expect the list of paths to be the same including ordering.
     prop_assert_eq!(overlay_names, existing_overlays);
@@ -725,15 +760,15 @@ fn read_back_wasm_chunk_store_overlay_file_names(
     heights: Vec<Height>,
 ) {
     let tmp = tmpdir("canister");
-    let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
+    let checkpoint_layout =
+        CheckpointLayout::<RwPolicy<()>>::new_untracked(tmp.path().to_owned(), Height::new(0))
+            .unwrap();
+    let wasm_chunk_store = checkpoint_layout
+        .canister_wasm_chunk_store(&canister_test_id(123))
+        .unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
-        .map(|h| {
-            canister_layout
-                .wasm_chunk_store()
-                .overlay(*h, Shard::new(0))
-        })
+        .map(|h| wasm_chunk_store.overlay(*h, Shard::new(0)))
         .collect();
 
     // Create the overlay files in the directory.
@@ -742,25 +777,30 @@ fn read_back_wasm_chunk_store_overlay_file_names(
     }
 
     // Create some other files that should be ignored.
-    File::create(canister_layout.raw_path().join("otherfile")).unwrap();
     File::create(
-        canister_layout
-            .vmemory_0()
+        checkpoint_layout
+            .canister_path(&canister_test_id(123))
+            .unwrap()
+            .join("otherfile"),
+    )
+    .unwrap();
+    File::create(
+        checkpoint_layout
+            .canister_vmemory_0(&canister_test_id(123))
+            .unwrap()
             .overlay(Height::new(42), Shard::new(0)),
     )
     .unwrap();
     File::create(
-        canister_layout
-            .stable_memory()
+        checkpoint_layout
+            .canister_stable_memory(&canister_test_id(123))
+            .unwrap()
             .overlay(Height::new(42), Shard::new(0)),
     )
     .unwrap();
-    File::create(canister_layout.wasm_chunk_store().base()).unwrap();
+    File::create(wasm_chunk_store.base()).unwrap();
 
-    let existing_overlays = canister_layout
-        .wasm_chunk_store()
-        .existing_overlays()
-        .unwrap();
+    let existing_overlays = wasm_chunk_store.existing_overlays().unwrap();
 
     // We expect the list of paths to be the same including ordering.
     prop_assert_eq!(overlay_names, existing_overlays);
@@ -810,10 +850,10 @@ fn read_back_canister_snapshot_ids(
     mut snapshot_ids: Vec<SnapshotId>,
 ) {
     let tmp = tmpdir("checkpoint");
-    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
     for snapshot_id in &snapshot_ids {
-        checkpoint_layout.snapshot(snapshot_id).unwrap(); // Creates the directory as side effect.
+        checkpoint_layout.snapshot_path(snapshot_id).unwrap(); // Creates the directory as side effect.
     }
 
     let actual_snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
@@ -832,11 +872,11 @@ fn can_add_and_delete_canister_snapshots(
     snapshot_ids: Vec<SnapshotId>,
 ) {
     let tmp = tmpdir("checkpoint");
-    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
 
     fn check_snapshot_layout(
-        checkpoint_layout: &CheckpointLayout<WriteOnly>,
+        checkpoint_layout: &CheckpointLayout<RwPolicy<()>>,
         expected_snapshot_ids: &[SnapshotId],
     ) {
         let actual_snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
@@ -860,17 +900,13 @@ fn can_add_and_delete_canister_snapshots(
 
     for i in 0..snapshot_ids.len() {
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[..i]);
-        checkpoint_layout.snapshot(&snapshot_ids[i]).unwrap(); // Creates the directory as side effect.
+        checkpoint_layout.snapshot_path(&snapshot_ids[i]).unwrap(); // Creates the directory as side effect.
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[..(i + 1)]);
     }
 
     for i in 0..snapshot_ids.len() {
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[i..]);
-        checkpoint_layout
-            .snapshot(&snapshot_ids[i])
-            .unwrap()
-            .delete_dir()
-            .unwrap();
+        checkpoint_layout.delete_snapshot(&snapshot_ids[i]).unwrap();
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i + 1)..]);
     }
 }

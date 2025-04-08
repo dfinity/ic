@@ -1,7 +1,7 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::execution::common::log_dirty_pages;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
@@ -19,11 +19,11 @@ use ic_management_canister_types_private::{
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState, MessageMemoryUsage};
-use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
+use ic_replicated_state::MessageMemoryUsage;
+use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    funds::Cycles, messages::CanisterCall, CanisterLog, CanisterTimer, ComputeAllocation, Height,
+    funds::Cycles, messages::CanisterCall, CanisterLog, CanisterTimer, ComputeAllocation,
     MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmHash;
@@ -911,18 +911,6 @@ pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {
         .execution_state
         .as_ref()
         .map(|execution_state| execution_state.wasm_binary.binary.module_hash())
-}
-
-#[doc(hidden)] // pub for usage in tests
-pub(crate) fn canister_layout(
-    state_path: &Path,
-    canister_id: &CanisterId,
-) -> CanisterLayout<ReadOnly> {
-    // We use ReadOnly, as CheckpointLayouts with write permissions have side effects
-    // of creating directories
-    CheckpointLayout::<ReadOnly>::new_untracked(state_path.into(), Height::from(0))
-        .and_then(|layout| layout.canister(canister_id))
-        .expect("failed to obtain canister layout")
 }
 
 /// Finishes an `install_code` execution early due to an error.

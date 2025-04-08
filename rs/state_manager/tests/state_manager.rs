@@ -21,12 +21,14 @@ use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,
-    page_map::{PageIndex, Shard, StorageLayout},
+    page_map::{PageIndex, Shard, StorageLayoutR, StorageLayoutW},
     testing::ReplicatedStateTesting,
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
+use ic_state_layout::{
+    CheckpointLayout, ReadOnly, RwPolicy, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE,
+};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
@@ -94,41 +96,39 @@ fn label<T: Into<Label>>(t: T) -> Label {
 }
 
 /// Combined size of wasm memory including overlays.
-fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    canister_layout
-        .vmemory_0()
+fn vmemory_size(layout: &CheckpointLayout<ReadOnly>, canister_id: &CanisterId) -> u64 {
+    let vmemory = layout.canister_vmemory_0(canister_id).unwrap();
+    vmemory
         .existing_overlays()
         .unwrap()
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.vmemory_0().base()).map_or(0, |metadata| metadata.len())
+        + std::fs::metadata(vmemory.base()).map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of stable memory including overlays.
-fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    canister_layout
-        .stable_memory()
+fn stable_memory_size(layout: &CheckpointLayout<ReadOnly>, canister_id: &CanisterId) -> u64 {
+    let stable_memory = layout.canister_stable_memory(canister_id).unwrap();
+    stable_memory
         .existing_overlays()
         .unwrap()
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.stable_memory().base())
-            .map_or(0, |metadata| metadata.len())
+        + std::fs::metadata(stable_memory.base()).map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of wasm chunk store including overlays.
-fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    canister_layout
-        .wasm_chunk_store()
+fn wasm_chunk_store_size(layout: &CheckpointLayout<ReadOnly>, canister_id: &CanisterId) -> u64 {
+    let wasm_chunk_store = layout.canister_wasm_chunk_store(canister_id).unwrap();
+    wasm_chunk_store
         .existing_overlays()
         .unwrap()
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.wasm_chunk_store().base())
-            .map_or(0, |metadata| metadata.len())
+        + std::fs::metadata(wasm_chunk_store.base()).map_or(0, |metadata| metadata.len())
 }
 
 /// This is a canister that keeps a counter on the heap and allows to increment it.
@@ -253,8 +253,9 @@ fn lsmt_merge_overhead() {
     fn checkpoint_size(checkpoint: &CheckpointLayout<ReadOnly>) -> f64 {
         let mut size = 0.0;
         for canister_id in checkpoint.canister_ids().unwrap() {
-            let canister = checkpoint.canister(&canister_id).unwrap();
-            for entry in std::fs::read_dir(canister.raw_path()).unwrap() {
+            for entry in
+                std::fs::read_dir(checkpoint.canister_path_unchecked(&canister_id)).unwrap()
+            {
                 size += std::fs::metadata(entry.unwrap().path()).unwrap().len() as f64;
             }
         }
@@ -458,16 +459,17 @@ fn checkpoint_marked_ro_at_restart() {
         insert_dummy_canister(&mut state, canister_id);
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
-        let canister_100_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(1))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-
         // Make sure we don't do asynchronous operations with checkpoint.
         state_manager.flush_tip_channel();
-        let canister_100_wasm = canister_100_layout.wasm().raw_path().to_path_buf();
+        let canister_100_wasm = checkpoint_layout
+            .canister_wasm(&canister_test_id(100))
+            .unwrap()
+            .raw_path()
+            .to_path_buf();
         make_mutable(&canister_100_wasm).unwrap();
 
         // Check that there are mutable files before the restart...
@@ -751,7 +753,6 @@ fn stable_memory_is_persisted() {
 
 #[test]
 fn missing_stable_memory_file_is_handled() {
-    use ic_state_layout::{CheckpointLayout, RwPolicy};
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
@@ -773,8 +774,10 @@ fn missing_stable_memory_file_is_handled() {
         )
         .unwrap();
 
-        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
-        let canister_stable_memory = canister_layout.stable_memory().base();
+        let canister_stable_memory = mutable_cp_layout
+            .canister_stable_memory(&canister_test_id(100))
+            .unwrap()
+            .base();
         assert!(!canister_stable_memory.exists());
 
         let state_manager = restart_fn(state_manager, None);
@@ -812,13 +815,16 @@ fn missing_wasm_chunk_store_is_handled() {
         )
         .unwrap();
 
-        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
-        let canister_wasm_chunk_store = canister_layout.wasm_chunk_store().base();
+        let canister_wasm_chunk_store = mutable_cp_layout
+            .canister_wasm_chunk_store(&canister_test_id(100))
+            .unwrap()
+            .base();
         if canister_wasm_chunk_store.exists() {
             std::fs::remove_file(&canister_wasm_chunk_store).unwrap();
         }
-        for overlay in canister_layout
-            .wasm_chunk_store()
+        for overlay in mutable_cp_layout
+            .canister_wasm_chunk_store(&canister_test_id(100))
+            .unwrap()
             .existing_overlays()
             .unwrap()
         {
@@ -3451,9 +3457,9 @@ fn can_recover_from_corruption_on_state_sync() {
             //
             // The code below prepares all 5 types of corruption.
 
-            let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
-            let canister_90_memory = canister_90_layout
-                .vmemory_0()
+            let canister_90_memory = mutable_cp_layout
+                .canister_vmemory_0(&canister_test_id(90))
+                .unwrap()
                 .existing_overlays()
                 .unwrap()
                 .remove(0);
@@ -3461,15 +3467,18 @@ fn can_recover_from_corruption_on_state_sync() {
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
             make_readonly(&canister_90_memory).unwrap();
 
-            let canister_90_raw_pb = canister_90_layout.canister().raw_path().to_path_buf();
+            let canister_90_raw_pb = mutable_cp_layout
+                .canister_state_bits(&canister_test_id(90))
+                .unwrap()
+                .raw_path()
+                .to_path_buf();
             make_mutable(&canister_90_raw_pb).unwrap();
             write_all_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
             make_readonly(&canister_90_raw_pb).unwrap();
 
-            let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
-
-            let canister_100_memory = canister_100_layout
-                .vmemory_0()
+            let canister_100_memory = mutable_cp_layout
+                .canister_vmemory_0(&canister_test_id(100))
+                .unwrap()
                 .existing_overlays()
                 .unwrap()
                 .remove(0);
@@ -3477,8 +3486,9 @@ fn can_recover_from_corruption_on_state_sync() {
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
             make_readonly(&canister_100_memory).unwrap();
 
-            let canister_100_stable_memory = canister_100_layout
-                .stable_memory()
+            let canister_100_stable_memory = mutable_cp_layout
+                .canister_stable_memory(&canister_test_id(100))
+                .unwrap()
                 .existing_overlays()
                 .unwrap()
                 .remove(0);
@@ -3491,7 +3501,11 @@ fn can_recover_from_corruption_on_state_sync() {
             .unwrap();
             make_readonly(&canister_100_stable_memory).unwrap();
 
-            let canister_100_raw_pb = canister_100_layout.canister().raw_path().to_path_buf();
+            let canister_100_raw_pb = mutable_cp_layout
+                .canister_state_bits(&canister_test_id(100))
+                .unwrap()
+                .raw_path()
+                .to_path_buf();
             make_mutable(&canister_100_raw_pb).unwrap();
             std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
             make_readonly(&canister_100_raw_pb).unwrap();
@@ -3602,11 +3616,9 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 .unwrap();
 
                 // Write garbage to the canister memory file so that loading will fail.
-                let canister_layout = state_sync_scratchpad_layout
-                    .canister(&canister_test_id(90))
-                    .unwrap();
-                let canister_memory = canister_layout
-                    .vmemory_0()
+                let canister_memory = state_sync_scratchpad_layout
+                    .canister_vmemory_0(&canister_test_id(90))
+                    .unwrap()
                     .existing_overlays()
                     .unwrap()
                     .remove(0);
@@ -5035,13 +5047,15 @@ fn can_reset_memory() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
         // Check the data is written to disk.
-        let canister_layout = state_manager
-            .state_layout()
-            .checkpoint_verified(height(1))
-            .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap();
-        assert!(vmemory_size(&canister_layout) >= 8 * PAGE_SIZE as u64);
+        assert!(
+            vmemory_size(
+                &state_manager
+                    .state_layout()
+                    .checkpoint_verified(height(1))
+                    .unwrap(),
+                &canister_test_id(100)
+            ) >= 8 * PAGE_SIZE as u64
+        );
 
         let (_height, mut state) = state_manager.take_tip();
 
@@ -5074,13 +5088,15 @@ fn can_reset_memory() {
         state_manager.flush_tip_channel();
 
         // Check file in checkpoint does not contain old data by checking its size.
-        let canister_layout = state_manager
-            .state_layout()
-            .checkpoint_verified(height(2))
-            .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap();
-        assert!(vmemory_size(&canister_layout) < 8 * PAGE_SIZE as u64);
+        assert!(
+            vmemory_size(
+                &state_manager
+                    .state_layout()
+                    .checkpoint_verified(height(2))
+                    .unwrap(),
+                &canister_test_id(100)
+            ) < 8 * PAGE_SIZE as u64
+        );
 
         let (_height, mut state) = state_manager.take_tip();
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
@@ -5109,13 +5125,16 @@ fn can_reset_memory() {
         state_manager.flush_tip_channel();
 
         // File should be empty after wiping and checkpoint.
-        let canister_layout = state_manager
-            .state_layout()
-            .checkpoint_verified(height(3))
-            .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap();
-        assert_eq!(vmemory_size(&canister_layout), 0);
+        assert_eq!(
+            vmemory_size(
+                &state_manager
+                    .state_layout()
+                    .checkpoint_verified(height(3))
+                    .unwrap(),
+                &canister_test_id(100)
+            ),
+            0
+        );
 
         assert_error_counters(metrics);
     });
@@ -5221,13 +5240,13 @@ fn can_reset_stable_memory() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
         // Check the data is written to disk.
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(1))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-        assert!(stable_memory_size(&canister_layout) >= 8 * PAGE_SIZE as u64);
+        assert!(
+            stable_memory_size(&checkpoint_layout, &canister_test_id(100)) >= 8 * PAGE_SIZE as u64
+        );
 
         let (_height, mut state) = state_manager.take_tip();
 
@@ -5261,13 +5280,13 @@ fn can_reset_stable_memory() {
         state_manager.flush_tip_channel();
 
         // Check file in checkpoint does not contain old data by checking its size.
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(2))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-        assert!(stable_memory_size(&canister_layout) < 8 * PAGE_SIZE as u64);
+        assert!(
+            stable_memory_size(&checkpoint_layout, &canister_test_id(100)) < 8 * PAGE_SIZE as u64
+        );
 
         let (_height, mut state) = state_manager.take_tip();
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
@@ -5297,13 +5316,14 @@ fn can_reset_stable_memory() {
         state_manager.flush_tip_channel();
 
         // File should be empty after wiping and checkpoint.
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(3))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-        assert_eq!(stable_memory_size(&canister_layout), 0);
+        assert_eq!(
+            stable_memory_size(&checkpoint_layout, &canister_test_id(100)),
+            0
+        );
 
         assert_error_counters(metrics);
     });
@@ -5335,13 +5355,14 @@ fn can_reset_wasm_chunk_store() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
         // Check the data is written to disk.
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(1))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-        assert!(wasm_chunk_store_size(&canister_layout) >= 8 * PAGE_SIZE as u64);
+        assert!(
+            wasm_chunk_store_size(&checkpoint_layout, &canister_test_id(100))
+                >= 8 * PAGE_SIZE as u64
+        );
 
         let (_height, mut state) = state_manager.take_tip();
 
@@ -5379,13 +5400,14 @@ fn can_reset_wasm_chunk_store() {
         state_manager.flush_tip_channel();
 
         // Check file in checkpoint does not contain old data by checking its size.
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(2))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-        assert!(wasm_chunk_store_size(&canister_layout) < 8 * PAGE_SIZE as u64);
+        assert!(
+            wasm_chunk_store_size(&checkpoint_layout, &canister_test_id(100))
+                < 8 * PAGE_SIZE as u64
+        );
 
         let (_height, mut state) = state_manager.take_tip();
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
@@ -5415,13 +5437,14 @@ fn can_reset_wasm_chunk_store() {
         state_manager.flush_tip_channel();
 
         // File should be empty after wiping and checkpoint.
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(3))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-        assert_eq!(wasm_chunk_store_size(&canister_layout), 0);
+        assert_eq!(
+            wasm_chunk_store_size(&checkpoint_layout, &canister_test_id(100)),
+            0
+        );
 
         assert_error_counters(metrics);
     });
@@ -5443,9 +5466,7 @@ fn can_delete_canister() {
             .state_layout()
             .checkpoint_verified(height(1))
             .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path();
+            .canister_path_unchecked(&canister_test_id(100));
         assert!(std::fs::metadata(canister_path).unwrap().is_dir());
 
         let (_height, mut state) = state_manager.take_tip();
@@ -5466,9 +5487,7 @@ fn can_delete_canister() {
             .state_layout()
             .checkpoint_verified(height(3))
             .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path()
+            .canister_path_unchecked(&canister_test_id(100))
             .exists());
 
         assert_error_counters(metrics);
@@ -5497,19 +5516,24 @@ fn can_uninstall_code() {
         state_manager.flush_tip_channel();
 
         // Check the checkpoint has the canister
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(1))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-        let canister_path = canister_layout.raw_path();
+        let canister_path = checkpoint_layout.canister_path_unchecked(&canister_test_id(100));
         assert!(std::fs::metadata(canister_path).unwrap().is_dir());
 
         // WASM binary, WASM memory and stable memory should all be present.
-        assert_ne!(vmemory_size(&canister_layout), 0);
-        assert_ne!(stable_memory_size(&canister_layout), 0);
-        assert!(canister_layout.wasm().raw_path().exists());
+        assert_ne!(vmemory_size(&checkpoint_layout, &canister_test_id(100)), 0);
+        assert_ne!(
+            stable_memory_size(&checkpoint_layout, &canister_test_id(100)),
+            0
+        );
+        assert!(checkpoint_layout
+            .canister_wasm(&canister_test_id(100))
+            .unwrap()
+            .raw_path()
+            .exists());
 
         let (_height, mut state) = state_manager.take_tip();
 
@@ -5528,20 +5552,26 @@ fn can_uninstall_code() {
         state_manager.flush_tip_channel();
 
         // Check that the checkpoint does contains the canister
-        let canister_layout = state_manager
+        let checkpoint_layout = state_manager
             .state_layout()
             .checkpoint_verified(height(3))
-            .unwrap()
-            .canister(&canister_test_id(100))
             .unwrap();
-
-        assert!(canister_layout.raw_path().exists());
+        assert!(checkpoint_layout
+            .canister_path_unchecked(&canister_test_id(100))
+            .exists());
 
         // WASM and stable memory should be empty after checkpoint.
-        assert_eq!(vmemory_size(&canister_layout), 0);
-        assert_eq!(stable_memory_size(&canister_layout), 0);
+        assert_eq!(vmemory_size(&checkpoint_layout, &canister_test_id(100)), 0);
+        assert_eq!(
+            stable_memory_size(&checkpoint_layout, &canister_test_id(100)),
+            0
+        );
         // WASM binary should be missing
-        assert!(!canister_layout.wasm().raw_path().exists());
+        assert!(!checkpoint_layout
+            .canister_wasm(&canister_test_id(100))
+            .unwrap()
+            .raw_path()
+            .exists());
 
         assert_error_counters(metrics);
     });
@@ -5566,26 +5596,30 @@ fn can_uninstall_code_state_machine() {
     env.tick();
     env.state_manager.flush_tip_channel();
 
-    let canister_layout = layout
+    let checkpoint_layout = layout
         .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
-        .unwrap()
-        .canister(&canister_id)
         .unwrap();
-    assert!(canister_layout.wasm().raw_path().exists());
-    assert_ne!(vmemory_size(&canister_layout), 0);
-    assert_ne!(stable_memory_size(&canister_layout), 0);
+    assert!(checkpoint_layout
+        .canister_wasm(&canister_id)
+        .unwrap()
+        .raw_path()
+        .exists());
+    assert_ne!(vmemory_size(&checkpoint_layout, &canister_id), 0);
+    assert_ne!(stable_memory_size(&checkpoint_layout, &canister_id), 0);
 
     env.uninstall_code(canister_id).unwrap();
 
     env.state_manager.flush_tip_channel();
-    let canister_layout = layout
+    let checkpoint_layout = layout
         .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
-        .unwrap()
-        .canister(&canister_id)
         .unwrap();
-    assert!(!canister_layout.wasm().raw_path().exists());
-    assert_eq!(vmemory_size(&canister_layout), 0);
-    assert_eq!(stable_memory_size(&canister_layout), 0);
+    assert!(!checkpoint_layout
+        .canister_wasm(&canister_id)
+        .unwrap()
+        .raw_path()
+        .exists());
+    assert_eq!(vmemory_size(&checkpoint_layout, &canister_id), 0);
+    assert_eq!(stable_memory_size(&checkpoint_layout, &canister_id), 0);
 }
 
 #[test]
@@ -5619,18 +5653,25 @@ fn tip_is_initialized_correctly() {
         assert!(!tip_layout.system_metadata().raw_path().exists());
         assert!(!tip_layout.subnet_queues().raw_path().exists());
         assert_eq!(tip_layout.canister_ids().unwrap().len(), 1);
-        let canister_layout = tip_layout
-            .canister(&tip_layout.canister_ids().unwrap()[0])
-            .unwrap();
-        assert!(!canister_layout.queues().raw_path().exists());
-        assert!(canister_layout.wasm().raw_path().exists());
+        let canister_id = &tip_layout.canister_ids().unwrap()[0];
+        assert!(!tip_layout
+            .canister_queues(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists());
+        assert!(tip_layout
+            .canister_wasm(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists());
+        let vmemory_layout = tip_layout.canister_vmemory_0(canister_id).unwrap();
         assert!(
-            canister_layout.vmemory_0().base().exists()
-                || canister_layout.vmemory_0().existing_overlays().unwrap()[0].exists()
+            vmemory_layout.base().exists()
+                || vmemory_layout.existing_overlays().unwrap()[0].exists()
         );
+        let stable_memory = tip_layout.canister_stable_memory(canister_id).unwrap();
         assert!(
-            canister_layout.stable_memory().base().exists()
-                || canister_layout.stable_memory().existing_overlays().unwrap()[0].exists()
+            stable_memory.base().exists() || stable_memory.existing_overlays().unwrap()[0].exists()
         );
 
         let (_height, state) = state_manager.take_tip();
@@ -5646,19 +5687,32 @@ fn tip_is_initialized_correctly() {
         assert!(checkpoint_layout.system_metadata().raw_path().exists());
         assert!(!checkpoint_layout.subnet_queues().raw_path().exists()); // empty
         assert_eq!(checkpoint_layout.canister_ids().unwrap().len(), 1);
-        let canister_layout = checkpoint_layout
-            .canister(&checkpoint_layout.canister_ids().unwrap()[0])
-            .unwrap();
-        assert!(!canister_layout.queues().raw_path().exists()); // empty
-        assert!(canister_layout.canister().raw_path().exists());
-        assert!(canister_layout.wasm().raw_path().exists());
+        let canister_id = &checkpoint_layout.canister_ids().unwrap()[0];
+        assert!(!checkpoint_layout
+            .canister_queues(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists()); // empty
+        assert!(checkpoint_layout
+            .canister_state_bits(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists());
+        assert!(checkpoint_layout
+            .canister_wasm(canister_id)
+            .unwrap()
+            .raw_path()
+            .exists());
+        let vmemory_layout = checkpoint_layout.canister_vmemory_0(canister_id).unwrap();
         assert!(
-            canister_layout.vmemory_0().base().exists()
-                || canister_layout.vmemory_0().existing_overlays().unwrap()[0].exists()
+            vmemory_layout.base().exists()
+                || vmemory_layout.existing_overlays().unwrap()[0].exists()
         );
+        let stable_memory = checkpoint_layout
+            .canister_stable_memory(canister_id)
+            .unwrap();
         assert!(
-            canister_layout.stable_memory().base().exists()
-                || canister_layout.stable_memory().existing_overlays().unwrap()[0].exists()
+            stable_memory.base().exists() || stable_memory.existing_overlays().unwrap()[0].exists()
         );
     });
 }
@@ -5790,13 +5844,18 @@ fn can_merge_unexpected_number_of_files() {
             }
 
             wait_for_checkpoint(&state_manager, height(HEIGHT - 1));
-            let pm_layout = state_manager
-                .state_layout()
-                .checkpoint_verified(height(HEIGHT - 1))
-                .unwrap()
-                .canister(&canister_test_id(1))
-                .unwrap()
-                .vmemory_0();
+            let cp_layout: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
+                state_manager
+                    .state_layout()
+                    .checkpoint_verified(height(HEIGHT - 1))
+                    .unwrap()
+                    .raw_path()
+                    .to_path_buf(),
+                height(HEIGHT - 1),
+            )
+            .unwrap();
+
+            let pm_layout = cp_layout.canister_vmemory_0(&canister_test_id(1)).unwrap();
             let existing_overlays = pm_layout.existing_overlays().unwrap();
             assert_eq!(existing_overlays.len(), NUM_PAGES); // single page per shard
             state_manager.flush_tip_channel();
@@ -5830,9 +5889,8 @@ fn can_merge_unexpected_number_of_files() {
                     .state_layout()
                     .checkpoint_verified(height(HEIGHT))
                     .unwrap()
-                    .canister(&canister_test_id(1))
+                    .canister_vmemory_0(&canister_test_id(1))
                     .unwrap()
-                    .vmemory_0()
                     .existing_overlays()
                     .unwrap()
                     .len(),
@@ -5853,15 +5911,12 @@ fn batch_summary_is_respected_for_writing_overlay_files() {
             state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
             state_manager.flush_tip_channel();
 
-            let tip_layout: CheckpointLayout<ReadOnly> = CheckpointLayout::new_untracked(
+            let tip_layout: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
                 state_manager.state_layout().raw_path().join("tip"),
                 height(0),
             )
             .unwrap();
-            let tip_vmemory_layout = tip_layout
-                .canister(&canister_test_id(1))
-                .unwrap()
-                .vmemory_0();
+            let tip_vmemory_layout = tip_layout.canister_vmemory_0(&canister_test_id(1)).unwrap();
 
             for h in 2_u64..600 {
                 let (_, mut state) = state_manager.take_tip();
@@ -5962,9 +6017,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(1))
             .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path();
+            .canister_path_unchecked(&canister_test_id(100));
         assert!(std::fs::metadata(canister_path.clone()).unwrap().is_dir());
 
         // Check the checkpoint has the snapshot.
@@ -5972,9 +6025,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(1))
             .unwrap()
-            .snapshot(&snapshot_id)
-            .unwrap()
-            .raw_path();
+            .snapshot_path_unchecked(&snapshot_id);
         assert!(std::fs::metadata(&snapshot_path).unwrap().is_dir());
 
         let (_height, state) = state_manager.take_tip();
@@ -5987,9 +6038,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(2))
             .unwrap()
-            .snapshot(&snapshot_id)
-            .unwrap()
-            .raw_path();
+            .snapshot_path_unchecked(&snapshot_id);
         assert!(std::fs::metadata(&snapshot_path).unwrap().is_dir());
 
         let (_height, mut state) = state_manager.take_tip();
@@ -6004,9 +6053,7 @@ fn can_create_and_delete_canister_snapshot() {
             .state_layout()
             .checkpoint_verified(height(3))
             .unwrap()
-            .snapshot(&snapshot_id)
-            .unwrap()
-            .raw_path();
+            .snapshot_path_unchecked(&snapshot_id);
         assert!(!snapshot_path.exists());
         assert!(!snapshot_path.parent().unwrap().exists());
 
