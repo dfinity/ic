@@ -107,6 +107,8 @@ const LOCALHOST: &str = "127.0.0.1";
 
 pub struct PocketIcState {
     state_dir: PathBuf,
+    /// We use a temp dir if the user did not specify any path to a state.
+    /// Then the field `state_dir` above corresponds to the temp dir.
     temp_dir: Option<TempDir>,
 }
 
