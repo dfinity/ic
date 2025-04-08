@@ -4568,6 +4568,7 @@ dependencies = [
  "ic-system-test-driver",
  "icrc-ledger-agent",
  "icrc-ledger-types",
+ "leb128",
  "on_wire",
  "serde_cbor",
 ]
@@ -9160,6 +9161,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-tracing",
  "ic-types",
+ "ic-utils 0.9.0",
  "ic-validator",
  "inferno 0.12.1",
  "maplit",

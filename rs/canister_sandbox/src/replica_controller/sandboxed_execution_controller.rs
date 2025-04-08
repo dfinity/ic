@@ -96,6 +96,7 @@ const EMBEDDER_CACHE_HIT_COMPILATION_ERROR: &str = "embedder_cache_hit_compilati
 const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
 const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_compilation_error";
 const CACHE_MISS: &str = "cache_miss";
+const CACHE_MISS_FALLBACK_FILE: &str = "cache_miss_fallback_file";
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -1048,6 +1049,11 @@ impl WasmExecutor for SandboxedExecutionController {
             match compilation_cache.get(&wasm_binary.binary) {
                 None => {
                     self.metrics.inc_cache_lookup(CACHE_MISS);
+                    // TODO(MR-651): This metric tracks the number of times execution reads wasm from disk.
+                    // Remove this once we roll out the lazy loading of wasm files.
+                    if wasm_binary.binary.file().is_some() {
+                        self.metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
+                    }
                     let _compilation_timer = self
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_compile_duration
@@ -1825,6 +1831,11 @@ fn open_wasm(
     let compilation = match compilation_cache.get(&wasm_binary.binary) {
         None => {
             metrics.inc_cache_lookup(CACHE_MISS);
+            // TODO(MR-651): This metric tracks the number of times execution reads wasm from disk.
+            // Remove this once we roll out the lazy loading of wasm files.
+            if wasm_binary.binary.file().is_some() {
+                metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
+            }
             let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
                 HypervisorError::WasmEngineError(ic_wasm_types::WasmEngineError::Unexpected(
                     "Couldn't find compiler binary".to_string(),

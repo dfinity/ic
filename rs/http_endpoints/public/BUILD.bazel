@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/types/types",
+    "//rs/utils",
     "//rs/validator",
     "@crate_index//:askama",
     "@crate_index//:axum",
