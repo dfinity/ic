@@ -164,7 +164,9 @@ pub async fn convert_icp_to_cycles<C: CallCanisters>(benecificary_agent: &C, amo
         .unwrap();
 }
 
-pub async fn add_wasm_via_nns_proposal<C: CallCanistersWithStoppedCanisterError + ProgressNetwork>(
+pub async fn add_wasm_via_nns_proposal<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     neuron_id: NeuronId,
     wasm: SnsWasm,
