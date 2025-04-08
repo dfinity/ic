@@ -220,21 +220,25 @@ impl Registry {
         old_operator_id: &PrincipalId,
         new_operator_id: &PrincipalId,
     ) -> Result<(NodeOperatorRecord, NodeOperatorRecord), String> {
-        match (
-            find_node_operator_record_for_provider(&operators, old_operator_id, provider),
-            find_node_operator_record_for_provider(&operators, new_operator_id, provider),
-        ) {
-            (Ok(old_operator_record), Ok(new_operator_record))
-                if old_operator_record.dc_id != new_operator_record.dc_id =>
-            {
-                Err(format!("{}do_update_node_operator: Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}", LOG_PREFIX, old_operator_id, old_operator_record.dc_id, new_operator_id, new_operator_record.dc_id))
-            }
-            (Ok(old_operator_record), Ok(new_operator_record)) => {
-                Ok((old_operator_record.clone(), new_operator_record.clone()))
-            }
-            (Err(e), _) => Err(e),
-            (_, Err(e)) => Err(e),
+        let old_operator_record =
+            find_node_operator_record_for_provider(&operators, old_operator_id, provider)?;
+        let new_operator_record =
+            find_node_operator_record_for_provider(&operators, new_operator_id, provider)?;
+
+        if old_operator_record.dc_id != new_operator_record.dc_id {
+            return Err(format!(
+                "{}do_update_node_operator: Old node operator and new node operator \
+                    are in different data centers. Old node operator {} is \
+                    in {} but the new node operator {} is in {}",
+                LOG_PREFIX,
+                old_operator_id,
+                old_operator_record.dc_id,
+                new_operator_id,
+                new_operator_record.dc_id
+            ));
         }
+
+        Ok((old_operator_record.clone(), new_operator_record.clone()))
     }
 }
 
