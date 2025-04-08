@@ -9,3 +9,5 @@ jobs:
     secrets: inherit
     with:
       runner: ubuntu-latest
+      runner_python_test: ""
+      labels_python_test: "dind-small"
