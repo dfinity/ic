@@ -105,41 +105,42 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
 const LOCALHOST: &str = "127.0.0.1";
 
+enum PocketIcStateKind {
+    StateDir(PathBuf),
+    TempDir(TempDir),
+}
+
 pub struct PocketIcState {
-    state_dir: PathBuf,
-    /// We use a temp dir if the user did not specify any path to a state.
-    /// Then the field `state_dir` above corresponds to the temp dir.
-    temp_dir: Option<TempDir>,
+    state: PocketIcStateKind,
 }
 
 impl PocketIcState {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let temp_dir = TempDir::new().unwrap();
-        let state_dir = temp_dir.path().to_path_buf();
         Self {
-            state_dir,
-            temp_dir: Some(temp_dir),
+            state: PocketIcStateKind::TempDir(temp_dir),
         }
     }
 
     pub fn new_from_path(state_dir: PathBuf) -> Self {
         Self {
-            state_dir,
-            temp_dir: None,
+            state: PocketIcStateKind::StateDir(state_dir),
         }
     }
 
-    pub fn into_path(mut self) -> PathBuf {
-        if let Some(temp_dir) = self.temp_dir.take() {
-            temp_dir.into_path()
-        } else {
-            self.state_dir
+    pub fn into_path(self) -> PathBuf {
+        match self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir,
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
         }
     }
 
     pub(crate) fn state_dir(&self) -> PathBuf {
-        self.state_dir.clone()
+        match &self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir.clone(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.path().to_path_buf(),
+        }
     }
 }
 
