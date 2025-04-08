@@ -14,7 +14,7 @@ use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
-use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self};
+use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, RecurrencyMode};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_agent::CallMode;
@@ -68,7 +68,7 @@ proptest! {
                 max_transactions_per_response: None,
             })
             .build();
-        let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args);
+        let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args, None);
         let endpoint = pocket_ic.make_live(None);
         let port = endpoint.port().unwrap();
 
@@ -132,7 +132,7 @@ proptest! {
                 current_balances.insert(account,Nat(BigUint::zero()));
             }
 
-            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![]))).await.unwrap();
+            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {})).await.unwrap();
             storage_client.update_account_balances().unwrap();
 
             let mut block_indices_iter = block_indices.into_iter().collect::<Vec<u64>>();
@@ -173,7 +173,7 @@ fn test_self_transfer() {
         .with_initial_balance(account, Nat::from(100_000_000_u64))
         .build();
 
-    let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args);
+    let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args, None);
     let endpoint = pocket_ic.make_live(None);
     let port = endpoint.port().unwrap();
 
@@ -189,6 +189,8 @@ fn test_self_transfer() {
             storage_client.clone(),
             10,
             Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
+            Box::new(|| {}),
         )
         .await
         .unwrap();
@@ -222,6 +224,8 @@ fn test_self_transfer() {
             storage_client.clone(),
             10,
             Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
+            Box::new(|| {}),
         )
         .await
         .unwrap();
