@@ -44,6 +44,7 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
 use metrics::RegistryreplicatorMetrics;
 use std::{
+    future::Future,
     io::{Error, ErrorKind},
     net::SocketAddr,
     sync::{
@@ -302,11 +303,25 @@ impl RegistryReplicator {
     /// Calls [`Self::poll()`] asynchronously and spawns a background task that
     /// continuously polls for updates.
     /// The background task is stopped when the object is dropped.
-    pub async fn start_polling(
+    pub async fn start_polling_in_background(
         &self,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
     ) -> Result<JoinHandle<()>, Error> {
+        let future = self.start_polling(nns_urls, nns_pub_key).await?;
+
+        info!(self.logger, "Spawning background thread.");
+        let handle = tokio::spawn(future);
+        Ok(handle)
+    }
+
+    /// Calls [`Self::poll()`] asynchronously and returns future that
+    /// continuously polls for updates.
+    pub async fn start_polling(
+        &self,
+        nns_urls: Vec<Url>,
+        nns_pub_key: Option<ThresholdSigPublicKey>,
+    ) -> Result<impl Future<Output = ()>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
@@ -333,8 +348,8 @@ impl RegistryReplicator {
         let registry_client = self.registry_client.clone();
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
-        info!(logger, "Spawning background thread.");
-        let handle = tokio::spawn(async move {
+
+        let future = async move {
             while !cancelled.load(Ordering::Relaxed) {
                 let timer = metrics.poll_duration.start_timer();
                 // The relevant I/O-operation of the poll() function is querying
@@ -355,8 +370,9 @@ impl RegistryReplicator {
                     .set(registry_client.get_latest_version().get() as i64);
                 tokio::time::sleep(poll_delay).await;
             }
-        });
-        Ok(handle)
+        };
+
+        Ok(future)
     }
 
     /// Requests latest version and certified changes from the

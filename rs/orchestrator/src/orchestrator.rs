@@ -36,10 +36,7 @@ use std::{
     thread,
     time::Duration,
 };
-use tokio::{
-    sync::watch::Receiver,
-    task::{JoinHandle, JoinSet},
-};
+use tokio::{sync::watch::Receiver, task::JoinSet};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
@@ -161,7 +158,7 @@ impl Orchestrator {
             .start_polling(nns_urls, nns_pub_key)
             .await
         {
-            Ok(join_handle) => task_tracker.insert("registry_replicator", join_handle),
+            Ok(future) => task_tracker.spawn("registry_replicator", future),
             Err(err) => {
                 metrics
                     .critical_error_task_panicked
@@ -631,24 +628,6 @@ impl TaskTracker {
         info!(self.logger, "Task `{task_name}` spawned");
     }
 
-    /// Inserts the provided [`JoinHandle`] into the [`JoinSet`] and updates the
-    /// [`Self::task_names`] field.
-    ///
-    /// TODO: use [`JoinSet::insert`] directly if it ever becomes public.
-    /// https://github.com/tokio-rs/tokio/issues/5924
-    fn insert(&mut self, task_name: &str, join_handle: JoinHandle<()>) {
-        let task = async {
-            match join_handle.await {
-                Err(err) if err.is_panic() => {
-                    std::panic::resume_unwind(err.into_panic());
-                }
-                _ => (),
-            }
-        };
-
-        self.spawn(task_name, task);
-    }
-
     /// Waits until all the tasks complete.
     ///
     /// If any of the tracked tasks panics it will be caught here and
@@ -729,44 +708,6 @@ mod tests {
             metrics
                 .critical_error_task_panicked
                 .get_metric_with_label_values(&["graceful"])
-                .unwrap()
-                .get(),
-            0
-        );
-    }
-
-    #[tokio::test]
-    async fn task_tracker_inserted_join_handle_panics_are_caught_test() {
-        let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
-        let mut task_tracker = TaskTracker::new(metrics.clone(), no_op_logger());
-
-        let join_handle = tokio::spawn(async { panic!("oups!") });
-        task_tracker.insert("panicky_join_handle", join_handle);
-        task_tracker.join_all().await;
-
-        assert_eq!(
-            metrics
-                .critical_error_task_panicked
-                .get_metric_with_label_values(&["panicky_join_handle"])
-                .unwrap()
-                .get(),
-            1
-        );
-    }
-
-    #[tokio::test]
-    async fn task_tracker_inserted_join_handle_graceful_completions_are_caught_test() {
-        let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
-        let mut task_tracker = TaskTracker::new(metrics.clone(), no_op_logger());
-
-        let join_handle = tokio::spawn(async { println!("all good!") });
-        task_tracker.insert("graceful_join_handle", join_handle);
-        task_tracker.join_all().await;
-
-        assert_eq!(
-            metrics
-                .critical_error_task_panicked
-                .get_metric_with_label_values(&["graceful_join_handle"])
                 .unwrap()
                 .get(),
             0

@@ -91,7 +91,7 @@ impl BackupManager {
         block_on(async {
             rt.spawn(async move {
                 reg_replicator2
-                    .start_polling(nns_urls, Some(nns_public_key))
+                    .start_polling_in_background(nns_urls, Some(nns_public_key))
                     .await
                     .expect("Failed to start registry replicator");
             })
