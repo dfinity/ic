@@ -8,7 +8,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* The Node Reward Canister will now sync changes from the Registry canister.
 * The Node Reward Canister will now perform the calculations that the Registry canister performs for node provider
   rewards.
 
