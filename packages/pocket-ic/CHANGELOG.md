@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The provided state is not modified (i.e., it is read-only).
 - The function `PocketIcBuilder::with_state` to specify a state from which the PocketIC instance is initialized
   and in which changes to the PocketIC instance are persisted.
+  This state must be empty if `PocketIcBuilder::with_read_only_state` is used.
 - The function `PocketIc::drop_and_take_state` to drop a PocketIC instance and get its final state if the instance was created
   using `PocketIcBuilder::with_state` or `PocketIcBuilder::with_state_dir`.
 

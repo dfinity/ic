@@ -36,10 +36,10 @@ use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{remove_dir_all, File};
+use std::fs::{read_dir, File};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -149,20 +149,24 @@ impl PocketIc {
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)
         if let Some(read_only_state_dir) = read_only_state_dir {
-            let instance_state_dir = if let Some(ref state_dir) = state_dir {
-                let state_dir = state_dir.state_dir();
-                if Path::new(&state_dir).exists() {
-                    remove_dir_all(&state_dir).unwrap();
+            if let Some(ref state_dir) = state_dir {
+                let mut state_dir_contents = read_dir(state_dir.state_dir()).unwrap();
+                if state_dir_contents.next().is_some() {
+                    panic!(
+                        "PocketIC instance state must be empty if a read-only state is mounted."
+                    );
                 }
-                state_dir.clone()
             } else {
-                let state = PocketIcState::new();
-                let dir = state.state_dir();
-                state_dir = Some(state);
-                dir
+                state_dir = Some(PocketIcState::new());
             };
-            copy_dir(read_only_state_dir, instance_state_dir)
-                .expect("Failed to copy state directory");
+            copy_dir(
+                read_only_state_dir,
+                state_dir
+                    .as_ref()
+                    .map(|state_dir| state_dir.state_dir())
+                    .unwrap(),
+            )
+            .expect("Failed to copy state directory");
         };
 
         // now that we initialized the state dir, we check if it contains a topology file
