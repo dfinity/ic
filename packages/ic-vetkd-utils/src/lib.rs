@@ -110,7 +110,7 @@ impl TransportSecretKey {
 pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
     match bytes.try_into() {
         Ok(bytes) => option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some(),
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
