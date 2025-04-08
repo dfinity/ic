@@ -63,6 +63,7 @@ runs:
         with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
           run: |
+            set -euo pipefail
 
             diff_only='${{ inputs.diff-only }}'
             release_build='${{ inputs.release-build }}'
