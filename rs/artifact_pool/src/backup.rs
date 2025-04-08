@@ -339,7 +339,6 @@ impl JoinGuard for Backup {}
 
 impl Backup {
     pub fn new_with_age_func(
-        // pool: &dyn ConsensusPool,
         backup_path: PathBuf,
         version_path: PathBuf,
         age_threshold: Duration,
@@ -367,23 +366,10 @@ impl Backup {
             log,
         };
 
-        // Due to the fact that the backup is synced to the disk completely
-        // independently of the consensus pool and always after the consensus pool was
-        // mutated, we might run into an inconsistent state between the pool and the
-        // backup data if the replica gets killed by the orchestrator. To avoid this
-        // situation, on the instantiation of the consensus pool and the backup
-        // component, we need to synchronize the backup with the pool in a blocking
-        // manner.
-        // let artifacts = get_all_persisted_artifacts(pool);
-        // if let Err(err) = store_artifacts(artifacts, &version_path) {
-        //     error!(backup.log, "Backup storing failed: {:?}", err);
-        //     backup.metrics.io_errors.inc();
-        // }
         (backup, backup_queue)
     }
 
     pub fn new(
-        // pool: &dyn ConsensusPool,
         backup_path: PathBuf,
         version_path: PathBuf,
         age_threshold: Duration,
@@ -393,7 +379,6 @@ impl Backup {
         time_source: Arc<dyn TimeSource>,
     ) -> (Self, SyncSender<BackupRequest>) {
         Self::new_with_age_func(
-            // pool,
             backup_path,
             version_path,
             age_threshold,

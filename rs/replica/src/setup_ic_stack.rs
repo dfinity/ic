@@ -147,21 +147,24 @@ pub fn construct_ic_stack(
         artifact_pool_config.persistent_pool_db_path(),
     );
 
-    let backup = artifact_pool_config.backup_config.as_ref().map(|config| {
-        Backup::new(
-            config.spool_path.clone(),
-            config
-                .spool_path
-                .join(subnet_id.to_string())
-                .join(ic_types::ReplicaVersion::default().to_string()),
-            Duration::from_secs(config.retention_time_secs),
-            Duration::from_secs(config.purging_interval_secs),
-            metrics_registry.clone(),
-            log.clone(),
-            Arc::new(SysTimeSource::new()),
-        )
-    });
-    let backup_sender = backup.as_ref().map(|b| b.1.clone());
+    let (backup, backup_sender) = artifact_pool_config
+        .backup_config
+        .as_ref()
+        .map(|config| {
+            Backup::new(
+                config.spool_path.clone(),
+                config
+                    .spool_path
+                    .join(subnet_id.to_string())
+                    .join(ic_types::ReplicaVersion::default().to_string()),
+                Duration::from_secs(config.retention_time_secs),
+                Duration::from_secs(config.purging_interval_secs),
+                metrics_registry.clone(),
+                log.clone(),
+                Arc::new(SysTimeSource::new()),
+            )
+        })
+        .unzip();
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         // Note: it's important to pass the original proto which came from the command line (as
@@ -342,6 +345,9 @@ pub fn construct_ic_stack(
         config.nns_registry_replicator.poll_delay_duration_ms,
         max_certified_height_tx,
     );
+    if let Some(backup) = backup {
+        p2p_runner.push(Box::new(backup));
+    }
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
         rt_handle_http.clone(),
@@ -369,9 +375,6 @@ pub fn construct_ic_stack(
         max_certified_height_rx,
         finalized_ingress_height_rx,
     );
-    if let Some((backup, _)) = backup {
-        p2p_runner.push(Box::new(backup));
-    }
 
     Ok((
         state_manager,
