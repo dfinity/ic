@@ -86,8 +86,8 @@ pub struct PocketIc {
     reqwest_client: reqwest::Client,
     // the instance should only be deleted when dropping this handle if this handle owns the instance
     owns_instance: bool,
-    _log_guard: Option<WorkerGuard>,
     state_dir: Option<PocketIcState>,
+    _log_guard: Option<WorkerGuard>,
 }
 
 impl PocketIc {
