@@ -122,8 +122,8 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: false,
-            _log_guard: log_guard,
             state_dir: None,
+            _log_guard: log_guard,
         }
     }
 
@@ -212,8 +212,8 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: true,
-            _log_guard: log_guard,
             state_dir,
+            _log_guard: log_guard,
         }
     }
 
