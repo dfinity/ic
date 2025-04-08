@@ -231,23 +231,31 @@ mod test {
     use super::*;
     use crate::governance::Governance;
     use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
-    use crate::pb::v1::{Governance as GovernanceProto, VotingPowerEconomics};
+    use crate::pb::v1::Governance as GovernanceProto;
     use crate::test_utils::{
         test_subaccount_for_neuron_id, MockEnvironment, MockRandomness, StubCMC, StubIcpLedger,
     };
     use ic_base_types::PrincipalId;
+    use ic_nervous_system_common::ONE_MONTH_SECONDS;
     use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
     use ic_stable_structures::DefaultMemoryImpl;
     use icp_ledger::Subaccount;
     use std::sync::Arc;
 
-    fn make_neuron(id: u64, maturity_e8s: u64, staked_maturity_e8s: u64) -> Neuron {
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+
+    fn make_neuron(
+        id: u64,
+        maturity_e8s: u64,
+        staked_maturity_e8s: u64,
+        dissolve_delay_seconds: u64,
+    ) -> Neuron {
         let subaccount =
             Subaccount::try_from(test_subaccount_for_neuron_id(id).as_slice()).unwrap();
 
         let now = 123_456_789;
-        let dissolve_delay_seconds =
-            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
         let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
 
         let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
@@ -291,13 +299,22 @@ mod test {
     }
 
     #[test]
-    fn test_distribute_rewards_for_multiple_events_to_neurons() {
+    fn test_distribute_rewards_for_multiple_events_to_neurons_3_months() {
+        run_distribute_rewards_for_multiple_events_to_neurons(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_distribute_rewards_for_multiple_events_to_neurons_6_months() {
+        run_distribute_rewards_for_multiple_events_to_neurons(SIX_MONTHS);
+    }
+
+    fn run_distribute_rewards_for_multiple_events_to_neurons(dissolve_delay_seconds: u64) {
         let mut neurons = BTreeMap::new();
         for i in 0..5 {
-            neurons.insert(i, make_neuron(i, 1000, 1000));
+            neurons.insert(i, make_neuron(i, 1000, 1000, dissolve_delay_seconds));
         }
         for i in 5..10 {
-            let mut neuron = make_neuron(i, 1000, 1000);
+            let mut neuron = make_neuron(i, 1000, 1000, dissolve_delay_seconds);
             neuron.auto_stake_maturity = Some(true);
             neurons.insert(i, neuron);
         }
@@ -353,17 +370,26 @@ mod test {
     }
 
     #[test]
-    fn test_distributions_always_at_least_distributes_one() {
+    fn test_distributions_always_at_least_distributes_one_3_months() {
+        run_distributions_always_at_least_distributes_one(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_distributions_always_at_least_distributes_one_6_months() {
+        run_distributions_always_at_least_distributes_one(SIX_MONTHS);
+    }
+
+    fn run_distributions_always_at_least_distributes_one(dissolve_delay_seconds: u64) {
         // This test ensures that in the worst case, the task will always distribute at least one
         // reward (i.e. it does not check instructions before trying to do at least a single piece
         // of work)
 
         let mut neurons = BTreeMap::new();
         for i in 0..5 {
-            neurons.insert(i, make_neuron(i, 1000, 1000));
+            neurons.insert(i, make_neuron(i, 1000, 1000, dissolve_delay_seconds));
         }
         for i in 5..10 {
-            let mut neuron = make_neuron(i, 1000, 1000);
+            let mut neuron = make_neuron(i, 1000, 1000, dissolve_delay_seconds);
             neuron.auto_stake_maturity = Some(true);
             neurons.insert(i, neuron);
         }
@@ -392,16 +418,25 @@ mod test {
     }
 
     #[test]
-    fn test_distribute_pending_rewards() {
+    fn test_distribute_pending_rewards_3_months() {
+        run_distribute_pending_rewards(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_distribute_pending_rewards_6_months() {
+        run_distribute_pending_rewards(SIX_MONTHS);
+    }
+
+    fn run_distribute_pending_rewards(dissolve_delay_seconds: u64) {
         // We are testing recoverability of the system (i.e. it got stalled, but we didnt' lose data, and now
         // it is able to finish processing)
 
         let mut neurons = BTreeMap::new();
         for i in 0..5 {
-            neurons.insert(i, make_neuron(i, 1000, 1000));
+            neurons.insert(i, make_neuron(i, 1000, 1000, dissolve_delay_seconds));
         }
         for i in 5..10 {
-            let mut neuron = make_neuron(i, 1000, 1000);
+            let mut neuron = make_neuron(i, 1000, 1000, dissolve_delay_seconds);
             neuron.auto_stake_maturity = Some(true);
             neurons.insert(i, neuron);
         }

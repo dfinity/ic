@@ -610,6 +610,7 @@ mod test {
     use futures::FutureExt;
     use ic_base_types::PrincipalId;
     use ic_ledger_core::Tokens;
+    use ic_nervous_system_common::ONE_MONTH_SECONDS;
     use ic_nervous_system_long_message::in_test_temporarily_set_call_context_over_threshold;
     use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -619,6 +620,10 @@ mod test {
     use maplit::{btreemap, hashmap};
     use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::sync::Arc;
+
+    const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+
+    const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
 
     fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
         Ballot {
@@ -631,6 +636,7 @@ mod test {
         id: u64,
         cached_neuron_stake_e8s: u64,
         followees: HashMap<i32, Followees>,
+        dissolve_delay_seconds: u64,
     ) -> Neuron {
         let mut account = vec![0; 32];
         for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
@@ -639,8 +645,6 @@ mod test {
         let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
 
         let now = 123_456_789;
-        let dissolve_delay_seconds =
-            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
         let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
 
         let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
@@ -661,17 +665,27 @@ mod test {
     }
 
     #[test]
-    fn test_cast_vote_and_cascade_doesnt_cascade_neuron_management() {
+    fn test_cast_vote_and_cascade_doesnt_cascade_neuron_management_3_months() {
+        run_cast_vote_and_cascade_doesnt_cascade_neuron_management(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_doesnt_cascade_neuron_management_6_months() {
+        run_cast_vote_and_cascade_doesnt_cascade_neuron_management(SIX_MONTHS);
+    }
+
+    fn run_cast_vote_and_cascade_doesnt_cascade_neuron_management(dissolve_delay_seconds: u64) {
         let now = 1000;
         let topic = Topic::NeuronManagement;
 
-        let make_neuron = |id: u64, followees: Vec<u64>| {
+        let make_neuron = |id: u64, followees: Vec<u64>, dissolve_delay_seconds: u64| {
             make_neuron(
                 id,
                 100,
                 hashmap! {topic.into() => Followees {
                     followees: followees.into_iter().map(|id| NeuronId { id }).collect(),
                 }},
+                dissolve_delay_seconds,
             )
         };
 
@@ -680,7 +694,7 @@ mod test {
                                       id: u64,
                                       followees: Vec<u64>,
                                       vote: Vote| {
-            let neuron = make_neuron(id, followees);
+            let neuron = make_neuron(id, followees, dissolve_delay_seconds);
             let deciding_voting_power =
                 neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
@@ -689,7 +703,7 @@ mod test {
 
         let add_neuron_without_ballot =
             |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
-                let neuron = make_neuron(id, followees);
+                let neuron = make_neuron(id, followees, dissolve_delay_seconds);
                 neuron_map.insert(id, neuron);
             };
 
@@ -773,17 +787,27 @@ mod test {
     }
 
     #[test]
-    fn test_cast_vote_and_cascade_works() {
+    fn test_cast_vote_and_cascade_works_3_months() {
+        run_cast_vote_and_cascade_works(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_works_6_months() {
+        run_cast_vote_and_cascade_works(SIX_MONTHS);
+    }
+
+    fn run_cast_vote_and_cascade_works(dissolve_delay_seconds: u64) {
         let now = 1000;
         let topic = Topic::NetworkCanisterManagement;
 
-        let make_neuron = |id: u64, followees: Vec<u64>| {
+        let make_neuron = |id: u64, followees: Vec<u64>, dissolve_delay_seconds: u64| {
             make_neuron(
                 id,
                 100,
                 hashmap! {topic.into() => Followees {
                     followees: followees.into_iter().map(|id| NeuronId { id }).collect(),
                 }},
+                dissolve_delay_seconds,
             )
         };
 
@@ -792,7 +816,7 @@ mod test {
                                       id: u64,
                                       followees: Vec<u64>,
                                       vote: Vote| {
-            let neuron = make_neuron(id, followees);
+            let neuron = make_neuron(id, followees, dissolve_delay_seconds);
             let deciding_voting_power =
                 neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
@@ -801,7 +825,7 @@ mod test {
 
         let add_neuron_without_ballot =
             |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
-                let neuron = make_neuron(id, followees);
+                let neuron = make_neuron(id, followees, dissolve_delay_seconds);
                 neuron_map.insert(id, neuron);
             };
 
@@ -935,14 +959,27 @@ mod test {
     }
 
     #[test]
-    fn test_continue_processsing() {
+    fn test_continue_processsing_3_months() {
+        run_continue_processsing(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_continue_processsing_6_months() {
+        run_continue_processsing(SIX_MONTHS);
+    }
+
+    fn run_continue_processsing(dissolve_delay_seconds: u64) {
         let mut state_machine =
             ProposalVotingStateMachine::new(ProposalId { id: 0 }, Topic::NetworkEconomics);
 
         let mut ballots = HashMap::new();
         let mut neurons = BTreeMap::new();
 
-        add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(1, 101, hashmap! {}));
+        add_neuron_with_ballot(
+            &mut neurons,
+            &mut ballots,
+            make_neuron(1, 101, hashmap! {}, dissolve_delay_seconds),
+        );
         add_neuron_with_ballot(
             &mut neurons,
             &mut ballots,
@@ -952,6 +989,7 @@ mod test {
                 hashmap! {Topic::NetworkEconomics.into() => Followees {
                     followees: vec![NeuronId { id: 1 }],
                 }},
+                dissolve_delay_seconds,
             ),
         );
         let mut neuron_store = NeuronStore::new(neurons);
@@ -1046,7 +1084,16 @@ mod test {
     }
 
     #[test]
-    fn test_cyclic_following_will_terminate() {
+    fn test_cyclic_following_will_terminate_3_months() {
+        run_cyclic_following_will_terminate(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_cyclic_following_will_terminate_6_months() {
+        run_cyclic_following_will_terminate(SIX_MONTHS);
+    }
+
+    fn run_cyclic_following_will_terminate(dissolve_delay_seconds: u64) {
         let mut state_machine =
             ProposalVotingStateMachine::new(ProposalId { id: 0 }, Topic::NetworkEconomics);
 
@@ -1062,6 +1109,7 @@ mod test {
                 hashmap! {Topic::NetworkEconomics.into() => Followees {
                     followees: vec![NeuronId { id: 2 }],
                 }},
+                dissolve_delay_seconds,
             ),
         );
         add_neuron_with_ballot(
@@ -1073,6 +1121,7 @@ mod test {
                 hashmap! {Topic::NetworkEconomics.into() => Followees {
                     followees: vec![NeuronId { id: 1 }],
                 }},
+                dissolve_delay_seconds,
             ),
         );
 
@@ -1092,7 +1141,18 @@ mod test {
     }
 
     #[test]
-    fn test_cast_vote_and_cascade_follow_always_finishes_processing_ballots() {
+    fn test_cast_vote_and_cascade_follow_always_finishes_processing_ballots_3_months() {
+        run_cast_vote_and_cascade_follow_always_finishes_processing_ballots(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_follow_always_finishes_processing_ballots_6_months() {
+        run_cast_vote_and_cascade_follow_always_finishes_processing_ballots(SIX_MONTHS);
+    }
+
+    fn run_cast_vote_and_cascade_follow_always_finishes_processing_ballots(
+        dissolve_delay_seconds: u64,
+    ) {
         let _a = temporarily_set_over_soft_message_limit(true);
         let topic = Topic::NetworkEconomics;
         let mut neurons = BTreeMap::new();
@@ -1108,7 +1168,11 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut neurons,
+                &mut ballots,
+                make_neuron(i, 100, followees, dissolve_delay_seconds),
+            );
         }
 
         let governance_proto = GovernanceProto {
@@ -1169,7 +1233,16 @@ mod test {
     }
 
     #[test]
-    fn test_cast_vote_and_cascade_breaks_if_over_hard_limit() {
+    fn test_cast_vote_and_cascade_breaks_if_over_hard_limit_3_months() {
+        run_cast_vote_and_cascade_breaks_if_over_hard_limit(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_breaks_if_over_hard_limit_6_months() {
+        run_cast_vote_and_cascade_breaks_if_over_hard_limit(SIX_MONTHS);
+    }
+
+    fn run_cast_vote_and_cascade_breaks_if_over_hard_limit(dissolve_delay_seconds: u64) {
         let topic = Topic::NetworkEconomics;
         let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
@@ -1184,7 +1257,11 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut neurons,
+                &mut ballots,
+                make_neuron(i, 100, followees, dissolve_delay_seconds),
+            );
         }
 
         let governance_proto = GovernanceProto {
@@ -1228,7 +1305,24 @@ mod test {
     }
 
     #[test]
-    fn test_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit() {
+    fn test_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit_3_months(
+    ) {
+        run_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit(
+            THREE_MONTHS,
+        );
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit_6_months(
+    ) {
+        run_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit(
+            SIX_MONTHS,
+        );
+    }
+
+    fn run_cast_vote_and_cascade_follow_doesnt_record_recent_ballots_after_first_soft_limit(
+        dissolve_delay_seconds: u64,
+    ) {
         let _a = temporarily_set_over_soft_message_limit(true);
         let topic = Topic::NetworkEconomics;
         let mut neurons = BTreeMap::new();
@@ -1245,7 +1339,11 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut neurons,
+                &mut ballots,
+                make_neuron(i, 100, followees, dissolve_delay_seconds),
+            );
         }
 
         let governance_proto = GovernanceProto {
@@ -1327,7 +1425,18 @@ mod test {
     }
 
     #[test]
-    fn test_process_voting_state_machines_processes_votes_and_executes_proposals() {
+    fn test_process_voting_state_machines_processes_votes_and_executes_proposals_3_months() {
+        run_process_voting_state_machines_processes_votes_and_executes_proposals(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_process_voting_state_machines_processes_votes_and_executes_proposals_6_months() {
+        run_process_voting_state_machines_processes_votes_and_executes_proposals(SIX_MONTHS);
+    }
+
+    fn run_process_voting_state_machines_processes_votes_and_executes_proposals(
+        dissolve_delay_seconds: u64,
+    ) {
         let topic = Topic::Governance;
         let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
@@ -1343,7 +1452,11 @@ mod test {
                     },
                 );
             }
-            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+            add_neuron_with_ballot(
+                &mut neurons,
+                &mut ballots,
+                make_neuron(i, 100, followees, dissolve_delay_seconds),
+            );
         }
 
         let motion = Motion {
@@ -1420,7 +1533,18 @@ mod test {
     }
 
     #[test]
-    fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
+    fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_3_months() {
+        run_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(THREE_MONTHS);
+    }
+
+    #[test]
+    fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_6_months() {
+        run_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(SIX_MONTHS);
+    }
+
+    fn run_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(
+        dissolve_delay_seconds: u64,
+    ) {
         let now = 1733433219;
         let topic = Topic::Governance;
         let mut neurons = BTreeMap::new();
@@ -1440,7 +1564,7 @@ mod test {
             add_neuron_with_ballot(
                 &mut neurons,
                 &mut ballots,
-                make_neuron(i, 100_000_000, followees),
+                make_neuron(i, 100_000_000, followees, dissolve_delay_seconds),
             );
         }
 
@@ -1457,6 +1581,7 @@ mod test {
                 100_000_000,
                 hashmap! {
                 topic as i32 => Followees { followees: vec![NeuronId { id: 1 }] }},
+                dissolve_delay_seconds,
             ),
         );
 
