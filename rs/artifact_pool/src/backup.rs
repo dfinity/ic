@@ -93,10 +93,14 @@ impl Metrics {
     }
 }
 
-// The number of backup / purging rounds, that can queue up before we start
-// blocking consensus. Currently, we have a full rendevouz, i.e. consensus
-// blocks when the artifacts of the last round have not persisted yet.
-const QUEUE_LENGTH: usize = 0;
+// The number of backup rounds, that can queue up before we start
+// blocking consensus/certification.
+const BACKUP_QUEUE_LENGTH: usize = 50;
+
+// The number of purging rounds, that can queue up before we start
+// blocking. Currently, we have a full rendevouz, i.e. the backup thread
+// blocks when the last purging request hasn't finished yet.
+const PURGING_QUEUE_LENGTH: usize = 0;
 
 pub enum BackupRequest {
     Backup(Vec<ConsensusMessage>),
@@ -154,7 +158,7 @@ impl BackupThread {
     }
 
     fn start(mut self) -> (SyncSender<BackupRequest>, JoinHandle<()>) {
-        let (tx, rx) = sync_channel(QUEUE_LENGTH);
+        let (tx, rx) = sync_channel(BACKUP_QUEUE_LENGTH);
         let handle = thread::Builder::new()
             .name("BackupThread".to_string())
             .spawn(move || self.run(rx))
@@ -296,7 +300,7 @@ impl PurgingThread {
     }
 
     fn start(mut self) -> (SyncSender<PurgingRequest>, JoinHandle<()>) {
-        let (tx, rx) = sync_channel(QUEUE_LENGTH);
+        let (tx, rx) = sync_channel(PURGING_QUEUE_LENGTH);
         let handle = thread::Builder::new()
             .name("BackupPurgingThread".to_string())
             .spawn(move || self.run(rx))
