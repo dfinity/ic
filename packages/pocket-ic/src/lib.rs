@@ -109,6 +109,7 @@ pub struct PocketIcBuilder {
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
+    read_only_state_dir: Option<PathBuf>,
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
@@ -123,6 +124,7 @@ impl PocketIcBuilder {
             server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            read_only_state_dir: None,
             state_dir: None,
             nonmainnet_features: false,
             log_level: None,
@@ -142,6 +144,7 @@ impl PocketIcBuilder {
             self.server_url,
             self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
@@ -155,6 +158,7 @@ impl PocketIcBuilder {
             self.server_url,
             self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
@@ -182,6 +186,11 @@ impl PocketIcBuilder {
 
     pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
         self.state_dir = Some(state_dir);
+        self
+    }
+
+    pub fn with_read_only_state_dir(mut self, read_only_state_dir: PathBuf) -> Self {
+        self.read_only_state_dir = Some(read_only_state_dir);
         self
     }
 
@@ -392,6 +401,7 @@ impl PocketIc {
         server_url: Option<Url>,
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
+        read_only_state_dir: Option<PathBuf>,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
@@ -413,6 +423,7 @@ impl PocketIc {
                 server_url,
                 server_binary,
                 max_request_time_ms,
+                read_only_state_dir,
                 state_dir,
                 nonmainnet_features,
                 log_level,
@@ -1807,6 +1818,23 @@ pub fn get_default_effective_canister_id(
     runtime.block_on(crate::nonblocking::get_default_effective_canister_id(
         pocket_ic_url,
     ))
+}
+
+pub fn copy_dir(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

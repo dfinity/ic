@@ -1,10 +1,3 @@
-pub mod host_memory;
-/// pub for usage in fuzzing
-#[doc(hidden)]
-pub mod linker;
-mod signal_stack;
-pub mod system_api_complexity;
-
 use std::{
     cell::Ref,
     collections::HashMap,
@@ -16,7 +9,6 @@ use std::{
 };
 
 use ic_management_canister_types_private::Global;
-use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
     unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
     StoreLimits, StoreLimitsBuilder, Val, ValType,
@@ -52,6 +44,16 @@ use crate::{
 use super::InstanceRunResult;
 
 use self::host_memory::{MemoryPageSize, MemoryStart};
+
+pub mod host_memory;
+/// pub for usage in fuzzing
+#[doc(hidden)]
+pub mod linker;
+mod signal_stack;
+pub mod system_api;
+pub mod system_api_complexity;
+
+use system_api::{ModificationTracking, SystemApiImpl};
 
 #[cfg(test)]
 mod wasmtime_embedder_tests;
