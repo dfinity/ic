@@ -18,7 +18,7 @@ on:
         type: string
       runner_python_test:
         required: false
-        type: strong 
+        type: string 
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
