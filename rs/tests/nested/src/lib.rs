@@ -178,8 +178,8 @@ pub fn upgrade_hostos(env: TestEnv) {
             host_boot_id_pre_upgrade
         ),
         logger.clone(),
-        NODE_REGISTRATION_TIMEOUT,
-        NODE_REGISTRATION_BACKOFF,
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(5),
         || {
             let host_boot_id = retrieve_host_boot_id();
             if host_boot_id != host_boot_id_pre_upgrade {
