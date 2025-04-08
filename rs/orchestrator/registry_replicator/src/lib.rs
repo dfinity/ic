@@ -300,7 +300,7 @@ impl RegistryReplicator {
         );
     }
 
-    /// Calls [`Self::poll()`] asynchronously and spawns a background task that
+    /// Initializes the registry local store asynchronously and spawns a background task that
     /// continuously polls for updates.
     /// The background task is stopped when the object is dropped.
     pub async fn start_polling_in_background(
@@ -315,8 +315,8 @@ impl RegistryReplicator {
         Ok(handle)
     }
 
-    /// Calls [`Self::poll()`] asynchronously and returns future that
-    /// continuously polls for updates.
+    /// Initializes the registry local store asynchronously and returns future that
+    /// continuously polls for registry updates.
     pub async fn start_polling(
         &self,
         nns_urls: Vec<Url>,
