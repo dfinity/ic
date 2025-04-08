@@ -1,9 +1,12 @@
 // To run the benchmarks:
 // bazel run //rs/execution_environment:management_canister_bench -- canister_snapshot
 use crate::utils::env;
+use candid::Decode;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
+    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, LoadCanisterSnapshotArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, TakeCanisterSnapshotArgs,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, Cycles, SnapshotId};
@@ -189,6 +192,81 @@ fn load_canister_snapshot_bench<M: criterion::measurement::Measurement>(
     });
 }
 
+fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
+    group: &mut BenchmarkGroup<M>,
+    bench_name: &str,
+    canister_size: u64,
+) {
+    group.bench_function(bench_name, |b| {
+        b.iter_batched(
+            || env_and_canister_snapshot(canister_size),
+            |(env, canister_id, snapshot_id)| {
+                let md = env
+                    .read_canister_snapshot_metadata(&ReadCanisterSnapshotMetadataArgs::new(
+                        canister_id,
+                        snapshot_id,
+                    ))
+                    .expect("Error reading snapshot metadata");
+                let md = Decode!(&md, ReadCanisterSnapshotMetadataResponse).unwrap();
+                let heap_size = md.wasm_memory_size;
+                let mut cnt = 0;
+                let slice_size = 2_000_000;
+                while cnt * slice_size < heap_size {
+                    let size = u64::min(slice_size, heap_size - cnt * slice_size);
+                    let args = ReadCanisterSnapshotDataArgs::new(
+                        canister_id,
+                        snapshot_id,
+                        CanisterSnapshotDataKind::MainMemory {
+                            offset: cnt * slice_size,
+                            size,
+                        },
+                    );
+                    let _ = env
+                        .read_canister_snapshot_data(&args)
+                        .expect("Error reading snapshot data");
+                    cnt += 1;
+                }
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    group.bench_function(format!("{bench_name}+checkpoint"), |b| {
+        b.iter_batched(
+            || env_and_canister_snapshot(canister_size),
+            |(env, canister_id, snapshot_id)| {
+                let md = env
+                    .read_canister_snapshot_metadata(&ReadCanisterSnapshotMetadataArgs::new(
+                        canister_id,
+                        snapshot_id,
+                    ))
+                    .expect("Error reading snapshot metadata");
+                let md = Decode!(&md, ReadCanisterSnapshotMetadataResponse).unwrap();
+                let heap_size = md.wasm_memory_size;
+                let mut cnt = 0;
+                let slice_size = 2_000_000;
+                while cnt * slice_size < heap_size {
+                    let size = u64::min(slice_size, heap_size - cnt * slice_size);
+                    let args = ReadCanisterSnapshotDataArgs::new(
+                        canister_id,
+                        snapshot_id,
+                        CanisterSnapshotDataKind::MainMemory {
+                            offset: cnt * slice_size,
+                            size,
+                        },
+                    );
+                    let _ = env
+                        .read_canister_snapshot_data(&args)
+                        .expect("Error reading snapshot data");
+                    cnt += 1;
+                }
+                env.set_checkpoints_enabled(true);
+                env.tick();
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 pub fn benchmark(c: &mut Criterion) {
     let sizes = [
         ("10 MiB", 10 * MIB),
@@ -219,6 +297,12 @@ pub fn benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("load_canister_snapshot");
     for (name, size) in sizes {
         load_canister_snapshot_bench(&mut group, name, size);
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("read_canister_snapshot_data");
+    for (name, size) in sizes {
+        read_canister_snapshot_data_bench(&mut group, name, size);
     }
     group.finish();
 }

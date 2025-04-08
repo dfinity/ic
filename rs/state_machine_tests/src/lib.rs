@@ -7,6 +7,7 @@ use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
@@ -33,7 +34,9 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    execution_environment::{
+        HypervisorResult, IngressFilterService, IngressHistoryReader, QueryExecutionService,
+    },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
@@ -49,6 +52,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -1591,10 +1595,12 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (mut subnet_config, hypervisor_config) = match config {
+        let (mut subnet_config, mut hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
+        hypervisor_config.canister_snapshot_download = FlagStatus::Enabled;
+        hypervisor_config.canister_snapshot_upload = FlagStatus::Enabled;
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -3246,6 +3252,52 @@ impl StateMachine {
             WasmResult::Reply(data) => Ok(data),
             WasmResult::Reject(reason) => {
                 panic!("load_canister_snapshot call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn read_canister_snapshot_metadata(
+        &self,
+        args: &ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ReadCanisterSnapshotMetadata,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("read_canister_snapshot_metadata call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn read_canister_snapshot_data(
+        &self,
+        args: &ReadCanisterSnapshotDataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ReadCanisterSnapshotData,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("read_canister_snapshot_data call rejected: {}", reason)
             }
         })?
     }
