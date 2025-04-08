@@ -3388,7 +3388,10 @@ impl Governance {
                  be submitted. Please submit `SetTopicsForCustomProposals` to do this.",
                 proposal.action
             );
-            return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, message));
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                message,
+            ));
         };
 
         // Voting duration parameters.
