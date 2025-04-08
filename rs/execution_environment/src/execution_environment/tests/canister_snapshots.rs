@@ -18,7 +18,7 @@ use ic_replicated_state::{
     canister_snapshots::SnapshotOperation,
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
-        system_state::CyclesUseCase,
+        system_state::{wasm_chunk_store::CHUNK_SIZE, CyclesUseCase},
         WASM_PAGE_SIZE_IN_BYTES,
     },
     CanisterState, ExecutionState, SchedulerState,
@@ -970,6 +970,11 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
         test.subnet_available_memory(),
         initial_subnet_available_memory
     );
+}
+
+#[test]
+fn chunk_size_multiple_of_os_page_size() {
+    assert!(CHUNK_SIZE % PAGE_SIZE == 0);
 }
 
 #[test]

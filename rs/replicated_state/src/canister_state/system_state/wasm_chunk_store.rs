@@ -14,7 +14,7 @@ use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 /// of the chunk store assumes every chunk is maximal, so that the number of
 /// entries in the chunk store is limited to a small number, i.e.,
 /// 'max_chunk_store_capacity' / CHUNK_SIZE = 100 entries.
-const CHUNK_SIZE: u64 = 1024 * 1024;
+pub const CHUNK_SIZE: u64 = 1024 * 1024;
 /// Depends on the OS, because OS pages have different sizes.
 const PAGES_PER_CHUNK: u64 = CHUNK_SIZE / (PAGE_SIZE as u64);
 
