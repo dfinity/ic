@@ -82,6 +82,12 @@ fn make_checkpoint_and_get_state_impl(
             err
         )
     });
+    #[allow(clippy::disallowed_methods)]
+    let (sender, recv) = unbounded();
+    tip_channel
+        .send(TipRequest::Wait { sender })
+        .expect("failed to send TipHandler Wait message");
+    recv.recv().expect("failed to wait for TipHandler thread");
     load_checkpoint_and_validate_parallel(
         &cp_layout,
         state.metadata.own_subnet_type,

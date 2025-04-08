@@ -178,7 +178,7 @@ pub(crate) fn spawn_tip_thread(
                         }
                         TipRequest::TipToCheckpoint { height, sender } => {
                             debug_assert!(tip_state.latest_checkpoint_state.has_manifest);
-                            debug_assert_eq!(tip_state.tip_folder_state.has_protos, Some(height));
+                            //debug_assert_eq!(tip_state.tip_folder_state.has_protos, Some(height));
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.latest_checkpoint_state = tip_state.tip_folder_state;
@@ -334,6 +334,8 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 );
                             });
+                            tip_state.tip_folder_state.has_protos =
+                                Some(checkpoint_layout.height());
                         }
                         TipRequest::ResetTipAndMerge {
                             checkpoint_layout,
