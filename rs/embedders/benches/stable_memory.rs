@@ -136,6 +136,7 @@ fn query_bench(
 ) {
     embedders_bench::query_bench(
         c,
+        "embedders:stable_memory/query",
         name,
         wasm,
         &Encode!(&structure, &initial_count).unwrap(),
@@ -157,6 +158,7 @@ fn update_bench(
 ) {
     embedders_bench::update_bench(
         c,
+        "embedders:stable_memory/update",
         name,
         wasm,
         &Encode!(&structure, &initial_count).unwrap(),
