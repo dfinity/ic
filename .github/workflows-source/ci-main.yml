@@ -13,6 +13,10 @@ on:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
+    inputs:
+      runner:
+        required: false
+        type: string
 
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
@@ -65,7 +69,7 @@ anchors:
 jobs:
   config:
     name: Set Config
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     outputs:
       release_build: ${{ steps.config.outputs.release_build }}
       diff_only: ${{ steps.config.outputs.diff_only }}
