@@ -51,7 +51,7 @@ anchors:
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
     runs-on: 
-      labels: ${{ inputs.runner || 'ubuntu-24-large' }}
+      labels: ${{ inputs.runner }}
     container:
       <<: *image
     timeout-minutes: 30
