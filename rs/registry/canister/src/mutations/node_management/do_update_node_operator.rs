@@ -16,9 +16,8 @@ impl Registry {
     /// that is in the same data center and is related to the
     /// same node provider.
     ///
-    /// Expected caller of this function has to be a principal
-    /// related to a node provider. All other principals will
-    /// be rejected.
+    /// Expected caller of this function has to be a node provider.
+    /// All other principals will be rejected.
     ///
     /// It is expected that all the nodes currently have set
     /// `old_node_operator` as their node operator.
@@ -26,31 +25,36 @@ impl Registry {
     /// Both `old_node_operator` and `new_node_operator` must
     /// belong to the same node provider, who is the caller,
     /// and must be within the same data center.
-    pub fn do_replace_operator(
+    pub fn do_update_node_operator(
         &mut self,
         payload: UpdateNodeOperatorPayload,
     ) -> Result<(), String> {
         let caller_id = dfn_core::api::caller();
         println!(
-            "{}do_replace_operator: {:?} caller: {:?}",
+            "{}do_update_node_operator: {:?} caller: {:?}",
             LOG_PREFIX, payload, caller_id
         );
 
-        self.do_replace_operator_with_caller(payload, caller_id)
+        self.do_update_node_operator_with_caller(payload, caller_id)
     }
 
-    fn do_replace_operator_with_caller(
+    fn do_update_node_operator_with_caller(
         &mut self,
         payload: UpdateNodeOperatorPayload,
         caller_id: PrincipalId,
     ) -> Result<(), String> {
         payload
             .validate()
-            .map_err(|e| format!("{}do_replace_operator: {}", LOG_PREFIX, e))?;
+            .map_err(|e| format!("{}do_update_node_operator: {}", LOG_PREFIX, e))?;
 
-        let node_ids = payload.node_ids.clone().unwrap();
-        let old_operator_id = payload.old_operator_id.unwrap();
-        let new_operator_id = payload.new_operator_id.unwrap();
+        let UpdateNodeOperatorPayload {
+            node_ids: Some(ref node_ids),
+            new_operator_id: Some(new_operator_id),
+            old_operator_id: Some(old_operator_id),
+        } = payload
+        else {
+            unreachable!("After validation this should not happen.")
+        };
 
         // Fetch operator records and extract
         // the records related to the provided
@@ -65,7 +69,7 @@ impl Registry {
         )?;
 
         let mut valid_mutations: Vec<_> = self
-            .maybe_fetch_nodes_to_update(&node_ids, &new_operator_id, &old_operator_id)?
+            .maybe_fetch_nodes_to_update(node_ids, &new_operator_id, &old_operator_id)?
             .into_iter()
             .map(|(node_id, node_record)| {
                 let node_key = make_node_record_key(node_id);
@@ -85,7 +89,7 @@ impl Registry {
         let node_mutations = valid_mutations.len() as u64;
 
         if node_mutations > new_operator_record.node_allowance {
-            return Err(format!("{}do_replace_operator: New operator cannot accept {} nodes due to remaining allowance {}", LOG_PREFIX, node_mutations, new_operator_record.node_allowance));
+            return Err(format!("{}do_update_node_operator: New operator cannot accept {} nodes due to remaining allowance {}", LOG_PREFIX, node_mutations, new_operator_record.node_allowance));
         }
 
         // Decrement new operator allowance.
@@ -113,7 +117,7 @@ impl Registry {
         self.maybe_apply_mutation_internal(valid_mutations);
 
         println!(
-            "{}do_replace_operator: Finished executing payload: {:?}",
+            "{}do_update_node_operator: Finished executing payload: {:?}",
             LOG_PREFIX, payload
         );
 
@@ -136,14 +140,14 @@ impl Registry {
         for node_id in provided_node_ids {
             let node_record = self.get_node(*node_id).ok_or_else(|| {
                 format!(
-                    "{}do_replace_operator: Node not found: {}",
+                    "{}do_update_node_operator: Node not found: {}",
                     LOG_PREFIX, node_id
                 )
             })?;
 
             if node_record.node_operator_id.eq(new_operator_id.as_slice()) {
                 println!(
-                    "{}do_replace_operator: Node {} already belongs to node operator {}",
+                    "{}do_update_node_operator: Node {} already belongs to node operator {}",
                     LOG_PREFIX, node_id, new_operator_id
                 );
                 continue;
@@ -151,7 +155,7 @@ impl Registry {
 
             if node_record.node_operator_id.ne(old_operator_id.as_slice()) {
                 return Err(format!(
-                    "{}do_replace_operator: Node {} does not belong to node operator {}",
+                    "{}do_update_node_operator: Node {} does not belong to node operator {}",
                     LOG_PREFIX, node_id, old_operator_id
                 ));
             }
@@ -171,11 +175,11 @@ impl Registry {
         let operators: Vec<_> = self
             .get_node_operators_and_dcs_of_node_provider(*provider_id)
             .map(|operators_and_dcs| operators_and_dcs.into_iter().map(|(_, o)| o).collect())
-            .map_err(|e| format!("{}do_replace_operator: {:?}", LOG_PREFIX, e))?;
+            .map_err(|e| format!("{}do_update_node_operator: {:?}", LOG_PREFIX, e))?;
 
         if operators.is_empty() {
             return Err(format!(
-                "{}do_replace_operator: Unknown node provider {}",
+                "{}do_update_node_operator: Unknown node provider {}",
                 LOG_PREFIX, provider_id
             ));
         }
@@ -202,7 +206,7 @@ impl Registry {
             (Ok(old_operator_record), Ok(new_operator_record))
                 if old_operator_record.dc_id != new_operator_record.dc_id =>
             {
-                Err(format!("{}do_replace_operator: Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}", LOG_PREFIX, old_operator_id, old_operator_record.dc_id, new_operator_id, new_operator_record.dc_id))
+                Err(format!("{}do_update_node_operator: Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}", LOG_PREFIX, old_operator_id, old_operator_record.dc_id, new_operator_id, new_operator_record.dc_id))
             }
             (Ok(old_operator_record), Ok(new_operator_record)) => {
                 Ok((old_operator_record.clone(), new_operator_record.clone()))
@@ -228,7 +232,7 @@ fn find_node_operator_record_for_provider<'a>(
         .find(|o| o.node_operator_principal_id == operator)
         .ok_or_else(|| {
             format!(
-                "{}do_replace_operator: Operator {} not found for provider {}",
+                "{}do_update_node_operator: Operator {} not found for provider {}",
                 LOG_PREFIX, operator_id, provider
             )
         })
@@ -371,7 +375,7 @@ mod tests {
         ]);
 
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(1), operator(2), &[node(1)]),
                 caller(99),
             )
@@ -391,7 +395,7 @@ mod tests {
 
         // Old operator should not be found in the registry
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(3), operator(2), &[node(1)]),
                 caller(1),
             )
@@ -403,7 +407,7 @@ mod tests {
 
         // New operator should not be found in the registry
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(1), operator(4), &[node(1)]),
                 caller(1),
             )
@@ -427,7 +431,7 @@ mod tests {
         ]);
 
         registry
-            .do_replace_operator_with_caller(payload(operator(1), operator(2), &[node(1)]), caller(1))
+            .do_update_node_operator_with_caller(payload(operator(1), operator(2), &[node(1)]), caller(1))
             .assert_err_contains(&format!(
                 "Old node operator and new node operator are in different data centers. Old node operator {} is in {} but the new node operator {} is in {}",
                 operator(1),
@@ -449,7 +453,7 @@ mod tests {
         ]);
 
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(1), operator(2), &[node(1), node(2)]),
                 caller(1),
             )
@@ -471,7 +475,7 @@ mod tests {
 
         let version_before_replacement = registry.latest_version();
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(1), operator(2), &[node(1), node(2), node(3)]),
                 caller(1),
             )
@@ -494,7 +498,7 @@ mod tests {
         ]);
 
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(1), operator(2), &[node(1), node(2)]),
                 caller(1),
             )
@@ -519,7 +523,7 @@ mod tests {
         ]);
 
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(1), operator(2), &[node(1), node(2), node(3)]),
                 caller(1),
             )
@@ -548,7 +552,7 @@ mod tests {
 
         let version_before = registry.latest_version();
         registry
-            .do_replace_operator_with_caller(
+            .do_update_node_operator_with_caller(
                 payload(operator(1), operator(2), &[first_node, second_node]),
                 caller(1),
             )
