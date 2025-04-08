@@ -7746,7 +7746,7 @@ impl Governance {
         // `rewards`
         for np in &self.heap_data.node_providers {
             if let Some(np_id) = &np.id {
-                let xdr_permyriad_reward = *reg_rewards.get(&np_id).unwrap_or(&0);
+                let xdr_permyriad_reward = *reg_rewards.get(np_id).unwrap_or(&0);
 
                 if let Some(reward_node_provider) =
                     get_node_provider_reward(np, xdr_permyriad_reward, xdr_permyriad_per_icp)
@@ -7841,7 +7841,7 @@ impl Governance {
             return Ok((rewards, registry_version));
         }
 
-        return Err(GovernanceError::new_with_message(
+        Err(GovernanceError::new_with_message(
             ErrorType::Unspecified,
             "get_node_providers_monthly_xdr_rewards returned empty response, \
                 which should be impossible.",
