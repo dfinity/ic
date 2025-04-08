@@ -80,6 +80,8 @@ All virtual machines are configured using the libvirt XML format. The configurat
 
 This template is used to generate the actual XML configuration. The systemd service `generate-guestos-config.service` executes this step, which is necessary to inject the deterministically generated MAC address.
 
+The GuestOS VM is configured with CPU passthrough. This configuration allows the GuestOS to directly access the physical CPU features and capabilities.
+
 == Firewall
 
 The hard-coded firewall ruleset is rather restrictive. A new disk-image has to be proposed and blessed in order to update the rules.
