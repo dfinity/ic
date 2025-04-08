@@ -1021,7 +1021,7 @@ fn serialize_snapshot_to_tip(
             canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
-            binary_hash: Some(canister_snapshot.canister_module().module_hash().into()),
+            binary_hash: canister_snapshot.canister_module().module_hash().into(),
             certified_data: canister_snapshot.certified_data().clone(),
             wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
             stable_memory_size: canister_snapshot.stable_memory().size,

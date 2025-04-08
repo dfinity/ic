@@ -208,7 +208,7 @@ fn test_canister_snapshots_decode() {
         canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
-        binary_hash: Some(WasmHash::from(&CanisterModule::new(vec![2, 3, 4]))),
+        binary_hash: WasmHash::from(&CanisterModule::new(vec![2, 3, 4])),
         certified_data: vec![3, 4, 7],
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         stable_memory_size: NumWasmPages::new(10),

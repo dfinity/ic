@@ -197,7 +197,7 @@ pub struct CanisterSnapshotBits {
     /// The canister version at the time of taking the snapshot.
     pub canister_version: u64,
     /// The hash of the canister wasm.
-    pub binary_hash: Option<WasmHash>,
+    pub binary_hash: WasmHash,
     /// The certified data blob belonging to the canister.
     pub certified_data: Vec<u8>,
     /// The metadata required for a wasm chunk store.
@@ -2818,7 +2818,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
             canister_id: Some((item.canister_id).into()),
             taken_at_timestamp: item.taken_at_timestamp.as_nanos_since_unix_epoch(),
             canister_version: item.canister_version,
-            binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
+            binary_hash: item.binary_hash.to_vec(),
             certified_data: item.certified_data.clone(),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             stable_memory_size: item.stable_memory_size.get() as u64,
@@ -2848,18 +2848,13 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         let canister_id: CanisterId =
             try_from_option_field(item.canister_id, "CanisterSnapshotBits::canister_id")?;
 
-        let binary_hash = match item.binary_hash {
-            Some(hash) => {
-                let hash: [u8; 32] =
-                    hash.try_into()
-                        .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                            typ: "BinaryHash",
-                            err: format!("Expected a 32-byte long module hash, got {:?}", e),
-                        })?;
-                Some(hash.into())
-            }
-            None => None,
-        };
+        let binary_hash: [u8; 32] =
+            item.binary_hash
+                .try_into()
+                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
+                    typ: "BinaryHash",
+                    err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                })?;
 
         let mut exported_globals = Vec::with_capacity(item.exported_globals.len());
         for global in item.exported_globals.into_iter() {
@@ -2882,7 +2877,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             canister_id,
             taken_at_timestamp: Time::from_nanos_since_unix_epoch(item.taken_at_timestamp),
             canister_version: item.canister_version,
-            binary_hash,
+            binary_hash: WasmHash::from(binary_hash),
             certified_data: item.certified_data,
             wasm_chunk_store_metadata: try_from_option_field(
                 item.wasm_chunk_store_metadata,
