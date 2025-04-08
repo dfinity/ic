@@ -13,7 +13,7 @@ jobs:
     secrets: inherit
     with:
       runner: dind-small
-      ci-main-external:
+  ci-main-external:
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
