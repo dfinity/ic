@@ -493,9 +493,9 @@ impl CanisterSnapshot {
 /// Errors that can occur when trying to create a `CanisterSnapshot` from a canister.
 #[derive(Debug)]
 pub enum CanisterSnapshotError {
-    ///  The canister is missing the execution state because it's empty (newly created or uninstalled).
+    /// The canister is missing the execution state because it's empty (newly created or uninstalled).
     EmptyExecutionState(CanisterId),
-    /// The provided offset/size exceed the module's or memory's size.
+    /// Offset and size exceed module or memory bounds.
     InvalidSubslice { offset: u64, size: u64 },
 }
 

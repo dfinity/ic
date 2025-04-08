@@ -107,12 +107,14 @@ impl WasmChunkStore {
             })
     }
 
-    /// Prefer the paginating `get_chunk_data` unless you need the complete Chunk materialized.
+    /// Returns the complete chunk as a single vector.
+    ///
+    /// Use `get_chunk_data` for paginated access.
     pub fn get_chunk_complete(&self, chunk_hash: &WasmChunkHash) -> Option<Vec<u8>> {
-        self.get_chunk_data(chunk_hash).map(|x| {
-            x.fold(vec![], |mut result, page| {
-                result.extend_from_slice(page);
-                result
+        self.get_chunk_data(chunk_hash).map(|pages| {
+            pages.fold(vec![], |mut bytes, page| {
+                bytes.extend_from_slice(page);
+                bytes
             })
         })
     }
