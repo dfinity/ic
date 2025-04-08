@@ -78,7 +78,6 @@ use url::Url;
 pub mod delegations;
 
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
-// this will be useful
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -1174,13 +1173,8 @@ pub fn assert_balance_equals(expected: Cycles, actual: Cycles, epsilon: Cycles) 
     );
 }
 
-// this may be useful
 pub async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
     let mgr = ManagementCanister::create(agent);
-    get_balance_inner(canister_id, &mgr).await
-}
-
-pub async fn get_balance_inner(canister_id: &Principal, mgr: &ManagementCanister<'_>) -> u128 {
     let canister_status = mgr
         .canister_status(canister_id)
         .call_and_wait()

@@ -16,7 +16,6 @@ Success::
 end::catalog[] */
 
 use anyhow::Result;
-// use ic_system_test_driver::util::*;
 use assert_matches::assert_matches;
 use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use canister_http::*;
@@ -38,7 +37,7 @@ use ic_system_test_driver::{
         test_env_api::HasTopologySnapshot,
     },
     systest,
-    util::{block_on, get_app_subnet_and_node, get_balance},
+    util::{block_on, get_app_subnet_and_node},
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -48,7 +47,7 @@ use ic_types::{
 };
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse, UnvalidatedCanisterHttpRequestArgs};
 use serde_json::Value;
-use std::{collections::HashSet, convert::TryFrom, io::{self, Write}};
+use std::{collections::HashSet, convert::TryFrom};
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 const MAX_MAX_RESPONSE_BYTES: usize = 2_000_000;
@@ -101,222 +100,95 @@ impl<'a> Handlers<'a> {
     }
 }
 
-// use cases:
-// more cycles on a request than available on canister ; maybe it fails or maybe it ignroes the high value
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(canister_http::setup)
         .add_parallel(
             SystemTestSubGroup::new()
-                .add_test(systest!(test_request_with_more_cycles_than_canister))
-                .add_test(systest!(test_request_with_refund_expectation))
-                // .add_test(systest!(test_enforce_https))
-                // .add_test(systest!(test_transform_function_is_executed))
-                // .add_test(systest!(test_composite_transform_function_is_executed))
-                // .add_test(systest!(test_no_cycles_attached))
-                // .add_test(systest!(test_2mb_response_cycle_for_rejection_path))
-                // .add_test(systest!(test_4096_max_response_cycle_case_1))
-                // .add_test(systest!(test_4096_max_response_cycle_case_2))
-                // .add_test(systest!(test_max_response_bytes_too_large))
-                // .add_test(systest!(test_max_response_bytes_2_mb_returns_ok))
-                // .add_test(systest!(
-                //     test_transform_that_bloats_response_above_2mb_limit
-                // ))
-                // .add_test(systest!(test_transform_that_bloats_on_the_2mb_limit))
-                // .add_test(systest!(test_request_header_name_and_value_within_limits))
-                // .add_test(systest!(test_request_header_name_too_long))
-                // .add_test(systest!(test_request_header_value_too_long))
-                // .add_test(systest!(test_response_header_name_within_limit))
-                // .add_test(systest!(test_response_header_name_over_limit))
-                // .add_test(systest!(test_response_header_value_within_limit))
-                // .add_test(systest!(test_response_header_value_over_limit))
-                // .add_test(systest!(
-                //     test_request_header_total_size_within_the_48_kib_limit
-                // ))
-                // .add_test(systest!(
-                //     test_request_header_total_size_over_the_48_kib_limit
-                // ))
-                // .add_test(systest!(
-                //     test_response_header_total_size_within_the_48_kib_limit
-                // ))
-                // .add_test(systest!(
-                //     test_response_header_total_size_over_the_48_kib_limit
-                // ))
-                // .add_test(systest!(test_non_existing_transform_function))
-                // .add_test(systest!(test_post_request))
-                // .add_test(systest!(
-                //     test_http_endpoint_response_is_too_large_with_custom_max_response_bytes
-                // ))
-                // .add_test(systest!(
-                //     test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes
-                // ))
-                // .add_test(systest!(
-                //     test_http_endpoint_response_is_too_large_with_default_max_response_bytes
-                // ))
-                // .add_test(systest!(
-                //     test_http_endpoint_response_is_within_limits_with_default_max_response_bytes
-                // ))
-                // .add_test(systest!(
-                //     test_http_endpoint_with_delayed_response_is_rejected
-                // ))
-                // .add_test(systest!(test_that_redirects_are_not_followed))
-                // .add_test(systest!(test_http_calls_to_ic_fails))
-                // .add_test(systest!(test_invalid_domain_name))
-                // .add_test(systest!(test_invalid_ip))
-                // .add_test(systest!(test_get_hello_world_call))
-                // .add_test(systest!(test_post_call))
-                // .add_test(systest!(test_head_call))
-                // .add_test(systest!(test_max_possible_request_size))
-                // .add_test(systest!(test_max_possible_request_size_exceeded))
-                // .add_test(systest!(test_non_ascii_url_is_rejected))
-                // .add_test(systest!(test_max_url_length))
-                // .add_test(systest!(test_max_url_length_exceeded))
-                // .add_test(systest!(
-                //     test_small_maximum_possible_response_size_only_headers
-                // ))
-                // .add_test(systest!(
-                //     test_small_maximum_possible_response_size_exceeded_only_headers
-                // ))
-                // .add_test(systest!(test_maximum_possible_value_of_max_response_bytes))
-                // .add_test(systest!(
-                //     test_maximum_possible_value_of_max_response_bytes_exceeded
-                // ))
-                // .add_test(systest!(check_caller_id_on_transform_function))
-                // .add_test(systest!(
-                //     reference_transform_function_exposed_by_different_canister
-                // ))
-                // .add_test(systest!(test_max_number_of_request_headers))
-                // .add_test(systest!(test_max_number_of_request_headers_exceeded))
-                // .add_test(systest!(test_max_number_of_response_headers))
-                // .add_test(systest!(test_non_existent_transform_function))
-                // .add_test(systest!(test_max_number_of_response_headers_exceeded)),
+                .add_test(systest!(test_enforce_https))
+                .add_test(systest!(test_transform_function_is_executed))
+                .add_test(systest!(test_composite_transform_function_is_executed))
+                .add_test(systest!(test_no_cycles_attached))
+                .add_test(systest!(test_2mb_response_cycle_for_rejection_path))
+                .add_test(systest!(test_4096_max_response_cycle_case_1))
+                .add_test(systest!(test_4096_max_response_cycle_case_2))
+                .add_test(systest!(test_max_response_bytes_too_large))
+                .add_test(systest!(test_max_response_bytes_2_mb_returns_ok))
+                .add_test(systest!(
+                    test_transform_that_bloats_response_above_2mb_limit
+                ))
+                .add_test(systest!(test_transform_that_bloats_on_the_2mb_limit))
+                .add_test(systest!(test_request_header_name_and_value_within_limits))
+                .add_test(systest!(test_request_header_name_too_long))
+                .add_test(systest!(test_request_header_value_too_long))
+                .add_test(systest!(test_response_header_name_within_limit))
+                .add_test(systest!(test_response_header_name_over_limit))
+                .add_test(systest!(test_response_header_value_within_limit))
+                .add_test(systest!(test_response_header_value_over_limit))
+                .add_test(systest!(
+                    test_request_header_total_size_within_the_48_kib_limit
+                ))
+                .add_test(systest!(
+                    test_request_header_total_size_over_the_48_kib_limit
+                ))
+                .add_test(systest!(
+                    test_response_header_total_size_within_the_48_kib_limit
+                ))
+                .add_test(systest!(
+                    test_response_header_total_size_over_the_48_kib_limit
+                ))
+                .add_test(systest!(test_non_existing_transform_function))
+                .add_test(systest!(test_post_request))
+                .add_test(systest!(
+                    test_http_endpoint_response_is_too_large_with_custom_max_response_bytes
+                ))
+                .add_test(systest!(
+                    test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes
+                ))
+                .add_test(systest!(
+                    test_http_endpoint_response_is_too_large_with_default_max_response_bytes
+                ))
+                .add_test(systest!(
+                    test_http_endpoint_response_is_within_limits_with_default_max_response_bytes
+                ))
+                .add_test(systest!(
+                    test_http_endpoint_with_delayed_response_is_rejected
+                ))
+                .add_test(systest!(test_that_redirects_are_not_followed))
+                .add_test(systest!(test_http_calls_to_ic_fails))
+                .add_test(systest!(test_invalid_domain_name))
+                .add_test(systest!(test_invalid_ip))
+                .add_test(systest!(test_get_hello_world_call))
+                .add_test(systest!(test_post_call))
+                .add_test(systest!(test_head_call))
+                .add_test(systest!(test_max_possible_request_size))
+                .add_test(systest!(test_max_possible_request_size_exceeded))
+                .add_test(systest!(test_non_ascii_url_is_rejected))
+                .add_test(systest!(test_max_url_length))
+                .add_test(systest!(test_max_url_length_exceeded))
+                .add_test(systest!(
+                    test_small_maximum_possible_response_size_only_headers
+                ))
+                .add_test(systest!(
+                    test_small_maximum_possible_response_size_exceeded_only_headers
+                ))
+                .add_test(systest!(test_maximum_possible_value_of_max_response_bytes))
+                .add_test(systest!(
+                    test_maximum_possible_value_of_max_response_bytes_exceeded
+                ))
+                .add_test(systest!(check_caller_id_on_transform_function))
+                .add_test(systest!(
+                    reference_transform_function_exposed_by_different_canister
+                ))
+                .add_test(systest!(test_max_number_of_request_headers))
+                .add_test(systest!(test_max_number_of_request_headers_exceeded))
+                .add_test(systest!(test_max_number_of_response_headers))
+                .add_test(systest!(test_non_existent_transform_function))
+                .add_test(systest!(test_max_number_of_response_headers_exceeded)),
         )
         .execute_from_args()?;
 
     Ok(())
-}
-
-fn test_request_with_more_cycles_than_canister(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    // todo: maybe get estimation of the cost
-
-    let response = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-            },
-            // cycles: Cycles::new(100_000_000_000_000),
-            // Task test_request_with_more_cycles_than_canister FAILED  in   1.16s   -- assertion failed: `Err(RejectResponse { reject_code: CanisterError, reject_message: "Error from Canister 5v3p4-iyaaa-aaaaa-qaaaa-cai: Canister 5v3p4-iyaaa-aaaaa-qaaaa-cai is out of cycles", error_code: Some("IC0504") })` does not match `Ok(r) if r.status==200`
-            // cycles: 101_000_000_000_000,
-            // cycles: 100_000_000_000_000,
-            // cycles: 99_999_999_999_999,
-            // This seems to work as opposed to having values on the limit or closer to the limit
-            cycles: 10_000_000_000_000,
-        },
-    ));
-
-    assert_matches!(response, Ok(r) if r.status==200);
-}
-
-fn test_request_with_refund_expectation(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    let agent = block_on(handlers.agent());
-    let balance = block_on(get_balance(
-        &Principal::from(get_proxy_canister_id(&env)),
-        &agent
-    ));
-
-
-    // with cycles: 0,
-    // gbrel balance: 99999136721805
-    // 2025-04-08 11:30:02.301 INFO[test_request_with_refund_expectation:StdErr] gbrel balance before: 99999136721805
-    // 
-    // with cycles: 50_000_000_000_000,
-    // gbrel balance: 49986180290311
-    // 2025-04-08 11:24:45.302 INFO[test_request_with_refund_expectation:StdErr] gbrel balance before: 49986180290311
-    println!("gbrel balance before: {}", balance);
-    eprintln!("gbrel balance before: {}", balance);
-
-    let request = UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-            };
-
-    // todo: maybe get estimation of the cost
-    let expected_cost = expected_cycle_cost(
-                        handlers.proxy_canister().canister_id(),
-                        request.clone(),
-                        handlers.subnet_size,
-                    );
-
-    // computed expected cost: 6413062400
-    println!("computed expected cost: {}", expected_cost);
-    eprintln!("computed expected cost: {}", expected_cost);
-
-    // run #2
-    let response = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request,
-            // cycles: Cycles::new(100_000_000_000_000),
-            cycles: 20_000_000_000_000,
-            // QUESTION: do I get CanisterReject if cycles here is 0?
-            // cycles: 0,
-        },
-    ));
-
-    assert_matches!(response, Ok(r) if r.status==200);
-
-    let balance = block_on(get_balance(
-        &Principal::from(get_proxy_canister_id(&env)),
-        &agent
-    ));
-
-    // with cycles: 0,
-    // http_request request sent with 0 cycles, but 6_413_062_400 cycles are required.
-    // Task test_request_with_refund_expectation        FAILED  in   3.37s   -- assertion failed: `Err(RejectResponse { reject_code: CanisterReject, reject_message: "http_request request sent with 0 cycles, but 6_413_062_400 cycles are required.", error_code: None })` does not match `Ok(r) if r.status==200`
-    // 
-    // with cycles: 50_000_000_000_000,
-    // gbrel balance: 99992717797335
-    // 2025-04-08 11:24:49.968 INFO[test_request_with_refund_expectation:StdOut] gbrel balance after: 99986302488657
-    println!("gbrel balance after: {}", balance);
-    eprintln!("gbrel balance after: {}", balance);
-
-    // assert!(balance < 50_000_000_000_000);
-    // println!("gbrel balance: {}", balance);
-    // eprintln!("gbrel balance: {}", balance);
-
-    // io::stdout().flush().unwrap();
-    // io::stderr().flush().unwrap();
-
-// TODO: assert before request that cycles is initial and after request that it decreased.
-
 }
 
 fn test_enforce_https(env: TestEnv) {
