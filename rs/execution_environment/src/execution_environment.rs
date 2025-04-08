@@ -1674,15 +1674,18 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
-                // TODO: EXC-1957
                 #[allow(clippy::bind_instead_of_map)]
-                let res =
-                    ReadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
-                        match self.config.canister_snapshot_download {
-                            FlagStatus::Disabled => Ok((vec![], None)),
-                            FlagStatus::Enabled => Ok((vec![], None)),
+                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| {
+                    match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            // TODO: [EXC-2018] do we need to account for copying the bytes -> costs and round_limits?
+                            self.read_snapshot_data(*msg.sender(), &state, args)
+                                .map(|res| (res, Some(canister_id)))
                         }
-                    });
+                    }
+                });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -2448,6 +2451,19 @@ impl ExecutionEnvironment {
         result
     }
 
+    fn read_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: ReadCanisterSnapshotDataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        self.canister_manager
+            .read_snapshot_data(sender, canister, args.get_snapshot_id(), args.kind, state)
+            .map(|res| Encode!(&res).unwrap())
+            .map_err(UserError::from)
+    }
+
     fn read_canister_snapshot_metadata(
         &self,
         sender: PrincipalId,
@@ -2459,7 +2475,7 @@ impl ExecutionEnvironment {
         self.canister_manager
             .read_snapshot_metadata(sender, snapshot_id, canister, state)
             .map(|res| Encode!(&res).unwrap())
-            .map_err(|e| e.into())
+            .map_err(UserError::from)
     }
 
     fn node_metrics_history(

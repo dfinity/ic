@@ -3890,6 +3890,16 @@ pub enum OnLowWasmMemoryHookStatus {
     Executed,
 }
 
+impl From<OnLowWasmMemoryHookStatus> for i32 {
+    fn from(val: OnLowWasmMemoryHookStatus) -> i32 {
+        match val {
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => 1,
+            OnLowWasmMemoryHookStatus::Ready => 2,
+            OnLowWasmMemoryHookStatus::Executed => 3,
+        }
+    }
+}
+
 impl OnLowWasmMemoryHookStatus {
     pub fn update(&mut self, is_hook_condition_satisfied: bool) {
         *self = if is_hook_condition_satisfied {
@@ -3997,6 +4007,11 @@ impl ReadCanisterSnapshotDataArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+
+    // TODO: EXC-1997 strengthen types
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
@@ -4026,6 +4041,12 @@ pub enum CanisterSnapshotDataKind {
 pub struct ReadCanisterSnapshotDataResponse {
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
+}
+
+impl ReadCanisterSnapshotDataResponse {
+    pub fn new(chunk: Vec<u8>) -> Self {
+        Self { chunk }
+    }
 }
 
 /// Struct to encode/decode
