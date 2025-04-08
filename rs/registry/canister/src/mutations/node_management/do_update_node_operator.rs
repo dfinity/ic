@@ -89,13 +89,19 @@ impl Registry {
         let node_mutations = valid_mutations.len() as u64;
 
         if node_mutations > new_operator_record.node_allowance {
-            return Err(format!("{}do_update_node_operator: New operator cannot accept {} nodes due to remaining allowance {}", LOG_PREFIX, node_mutations, new_operator_record.node_allowance));
+            return Err(format!(
+                "{}do_update_node_operator: New operator cannot accept {} \
+                 nodes due to remaining allowance {}",
+                LOG_PREFIX, node_mutations, new_operator_record.node_allowance
+            ));
         }
 
         // Decrement new operator allowance.
         let new_node_operator_key = make_node_operator_record_key(new_operator_id);
         let updated_new_operator_record = NodeOperatorRecord {
-            node_allowance: new_operator_record.node_allowance - node_mutations,
+            node_allowance: new_operator_record
+                .node_allowance
+                .saturating_sub(node_mutations),
             ..new_operator_record.clone()
         };
         valid_mutations.push(update(
@@ -106,7 +112,9 @@ impl Registry {
         // Increment old operator allowance.
         let old_node_operator_key = make_node_operator_record_key(old_operator_id);
         let updated_old_operator_record = NodeOperatorRecord {
-            node_allowance: old_operator_record.node_allowance + node_mutations,
+            node_allowance: old_operator_record
+                .node_allowance
+                .saturating_add(node_mutations),
             ..old_operator_record.clone()
         };
         valid_mutations.push(update(
