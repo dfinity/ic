@@ -108,6 +108,7 @@ pub struct SetupOSSettings;
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
+    pub vm_nr_of_vcpus: u32,
     pub verbose: bool,
 }
 
@@ -261,6 +262,7 @@ mod tests {
             hostos_settings: HostOSSettings {
                 vm_memory: 0,
                 vm_cpu: String::new(),
+                vm_nr_of_vcpus: 0,
                 verbose: false,
             },
             guestos_settings: GuestOSSettings::default(),
