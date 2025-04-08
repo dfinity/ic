@@ -389,16 +389,15 @@ where
     ) {
         let key = ApprovalKey::from((from, spender));
         if let Some(expected_allowance) = expected_allowance {
-            let current_allowance_amount = self
-                .allowances
-                .get(&key)
-                .map(|allowance| allowance.amount.clone())
-                .unwrap_or(Tokens::zero());
-            if current_allowance_amount != *expected_allowance {
-                panic!(
-                    "Expected allowance ({:?}) does not match current allowance ({:?})",
-                    expected_allowance, current_allowance_amount
-                );
+            if let Some(current_allowance) = self.allowances.get(&key) {
+                if let Some(expires_at) = current_allowance.expires_at {
+                    if expires_at >= arrived_at && current_allowance.amount != *expected_allowance {
+                        panic!(
+                                "Expected allowance of ({:?}) for key {:?} does not match current allowance ({:?})",
+                                expected_allowance, key, current_allowance.amount
+                            );
+                    }
+                }
             }
         }
         if amount == &Tokens::zero() {
@@ -729,6 +728,15 @@ where
                 &from,
                 &spender
             );
+            if let Some(in_memory_expires_at) = allowance.expires_at {
+                if in_memory_expires_at.as_nanos_since_unix_epoch() < timestamp {
+                    println!(
+                        "In memory expires_at is in the past ({:?} vs {:?}), ignoring",
+                        in_memory_expires_at, timestamp
+                    );
+                    continue;
+                }
+            }
             let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
             match actual_allowance.expires_at {
                 None => {
@@ -738,6 +746,8 @@ where
                     if expires_at > timestamp {
                         expiration_in_future_count += 1;
                     } else {
+                        // This should never happen, since the allowance returned from the ledger
+                        // should have an amount of 0, and no expires_at.
                         expiration_in_past_count += 1;
                     }
                 }
