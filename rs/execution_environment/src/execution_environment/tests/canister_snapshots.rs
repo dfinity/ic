@@ -974,7 +974,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
 
 #[test]
 fn chunk_size_multiple_of_os_page_size() {
-    assert!(CHUNK_SIZE % PAGE_SIZE == 0);
+    assert!(CHUNK_SIZE % PAGE_SIZE as u64 == 0);
 }
 
 #[test]
