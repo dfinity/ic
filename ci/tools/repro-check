@@ -114,7 +114,14 @@ def conventional_logging(one_line_logs: bool, verbose: bool) -> None:
 
 
 class Dirs(object):
-    def __init__(self, tmp_dir: Path, out_dir: Path, cdn_out: Path, dev_out: Path, proposal_out: Path):
+    def __init__(
+        self,
+        tmp_dir: Path,
+        out_dir: Path,
+        cdn_out: Path,
+        dev_out: Path,
+        proposal_out: Path,
+    ):
         self.tmp_dir = tmp_dir
         self.out_dir = out_dir
         self.cdn_out = cdn_out
@@ -244,7 +251,9 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
     tmp_file = dest_path.with_suffix(dest_path.suffix + ".part")
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ReproducibilityVerifier/1.0"})
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "ReproducibilityVerifier/1.0"}
+        )
         with urllib.request.urlopen(req) as response:
             try:
                 length: int | None = int(response.headers["Content-Length"])
@@ -260,7 +269,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
                         progressbar(sofar / length)
                     if interrupted:
                         tmp_file.unlink()
-                        return Path
+                        return dest_path
         if length is not None and length != sofar:
             raise RuntimeError(
                 "Error downloading %s -> %s. File is supposed to be %s bytes, is %s bytes.",
@@ -294,9 +303,15 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
-    parser.add_argument("--guestos", action="store_true", help="Verify only GuestOS images.")
-    parser.add_argument("--hostos", action="store_true", help="Verify only HostOS images.")
-    parser.add_argument("--setupos", action="store_true", help="Verify only SetupOS images.")
+    parser.add_argument(
+        "--guestos", action="store_true", help="Verify only GuestOS images."
+    )
+    parser.add_argument(
+        "--hostos", action="store_true", help="Verify only HostOS images."
+    )
+    parser.add_argument(
+        "--setupos", action="store_true", help="Verify only SetupOS images."
+    )
     parser.add_argument(
         "-p",
         "--proposal-id",
@@ -305,13 +320,26 @@ def parse_args() -> argparse.Namespace:
         help="Proposal ID to check (for an Elect Replica or HostOS proposal).",
     )
     parser.add_argument(
-        "-c", "--commit", type=str, default="", help="Git revision/commit to use from the IC repository."
+        "-c",
+        "--commit",
+        type=str,
+        default="",
+        help="Git revision/commit to use from the IC repository.",
     )
     parser.add_argument(
-        "--cache-dir", type=Path, default=None, help="Cache directory to use (defaults to ~/.cache/repro-check)."
+        "--cache-dir",
+        type=Path,
+        default=None,
+        help="Cache directory to use (defaults to ~/.cache/repro-check).",
     )
-    parser.add_argument("--clean", action="store_true", help="Clean up the download cache before running.")
-    parser.add_argument("--debug", "--verbose", action="store_true", help="Enable debug mode output.")
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Clean up the download cache before running.",
+    )
+    parser.add_argument(
+        "--debug", "--verbose", action="store_true", help="Enable debug mode output."
+    )
     parser.add_argument(
         "--download-source",
         choices=["systems", "network", "both"],
@@ -330,7 +358,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def get_download_sources(
-    mode: typing.Literal["systems"] | typing.Literal["network"] | typing.Literal["both"],
+    mode: typing.Literal["systems"]
+    | typing.Literal["network"]
+    | typing.Literal["both"],
 ) -> list[str]:
     """Returns the list of base CDN domains from which the images should be downloaded."""
     if mode == "systems":
@@ -357,7 +387,9 @@ class ReproducibilityVerifier:
         verify_setupos: bool,
         proposal_id: str,
         git_commit: str,
-        download_source_mode: str,
+        download_source_mode: typing.Literal["systems"]
+        | typing.Literal["network"]
+        | typing.Literal["both"],
         base_cache_dir: Path | None,
         clean_base_cache_dir: bool,
         keep_temp: bool,
@@ -380,12 +412,16 @@ class ReproducibilityVerifier:
         # Cache
         if base_cache_dir is not None:
             if clean_base_cache_dir:
-                raise RuntimeError(f"Refusing to clean manually specified base cache directory {base_cache_dir}")
+                raise RuntimeError(
+                    f"Refusing to clean manually specified base cache directory {base_cache_dir}"
+                )
             self.base_cache_dir = base_cache_dir
         else:
-            self.base_cache_dir = base_cache_dir or Path(os.path.expanduser("~/.cache/repro-check"))
-            if clean_base_cache_dir and base_cache_dir.is_dir():
-                shutil.rmtree(base_cache_dir)
+            self.base_cache_dir = base_cache_dir or Path(
+                os.path.expanduser("~/.cache/repro-check")
+            )
+            if clean_base_cache_dir and self.base_cache_dir.is_dir():
+                shutil.rmtree(self.base_cache_dir)
         self.cache_for_this_hash: Path = Path()
 
         self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=9)
@@ -423,7 +459,9 @@ class ReproducibilityVerifier:
             if version_id >= 22.04:
                 logger.info("Ubuntu version ≥ 22.04 detected.")
             else:
-                logger.warning("Please run this script on Ubuntu version 22.04 or higher.")
+                logger.warning(
+                    "Please run this script on Ubuntu version 22.04 or higher."
+                )
         except ValueError:
             pass
 
@@ -438,7 +476,9 @@ class ReproducibilityVerifier:
                             mem_kb = int(parts[1])
                             mem_gb = mem_kb // 1024 // 1024
                             if mem_gb < required_gb:
-                                logger.warning(f"You need at least {required_gb} GiB of RAM on this machine.")
+                                logger.warning(
+                                    f"You need at least {required_gb} GiB of RAM on this machine."
+                                )
                             else:
                                 logger.info(f"{required_gb} GiB or more RAM detected.")
                         return
@@ -452,7 +492,9 @@ class ReproducibilityVerifier:
             free_bytes = st.f_bavail * st.f_frsize
             free_gb = free_bytes / (1024 * 1024 * 1024)
             if free_gb < required_gb:
-                logger.warning(f"You need at least {required_gb} GiB of free disk space on this machine.")
+                logger.warning(
+                    f"You need at least {required_gb} GiB of free disk space on this machine."
+                )
             else:
                 logger.info(f"{required_gb} GiB+ of free disk space detected.")
         except Exception:
@@ -475,7 +517,9 @@ class ReproducibilityVerifier:
         logger.debug("Checking we are inside a Git repository.")
         try:
             cmd = ["git", "rev-parse", "--is-inside-work-tree"]
-            inside = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
+            inside = (
+                subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
+            )
             if inside != "true":
                 raise RuntimeError("Please run this script inside of a git repository.")
             logger.debug("Inside git repository.")
@@ -486,14 +530,18 @@ class ReproducibilityVerifier:
         logger.debug("Checking the repository is the IC repository.")
         try:
             cmd = ["git", "config", "--get", "remote.origin.url"]
-            git_remote = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
+            git_remote = (
+                subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
+            )
             if "/ic" not in git_remote:
                 raise RuntimeError(
                     "When not specifying any option, please run this script inside an IC git repository."
                 )
             logger.debug("Inside IC repository.")
         except subprocess.CalledProcessError:
-            raise RuntimeError("When not specifying any option, please run this script inside an IC git repository.")
+            raise RuntimeError(
+                "When not specifying any option, please run this script inside an IC git repository."
+            )
 
     def check_environment(self) -> None:
         self.check_architecture()
@@ -522,7 +570,11 @@ class ReproducibilityVerifier:
 
     def cached_download(self, url: str, target_file: Path, os_type: str) -> Path:
         """Downloads a file if it’s not already in the cache."""
-        dest_dir = self.cache_for_this_hash / urllib.parse.urlparse(url).netloc.split(":")[0] / os_type
+        dest_dir = (
+            self.cache_for_this_hash
+            / urllib.parse.urlparse(url).netloc.split(":")[0]
+            / os_type
+        )
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         cache_file = dest_dir / target_file.name
@@ -538,8 +590,12 @@ class ReproducibilityVerifier:
         os.link(cache_file, target_file)
         return target_file
 
-    def start_download(self, url: str, target_file: Path, os_type: str, append_to_futures: bool = True) -> Download:
-        return self.download_executor.submit(self.cached_download, url, target_file, os_type)
+    def start_download(
+        self, url: str, target_file: Path, os_type: str, append_to_futures: bool = True
+    ) -> Download:
+        return self.download_executor.submit(
+            self.cached_download, url, target_file, os_type
+        )
 
     # --------------------------------------------------------------------------
     # Core logic restructured to start downloads early
@@ -548,13 +604,19 @@ class ReproducibilityVerifier:
         """If a proposal ID is provided, fetch the proposal data and set internal state."""
         if not self.proposal_id:
             return (None, None)
-        proposal_url = f"https://ic-api.internetcomputer.org/api/v3/proposals/{self.proposal_id}"
+        proposal_url = (
+            f"https://ic-api.internetcomputer.org/api/v3/proposals/{self.proposal_id}"
+        )
         logger.debug(f"Fetching proposal {proposal_url}")
         try:
-            req = urllib.request.Request(proposal_url, headers={"User-Agent": "ReproducibilityVerifier/1.0"})
+            req = urllib.request.Request(
+                proposal_url, headers={"User-Agent": "ReproducibilityVerifier/1.0"}
+            )
             with urllib.request.urlopen(req) as resp:
                 if not (200 <= resp.status < 300):
-                    raise RuntimeError(f"Could not fetch proposal {self.proposal_id}, HTTP code {resp.status}")
+                    raise RuntimeError(
+                        f"Could not fetch proposal {self.proposal_id}, HTTP code {resp.status}"
+                    )
                 data = resp.read()
         except Exception as e:
             err = f"Could not fetch {self.proposal_id}. Error: {e}"
@@ -562,7 +624,9 @@ class ReproducibilityVerifier:
 
         proposal_data = json.loads(data)
         self.proposal_package_urls = proposal_data["payload"]["release_package_urls"]
-        self.proposal_package_sha256_hex = proposal_data["payload"]["release_package_sha256_hex"]
+        self.proposal_package_sha256_hex = proposal_data["payload"][
+            "release_package_sha256_hex"
+        ]
 
         prop_str = json.dumps(proposal_data)
         if "replica_version_to_elect" in prop_str:
@@ -583,7 +647,9 @@ class ReproducibilityVerifier:
             self.git_hash = self.git_commit
         else:
             self.check_git_repo()
-            self.git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+            self.git_hash = (
+                subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+            )
 
     def start_cdn_downloads_for_os(self, os_type: str, storage: Dirs) -> list[Download]:
         """Queues downloading of the OS artifact and sums file from the selected CDNs."""
@@ -619,15 +685,23 @@ class ReproducibilityVerifier:
             parsed = urllib.parse.urlparse(url)
             domain = parsed.netloc.split(":")[0]
             proposal_target = storage.proposal_out / domain / "update-img.tar.zst"
-            downloads.append(self.start_download(url, proposal_target, "proposal", append_to_futures=False))
+            downloads.append(
+                self.start_download(
+                    url, proposal_target, "proposal", append_to_futures=False
+                )
+            )
         return downloads
 
     @contextlib.contextmanager
-    def storage(self, keep_temp: bool) -> typing.Generator[Dirs, None, None]:
+    def storage(
+        self, under: Path, keep_temp: bool
+    ) -> typing.Generator[Dirs, None, None]:
         """Prepares temporary and output directories."""
         if keep_temp:
             logger.debug("DEBUG mode => not automatically removing the tempdir.")
-        _tmpdir_obj = tempfile.TemporaryDirectory(prefix="repro-check_", delete=not keep_temp)
+        _tmpdir_obj = tempfile.TemporaryDirectory(
+            dir=under, prefix="repro-check_", delete=not keep_temp
+        )
         tmpdir = Path(_tmpdir_obj.name)
 
         logger.info(f"Using temporary directory: {tmpdir}")
@@ -671,11 +745,15 @@ class ReproducibilityVerifier:
             subdir = storage.cdn_out / cdn_domain / os_type
             local_sums_path = subdir / "SHA256SUMS"
             binary_file_path = subdir / f"{artifact}.tar.zst"
-            h = verify_sha256_against_sums(binary_file_path, local_sums_path, self.git_hash)
+            h = verify_sha256_against_sums(
+                binary_file_path, local_sums_path, self.git_hash
+            )
             final_hashes.append(h)
 
         if len(set(final_hashes)) != 1:
-            raise VerificationError(f"The sources for {os_type} do not all match! {final_hashes}")
+            raise VerificationError(
+                f"The sources for {os_type} do not all match! {final_hashes}"
+            )
         return final_hashes[0]
 
     def compare_proposal_vs_cdn(
@@ -716,8 +794,12 @@ class ReproducibilityVerifier:
         """Clones and checks out the IC repository at the desired commit."""
         ic_clone_path_cache = self.base_cache_dir / "repo"
         if os.getenv("CI") is not None:
-            logger.info(f"Copying IC repository from {Path.cwd()} to temporary directory.")
-            subprocess.run(["git", "clone", str(Path.cwd()), str(ic_clone_path)], check=True)
+            logger.info(
+                f"Copying IC repository from {Path.cwd()} to temporary directory."
+            )
+            subprocess.run(
+                ["git", "clone", str(Path.cwd()), str(ic_clone_path)], check=True
+            )
         else:
             logger.info("Cloning IC repository from GitHub.")
             try:
@@ -728,7 +810,9 @@ class ReproducibilityVerifier:
                     stderr=subprocess.DEVNULL,
                 )
             except subprocess.CalledProcessError:
-                logger.debug(f"Git fsck failed in cache {ic_clone_path_cache}, removing IC repo git cache.")
+                logger.debug(
+                    f"Git fsck failed in cache {ic_clone_path_cache}, removing IC repo git cache."
+                )
                 shutil.rmtree(ic_clone_path_cache, ignore_errors=True)
             subprocess.run(
                 [
@@ -748,7 +832,10 @@ class ReproducibilityVerifier:
             self.check_git_repo()
             self.check_ic_repo()
             try:
-                subprocess.run(["git", "cat-file", "-e", f"{self.git_commit}^{{commit}}"], check=True)
+                subprocess.run(
+                    ["git", "cat-file", "-e", f"{self.git_commit}^{{commit}}"],
+                    check=True,
+                )
             except subprocess.CalledProcessError:
                 raise RuntimeError(
                     "When specifying -c, please provide a valid git hash on a branch of the IC repository."
@@ -832,15 +919,27 @@ class ReproducibilityVerifier:
         """Main entry point for reproducibility verification logic."""
         start_time = time.time()
 
-        with self.storage(self.keep_temp) as dirs:
+        with self.storage(under=self.base_cache_dir, keep_temp=self.keep_temp) as dirs:
             guest_os_hash, host_os_hash = self.process_proposal()
             self.decide_git_hash()
             self.init_cache()
 
             downloads_for_proposal = self.start_proposal_download_if_needed(dirs)
-            guest_os_downloads = self.start_cdn_downloads_for_os("guest-os", dirs) if self.verify_guestos else []
-            host_os_downloads = self.start_cdn_downloads_for_os("host-os", dirs) if self.verify_hostos else []
-            setup_os_downloads = self.start_cdn_downloads_for_os("setup-os", dirs) if self.verify_setupos else []
+            guest_os_downloads = (
+                self.start_cdn_downloads_for_os("guest-os", dirs)
+                if self.verify_guestos
+                else []
+            )
+            host_os_downloads = (
+                self.start_cdn_downloads_for_os("host-os", dirs)
+                if self.verify_hostos
+                else []
+            )
+            setup_os_downloads = (
+                self.start_cdn_downloads_for_os("setup-os", dirs)
+                if self.verify_setupos
+                else []
+            )
             build = self.download_executor.submit(self.build_locally, dirs)
 
             # Environment checks can happen while downloads progress
@@ -848,8 +947,12 @@ class ReproducibilityVerifier:
 
             # Verifications after downloads.  They take futures and await for them to be finished.
             self.verify_proposal_artifacts(downloads_for_proposal)
-            self.compare_proposal_vs_cdn(dirs, guest_os_hash, guest_os_downloads, host_os_hash, host_os_downloads)
-            self.compare_with_local_build(dirs, build, guest_os_downloads, host_os_downloads, setup_os_downloads)
+            self.compare_proposal_vs_cdn(
+                dirs, guest_os_hash, guest_os_downloads, host_os_hash, host_os_downloads
+            )
+            self.compare_with_local_build(
+                dirs, build, guest_os_downloads, host_os_downloads, setup_os_downloads
+            )
 
         elapsed = time.time() - start_time
         h, rem = divmod(elapsed, 3600)
