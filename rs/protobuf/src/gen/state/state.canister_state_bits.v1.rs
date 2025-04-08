@@ -232,7 +232,7 @@ pub struct ExecutionStateBits {
     pub last_executed_round: u64,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<WasmMetadata>,
-    #[prost(bytes = "vec", optional, tag = "6")]
+    #[prost(bytes = "vec", tag = "6")]
     pub binary_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "NextScheduledMethod", optional, tag = "7")]
     pub next_scheduled_method: ::core::option::Option<i32>,
