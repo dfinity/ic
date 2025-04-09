@@ -2344,63 +2344,6 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["serialize_wasm_binaries"])
-                .start_timer();
-            self.tip_channel
-                .send(TipRequest::SerializeWasmBinaries {
-                    height,
-                    replicated_state: Box::new(state.clone()),
-                })
-                .unwrap();
-        }
-        let result = {
-            checkpoint::make_unvalidated_checkpoint(
-                &mut state,
-                height,
-                &self.tip_channel,
-                &self.metrics.checkpoint_metrics,
-                self.get_fd_factory(),
-            )
-        };
-        let (cp_layout, has_downgrade) = match result {
-            Ok(response) => response,
-            Err(CheckpointError::AlreadyExists(_)) => {
-                warn!(
-                    self.log,
-                    "Failed to create checkpoint @{} because it already exists, \
-                    re-loading the checkpoint from disk",
-                    height
-                );
-
-                let cp_layout = self
-                    .state_layout
-                    .checkpoint_in_verification(height)
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            self.log,
-                            "Failed to open checkpoint layout #{}: {}",
-                            height,
-                            err
-                        );
-                    });
-                (
-                    cp_layout,
-                    // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
-                    HasDowngrade::Yes,
-                )
-            }
-            Err(err) => fatal!(
-                self.log,
-                "Failed to make a checkpoint @{}: {:?}",
-                height,
-                err
-            ),
-        };
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
                 .with_label_values(&["defrag_canisters_map"])
                 .start_timer();
 
@@ -2408,39 +2351,65 @@ impl StateManagerImpl {
             let canisters = std::mem::take(&mut state.canister_states);
             state.canister_states = canisters.into_iter().collect();
         }
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
-                .with_label_values(&["switch_to_checkpoint"])
-                .start_timer();
-            switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory()).unwrap_or_else(
-                |err| {
-                    fatal!(
-                        self.log,
-                        "Failed to switch to checkpoint for height #{}: {}",
-                        height,
-                        err
-                    );
-                },
-            );
-        }
-        let state = Arc::new(state);
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
-                .with_label_values(&["serialize_to_tip_cloning"])
-                .start_timer();
-            self.tip_channel
-                .send(TipRequest::SerializeToTip {
-                    checkpoint_layout: cp_layout.clone(),
-                    replicated_state: Arc::clone(&state),
-                })
-                .unwrap();
-        }
+        let result = {
+            checkpoint::make_unvalidated_checkpoint(
+                state,
+                height,
+                &self.tip_channel,
+                &self.metrics.checkpoint_metrics,
+                self.get_fd_factory(),
+            )
+        };
+        let (state, cp_layout, has_downgrade) = match result {
+            Ok(response) => response,
+            // Err(CheckpointError::AlreadyExists(_)) => {
+            //     warn!(
+            //         self.log,
+            //         "Failed to create checkpoint @{} because it already exists, \
+            //         re-loading the checkpoint from disk",
+            //         height
+            //     );
+
+            //     let cp_layout = self
+            //         .state_layout
+            //         .checkpoint_in_verification(height)
+            //         .unwrap_or_else(|err| {
+            //             fatal!(
+            //                 self.log,
+            //                 "Failed to open checkpoint layout #{}: {}",
+            //                 height,
+            //                 err
+            //             );
+            //         });
+            // let _timer = self
+            //     .metrics
+            //     .checkpoint_metrics
+            //     .make_checkpoint_step_duration
+            //     .with_label_values(&["switch_to_checkpoint"])
+            //     .start_timer();
+            // switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory()).unwrap_or_else(
+            //     |err| {
+            //         fatal!(
+            //             self.log,
+            //             "Failed to switch to checkpoint for height #{}: {}",
+            //             height,
+            //             err
+            //         );
+            //     },
+            // );
+            //     (
+            //         cp_layout,
+            //         // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
+            //         HasDowngrade::Yes,
+            //     )
+            // }
+            Err(err) => fatal!(
+                self.log,
+                "Failed to make a checkpoint @{}: {:?}",
+                height,
+                err
+            ),
+        };
 
         self.tip_channel
             .send(TipRequest::ValidateReplicatedStateAndFinalize {

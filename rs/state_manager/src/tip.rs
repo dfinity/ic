@@ -108,14 +108,6 @@ pub(crate) enum TipRequest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes: Vec<PageMapType>,
     },
-    SerializeWasmBinaries {
-        height: Height,
-        replicated_state: Box<ReplicatedState>,
-    },
-    SerializeToTip {
-        checkpoint_layout: CheckpointLayout<ReadOnly>,
-        replicated_state: Arc<ReplicatedState>,
-    },
     /// Compute manifest, store result into states and persist metadata as result.
     /// State: latest_checkpoint_state.has_manifest = true
     ComputeManifest {
@@ -200,7 +192,18 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.latest_checkpoint_state = tip_state.tip_folder_state;
                             tip_state.tip_folder_state = Default::default();
-
+                            {
+                                let _timer = request_timer(&metrics, "serialize_wasm_binaries");
+                                serialize_wasm_binaries(
+                                    &log,
+                                    &state,
+                                    &tip_handler.tip(height).unwrap(),
+                                    &mut thread_pool,
+                                )
+                                .unwrap_or_else(|err| {
+                                    fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
+                                });
+                            }
                             let state_and_layout = {
                                 let _timer =
                                     request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
@@ -332,56 +335,6 @@ pub(crate) fn spawn_tip_thread(
                                 },
                             );
                         }
-                        TipRequest::SerializeWasmBinaries {
-                            height,
-                            replicated_state,
-                        } => {
-                            let _timer = request_timer(&metrics, "serialize_wasm_binaries");
-                            serialize_wasm_binaries(
-                                &log,
-                                &replicated_state,
-                                &tip_handler.tip(height).unwrap(),
-                                &mut thread_pool,
-                            )
-                            .unwrap_or_else(|err| {
-                                fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
-                            });
-                        }
-                        TipRequest::SerializeToTip {
-                            checkpoint_layout,
-                            replicated_state,
-                        } => {
-                            let _timer = request_timer(&metrics, "serialize_to_tip");
-                            fn rw_cp(
-                                _t: &mut TipHandler,
-                                path: PathBuf,
-                                height: Height,
-                            ) -> CheckpointLayout<RwPolicy<TipHandler>>
-                            {
-                                CheckpointLayout::new_untracked(path, height).unwrap()
-                            }
-                            serialize_to_tip(
-                                &replicated_state,
-                                &rw_cp(
-                                    &mut tip_handler,
-                                    checkpoint_layout.raw_path().to_path_buf(),
-                                    checkpoint_layout.height(),
-                                ),
-                                &mut thread_pool,
-                                &metrics.storage_metrics,
-                                &lsmt_config,
-                            )
-                            .unwrap_or_else(|err| {
-                                fatal!(
-                                    log,
-                                    "Failed to serialize to tip @{}: {}",
-                                    checkpoint_layout.height(),
-                                    err
-                                );
-                            });
-                            tip_state.tip_folder_state.has_protos =
-                                Some(checkpoint_layout.height());
-                        }
                         TipRequest::ResetTipAndMerge {
                             checkpoint_layout,
                             pagemaptypes,
@@ -463,10 +416,10 @@ pub(crate) fn spawn_tip_thread(
                                 tip_state.latest_checkpoint_state.page_maps_height,
                                 checkpoint_layout.height()
                             );
-                            debug_assert_eq!(
-                                tip_state.latest_checkpoint_state.has_protos,
-                                Some(checkpoint_layout.height())
-                            );
+                            //debug_assert_eq!(
+                            //    tip_state.latest_checkpoint_state.has_protos,
+                            //    Some(checkpoint_layout.height())
+                            //);
                             tip_state.latest_checkpoint_state.verified = true;
 
                             if let Err(err) =
