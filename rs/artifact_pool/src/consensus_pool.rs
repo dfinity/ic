@@ -1,4 +1,4 @@
-use crate::backup::Backup;
+use crate::backup::{BackupRequest, BackupSender};
 use crate::height_index::HeightIndexedInstants;
 use crate::{
     consensus_pool_cache::{
@@ -24,10 +24,10 @@ use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
+use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, sync::Arc};
 
 #[derive(Clone, Debug)]
 pub enum PoolSectionOp<T> {
@@ -290,7 +290,7 @@ pub struct ConsensusPoolImpl {
 
     time_source: Arc<dyn TimeSource>,
     cache: Arc<ConsensusCacheImpl>,
-    backup: Option<Backup>,
+    backup: Option<BackupSender>,
     log: ReplicaLogger,
 }
 
@@ -414,12 +414,12 @@ impl ConsensusPoolImpl {
     /// height and registry version) will be used.
     pub fn new(
         node_id: NodeId,
-        subnet_id: SubnetId,
         cup_proto: pb::CatchUpPackage,
         config: ArtifactPoolConfig,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
+        backup_sender: Option<BackupSender>,
     ) -> ConsensusPoolImpl {
         let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
         Self::init_genesis(cup_proto, pool.validated.as_mut());
@@ -430,23 +430,19 @@ impl ConsensusPoolImpl {
             log.clone(),
             time_source.clone(),
         );
-        // If the back up directory is set, instantiate the backup component
-        // and create a subdirectory with the subnet id as directory name.
-        pool.backup = config.backup_config.map(|config| {
-            Backup::new(
-                &pool,
-                config.spool_path.clone(),
-                config
-                    .spool_path
-                    .join(subnet_id.to_string())
-                    .join(ic_types::ReplicaVersion::default().to_string()),
-                Duration::from_secs(config.retention_time_secs),
-                Duration::from_secs(config.purging_interval_secs),
-                registry,
-                log,
-                time_source,
-            )
-        });
+        pool.backup = backup_sender;
+        // Due to the fact that the backup is synced to the disk completely
+        // independently of the consensus pool and always after the consensus pool was
+        // mutated, we might run into an inconsistent state between the pool and the
+        // backup data if the replica gets killed by the orchestrator. To avoid this
+        // situation, on the instantiation of the consensus pool, we need to synchronize
+        // the backup with the pool in a blocking manner.
+        if let Some(backup) = pool.backup.as_ref() {
+            let (artifacts, (height, cup)) = pool.get_all_persisted_artifacts();
+            backup.send(BackupRequest::Backup(artifacts));
+            backup.send(BackupRequest::BackupOriginalCUP(height, cup));
+            backup.sync();
+        }
 
         // Initial update to the metrics, such that they always report the state, even
         // when a subnet is halted.
@@ -503,6 +499,70 @@ impl ConsensusPoolImpl {
             backup: None,
             log,
         }
+    }
+
+    // Returns all artifacts starting from the latest catch-up package height.
+    // CUPs need to be returned as their original protobuf bytes for compatibility.
+    fn get_all_persisted_artifacts(&self) -> (Vec<ConsensusMessage>, (Height, pb::CatchUpPackage)) {
+        let cup_height = self.as_cache().catch_up_package().height();
+        let notarization_pool = self.validated().notarization();
+        let notarization_range = HeightRange::new(
+            cup_height,
+            notarization_pool.max_height().unwrap_or_default(),
+        );
+        let finalization_pool = self.validated().finalization();
+        let finalization_range = HeightRange::new(
+            cup_height,
+            finalization_pool.max_height().unwrap_or_default(),
+        );
+        let block_proposal_pool = self.validated().block_proposal();
+        let block_proposal_range = HeightRange::new(
+            cup_height,
+            block_proposal_pool.max_height().unwrap_or_default(),
+        );
+        let random_tape_pool = self.validated().random_tape();
+        let random_tape_range = HeightRange::new(
+            cup_height,
+            random_tape_pool.max_height().unwrap_or_default(),
+        );
+        let random_beacon_pool = self.validated().random_beacon();
+        let random_beacon_range = HeightRange::new(
+            cup_height,
+            random_beacon_pool.max_height().unwrap_or_default(),
+        );
+
+        let artifacts = finalization_pool
+            .get_by_height_range(finalization_range)
+            .map(ConsensusMessage::Finalization)
+            .chain(
+                notarization_pool
+                    .get_by_height_range(notarization_range)
+                    .map(ConsensusMessage::Notarization),
+            )
+            .chain(
+                random_tape_pool
+                    .get_by_height_range(random_tape_range)
+                    .map(ConsensusMessage::RandomTape),
+            )
+            .chain(
+                random_beacon_pool
+                    .get_by_height_range(random_beacon_range)
+                    .map(ConsensusMessage::RandomBeacon),
+            )
+            .chain(
+                block_proposal_pool
+                    .get_by_height_range(block_proposal_range)
+                    .map(ConsensusMessage::BlockProposal),
+            )
+            .collect();
+
+        (
+            artifacts,
+            (
+                cup_height,
+                self.validated().highest_catch_up_package_proto(),
+            ),
+        )
     }
 
     /// Get a copy of ConsensusPoolCache.
@@ -570,7 +630,7 @@ impl ConsensusPoolImpl {
     // block proposals with their notarizations that are now provably belong to the finalized chain.
     fn backup_artifacts(
         &self,
-        backup: &Backup,
+        backup: &BackupSender,
         latest_finalization_height: Height,
         mut artifacts_for_backup: Vec<ConsensusMessage>,
     ) {
@@ -622,7 +682,7 @@ impl ConsensusPoolImpl {
             }
         }
 
-        backup.store(artifacts_for_backup);
+        backup.send(BackupRequest::Backup(artifacts_for_backup));
     }
 
     /// Record instant measurement for the given validated message, as long
@@ -1034,7 +1094,7 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
 
 #[cfg(test)]
 mod tests {
-    use crate::backup::{BackupAge, PurgingError};
+    use crate::backup::{Backup, BackupAge, PurgingError};
 
     use super::*;
     use ic_interfaces::p2p::consensus::UnvalidatedArtifact;
@@ -1057,25 +1117,28 @@ mod tests {
         RegistryVersion, ReplicaVersion,
     };
     use prost::Message;
-    use std::{collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock};
+    use std::{
+        collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock,
+        time::Duration,
+    };
 
     fn new_from_cup_without_bytes(
         node_id: NodeId,
-        subnet_id: SubnetId,
         catch_up_package: CatchUpPackage,
         config: ArtifactPoolConfig,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
+        backup: Option<BackupSender>,
     ) -> ConsensusPoolImpl {
         ConsensusPoolImpl::new(
             node_id,
-            subnet_id,
             (&catch_up_package).into(),
             config,
             registry,
             log,
             time_source,
+            backup,
         )
     }
 
@@ -1103,12 +1166,12 @@ mod tests {
             let time_0 = time_source.get_relative_time();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
-                subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
+                None,
             );
 
             let mut random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
@@ -1162,12 +1225,12 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
-                subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
+                None,
             );
 
             let random_beacon_1 = RandomBeacon::fake(RandomBeaconContent::new(
@@ -1242,12 +1305,12 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
-                subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
+                None,
             );
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
@@ -1312,12 +1375,12 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
-                subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
+                None,
             );
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
@@ -1345,12 +1408,12 @@ mod tests {
             let node = node_test_id(3);
             let mut pool = new_from_cup_without_bytes(
                 node,
-                subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
+                None,
             );
 
             let height_offset = 5_000_000_000;
@@ -1503,12 +1566,12 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
-                subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::global(),
                 no_op_logger(),
                 time_source.clone(),
+                None,
             );
 
             // creates a fake block proposal for the given block
@@ -1628,19 +1691,9 @@ mod tests {
                 .path()
                 .join(subnet_id.to_string())
                 .join(ic_types::ReplicaVersion::default().to_string());
-            let mut pool = new_from_cup_without_bytes(
-                node_test_id(0),
-                subnet_id,
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                pool_config,
-                ic_metrics::MetricsRegistry::new(),
-                no_op_logger(),
-                time_source.clone(),
-            );
 
             let purging_interval = Duration::from_millis(100);
-            pool.backup = Some(Backup::new(
-                &pool,
+            let backup = Backup::new(
                 backup_dir.path().into(),
                 root_path.clone(),
                 // We purge all artifacts older than 5ms millisecond.
@@ -1650,7 +1703,16 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
-            ));
+            );
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+                Some(backup.backup_sender.clone()),
+            );
 
             // All tests in this group work on artifacts inside the same group, so we extend
             // the path with it.
@@ -1780,7 +1842,7 @@ mod tests {
             pool.apply(changeset);
             // We sync the backup before checking the asserts to make sure all backups have
             // been written.
-            pool.backup.as_ref().unwrap().sync_backup();
+            pool.backup.as_ref().unwrap().sync();
 
             // Check backup for height 0
             assert!(
@@ -1939,7 +2001,7 @@ mod tests {
                 .set_time(time_source.get_relative_time() + purging_interval)
                 .unwrap();
             pool.apply(Vec::new());
-            pool.backup.as_ref().unwrap().sync_purging();
+            pool.backup.as_ref().unwrap().sync();
 
             // Make sure the subnet directory is empty, as we purged everything.
             assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
@@ -1952,7 +2014,7 @@ mod tests {
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
             pool.apply(Vec::new());
-            pool.backup.as_ref().unwrap().sync_purging();
+            pool.backup.as_ref().unwrap().sync();
             assert!(!path.exists());
         })
     }
@@ -1984,17 +2046,29 @@ mod tests {
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
             let subnet_id = subnet_test_id(0);
             let path = backup_dir.path().join(format!("{:?}", subnet_id));
+
+            let map: Arc<RwLock<HashMap<String, Duration>>> = Default::default();
+            let purging_interval = Duration::from_millis(3000);
+            let backup = Backup::new_with_age_func(
+                backup_dir.path().into(),
+                backup_dir.path().join(format!("{:?}", subnet_id)),
+                // Artifact retention time
+                Duration::from_millis(2700),
+                purging_interval,
+                MetricsRegistry::new(),
+                no_op_logger(),
+                Box::new(FakeAge { map: map.clone() }),
+                time_source.clone(),
+            );
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
-                subnet_id,
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
+                Some(backup.backup_sender.clone()),
             );
-
-            let map: Arc<RwLock<HashMap<String, Duration>>> = Default::default();
 
             // Insert a list of directory names into the fake age map.
             let insert_dirs = |v: &[&str]| {
@@ -2011,20 +2085,6 @@ mod tests {
                     *age += d;
                 })
             };
-
-            let purging_interval = Duration::from_millis(3000);
-            pool.backup = Some(Backup::new_with_age_func(
-                &pool,
-                backup_dir.path().into(),
-                backup_dir.path().join(format!("{:?}", subnet_id)),
-                // Artifact retention time
-                Duration::from_millis(2700),
-                purging_interval,
-                MetricsRegistry::new(),
-                no_op_logger(),
-                Box::new(FakeAge { map: map.clone() }),
-                time_source.clone(),
-            ));
 
             let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
                 Height::from(1),
@@ -2069,7 +2129,7 @@ mod tests {
             // Apply changes
             pool.apply(changeset);
             // sync
-            pool.backup.as_ref().unwrap().sync_backup();
+            pool.backup.as_ref().unwrap().sync();
 
             let group_path = &path.join("0");
             // We expect 3 folders for heights 0 to 2.
@@ -2102,7 +2162,7 @@ mod tests {
 
             pool.apply(changeset);
             // sync
-            pool.backup.as_ref().unwrap().sync_backup();
+            pool.backup.as_ref().unwrap().sync();
 
             // We expect 5 folders for heights 0 to 4.
             assert_eq!(fs::read_dir(group_path).unwrap().count(), 5);
@@ -2119,7 +2179,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            pool.backup.as_ref().unwrap().sync_purging();
+            pool.backup.as_ref().unwrap().sync();
 
             // We expect only 2 folders to survive the purging: 3, 4
             assert_eq!(fs::read_dir(group_path).unwrap().count(), 2);
@@ -2135,7 +2195,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            pool.backup.as_ref().unwrap().sync_purging();
+            pool.backup.as_ref().unwrap().sync();
 
             // We deleted all artifacts, but the group folder was updated by this and needs
             // to age now.
@@ -2151,7 +2211,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            pool.backup.as_ref().unwrap().sync_purging();
+            pool.backup.as_ref().unwrap().sync();
 
             //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 37));
             // The group folder expired and was deleted.
@@ -2168,7 +2228,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            pool.backup.as_ref().unwrap().sync_purging();
+            pool.backup.as_ref().unwrap().sync();
 
             // The subnet_id folder expired and was deleted.
             assert!(!path.exists());
@@ -2250,12 +2310,12 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
-                subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
+                None,
             );
 
             let height = Height::from(5_000_000_000);
