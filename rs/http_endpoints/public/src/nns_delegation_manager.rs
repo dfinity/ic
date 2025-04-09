@@ -211,7 +211,7 @@ mod tests {
             CancellationToken::new(),
         );
 
-        // The initial delegation should be fetched immediatelly.
+        // The initial delegation should be fetched immediately.
         rx.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has elapsed.
