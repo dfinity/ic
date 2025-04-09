@@ -681,7 +681,6 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
     );
 }
 
-#[allow(dead_code)]
 fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine) {
     setup_nns_canister_at_position(
         machine,
