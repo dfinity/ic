@@ -766,7 +766,7 @@ async fn collect_timer_metric(
 
 /// Fetches a delegation from the NNS subnet to allow this subnet to issue
 /// certificates on its behalf. On the NNS subnet this method is a no-op.
-// TODO(kpop): move this to nns_delegation_manager.rs
+// TODO(CON-1469): move this to nns_delegation_manager.rs
 pub(crate) async fn load_root_delegation(
     config: &Config,
     log: &ReplicaLogger,

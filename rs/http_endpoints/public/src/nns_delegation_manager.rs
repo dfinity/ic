@@ -239,7 +239,7 @@ mod tests {
             CancellationToken::new(),
         );
 
-        // The initial delegation should be fetched immediatelly.
+        // The initial delegation should be fetched immediately.
         rx.changed().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_UPDATE_INTERVAL`
         // has passed.
@@ -268,7 +268,7 @@ mod tests {
             CancellationToken::new(),
         );
 
-        // The initial *valid* delegation should be fetched immediatelly.
+        // The initial *valid* delegation should be fetched immediately.
         assert!(rx.changed().await.is_ok());
 
         // Mock an *invalid* certificate delegation.

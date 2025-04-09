@@ -222,19 +222,19 @@ impl DelegationManagerMetrics {
                 "How many times has the nns delegation been updated",
             ),
             update_duration: metrics_registry.histogram(
-                "nns_delegation_manager_update_duration",
+                "nns_delegation_manager_update_duration_seconds",
                 "How long it took to update the nns delegation, in seconds",
                 // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
                 decimal_buckets(-3, 1),
             ),
             delegation_size: metrics_registry.histogram(
-                "nns_delegation_manager_delegation_size",
+                "nns_delegation_manager_delegation_size_bytes",
                 "How big is the delegation, in bytes",
                 // (1, 2, 5, ..., 1MB, 2MB, 5MB)
                 decimal_buckets(0, 6),
             ),
             errors: metrics_registry.int_counter(
-                "nns_delegation_manager_errors",
+                "nns_delegation_manager_errors_total",
                 "Number of errors encountered while fetching nns delegations",
             ),
         }

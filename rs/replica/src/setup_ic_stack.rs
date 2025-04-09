@@ -285,7 +285,6 @@ pub fn construct_ic_stack(
         metrics_registry,
         config.http_handler.clone(),
         log.clone(),
-        // FIXME(kpop): which tokio runtime should we use?
         rt_handle_http.clone(),
         subnet_id,
         root_subnet_id,
