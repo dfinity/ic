@@ -18,7 +18,6 @@ on:
       - Release Testing
       - Publish Release
       - Container IC Base Images
-      - Update IC versions file
 
 jobs:
   slack-workflow-run:

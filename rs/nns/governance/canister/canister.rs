@@ -1,4 +1,4 @@
-use candid::candid_method;
+use candid::{candid_method, Decode};
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
@@ -151,31 +151,47 @@ fn panic_with_probability(probability: f64, message: &str) {
     // state, which makes sure that the next time still panics, unless some other operation modifies
     // the `rng` successfully, such as spawning a neuron.
     let random = ChaCha20Rng::seed_from_u64(now_seconds()).next_u64();
-    let should_panic = (random as f64) / (u64::MAX as f64) < probability;
+    let should_panic = (random as f64) / (u64::MAX as f64) <= probability;
     if should_panic {
         panic!("{}", message);
     }
 }
 
-// TODO - can we migrate the canister_init to use candid later?
 #[export_name = "canister_init"]
 fn canister_init() {
     ic_cdk::setup();
 
-    match ApiGovernanceProto::decode(&arg_data_raw()[..]) {
-        Err(err) => {
-            println!(
-                "Error deserializing canister state in initialization: {}.",
-                err
-            );
-            Err(err)
+    let init_bytes = arg_data_raw();
+    let init_result = if init_bytes.starts_with(b"DIDL") {
+        match Decode!(&init_bytes, ApiGovernanceProto) {
+            Err(err) => {
+                println!(
+                    "Error deserializing canister state in initialization: {}.",
+                    err
+                );
+                Err(err.to_string())
+            }
+            Ok(proto) => {
+                canister_init_(proto);
+                Ok(())
+            }
         }
-        Ok(proto) => {
-            canister_init_(proto);
-            Ok(())
+    } else {
+        match ApiGovernanceProto::decode(&init_bytes[..]) {
+            Err(err) => {
+                println!(
+                    "Error deserializing canister state in initialization: {}.",
+                    err
+                );
+                Err(err.to_string())
+            }
+            Ok(proto) => {
+                canister_init_(proto);
+                Ok(())
+            }
         }
-    }
-    .expect("Couldn't initialize canister.");
+    };
+    init_result.expect("Couldn't initialize canister.");
 }
 
 #[candid_method(init)]
@@ -563,7 +579,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.9,
+        1.0,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -598,7 +614,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.9,
+        1.0,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 

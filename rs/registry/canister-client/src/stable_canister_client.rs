@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
+use std::sync::Arc;
 
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
@@ -24,11 +25,11 @@ pub struct StableCanisterRegistryClient<S: RegistryDataStableMemory> {
     // cache of latest_version
     latest_version: AtomicU64,
     // Registry client to interact with the canister
-    registry: Box<dyn Registry>,
+    registry: Arc<dyn Registry>,
 }
 
 impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
-    pub fn new(registry: Box<dyn Registry>) -> Self {
+    pub fn new(registry: Arc<dyn Registry>) -> Self {
         Self {
             _stable_memory: PhantomData,
             latest_version: AtomicU64::new(0),
@@ -56,6 +57,39 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             });
         }
         Ok(())
+    }
+
+    fn get_key_family_base<T>(
+        &self,
+        key_prefix: &str,
+        version: RegistryVersion,
+        f: Box<dyn Fn(String, Option<Vec<u8>>) -> T>,
+    ) -> Result<Vec<T>, RegistryClientError> {
+        if self.get_latest_version() < version {
+            return Err(RegistryClientError::VersionNotAvailable { version });
+        }
+
+        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
+
+        let mut effective_records = BTreeMap::new();
+        S::with_registry_map(|map| {
+            let version = version.get();
+            for (key, value) in map
+                .range(start_range..)
+                .filter(|(k, _)| k.version <= version)
+                .take_while(|(k, _)| k.key.starts_with(key_prefix))
+            {
+                // For each key, keep only the record values for the latest record versions. We rely upon
+                // the fact that for a fixed key, the records are sorted by version.
+                effective_records.insert(key.key, value.0);
+            }
+        });
+
+        let result = effective_records
+            .into_iter()
+            .filter_map(|(key, value)| value.is_some().then_some(f(key, value)))
+            .collect();
+        Ok(result)
     }
 }
 
@@ -92,31 +126,15 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         key_prefix: &str,
         version: RegistryVersion,
     ) -> Result<Vec<String>, RegistryClientError> {
-        if self.get_latest_version() < version {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
+        self.get_key_family_base(key_prefix, version, Box::new(|k, _| k))
+    }
 
-        let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
-
-        let mut effective_records = BTreeMap::new();
-        S::with_registry_map(|map| {
-            let version = version.get();
-            for (key, value) in map
-                .range(start_range..)
-                .filter(|(k, _)| k.version <= version)
-                .take_while(|(k, _)| k.key.starts_with(key_prefix))
-            {
-                // For each key, keep only the record values for the latest record versions. We rely upon
-                // the fact that for a fixed key, the records are sorted by version.
-                effective_records.insert(key.key, value.0);
-            }
-        });
-
-        let result = effective_records
-            .into_iter()
-            .filter_map(|(key, value)| value.is_some().then_some(key))
-            .collect();
-        Ok(result)
+    fn get_key_family_with_values(
+        &self,
+        key_prefix: &str,
+        version: RegistryVersion,
+    ) -> Result<Vec<(String, Vec<u8>)>, RegistryClientError> {
+        self.get_key_family_base(key_prefix, version, Box::new(|k, v| (k, v.unwrap())))
     }
 
     fn get_value(&self, key: &str, version: RegistryVersion) -> RegistryClientResult<Vec<u8>> {

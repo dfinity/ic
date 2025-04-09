@@ -21,6 +21,7 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
+use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
@@ -3601,11 +3602,13 @@ impl DeleteCanisterSnapshotArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
+    // TODO: EXC-1997.
     pub fn get_snapshot_id(&self) -> SnapshotId {
         SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
+// TODO: EXC-1997.
 impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
@@ -3747,23 +3750,75 @@ pub struct ReadCanisterSnapshotMetadataArgs {
 }
 
 impl ReadCanisterSnapshotMetadataArgs {
-    pub fn new(canister_id: CanisterId, snapshot_id: Vec<u8>) -> Self {
+    pub fn new(canister_id: CanisterId, snapshot_id: SnapshotId) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
         }
     }
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+    // TODO: EXC-1997.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
 }
 
-impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
 pub enum SnapshotSource {
+    #[default]
     TakenFromCanister,
     UploadedManually,
+}
+
+impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
+    fn from(value: SnapshotSource) -> Self {
+        match value {
+            SnapshotSource::TakenFromCanister => {
+                pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
+            }
+            SnapshotSource::UploadedManually => {
+                pb_canister_snapshot_bits::SnapshotSource::UploadedManually
+            }
+        }
+    }
+}
+
+impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_canister_snapshot_bits::SnapshotSource) -> Result<Self, Self::Error> {
+        match value {
+            pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "SnapshotSource",
+                    err: format!("Unexpected value of SnapshotSource: {:?}", value),
+                })
+            }
+            pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
+                Ok(SnapshotSource::TakenFromCanister)
+            }
+            pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
+                Ok(SnapshotSource::UploadedManually)
+            }
+        }
+    }
 }
 
 /// Struct used for encoding/decoding
@@ -3811,11 +3866,13 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub canister_version: u64,
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    pub global_timer: GlobalTimer,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
+///
+/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
     Inactive,
@@ -3823,7 +3880,9 @@ pub enum GlobalTimer {
 }
 
 /// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, CandidType, Serialize)]
+#[derive(
+    Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, CandidType, Serialize, EnumIter,
+)]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
     ConditionNotSatisfied,
@@ -3925,18 +3984,23 @@ impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
 impl ReadCanisterSnapshotDataArgs {
     pub fn new(
         canister_id: CanisterId,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id,
+            snapshot_id: snapshot_id.to_vec(),
             kind,
         }
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    // TODO: EXC-1997 strengthen types
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
@@ -3967,6 +4031,12 @@ pub enum CanisterSnapshotDataKind {
 pub struct ReadCanisterSnapshotDataResponse {
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
+}
+
+impl ReadCanisterSnapshotDataResponse {
+    pub fn new(chunk: Vec<u8>) -> Self {
+        Self { chunk }
+    }
 }
 
 /// Struct to encode/decode
@@ -4105,6 +4175,27 @@ mod tests {
     use super::*;
     use strum::IntoEnumIterator;
 
+    use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
+    use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
+
+    #[test]
+    fn snapshot_source_exhaustive() {
+        for initial in SnapshotSource::iter() {
+            let encoded = pb_canister_snapshot_bits::SnapshotSource::from(initial);
+            let round_trip = SnapshotSource::try_from(encoded).unwrap();
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn on_low_wasm_memory_hook_status_exhaustive() {
+        for initial in OnLowWasmMemoryHookStatus::iter() {
+            let encoded = pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&initial);
+            let round_trip = OnLowWasmMemoryHookStatus::try_from(encoded).unwrap();
+            assert_eq!(initial, round_trip);
+        }
+    }
+
     #[test]
     fn ecdsa_from_u32_exhaustive() {
         // If this test fails, make sure this trait impl covers all variants:
@@ -4166,6 +4257,26 @@ mod tests {
                 .collect::<Vec<i32>>(),
             [1, 2, 3]
         );
+    }
+
+    #[test]
+    fn compatibility_for_snapshot_source() {
+        // If this fails, you are making a potentially incompatible change to `SnapshotSource`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        let actual_variants: Vec<i32> = SnapshotSource::iter().map(|x| x as i32).collect();
+        let expected_variants = vec![0, 1];
+        assert_eq!(actual_variants, expected_variants);
+    }
+
+    #[test]
+    fn compatibility_for_on_low_wasm_memory_hook_status() {
+        // If this fails, you are making a potentially incompatible change to `OnLowWasmMemoryHookStatus`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        let actual_variants: Vec<i32> = OnLowWasmMemoryHookStatus::iter()
+            .map(|x| x as i32)
+            .collect();
+        let expected_variants = vec![0, 1, 2];
+        assert_eq!(actual_variants, expected_variants);
     }
 
     #[test]
