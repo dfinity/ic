@@ -520,7 +520,7 @@ impl SubnetPair {
             Ok(self.open_call_contexts_count().values().sum::<usize>() == 0)
         })?;
 
-        // Check the records agree on 'no pending calls'.
+        // Check that the records agree on 'no pending calls'.
         if self
             .canisters()
             .into_iter()
@@ -560,8 +560,6 @@ impl SubnetPair {
     }
 
     /// Returns the canister records, the latest local state and the latest remote state.
-    ///
-    /// # Panics if any critical errors were raised.
     pub fn failed_with_reason(&self, reason: impl Into<String>) -> Result<(), (String, DebugInfo)> {
         Err((
             reason.into(),
@@ -577,7 +575,7 @@ impl SubnetPair {
     }
 
     /// Gathers trap messages from the canisters logs of each canister and return it as map of
-    /// canister ID to logs (decoded into strings).
+    /// canister ID to logs (decoded into strings); skipping over canisters that didn't trap.
     pub fn gather_canister_traps(&self) -> BTreeMap<CanisterId, Vec<String>> {
         self.canisters()
             .into_iter()

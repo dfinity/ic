@@ -180,8 +180,8 @@ fn check_calls_conclude_with_migrating_canister_impl(
         ))
     })?;
 
-    // Induct the stream into `remote_env` and ensure there are reject signals in the reverse
-    // stream header.
+    // Induct the stream into `remote_env` and ensure that there are reject signals in the
+    // reverse stream header.
     if let Err(err) = induct_from_head_of_stream(&subnets.local_env, &subnets.remote_env, None) {
         return subnets.failed_with_reason(format!("{err}"));
     }
