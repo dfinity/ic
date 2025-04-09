@@ -82,4 +82,4 @@ jobs:
                     "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-performance-test/_doc"
             done < <(find -L ./bazel-out -type d -path '*/new')
 
-            echo -e "\e[34mRust benchmark on dedicated machine fr1-spm15 finished.\e[0m"
+            echo -e "\e[34mRust benchmarks on dedicated machine fr1-spm15 finished.\e[0m"
