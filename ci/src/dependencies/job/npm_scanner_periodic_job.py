@@ -111,6 +111,28 @@ REPOS_TO_SCAN = [
         ],
         DEFAULT_NODE_VERSION,
     ),
+    Repository(
+        "caffeine",
+        "https://github.com/dfinity/caffeine",
+        [
+            Project(
+                name="admin",
+                path="admin",
+                owner=Team.INTEGRATIONS_TEAM,
+            ),
+            Project(
+                name="frontend",
+                path="frontend",
+                owner=Team.INTEGRATIONS_TEAM,
+            ),
+            Project(
+                name="server",
+                path="server",
+                owner=Team.INTEGRATIONS_TEAM,
+            ),
+        ],
+        "22.11.0",
+    ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm
     # Repository(
