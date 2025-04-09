@@ -7727,6 +7727,14 @@ impl Governance {
 
         // Maps node providers to their rewards in XDR
         let (reg_rewards, maybe_version) = self.get_node_providers_monthly_xdr_rewards().await?;
+        let registry_version = maybe_version.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                "Registry version was not available in the response to \
+                    get_node_providers_monthly_xdr_rewards, which indicates a problem."
+                    .to_string(),
+            )
+        })?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
@@ -7760,8 +7768,6 @@ impl Governance {
             timestamp_seconds: icp_xdr_conversion_rate.timestamp_seconds,
             xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
         };
-
-        let registry_version = maybe_version.unwrap();
 
         Ok(MonthlyNodeProviderRewards {
             timestamp: self.env.now(),
