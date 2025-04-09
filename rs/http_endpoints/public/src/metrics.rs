@@ -218,7 +218,7 @@ impl DelegationManagerMetrics {
     pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             updates: metrics_registry.int_counter(
-                "nns_delegation_manager_updates",
+                "nns_delegation_manager_updates_total",
                 "How many times has the nns delegation been updated",
             ),
             update_duration: metrics_registry.histogram(
