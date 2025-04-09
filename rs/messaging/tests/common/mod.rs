@@ -355,8 +355,10 @@ impl SubnetPair {
     /// Force queries `canister` for `method` by first attempting a normal query; if it fails, start
     /// the `canister` and try again.
     ///
-    /// # Panics if `canister` is not installed in `self`; or if the query fails after starting the
-    /// canister.
+    /// # Panics
+    ///
+    /// This function panics if `canister` is not installed in `self`; or if the query fails after
+    /// starting the canister.
     pub fn force_query<T: candid::CandidType + for<'a> candid::Deserialize<'a>>(
         &self,
         canister: CanisterId,
@@ -484,7 +486,7 @@ impl SubnetPair {
 
     /// Repeatedly calls `f()` until it returns `Ok(true)` indicating 'job done' or else
     /// the job is considered failed after `max_ticks` iterations.
-    pub fn repeat<F>(&self, max_ticks: usize, f: F) -> Result<(), (String, DebugInfo)>
+    pub fn repeat_until<F>(&self, max_ticks: usize, f: F) -> Result<(), (String, DebugInfo)>
     where
         F: Fn() -> Result<bool, (String, DebugInfo)>,
     {
@@ -511,7 +513,7 @@ impl SubnetPair {
         F: Fn() -> Result<(), (String, DebugInfo)>,
     {
         // Tick until no more call contexts are observed.
-        self.repeat(max_ticks, || {
+        self.repeat_until(max_ticks, || {
             self.tick();
 
             perform_checks()?;
@@ -547,7 +549,9 @@ impl SubnetPair {
 
     /// Migrates `canister` from `local_env` to `remote_env`.
     ///
-    /// # Panics if `canister` does not exist on `local_env`.
+    /// # Panics
+    ///
+    /// This functions panics if `canister` does not exist on `local_env`.
     pub fn migrate_local_canister_to_remote_env(&self, canister: CanisterId) {
         for env in [&self.local_env, &self.remote_env] {
             env.prepare_canister_migrations(canister..=canister, LOCAL_SUBNET_ID, REMOTE_SUBNET_ID);

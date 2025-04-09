@@ -172,7 +172,7 @@ fn check_calls_conclude_with_migrating_canister_impl(
 
     // Tick on `local_env` only until at least `msgs_in_stream_min_count` messages
     // are accumulated in the stream from `local_env` to `remote_env`.
-    subnets.repeat(3 * msgs_in_stream_min_count, || {
+    subnets.repeat_until(3 * msgs_in_stream_min_count, || {
         subnets.local_env.tick();
         Ok(matches!(
             stream_snapshot(&subnets.local_env, &subnets.remote_env),
