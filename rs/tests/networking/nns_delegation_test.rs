@@ -29,13 +29,6 @@ fn setup(env: TestEnv) {
         .expect("Should be able to set up IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
-
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            node.await_status_is_healthy()
-                .expect("All nodes should go up eventually");
-        }
-    }
 }
 
 fn nns_delegation_on_nns_test(env: TestEnv) {
