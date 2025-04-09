@@ -11,7 +11,7 @@ use crate::{
         },
         remove_neuron_from_follower_index, FollowerIndex,
     },
-    following::ValidatedSetFollowing,
+    following::{self, ValidatedSetFollowing},
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -3918,6 +3918,16 @@ impl Governance {
         // as voting required).
         neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
 
+        let mentioned_topics = set_following
+            .topic_following
+            .iter()
+            .filter_map(|followees_for_topic| {
+                followees_for_topic
+                    .topic
+                    .and_then(|topic_id| Topic::try_from(topic_id).ok())
+            })
+            .collect::<BTreeSet<_>>();
+
         // First, validate the requested followee modifications in isolation.
 
         // TODO[NNS1-3708]: Avoid cloning the neuron commands.
@@ -3938,6 +3948,59 @@ impl Governance {
         // Third, update the followee index for this neuron.
         remove_neuron_from_follower_index(&mut self.topic_follower_index, neuron);
         add_neuron_to_follower_index(&mut self.topic_follower_index, neuron);
+
+        // Fourth, remove any legacy following (based on individual proposal types under the topics
+        // that were modified by this command).
+        for topic in &mentioned_topics {
+            let native_functions = topic.native_functions();
+            let custom_functions = GovernanceProto::get_custom_functions_for_topic(
+                &self.proto.id_to_nervous_system_functions,
+                *topic,
+            );
+            for function in native_functions.union(&custom_functions) {
+                neuron.followees.remove(function);
+
+                legacy::remove_neuron_from_function_followee_index_for_function(
+                    &mut self.function_followee_index,
+                    neuron,
+                    *function,
+                );
+            }
+        }
+
+        // Lastly, remove legacy catch-all following if either this command specifies following for
+        // all topics, or if this neuron follows on all topics (which can happen by executing
+        // multiple set-following commands).
+        let this_neurons_topics = neuron
+            .topic_followees
+            .iter()
+            .flat_map(|topic_followees| {
+                topic_followees
+                    .topic_id_to_followees
+                    .keys()
+                    .filter_map(|topic_id| Topic::try_from(*topic_id).ok())
+            })
+            .collect::<BTreeSet<_>>();
+
+        let this_neurons_follows_on_all_non_critical_topics =
+            following::NON_CRITICAL_TOPICS.is_subset(&this_neurons_topics);
+
+        let this_command_specifies_all_non_critical_topics =
+            following::NON_CRITICAL_TOPICS.is_subset(&mentioned_topics);
+
+        if this_neurons_follows_on_all_non_critical_topics
+            || this_command_specifies_all_non_critical_topics
+        {
+            let catchall_function = u64::from(&Action::Unspecified(Empty {}));
+
+            neuron.followees.remove(&catchall_function);
+
+            legacy::remove_neuron_from_function_followee_index_for_function(
+                &mut self.function_followee_index,
+                neuron,
+                catchall_function,
+            );
+        }
 
         Ok(())
     }
