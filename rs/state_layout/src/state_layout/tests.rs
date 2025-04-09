@@ -633,6 +633,31 @@ fn test_all_existing_pagemaps() {
     );
 }
 
+#[test]
+fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
+    let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
+    let wasm_hash = wasm_in_memory.module_hash();
+
+    let tmpdir = tmpdir("canister");
+    let canister_layout: CanisterLayout<WriteOnly> =
+        CanisterLayout::new_untracked(tmpdir.path().to_owned()).unwrap();
+    let wasm_file = canister_layout.wasm();
+    wasm_file
+        .serialize(&wasm_in_memory)
+        .expect("failed to write Wasm to disk");
+
+    let canister_layout: CanisterLayout<ReadOnly> =
+        CanisterLayout::new_untracked(tmpdir.path().to_owned()).unwrap();
+    let wasm_on_disk =
+        CanisterModule::new_from_file(Box::new(canister_layout.wasm()), wasm_hash.into())
+            .expect("failed to read Wasm from disk");
+
+    assert_eq!(wasm_in_memory.file(), None);
+    assert_eq!(wasm_on_disk.file(), Some(wasm_file.path.as_path()));
+    assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
+    assert_eq!(wasm_in_memory, wasm_on_disk);
+}
+
 #[test_strategy::proptest]
 fn read_back_wasm_memory_overlay_file_names(
     #[strategy(random_sorted_unique_heights(
