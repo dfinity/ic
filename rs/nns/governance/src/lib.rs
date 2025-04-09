@@ -209,6 +209,9 @@ thread_local! {
 
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
+
+    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool>
+        = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 }
 
 thread_local! {
@@ -296,6 +299,22 @@ pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
+}
+
+pub fn is_disburse_maturity_enabled() -> bool {
+    IS_DISBURSE_MATURITY_ENABLED.get()
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_disburse_maturity() -> Temporary {
+    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_disburse_maturity() -> Temporary {
+    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
