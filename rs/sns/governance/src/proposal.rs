@@ -1,5 +1,5 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::AdvanceSnsTargetVersion;
+use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
 use crate::types::Wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -23,7 +23,7 @@ use crate::{
         LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
         MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
         ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, SnsVersion, Tally, TransferSnsTreasuryFunds,
+        RegisterDappCanisters, SnsVersion, Tally, Topic as TopicPb, TransferSnsTreasuryFunds,
         UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
@@ -42,6 +42,7 @@ use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_api::format_full_hash;
+use ic_sns_governance_api::pb::v1 as pb_api;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -491,6 +492,12 @@ pub(crate) async fn validate_and_render_action(
                 advance_sns_target_version,
             );
         }
+        proposal::Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+            validate_and_render_set_topics_for_custom_proposals(
+                set_topics_for_custom_proposals,
+                &governance_proto.custom_functions_to_topics(),
+            )
+        }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
 }
@@ -518,6 +525,10 @@ fn validate_and_render_manage_nervous_system_parameters(
     new_parameters: &NervousSystemParameters,
     current_parameters: &NervousSystemParameters,
 ) -> Result<String, String> {
+    if new_parameters == &NervousSystemParameters::default() {
+        return Err("NervousSystemParameters: at least one field must be set.".to_string());
+    }
+
     new_parameters.inherit_from(current_parameters).validate()?;
 
     Ok(format!(
@@ -1225,6 +1236,8 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 #[derive(Debug)]
 pub(crate) struct ValidGenericNervousSystemFunction {
     pub id: u64,
+    #[allow(dead_code)]
+    pub topic: Option<pb_api::topics::Topic>,
     pub target_canister_id: CanisterId,
     pub target_method: String,
     pub validator_canister_id: CanisterId,
@@ -1300,6 +1313,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                 target_method_name,
                 validator_canister_id,
                 validator_method_name,
+                topic,
             })) => {
                 // Validate the target_canister_id field.
                 let target_canister_id =
@@ -1323,6 +1337,20 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     defects.push("validator_method_name was empty.".to_string());
                 }
 
+                let topic = topic.map(|topic| -> Result<pb_api::topics::Topic, String> {
+                    let topic = TopicPb::try_from(topic).map_err(|e| format!("{:?}", e))?;
+                    let topic = pb_api::topics::Topic::try_from(topic)?;
+                    Ok(topic)
+                });
+                let topic = match topic {
+                    None => None,
+                    Some(Ok(topic)) => Some(topic),
+                    Some(Err(e)) => {
+                        defects.push(format!("topic field is not valid: {:?}", e));
+                        None
+                    }
+                };
+
                 if !defects.is_empty() {
                     return Err(format!(
                         "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
@@ -1332,6 +1360,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
 
                 Ok(ValidGenericNervousSystemFunction {
                     id: *id,
+                    topic,
                     target_canister_id: target_canister_id.unwrap(),
                     target_method: target_method_name.as_ref().unwrap().clone(),
                     validator_canister_id: validator_canister_id.unwrap(),
@@ -1374,6 +1403,12 @@ pub fn validate_and_render_add_generic_nervous_system_function(
 
     if existing_functions.len() >= MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS {
         return Err("Reached maximum number of allowed GenericNervousSystemFunctions".to_string());
+    }
+
+    // This isn't done in ValidGenericNervousSystemFunction::try_from because it's only invalid for new functions, not
+    // for existing functions
+    if validated_function.topic.is_none() {
+        return Err("NervousSystemFunction must have a topic".to_string());
     }
 
     Ok(format!(
@@ -1778,6 +1813,103 @@ fn validate_and_render_advance_sns_target_version_proposal(
         render,
         ActionAuxiliary::AdvanceSnsTargetVersion(target_version),
     ))
+}
+
+pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
+    set_topics_for_custom_proposals: &SetTopicsForCustomProposals,
+    existing_custom_functions: &BTreeMap<u64, (String, Option<Topic>)>,
+) -> Result<String, String> {
+    let SetTopicsForCustomProposals {
+        custom_function_id_to_topic,
+    } = set_topics_for_custom_proposals;
+
+    if custom_function_id_to_topic.is_empty() {
+        return Err(
+            "SetTopicsForCustomProposals.custom_function_id_to_topic must not be empty."
+                .to_string(),
+        );
+    }
+
+    let mut table = vec!["".to_string()]; // "" ensures joining this string works well.
+    let mut functions_with_unknown_topics = vec![];
+    let mut functions_with_unspecified_topics = vec![];
+    let mut not_registered_as_custom_functions = vec![];
+
+    for (custom_function_id, proposed_topic) in custom_function_id_to_topic.iter() {
+        let Ok(proposed_topic) = Topic::try_from(*proposed_topic) else {
+            functions_with_unknown_topics.push(format!(
+                "function ID: {custom_function_id}, invalid topic: {proposed_topic}"
+            ));
+            continue;
+        };
+
+        if matches!(proposed_topic, Topic::Unspecified) {
+            functions_with_unspecified_topics.push(format!("{custom_function_id}"));
+            continue;
+        }
+
+        let Some((function_name, current_topic)) =
+            existing_custom_functions.get(custom_function_id)
+        else {
+            not_registered_as_custom_functions.push(format!("{custom_function_id}"));
+            continue;
+        };
+
+        let topic_change_str = if let Some(current_topic) = current_topic {
+            // Is this proposal trying to modify a previously set topic?
+
+            if proposed_topic == *current_topic {
+                format!("{proposed_topic} (keeping unchanged)")
+            } else {
+                format!("{proposed_topic} (changing from {current_topic})")
+            }
+        } else {
+            format!("{proposed_topic} (topic not currently set)")
+        };
+
+        table.push(format!("{function_name} under topic {topic_change_str}"));
+    }
+
+    if !functions_with_unknown_topics.is_empty() {
+        return Err(format!(
+            "Invalid topics detected: {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            functions_with_unspecified_topics.join("; "),
+        ));
+    }
+
+    if !functions_with_unspecified_topics.is_empty() {
+        return Err(format!(
+            "Cannot set the unspecified topic ({}) for proposal(s) with ID(s) {}.\
+                 To list available topics, please query `SnsGovernance.list_topics`.",
+            Topic::Unspecified as i32,
+            functions_with_unspecified_topics.join(", "),
+        ));
+    }
+
+    if !not_registered_as_custom_functions.is_empty() {
+        return Err(format!(
+            "Cannot set topic for proposal(s) with ID(s) {} since they have not been registered \
+             as custom proposals in this SNS yet. Please use `AddGenericNervousSystemFunction` \
+             proposals to register new custom SNS proposals.",
+            not_registered_as_custom_functions.join(", "),
+        ));
+    }
+
+    let render = table.join("\n  - ");
+
+    let render = format!(
+        "### If adopted, the following proposals will be categorized under \
+         the specified topics:\n\
+         {render}"
+    );
+
+    let render = format!(
+        "# Set topics for custom SNS proposal types\n\n\
+         {render}"
+    );
+
+    Ok(render)
 }
 
 impl ProposalData {
@@ -2273,6 +2405,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised,
             action_auxiliary,
+            topic,
         } = self;
 
         let limited_ballots: BTreeMap<_, _> = ballots
@@ -2302,6 +2435,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total: *minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: *minimum_yes_proportion_of_exercised,
             action_auxiliary: action_auxiliary.clone(),
+            topic: *topic,
 
             // The following fields are truncated:
             payload_text_rendering: None,
@@ -2560,13 +2694,16 @@ mod minting_tests;
 mod advance_sns_target_version;
 
 #[cfg(test)]
+mod set_topics_for_custom_proposals;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
-            ProposalId, Subaccount, WaitForQuietState,
+            ProposalId, Subaccount, Topic, WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -2580,7 +2717,7 @@ mod tests {
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha2::Sha256;
-    use ic_management_canister_types::{CanisterIdRecord, ChunkHash, StoredChunksReply};
+    use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
     use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -3225,6 +3362,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from_u64(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(1).get()),
@@ -3422,6 +3560,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from_u64(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(1).get()),
@@ -3468,6 +3607,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
                 description: None,
                 function_type: Some(FunctionType::GenericNervousSystemFunction(
                     GenericNervousSystemFunction {
+                        topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                         target_canister_id: Some(CanisterId::from_u64(i as u64).get()),
                         target_method_name: Some("test_method".to_string()),
                         validator_canister_id: Some(CanisterId::from_u64(i as u64).get()),
@@ -3484,6 +3624,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from(u64::MAX).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(u64::MAX).get()),
@@ -3926,6 +4067,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from(2).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from(1).get()),
@@ -3947,6 +4089,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::ic_00().get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from(1).get()),
@@ -3966,6 +4109,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::ic_00().get()),
@@ -4605,6 +4749,7 @@ Version {
             // This is because the proposal was rejected (see the latest_tally field).
             executed_timestamp_seconds: 0,
             action_auxiliary: None,
+            topic: Some(Topic::Governance as i32),
         };
     }
 
@@ -4914,6 +5059,7 @@ Version {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(TopicPb::DaoCommunitySettings)),
                     target_canister_id: Some(canister_id.get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(canister_id.get()),
@@ -4969,6 +5115,9 @@ NervousSystemFunction {
                 ),
                 validator_method_name: Some(
                     "test_validator_method",
+                ),
+                topic: Some(
+                    DaoCommunitySettings,
                 ),
             },
         ),
@@ -5261,5 +5410,75 @@ Payload rendering here"#
                 ..Default::default()
             }
         );
+    }
+
+    #[test]
+    fn test_manage_nervous_system_parameters_must_set_some_fields() {
+        let current_parameters = NervousSystemParameters::with_default_values();
+
+        // Probably the same as `NervousSystemParameters::default()`, but more verbose.
+        let new_parameters = NervousSystemParameters {
+            reject_cost_e8s: None,
+            neuron_minimum_stake_e8s: None,
+            transaction_fee_e8s: None,
+            max_proposals_to_keep_per_action: None,
+            initial_voting_period_seconds: None,
+            wait_for_quiet_deadline_increase_seconds: None,
+            default_followees: None,
+            max_number_of_neurons: None,
+            neuron_minimum_dissolve_delay_to_vote_seconds: None,
+            max_followees_per_function: None,
+            max_dissolve_delay_seconds: None,
+            max_neuron_age_for_age_bonus: None,
+            max_number_of_proposals_with_ballots: None,
+            neuron_claimer_permissions: None,
+            neuron_grantable_permissions: None,
+            max_number_of_principals_per_neuron: None,
+            voting_rewards_parameters: None,
+            max_dissolve_delay_bonus_percentage: None,
+            max_age_bonus_percentage: None,
+            maturity_modulation_disabled: None,
+            automatically_advance_target_version: None,
+        };
+
+        let result = validate_and_render_manage_nervous_system_parameters(
+            &new_parameters,
+            &current_parameters,
+        );
+
+        assert_eq!(
+            result,
+            Err("NervousSystemParameters: at least one field must be set.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_manage_nervous_system_parameters_happy() {
+        let current_parameters = NervousSystemParameters::with_default_values();
+
+        // At least one field must be set. Which one - doesn't matter for this test.
+        let new_parameters = NervousSystemParameters {
+            automatically_advance_target_version: Some(false),
+            ..Default::default()
+        };
+
+        let render = validate_and_render_manage_nervous_system_parameters(
+            &new_parameters,
+            &current_parameters,
+        )
+        .unwrap();
+
+        for keyword in [
+            "change nervous system parameters",
+            "automatically_advance_target_version: Some(\n        true,\n    )",
+            "automatically_advance_target_version: Some(\n        false,\n    )",
+        ] {
+            assert!(
+                render.contains(keyword),
+                "Proposal render:\n{}\n does not contain expected keyword {}",
+                render,
+                keyword
+            );
+        }
     }
 }

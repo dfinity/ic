@@ -66,9 +66,9 @@ fn http_request(request: HttpGatewayRequest) -> HttpGatewayResponse {
         }
     } else {
         HttpGatewayResponse {
-            status_code: 404,
+            status_code: 400,
             headers: vec![],
-            body: ByteBuf::from(b"Not Found."),
+            body: ByteBuf::from(b"The request is not supported by the test canister."),
             upgrade: None,
             streaming_strategy: None,
         }
@@ -158,23 +158,23 @@ async fn sign_with_schnorr(
     key_id: SchnorrKeyId,
     aux: Option<SignWithSchnorrAux>,
 ) -> Result<Vec<u8>, String> {
-    let internal_request = SignWithSchnorrArgument {
+    let request = SignWithSchnorrArgument {
         message,
         derivation_path,
         key_id,
         aux,
     };
 
-    let (internal_reply,): (SignWithSchnorrResponse,) = ic_cdk::api::call::call_with_payment(
+    let (reply,): (SignWithSchnorrResponse,) = ic_cdk::api::call::call_with_payment(
         Principal::management_canister(),
         "sign_with_schnorr",
-        (internal_request,),
-        25_000_000_000,
+        (request,),
+        26_153_846_153,
     )
     .await
     .map_err(|e| format!("sign_with_schnorr failed {e:?}"))?;
 
-    Ok(internal_reply.signature)
+    Ok(reply.signature)
 }
 
 // ECDSA interface
@@ -218,6 +218,101 @@ async fn sign_with_ecdsa(
         .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
         .0
         .signature)
+}
+
+// vetKd interface
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub enum VetKdCurve {
+    #[serde(rename = "bls12_381_g2")]
+    #[allow(non_camel_case_types)]
+    Bls12_381_G2,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdKeyId {
+    pub curve: VetKdCurve,
+    pub name: String,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdPublicKeyArgument {
+    pub canister_id: Option<Principal>,
+    pub context: Vec<u8>,
+    pub key_id: VetKdKeyId,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdPublicKeyResponse {
+    pub public_key: Vec<u8>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdDeriveKeyArgument {
+    pub context: Vec<u8>,
+    pub input: Vec<u8>,
+    pub key_id: VetKdKeyId,
+    pub transport_public_key: Vec<u8>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdDeriveKeyResponse {
+    pub encrypted_key: Vec<u8>,
+}
+
+#[update]
+async fn vetkd_public_key(
+    canister_id: Option<Principal>,
+    context: Vec<u8>,
+    name: String,
+) -> Result<Vec<u8>, String> {
+    let request = VetKdPublicKeyArgument {
+        canister_id,
+        context,
+        key_id: VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name,
+        },
+    };
+
+    let (res,): (VetKdPublicKeyResponse,) = ic_cdk::call(
+        Principal::management_canister(),
+        "vetkd_public_key",
+        (request,),
+    )
+    .await
+    .map_err(|e| format!("vetkd_public_key failed {}", e.1))?;
+
+    Ok(res.public_key)
+}
+
+#[update]
+async fn vetkd_derive_key(
+    context: Vec<u8>,
+    input: Vec<u8>,
+    name: String,
+    transport_public_key: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let request = VetKdDeriveKeyArgument {
+        context,
+        input,
+        key_id: VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name,
+        },
+        transport_public_key,
+    };
+
+    let (reply,): (VetKdDeriveKeyResponse,) = ic_cdk::api::call::call_with_payment(
+        Principal::management_canister(),
+        "vetkd_derive_key",
+        (request,),
+        26_153_846_153,
+    )
+    .await
+    .map_err(|e| format!("vetkd_derive_key failed {e:?}"))?;
+
+    Ok(reply.encrypted_key)
 }
 
 // canister HTTP outcalls
@@ -291,6 +386,40 @@ async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
         .await
         .unwrap()
         .0
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct NodeMetrics {
+    pub node_id: Principal,
+    pub num_blocks_proposed_total: u64,
+    pub num_block_failures_total: u64,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct NodeMetricsHistoryResponse {
+    pub timestamp_nanos: u64,
+    pub node_metrics: Vec<NodeMetrics>,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct NodeMetricsHistoryArgs {
+    pub start_at_timestamp_nanos: u64,
+    pub subnet_id: Principal,
+}
+
+#[update]
+async fn node_metrics_history_proxy(
+    args: NodeMetricsHistoryArgs,
+) -> Vec<NodeMetricsHistoryResponse> {
+    ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
+        candid::Principal::management_canister(),
+        "node_metrics_history",
+        (args,),
+        0_u128,
+    )
+    .await
+    .unwrap()
+    .0
 }
 
 // executing many instructions

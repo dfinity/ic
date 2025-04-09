@@ -1,7 +1,6 @@
 use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;
-use std::net::IpAddr;
-use std::str::FromStr;
+use std::{net::IpAddr, str::FromStr};
 use url::Url;
 
 pub(crate) fn http_endpoint_to_url(http: &ConnectionEndpoint, log: &ReplicaLogger) -> Option<Url> {

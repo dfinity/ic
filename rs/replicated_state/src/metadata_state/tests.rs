@@ -5,14 +5,14 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
         canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
         SUBNET_1, SUBNET_2,
     },
-    messages::RequestBuilder,
+    messages::{RequestBuilder, ResponseBuilder},
     xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
 use ic_types::{
@@ -329,10 +329,9 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.network_topology = network_topology;
 
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
-    let pk_der =
-        ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
-            .unwrap()
-            .serialize_rfc8410_der();
+    let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
+        .unwrap()
+        .serialize_rfc8410_der();
 
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
@@ -1573,6 +1572,82 @@ fn compatibility_for_reject_reason() {
 }
 
 #[test]
+fn stream_responses_tracking() {
+    let mut stream = Stream::new(StreamIndexedQueue::with_begin(0.into()), 0.into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
+
+    // Best-effort responses don't count.
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1 }
+    );
+
+    let response = ResponseBuilder::default()
+        .respondent(*LOCAL_CANISTER)
+        .originator(*REMOTE_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2 }
+    );
+
+    // Response from a different respondent.
+    let response = ResponseBuilder::default()
+        .respondent(*REMOTE_CANISTER)
+        .originator(*LOCAL_CANISTER)
+        .build();
+    stream.push(response.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
+
+    // Requests don't count.
+    let request = RequestBuilder::default()
+        .sender(*LOCAL_CANISTER)
+        .receiver(*REMOTE_CANISTER)
+        .build();
+    stream.push(request.into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 2, *REMOTE_CANISTER => 1 }
+    );
+
+    // Discard everything in the same order.
+    stream.discard_messages_before(StreamIndex::new(1), &vec![].into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
+    stream.discard_messages_before(StreamIndex::new(2), &vec![].into());
+    assert_eq!(
+        stream.guaranteed_response_counts(),
+        &btreemap! { *LOCAL_CANISTER => 1, *REMOTE_CANISTER => 1 }
+    );
+    stream.discard_messages_before(StreamIndex::new(4), &vec![].into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+    stream.discard_messages_before(StreamIndex::new(5), &vec![].into());
+    assert!(stream.guaranteed_response_counts().is_empty());
+}
+
+#[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
     let mut consumed_cycles_by_use_case = BTreeMap::new();
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::from(5));
@@ -2029,7 +2104,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     );
 }
 

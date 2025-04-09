@@ -10,7 +10,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::{self as api, manage_neuron_response::MergeResponse};
+use ic_nns_governance_api::pb::v1::manage_neuron_response::MergeResponse;
 use icp_ledger::Subaccount;
 use std::collections::BTreeMap;
 
@@ -349,16 +349,8 @@ pub fn build_merge_neurons_response(
     now_seconds: u64,
     requester: PrincipalId,
 ) -> MergeResponse {
-    let source_neuron = Some(api::Neuron::from(
-        source
-            .clone()
-            .into_proto(voting_power_economics, now_seconds),
-    ));
-    let target_neuron = Some(api::Neuron::from(
-        target
-            .clone()
-            .into_proto(voting_power_economics, now_seconds),
-    ));
+    let source_neuron = Some(source.clone().into_api(now_seconds, voting_power_economics));
+    let target_neuron = Some(target.clone().into_api(now_seconds, voting_power_economics));
 
     let source_neuron_info =
         Some(source.get_neuron_info(voting_power_economics, now_seconds, requester));

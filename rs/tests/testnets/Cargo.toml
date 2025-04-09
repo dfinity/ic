@@ -1,21 +1,21 @@
 [package]
-name = "testnets"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "testnets"
+version.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-base-types = { path = "../../types/base_types" }
 ic-mainnet-nns-recovery = { path = "../nns/ic_mainnet_nns_recovery" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-xrc-types = "1.0.0"
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
 nns_dapp = { path = "../nns/nns_dapp" }
 os_qualification_utils = { path = "../dre/utils" }
 reqwest = { workspace = true }
@@ -42,6 +42,10 @@ name = "single_app_large_node"
 path = "single_app_large_node.rs"
 
 [[bin]]
+name = "single_app_small_node"
+path = "single_app_small_node.rs"
+
+[[bin]]
 name = "single_large_node"
 path = "single_large_node.rs"
 
@@ -52,6 +56,10 @@ path = "small_nns.rs"
 [[bin]]
 name = "small"
 path = "small.rs"
+
+[[bin]]
+name = "small_bitcoin"
+path = "small_bitcoin.rs"
 
 [[bin]]
 name = "small_high_perf"

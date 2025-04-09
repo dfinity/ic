@@ -6,11 +6,13 @@ use crate::pb::v1::{
     neuron::Followees,
     ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
 };
+use candid::Nat;
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::ChunkHash;
+use ic_management_canister_types_private::ChunkHash;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::Principals;
+use ic_sns_governance_api::pb::v1::topics::Topic;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use std::convert::TryInto;
@@ -27,7 +29,10 @@ fn test_voting_period_parameters() {
         ..Default::default()
     };
     assert_eq!(
-        non_critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
+        non_critical_action.voting_duration_parameters(
+            &normal_nervous_system_parameters,
+            ProposalCriticality::Normal
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(4 * ONE_DAY_SECONDS),
@@ -38,7 +43,10 @@ fn test_voting_period_parameters() {
         },
     );
     assert_eq!(
-        critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
+        critical_action.voting_duration_parameters(
+            &normal_nervous_system_parameters,
+            ProposalCriticality::Critical
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(5 * ONE_DAY_SECONDS),
@@ -58,7 +66,10 @@ fn test_voting_period_parameters() {
         ..Default::default()
     };
     assert_eq!(
-        non_critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
+        non_critical_action.voting_duration_parameters(
+            &slow_nervous_system_parameters,
+            ProposalCriticality::Normal
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(7 * ONE_DAY_SECONDS),
@@ -69,7 +80,10 @@ fn test_voting_period_parameters() {
         },
     );
     assert_eq!(
-        critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
+        critical_action.voting_duration_parameters(
+            &slow_nervous_system_parameters,
+            ProposalCriticality::Critical
+        ),
         VotingDurationParameters {
             initial_voting_period: PbDuration {
                 seconds: Some(7 * ONE_DAY_SECONDS),
@@ -431,6 +445,7 @@ lazy_static! {
                     target_method_name: Some("Foo".to_string()),
                     validator_canister_id: Some(*target_canister_id),
                     validator_method_name: Some("Bar".to_string()),
+                    topic: Some(Topic::Governance as i32),
                 })),
             }
         }
@@ -1490,5 +1505,60 @@ fn test_validate_chunked_wasm_management_canister_call_returns_junk() {
             "Cannot decode response from calling stored_chunks for {}: Cannot parse header ",
             store_canister_id
         )]),
+    );
+}
+
+#[test]
+fn test_from_manage_ledger_parameters_into_ledger_upgrade_args() {
+    let manage_ledger_parameters = ManageLedgerParameters {
+        transfer_fee: Some(111),
+        token_name: Some("abc".to_string()),
+        token_symbol: Some("xyz".to_string()),
+        token_logo: Some("<logo>".to_string()),
+    };
+
+    let observed = LedgerUpgradeArgs::from(manage_ledger_parameters);
+
+    assert_eq!(
+        observed,
+        LedgerUpgradeArgs {
+            metadata: Some(vec![(
+                "icrc1:logo".to_string(),
+                MetadataValue::Text("<logo>".to_string())
+            )]),
+            token_name: Some("abc".to_string()),
+            token_symbol: Some("xyz".to_string()),
+            transfer_fee: Some(Nat::from(111_u64)),
+            change_fee_collector: None,
+            max_memo_length: None,
+            feature_flags: None,
+            change_archive_options: None,
+        }
+    );
+}
+
+#[test]
+fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
+    let manage_ledger_parameters = ManageLedgerParameters {
+        transfer_fee: Some(111),
+        token_name: Some("abc".to_string()),
+        token_symbol: Some("xyz".to_string()),
+        token_logo: None,
+    };
+
+    let observed = LedgerUpgradeArgs::from(manage_ledger_parameters);
+
+    assert_eq!(
+        observed,
+        LedgerUpgradeArgs {
+            metadata: None,
+            token_name: Some("abc".to_string()),
+            token_symbol: Some("xyz".to_string()),
+            transfer_fee: Some(Nat::from(111_u64)),
+            change_fee_collector: None,
+            max_memo_length: None,
+            feature_flags: None,
+            change_archive_options: None,
+        }
     );
 }

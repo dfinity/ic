@@ -1,0 +1,33 @@
+[package]
+name = "ic-secp256k1"
+version = "0.1.0"
+description = "A package created for the Internet Computer Protocol for the handling of ECDSA and Schnorr keys over the secp256k1 curve."
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hmac = "0.12"
+k256 = { workspace = true }
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
+pem = "1.1.0"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+simple_asn1 = { workspace = true }
+sha2 = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+bip32 = "0.5"
+bitcoin = { version = "0.28.2" }
+hex = { workspace = true }
+hex-literal = "0.4"
+secp256k1 = { version = "0.22", features = ["global-context", "rand-std"] }
+wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }

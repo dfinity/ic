@@ -453,7 +453,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
                 .to_vec();
 
             if res != hello_world_gzip {
-                bail!("gzipped hello world response did not match uploaded content")
+                bail!("gzipped hello world response did not match uploaded content (got {res:?}, expected {hello_world_gzip:?}")
             }
 
             Ok(())
@@ -674,7 +674,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
                     .send()
                     .await.context("unable to request asset")?;
 
-                if res.status() != StatusCode::SERVICE_UNAVAILABLE {
+                if res.status() != StatusCode::BAD_GATEWAY {
                     bail!("invalid 4mb asset did not fail verification")
                 }
 
@@ -1768,7 +1768,7 @@ pub fn http_endpoints_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::SERVICE_UNAVAILABLE {
+            if res.status() != StatusCode::BAD_GATEWAY {
                 bail!("{name} failed: {}", res.status())
             }
 

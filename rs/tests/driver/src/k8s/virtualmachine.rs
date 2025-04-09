@@ -28,6 +28,7 @@ spec:
       labels:
         kubevirt.io/vm: {name}
     spec:
+      schedulerName: koord-scheduler
       domain:
         cpu:
           cores: {cpus}
@@ -60,8 +61,9 @@ spec:
       - name: default
         pod: {}
       volumes:
-        - dataVolume:
-            name: "{name}-guestos"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/disk.img
           name: disk0
         - name: cloudinitdisk
           cloudInitNoCloud:
@@ -116,6 +118,9 @@ spec:
       labels:
         kubevirt.io/vm: {name}
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: {node}
+      schedulerName: koord-scheduler
       domain:
         cpu:
           cores: {cpus}
@@ -149,11 +154,13 @@ spec:
       - name: default
         pod: {}
       volumes:
-        - dataVolume:
-            name: "{name}-guestos"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/disk.img
           name: disk0
-        - containerDisk:
-            image: "harbor.ln1-idx1.dfinity.network/tnet/config:{name}"
+        - hostDisk:
+            type: Disk
+            path: /srv/tnet/{name}/config_disk.img
           name: disk1
 "#;
 
@@ -169,6 +176,7 @@ pub async fn create_vm(
     owner: OwnerReference,
     access_key: Option<String>,
     vm_type: ImageType,
+    node: Option<String>,
 ) -> Result<()> {
     info!("Creating virtual machine {}", name);
     let template = match vm_type {
@@ -183,7 +191,8 @@ pub async fn create_vm(
         .replace("{memory_request}", memory_request)
         .replace("{cpus}", cpus)
         .replace("{ipv4}", &ipv4.to_string())
-        .replace("{ipv6}", &ipv6.to_string());
+        .replace("{ipv6}", &ipv6.to_string())
+        .replace("{node}", &node.unwrap_or_default());
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
     data.metadata.owner_references = vec![owner].into();
     let response = api

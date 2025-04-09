@@ -1,5 +1,6 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
+use crate::metrics::observe_get_utxos_latency;
 use crate::ECDSAPublicKey;
 use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
@@ -15,7 +16,7 @@ use ic_cdk::api::{
     call::RejectionCode,
     management_canister::bitcoin::{BitcoinNetwork, UtxoFilter},
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
 use serde::de::DeserializeOwned;
@@ -136,12 +137,21 @@ where
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CallSource {
     /// The client initiated the call.
     Client,
     /// The minter initiated the call for internal bookkeeping.
     Minter,
+}
+
+impl fmt::Display for CallSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Client => write!(f, "client"),
+            Self::Minter => write!(f, "minter"),
+        }
+    }
 }
 
 /// Fetches the full list of UTXOs for the specified address.
@@ -165,6 +175,9 @@ pub async fn get_utxos<R: CanisterRuntime>(
         runtime.bitcoin_get_utxos(req).await
     }
 
+    // Record start time of method execution for metrics
+    let start_time = runtime.time();
+
     let mut response = bitcoin_get_utxos(
         GetUtxosRequest {
             address: address.to_string(),
@@ -177,6 +190,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     .await?;
 
     let mut utxos = std::mem::take(&mut response.utxos);
+    let mut num_pages: usize = 1;
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
@@ -192,7 +206,10 @@ pub async fn get_utxos<R: CanisterRuntime>(
         .await?;
 
         utxos.append(&mut response.utxos);
+        num_pages += 1;
     }
+
+    observe_get_utxos_latency(utxos.len(), num_pages, source, start_time, runtime.time());
 
     response.utxos = utxos;
 

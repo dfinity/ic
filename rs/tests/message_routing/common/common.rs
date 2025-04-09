@@ -13,7 +13,9 @@ use xnet_test::StartArgs;
 /// given parameters.
 pub async fn start_all_canisters(
     canisters: &[Vec<Canister<'_>>],
-    payload_size_bytes: u64,
+    request_payload_size_bytes: u64,
+    call_timeouts_seconds: &[Option<u32>],
+    response_payload_size_bytes: u64,
     canister_to_subnet_rate: u64,
 ) {
     let topology: Vec<Vec<CanisterId>> = canisters
@@ -33,7 +35,9 @@ pub async fn start_all_canisters(
         let input = StartArgs {
             network_topology: topology.clone(),
             canister_to_subnet_rate,
-            payload_size_bytes,
+            request_payload_size_bytes,
+            call_timeouts_seconds: call_timeouts_seconds.to_vec(),
+            response_payload_size_bytes,
         };
         futures.push(async move {
             let _: String = canister

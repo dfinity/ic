@@ -1,10 +1,12 @@
-use crate::errors::ApiError;
-use crate::models::seconds::Seconds;
-use crate::request::Request;
-use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp,
-    Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+use crate::{
+    errors::ApiError,
+    models::seconds::Seconds,
+    request::Request,
+    request_types::{
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    },
 };
 use ic_types::PrincipalId;
 use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
@@ -359,10 +361,16 @@ impl State {
         Ok(())
     }
 
-    pub fn list_neurons(&mut self, account: icp_ledger::AccountIdentifier) -> Result<(), ApiError> {
+    pub fn list_neurons(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        page_number: Option<u64>,
+    ) -> Result<(), ApiError> {
         self.flush()?;
-        self.actions
-            .push(Request::ListNeurons(ListNeurons { account }));
+        self.actions.push(Request::ListNeurons(ListNeurons {
+            account,
+            page_number,
+        }));
         Ok(())
     }
 
@@ -389,12 +397,14 @@ impl State {
         &mut self,
         account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
+        controller: Option<PrincipalId>,
     ) -> Result<(), ApiError> {
         self.flush()?;
         self.actions
             .push(Request::RefreshVotingPower(RefreshVotingPower {
                 account,
                 neuron_index,
+                controller,
             }));
         Ok(())
     }

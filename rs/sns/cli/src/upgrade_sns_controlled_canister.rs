@@ -1,34 +1,37 @@
 use crate::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use candid::{CandidType, Encode, Nat, Principal};
 use candid_utils::{
     printing,
     validation::{encode_upgrade_args, encode_upgrade_args_without_service},
 };
 use clap::Parser;
+use core::convert::From;
 use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelection};
-use ic_agent::{export::reqwest::Url, Agent};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types::{BoundedVec, CanisterInstallMode};
+use ic_management_canister_types_private::{BoundedVec, CanisterInstallMode};
 use ic_nervous_system_agent::{
-    management_canister, nns,
-    sns::{self, root::SnsCanisters},
-    CallCanisters, Request,
+    management_canister::{self, delete_canister, stop_canister},
+    nns,
+    sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
+    CallCanisters, CanisterInfo, Request,
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
-use ic_sns_governance::pb::v1::{
-    proposal::Action, ChunkedCanisterWasm, Proposal, UpgradeSnsControlledCanister,
+use ic_sns_governance_api::pb::v1::{
+    get_proposal_response,
+    proposal::{self, Action},
+    ChunkedCanisterWasm, Proposal, ProposalData, ProposalId, UpgradeSnsControlledCanister,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
 use itertools::{Either, Itertools};
 use serde::Deserialize;
-use serde_cbor::Value;
 use std::{
     collections::BTreeSet,
     fs::File,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
+use thiserror::Error;
 
 const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
 const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
@@ -37,7 +40,7 @@ const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
 // The cycle fee for create request is 0.1T cycles.
 pub const CANISTER_CREATE_FEE: u128 = 100_000_000_000_u128;
 
-pub const STORE_CANISTER_INITIAL_CYCLES_BALANCE: u128 = 500_000_000_000_u128; // 0.5T
+pub const STORE_CANISTER_INITIAL_CYCLES_BALANCE: u128 = 1_000_000_000_000_u128; // 1T
 
 /// The arguments used to configure the upgrade_sns_controlled_canister command.
 #[derive(Debug, Parser)]
@@ -46,27 +49,39 @@ pub struct UpgradeSnsControlledCanisterArgs {
     ///
     /// If not specified, the proposal payload will be printed at the end.
     #[clap(long)]
-    sns_neuron_id: Option<ParsedSnsNeuron>,
+    pub sns_neuron_id: Option<ParsedSnsNeuron>,
 
     /// ID of the target canister to be upgraded.
     #[clap(long)]
-    target_canister_id: CanisterId,
+    pub target_canister_id: CanisterId,
 
     /// Path to a ICP WASM module file (may be gzipped).
     #[clap(long)]
-    wasm_path: PathBuf,
+    pub wasm_path: PathBuf,
 
     /// Upgrade argument for the Candid service.
     #[clap(long)]
-    candid_arg: Option<String>,
+    pub candid_arg: Option<String>,
 
     /// URL (starting with https://) of a web page with a public announcement of this upgrade.
     #[clap(long)]
-    proposal_url: Url,
+    pub proposal_url: url::Url,
 
     /// Human-readable text explaining why this upgrade is being done (may be markdown).
     #[clap(long)]
-    summary: String,
+    pub summary: String,
+}
+
+/// The arguments used to configure the refund_after_sns_controlled_canister_upgrade command.
+#[derive(Debug, Parser)]
+pub struct RefundAfterSnsControlledCanisterUpgradeArgs {
+    /// ID of the target canister that was to be upgraded using upgrade-sns-controlled-canister.
+    #[clap(long)]
+    pub target_canister_id: CanisterId,
+
+    /// ID of the proposal created by upgrade-sns-controlled-canister. Must be
+    #[clap(long)]
+    pub proposal_id: u64,
 }
 
 pub struct Wasm {
@@ -84,8 +99,8 @@ impl Wasm {
         self.module_hash
     }
 
-    pub fn path(&self) -> String {
-        self.path.display().to_string()
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 
@@ -179,8 +194,8 @@ pub fn validate_candid_arg_for_wasm(wasm: &Wasm, args: Option<String>) -> Result
             ⚠️ Please consider adding it as follows:\n\
             cargo install ic-wasm\n\
             ic-wasm -o augmented-{} {} metadata -v public candid:service -f service.did",
-            wasm.path(),
-            wasm.path(),
+            wasm.path().display(),
+            wasm.path().display(),
         );
 
         // Proceed with whatever argument the user has specified without validation.
@@ -193,68 +208,11 @@ pub fn validate_candid_arg_for_wasm(wasm: &Wasm, args: Option<String>) -> Result
     Ok(canister_arg)
 }
 
-/// Checks if `canister_id` is an ID of a canister that exists and has some Wasm code installed.
-///
-/// In the Ok result, returns a tuple with the following components:
-/// 1. Set of controllers.
-/// 2. Module hash of the installed code.
-///
-/// See https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-canister-information
-///
-/// This function is analogous to `dfx canister info`.
-pub async fn fetch_canister_info(
-    agent: &Agent,
-    canister_id: CanisterId,
-) -> Result<(BTreeSet<PrincipalId>, Vec<u8>)> {
-    let module_hash = agent
-        .read_state_canister_info(canister_id.get().0, "module_hash")
-        .await
-        .context("Cannot read target canister's module hash.")?;
-
-    let controllers_blob = agent
-        .read_state_canister_info(canister_id.get().0, "controllers")
-        .await
-        .context("Cannot read canister controllers.")?;
-
-    let cbor: Value = serde_cbor::from_slice(&controllers_blob)
-        .expect("Invalid cbor data for controller controllers.");
-
-    let Value::Array(controllers) = cbor else {
-        bail!("Expected controllers to be an array, but got {cbor:?}");
-    };
-
-    let (controllers, errors): (BTreeSet<_>, Vec<_>) =
-        controllers.into_iter().partition_map(|value| {
-            let Value::Bytes(bytes) = value else {
-                let err =
-                    format!("Expected canister controller to be of type bytes, got {value:?}",);
-                return Either::Right(err);
-            };
-            match Principal::try_from(&bytes) {
-                Err(err) => {
-                    let err = format!("Cannot interpret canister controller principal: {err}");
-                    Either::Right(err)
-                }
-                Ok(principal) => Either::Left(PrincipalId(principal)),
-            }
-        });
-
-    if !errors.is_empty() {
-        let err = format!(
-            "Problems with canister controllers:\n  - {}",
-            errors.join("\n  - ")
-        );
-        bail!(err);
-    }
-
-    Ok((controllers, module_hash))
-}
-
 /// Attempts to create an empty canister on the same subnet as `next_to`.
 ///
 /// Returns the ID of the newly created canister in the Ok result.
-pub async fn create_canister_next_to(
-    agent: &Agent,
+pub async fn create_canister_next_to<C: CallCanisters>(
+    agent: &C,
     next_to: CanisterId,
     controllers: Vec<PrincipalId>,
     cycles_amount: u128,
@@ -294,9 +252,97 @@ pub async fn create_canister_next_to(
     CanisterId::try_from_principal_id(canister_id).map_err(|err| anyhow::anyhow!(err))
 }
 
-pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Result<()> {
-    // Prepare.
+#[derive(Debug, Error)]
+pub enum UpgradeSnsControlledCanisterError<AgentError> {
+    #[error("agent interaction failed: {0}")]
+    Agent(AgentError),
+    #[error("observed bad state: {0}")]
+    Client(String),
+}
 
+impl<E: std::error::Error> From<E> for UpgradeSnsControlledCanisterError<E> {
+    fn from(err: E) -> Self {
+        Self::Agent(err)
+    }
+}
+
+pub struct UpgradeSnsControlledCanisterInfo {
+    pub wasm_module_hash: Vec<u8>,
+    pub proposal_id: Option<ProposalId>,
+}
+
+pub async fn find_sns<C: CallCanisters>(
+    agent: &C,
+    caller_principal: PrincipalId,
+    target_canister_id: CanisterId,
+    target_controllers: BTreeSet<PrincipalId>,
+) -> Result<Option<Sns>, UpgradeSnsControlledCanisterError<C::Error>> {
+    let (user_controllers, canister_controllers): (Vec<_>, Vec<_>) =
+        target_controllers.into_iter().partition_map(|controller| {
+            if controller.is_self_authenticating() {
+                Either::Left(controller)
+            } else {
+                Either::Right(controller)
+            }
+        });
+
+    if user_controllers.contains(&caller_principal) {
+        println!(
+            "\n\
+                ⚠️ the target is controlled by the caller, which means it is not decentralized.\n\
+                ⚠️ Proceed upgrading it directly."
+        );
+
+        Ok(None)
+    } else {
+        assert!(
+            !canister_controllers.is_empty(),
+            "The target canister is not controlled by an SNS."
+        );
+
+        assert_eq!(
+            canister_controllers.len(),
+            1,
+            "The target canister has more than one canister controller!"
+        );
+
+        let canister_id = *canister_controllers.first().unwrap();
+
+        // TODO: Check that this is indeed an SNS canister controlling the target.
+        //
+        // This is expected to be `None` if we're running against a local replica.
+        // let root_subnet = nns::registry::get_subnet_for_canister(agent, canister_id)
+        //     .await
+        //     .ok();
+        // let sns_subnets = sns_w.list_sns_subnets().await.unwrap();
+        // assert!(
+        //     sns_subnets.contains(&root_subnet),
+        //     "Target canister is not controlled by an SNS!",
+        // );
+
+        let root_canister = sns::root::RootCanister { canister_id };
+
+        let response = root_canister.list_sns_canisters(agent).await?;
+        let SnsCanisters { sns, dapps } =
+            SnsCanisters::try_from(response).map_err(UpgradeSnsControlledCanisterError::Client)?;
+
+        // Check that the target is indeed controlled by this SNS.
+        if !BTreeSet::from_iter(&dapps[..]).contains(&target_canister_id.get()) {
+            return Err(UpgradeSnsControlledCanisterError::Client(format!(
+                "{} is not one of the canisters controlled by the SNS with Root canister {}",
+                target_canister_id.get(),
+                root_canister.canister_id,
+            )));
+        }
+
+        Ok(Some(sns))
+    }
+}
+
+pub async fn exec<C: CallCanisters>(
+    args: UpgradeSnsControlledCanisterArgs,
+    agent: &C,
+) -> Result<UpgradeSnsControlledCanisterInfo, UpgradeSnsControlledCanisterError<C::Error>> {
     let UpgradeSnsControlledCanisterArgs {
         sns_neuron_id,
         target_canister_id,
@@ -306,76 +352,36 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
         summary,
     } = args;
 
-    let caller_principal = PrincipalId(agent.get_principal().map_err(|err| anyhow::anyhow!(err))?);
+    let caller_principal = PrincipalId(agent.caller()?);
 
     print!("Getting target canister info ... ");
     std::io::stdout().flush().unwrap();
-    let (target_controllers, current_module_hash) =
-        fetch_canister_info(agent, target_canister_id).await?;
+    let CanisterInfo {
+        module_hash: Some(current_module_hash),
+        controllers: target_controllers,
+    } = agent.canister_info(target_canister_id).await?
+    else {
+        return Err(UpgradeSnsControlledCanisterError::Client(format!(
+            "Before upgrading, please install the target, e.g.: {}",
+            suggested_install_command(&wasm_path, &candid_arg)
+        )));
+    };
     println!("✔️");
+
+    let target_controllers = target_controllers
+        .into_iter()
+        .map(PrincipalId)
+        .collect::<BTreeSet<_>>();
 
     print!("Finding the SNS controlling this target canister ... ");
     std::io::stdout().flush().unwrap();
-    let sns = {
-        let (user_controllers, canister_controllers): (Vec<_>, Vec<_>) =
-            target_controllers.into_iter().partition_map(|controller| {
-                if controller.is_self_authenticating() {
-                    Either::Left(controller)
-                } else {
-                    Either::Right(controller)
-                }
-            });
-
-        if user_controllers.contains(&caller_principal) {
-            println!(
-                "\n\
-                 ⚠️ the target is controlled by the caller, which means it is not decentralized.\n\
-                 ⚠️ Proceed upgrading it directly."
-            );
-
-            None // no SNS
-        } else {
-            assert!(
-                !canister_controllers.is_empty(),
-                "The target canister is not controlled by an SNS."
-            );
-
-            assert_eq!(
-                canister_controllers.len(),
-                1,
-                "The target canister has more than one canister controller!"
-            );
-
-            let canister_id = *canister_controllers.first().unwrap();
-
-            // TODO: Check that this is indeed an SNS canister controlling the target.
-            //
-            // This is expected to be `None` if we're running against a local replica.
-            // let root_subnet = nns::registry::get_subnet_for_canister(agent, canister_id)
-            //     .await
-            //     .ok();
-            // let sns_subnets = sns_w.list_sns_subnets().await.unwrap();
-            // assert!(
-            //     sns_subnets.contains(&root_subnet),
-            //     "Target canister is not controlled by an SNS!",
-            // );
-
-            let root_canister = sns::root::RootCanister { canister_id };
-
-            let SnsCanisters { sns, dapps } = root_canister.list_sns_canisters(agent).await?;
-
-            // Check that the target is indeed controlled by this SNS.
-            if !BTreeSet::from_iter(&dapps[..]).contains(&target_canister_id.get()) {
-                bail!(
-                    "{} is not one of the canisters controlled by the SNS with Root canister {}",
-                    target_canister_id.get(),
-                    root_canister.canister_id,
-                );
-            }
-
-            Some(sns)
-        }
-    };
+    let sns = find_sns(
+        agent,
+        caller_principal,
+        target_canister_id,
+        target_controllers,
+    )
+    .await?;
     println!("✔️");
 
     print!("Checking that we have a viable Wasm for this upgrade ... ");
@@ -442,7 +448,7 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
     let Some(sns) = &sns else {
         unimplemented!(
             "Direct canister upgrades are not implemented yet. Please use DFX:\n{}",
-            suggested_install_command(&wasm.path(), &candid_arg)
+            suggested_install_command(wasm.path(), &candid_arg)
         );
     };
 
@@ -473,10 +479,12 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
         )),
     };
 
-    if let Some(sns_neuron_id) = sns_neuron_id {
-        let proposal_id = sns_governance
+    let proposal_id = if let Some(sns_neuron_id) = sns_neuron_id {
+        let manage_neuron_response = sns_governance
             .submit_proposal(agent, sns_neuron_id.0, proposal)
             .await?;
+        let SubmittedProposal { proposal_id } = SubmittedProposal::try_from(manage_neuron_response)
+            .map_err(|err| UpgradeSnsControlledCanisterError::Client(err.to_string()))?;
         println!("✔️");
 
         let proposal_url = format!(
@@ -487,11 +495,150 @@ pub async fn exec(args: UpgradeSnsControlledCanisterArgs, agent: &Agent) -> Resu
             "Successfully proposed to upgrade SNS-controlled canister, see details here:\n\
                 {proposal_url}",
         );
+
+        Some(proposal_id)
     } else {
         println!("✔️");
         let proposal_str = printing::pretty(&proposal).unwrap();
         println!("{proposal_str}");
-    }
+
+        None
+    };
+
+    Ok(UpgradeSnsControlledCanisterInfo {
+        wasm_module_hash: wasm.module_hash().to_vec(),
+        proposal_id,
+    })
+}
+
+pub async fn refund<C: CallCanisters>(
+    args: RefundAfterSnsControlledCanisterUpgradeArgs,
+    agent: &C,
+) -> Result<(), UpgradeSnsControlledCanisterError<C::Error>> {
+    let RefundAfterSnsControlledCanisterUpgradeArgs {
+        target_canister_id,
+        proposal_id,
+    } = args;
+
+    let proposal_id = ProposalId { id: proposal_id };
+
+    let caller_principal = PrincipalId(agent.caller()?);
+
+    print!("Getting target canister info ... ");
+    std::io::stdout().flush().unwrap();
+    let CanisterInfo {
+        controllers: target_controllers,
+        module_hash: _,
+    } = agent
+        .canister_info(target_canister_id)
+        .await
+        .map_err(|err| {
+            UpgradeSnsControlledCanisterError::Client(format!(
+                "Cannot refund cycles, target canister {} does not seem to be installed: {}",
+                target_canister_id.get(),
+                err
+            ))
+        })?;
+    println!("✔️");
+
+    let target_controllers = target_controllers
+        .into_iter()
+        .map(PrincipalId)
+        .collect::<BTreeSet<_>>();
+
+    print!("Finding the SNS controlling this target canister ... ");
+    std::io::stdout().flush().unwrap();
+    let sns = find_sns(
+        agent,
+        caller_principal,
+        target_canister_id,
+        target_controllers,
+    )
+    .await?;
+    let sns = match sns {
+        Some(sns) => sns,
+        None => {
+            return Err(UpgradeSnsControlledCanisterError::Client(format!(
+                "Cannot find SNS controlling target canister {}",
+                target_canister_id.get()
+            )));
+        }
+    };
+    println!("✔️");
+
+    print!("Fetching the store canister ID ... ");
+    std::io::stdout().flush().unwrap();
+    let sns_governance = sns::governance::GovernanceCanister {
+        canister_id: sns.governance.canister_id,
+    };
+    let get_proposal_result = sns_governance
+        .get_proposal(agent, proposal_id)
+        .await
+        .map_err(UpgradeSnsControlledCanisterError::Agent)?
+        .result
+        .ok_or("Missing GetProposalResponse.result")
+        .map_err(|err| UpgradeSnsControlledCanisterError::Client(err.to_string()))?;
+
+    let proposal = match get_proposal_result {
+        get_proposal_response::Result::Error(err) => {
+            return Err(UpgradeSnsControlledCanisterError::Client(format!(
+                "{err:?}"
+            )));
+        }
+        get_proposal_response::Result::Proposal(ProposalData {
+            proposal,
+            executed_timestamp_seconds,
+            failed_timestamp_seconds,
+            ..
+        }) if executed_timestamp_seconds > 0 || failed_timestamp_seconds > 0 => proposal,
+        get_proposal_response::Result::Proposal(_) => {
+            return Err(UpgradeSnsControlledCanisterError::Client(format!(
+                "Proposal {} is still live; please repeat this command after it executes or fails.",
+                proposal_id.id,
+            )));
+        }
+    };
+
+    let store_canister_id = match proposal {
+        Some(Proposal {
+            action:
+                Some(proposal::Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister {
+                    chunked_canister_wasm:
+                        Some(ChunkedCanisterWasm {
+                            store_canister_id: Some(store_canister_id),
+                            ..
+                        }),
+                    ..
+                })),
+            ..
+        }) => store_canister_id,
+        _ => {
+            return Err(UpgradeSnsControlledCanisterError::Client(format!(
+                "Proposal {} is invalid or does not correspond to an SNS-controlled canister upgrade
+                with chunked Wasm.",
+                proposal_id.id,
+            )));
+        }
+    };
+    println!("✔️");
+
+    // TODO: Implement the actual reimbursement.
+
+    print!("Deleting the store canister {} ... ", store_canister_id);
+    std::io::stdout().flush().unwrap();
+    stop_canister(
+        agent,
+        CanisterId::unchecked_from_principal(store_canister_id),
+    )
+    .await
+    .map_err(UpgradeSnsControlledCanisterError::Agent)?;
+    delete_canister(
+        agent,
+        CanisterId::unchecked_from_principal(store_canister_id),
+    )
+    .await
+    .map_err(UpgradeSnsControlledCanisterError::Agent)?;
+    println!("✔️");
 
     Ok(())
 }
@@ -597,11 +744,15 @@ fn format_full_hash(hash: &[u8]) -> String {
         .join("")
 }
 
-fn suggested_install_command(wasm_path_str: &str, candid_arg: &Option<String>) -> String {
+fn suggested_install_command(wasm_path_str: &Path, candid_arg: &Option<String>) -> String {
     let arg_suggestion = if let Some(candid_arg) = candid_arg {
         format!(" --argument '{}'", candid_arg)
     } else {
         "".to_string()
     };
-    format!("dfx canister install --mode auto --wasm {wasm_path_str} CANISTER_NAME{arg_suggestion}")
+    format!(
+        "dfx canister install --mode auto --wasm {} CANISTER_NAME{}",
+        wasm_path_str.display(),
+        arg_suggestion,
+    )
 }

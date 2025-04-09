@@ -6,6 +6,8 @@
 //!     bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
 //!
 
+use std::time::Duration;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::common;
 use ic_error_types::ErrorCode;
@@ -32,7 +34,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     // Benchmark function.
     common::run_benchmarks(
         c,
-        "wasm_instructions",
+        "execution_environment:wasm_instructions",
         &benchmarks,
         |_id: &str,
          exec_env: &ExecutionEnvironment,
@@ -87,5 +89,12 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, wasm_instructions_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default()
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(1))
+        .sample_size(10);
+    targets = wasm_instructions_bench
+}
 criterion_main!(benchmarks);

@@ -6,15 +6,15 @@ use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyErrorCode,
     NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
     SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
-    IS_AUTOMATIC_REFUND_ENABLED, MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES,
-    MEMO_TOP_UP_CANISTER,
+    MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
+use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
@@ -55,6 +55,8 @@ use icrc_ledger_types::icrc1::{self, account::Account};
 use maplit::btreemap;
 use serde_bytes::ByteBuf;
 use std::time::Duration;
+
+const CYCLES_LEDGER_FEE: u128 = 100_000_000;
 
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
 /// proposal.
@@ -324,7 +326,7 @@ fn canister_info(
             CanisterId::ic_00(),
             "canister_info",
             call_args().other_side(Encode!(&CanisterIdRecord::from(target)).unwrap()),
-            0_u128.into(),
+            0_u128,
         )
         .build();
 
@@ -438,7 +440,7 @@ fn test_cmc_notify_create_with_settings() {
         &state_machine,
         Some(
             CanisterSettingsArgsBuilder::new()
-                .with_freezing_threshold(7)
+                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
                 .build(),
         ),
     );
@@ -446,7 +448,7 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 7);
+    assert_eq!(status.freezing_threshold(), MINIMUM_FREEZING_THRESHOLD);
 
     //specify memory allocation
     let canister = notify_create_canister(
@@ -687,7 +689,7 @@ fn test_cmc_cycles_create_with_settings() {
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![*TEST_USER1_PRINCIPAL])
-                .with_freezing_threshold(7)
+                .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
                 .build(),
         ),
         None,
@@ -698,7 +700,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 7);
+    assert_eq!(status.freezing_threshold(), MINIMUM_FREEZING_THRESHOLD);
 
     //specify memory allocation
     let canister = cmc_create_canister_with_cycles(
@@ -938,15 +940,11 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     assert_canister_statuses_fixed("end");
 
     // Step 3.2: Inspect USER1's balance.
-    if IS_AUTOMATIC_REFUND_ENABLED {
-        // Verify that CMC sent 10 ICP back to USER1 (minus fee, ofc). Here, we
-        // also see that CMC refrained from refunding the same transfer more
-        // than once, even though multiple its notify_create_canister method was
-        // called a couple of times.
-        assert_balance(50, 3, "end");
-    } else {
-        assert_balance(40, 2, "end");
-    }
+    // Verify that CMC sent 10 ICP back to USER1 (minus fee, ofc). Here, we
+    // also see that CMC refrained from refunding the same transfer more
+    // than once, even though multiple its notify_create_canister method was
+    // called a couple of times.
+    assert_balance(50, 3, "end");
 
     // Step 3.3: Verify that CMC returned Err.
 
@@ -983,54 +981,28 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     // Refunded; otherwise, they should be InvalidTransaction.
     //
     // (Most of the code here is for inspecting the reason.)
-    if IS_AUTOMATIC_REFUND_ENABLED {
-        match &last_err {
-            NotifyError::Refunded {
-                reason,
-                block_index: refund_block_index,
-            } => {
-                // There should be a block_index.
-                refund_block_index.as_ref().unwrap();
+    match &last_err {
+        NotifyError::Refunded {
+            reason,
+            block_index: refund_block_index,
+        } => {
+            // There should be a block_index.
+            refund_block_index.as_ref().unwrap();
 
-                // Inspect reason.
-                let lower_reason = reason.to_lowercase();
-                for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
-                    assert!(
-                        lower_reason.contains(key_word),
-                        r#""{}" not in {:?}"#,
-                        key_word,
-                        last_err
-                    );
-                }
+            // Inspect reason.
+            let lower_reason = reason.to_lowercase();
+            for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
+                assert!(
+                    lower_reason.contains(key_word),
+                    r#""{}" not in {:?}"#,
+                    key_word,
+                    last_err
+                );
             }
+        }
 
-            _ => panic!("{:?}", last_err),
-        };
-    } else {
-        match &last_err {
-            NotifyError::InvalidTransaction(reason) => {
-                // Inspect reason.
-                let lower_reason = reason.to_lowercase();
-                for key_word in [
-                    "memo",
-                    "3735928559", // 0xDEAD_BEEF
-                    "not match",
-                    "expected",
-                    "1095062083", // MEMO_CREATE_CANISTER
-                    "createcanister",
-                ] {
-                    assert!(
-                        lower_reason.contains(key_word),
-                        r#""{}" not in {:?}"#,
-                        key_word,
-                        last_err
-                    );
-                }
-            }
-
-            _ => panic!("{:?}", last_err),
-        };
-    }
+        _ => panic!("{:?}", last_err),
+    };
 }
 
 fn send_transfer(env: &StateMachine, arg: &TransferArgs) -> Result<BlockIndex, TransferError> {
@@ -1175,7 +1147,7 @@ fn cmc_create_canister_with_cycles(
             CYCLES_MINTING_CANISTER_ID,
             "create_canister",
             call_args().other_side(create_args),
-            cycles.into(),
+            cycles,
         )
         .build();
 
@@ -1358,7 +1330,7 @@ fn cmc_notify_mint_cycles() {
     .unwrap();
     assert_eq!(
         cycles_ledger_balance_of(&state_machine, main_account),
-        100_000_000_000_000
+        100_000_000_000_000 - CYCLES_LEDGER_FEE
     );
 
     // to subaccount
@@ -1375,7 +1347,7 @@ fn cmc_notify_mint_cycles() {
     .unwrap();
     assert_eq!(
         cycles_ledger_balance_of(&state_machine, subaccount_1),
-        200_000_000_000_000
+        200_000_000_000_000 - CYCLES_LEDGER_FEE
     );
 
     // insufficient amount
@@ -1424,30 +1396,22 @@ fn cmc_notify_mint_cycles() {
         panic!("notify rejected")
     };
     let result = Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap();
-    if IS_AUTOMATIC_REFUND_ENABLED {
-        let reason = match &result {
-            Err(NotifyError::Refunded {
-                reason,
-                block_index: _,
-            }) => reason,
-            _ => panic!("{:?}", result),
-        };
+    let reason = match &result {
+        Err(NotifyError::Refunded {
+            reason,
+            block_index: _,
+        }) => reason,
+        _ => panic!("{:?}", result),
+    };
 
-        let reason = reason.to_lowercase();
-        for key_word in ["memo", "transfer", "correspond", "offer"] {
-            assert!(
-                reason.contains(key_word),
-                "{} not in reason of {:?}",
-                key_word,
-                result
-            );
-        }
-    } else {
-        // Legacy behavior.
-        match result {
-            Err(NotifyError::InvalidTransaction(_)) => (), // ok
-            _ => panic!("{:?}", result),
-        }
+    let reason = reason.to_lowercase();
+    for key_word in ["memo", "transfer", "correspond", "offer"] {
+        assert!(
+            reason.contains(key_word),
+            "{} not in reason of {:?}",
+            key_word,
+            result
+        );
     }
 
     // double notify

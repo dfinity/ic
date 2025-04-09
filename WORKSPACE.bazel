@@ -4,6 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
+load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
@@ -45,6 +46,7 @@ canisters(
         "sns_ledger_v2": "ic-icrc1-ledger.wasm.gz",
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
+        "node-rewards": "node-rewards-canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     reponames = {
@@ -79,6 +81,7 @@ canisters(
         "sns_ledger_v2": "mainnet_ic-icrc1-ledger-v2",
         "sns_archive": "mainnet_ic-icrc1-archive",
         "sns_index": "mainnet_ic-icrc1-index-ng",
+        "node-rewards": "mainnet_node-rewards-canister",
     },
 )
 
@@ -261,6 +264,4 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 
 idl_to_json(name = "idl2json")
 
-load("//bazel:jq.bzl", "jq_repository")
-
-jq_repository(name = "jq")
+mainnet_icos_images()

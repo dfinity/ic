@@ -4,7 +4,7 @@ use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
     InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
@@ -36,7 +36,7 @@ fn can_create_canister_from_another_canister() {
         // Call method "create_canister" on ic:00. This should create a canister
         // with the auto-generated id above.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
+            canister.update(wasm().call(management::create_canister(num_cycles))),
             Ok(WasmResult::Reply(expected_response_payload))
         );
     });
@@ -52,7 +52,7 @@ fn full_canister_lifecycle_from_another_canister() {
 
         // Create a new canister from within a canister.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
+            canister.update(wasm().call(management::create_canister(num_cycles))),
             Ok(WasmResult::Reply(canister_id_record,)),
         );
 
@@ -689,6 +689,8 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
+        let canister_history_size =
+            NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64);
         // Request the status of canister_b.
         assert_matches!(
             test.ingress(
@@ -707,7 +709,15 @@ fn can_get_canister_information() {
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
-                NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64),
+                canister_history_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                canister_history_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
@@ -766,6 +776,14 @@ fn can_get_canister_information() {
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
                     // size changes between updates.
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
                     NumBytes::from(0),
                     num_cycles.get(),
                     ComputeAllocation::default().as_percent(),
@@ -957,7 +975,7 @@ fn test_canister_skip_upgrade() {
 
         // Create a new canister from within a canister.
         let reply = match canister
-            .update(wasm().call(management::create_canister(num_cycles.into_parts())))
+            .update(wasm().call(management::create_canister(num_cycles)))
             .unwrap()
         {
             WasmResult::Reply(reply) => reply,

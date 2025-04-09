@@ -79,13 +79,15 @@ pub fn tla_update(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Marks the method as the starting point of a TLA transition (or more concretely, a PlusCal process).
 /// Assumes that the following are in scope:
 /// 1. TLA_INSTRUMENTATION_STATE LocalKey storing a Rc<RefCell<InstrumentationState>>
-/// 2. TLA_TRACES_MUTEX RwLock storing a Vec<UpdateTrace>
+/// 2. TLA_TRACES_MUTEX Option<RwLock> storing a Vec<UpdateTrace>
 /// 3. TLA_TRACES_LKEY LocalKey storing a RefCell<Vec<UpdateTrace>>
 /// 4. tla_get_globals! a macro which takes a self parameter iff this is a method
 /// 5. tla_instrumentation crate
 ///
 /// It records the trace (sequence of states) resulting from `tla_log_request!` and `tla_log_response!`
-/// macro calls in either the
+/// macro calls in either:
+/// 1. the TLA_TRACES_LKEY when available, or, failing that
+/// 2. in TLA_TRACES_MUTEX, if it is not None. If it's None, then no trace is recorded.
 #[proc_macro_attribute]
 pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function
@@ -120,7 +122,17 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let asyncness = sig.asyncness;
 
-    let invocation = if asyncness.is_some() {
+    let noninstrumented_invocation = if asyncness.is_some() {
+        quote! {
+            self.#mangled_name(#(#args),*).await
+        }
+    } else {
+        quote! {
+            self.#mangled_name(#(#args),*)
+        }
+    };
+
+    let instrumented_invocation = if asyncness.is_some() {
         quote! { {
             let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
                 tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
@@ -166,13 +178,18 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 use std::cell::RefCell;
                 use std::rc::Rc;
 
+                let enabled = TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some();
+                if !enabled {
+                    return #noninstrumented_invocation;
+                }
+
                 let globals = tla_get_globals!(self);
                 let raw_ptr = self as *const _;
                 let snapshotter = Rc::new(move || { unsafe { tla_get_globals!(&*raw_ptr) } });
                 let update = #attr2;
                 let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
                 let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
-                let (mut pairs, res) = #invocation;
+                let (mut pairs, res) = #instrumented_invocation;
 
                 let constants = (update.post_process)(&mut pairs);
 
@@ -187,7 +204,9 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }) {
                     Ok(_) => (),
                     Err(_) => {
-                        let mut traces = TLA_TRACES_MUTEX.write().unwrap();
+                        // We can unwrap here, because we checked earlier that either
+                        // we're in a TLA_TRACES_LKEY scope, or that TLA_TRACES_MUTEX isn't None
+                        let mut traces = TLA_TRACES_MUTEX.as_ref().unwrap().write().unwrap();
                         traces.push(trace);
                     },
                 }

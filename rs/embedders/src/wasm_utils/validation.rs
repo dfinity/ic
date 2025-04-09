@@ -40,9 +40,21 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
     STABLE_BYTEMAP_MEMORY_NAME,
 ];
 
+/// System functions that can be exported by a canister
+#[doc(hidden)] // pub for usage in tests
+pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
+    "canister_init",
+    "canister_inspect_message",
+    "canister_pre_upgrade",
+    "canister_post_upgrade",
+    "canister_heartbeat",
+    "canister_global_timer",
+    "canister_on_low_wasm_memory",
+];
+
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
-pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
+pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 11 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -558,6 +570,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "canister_liquid_cycle_balance128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "msg_cycles_available128",
             vec![(
                 API_VERSION_IC0,
@@ -634,6 +656,86 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 FunctionSignature {
                     param_types: vec![],
                     return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "subnet_self_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "subnet_self_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_call",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_create_canister",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_http_request",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_ecdsa",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_schnorr",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_vetkd_derive_key",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
                 },
             )],
         ),
@@ -892,15 +994,6 @@ fn validate_export_section(
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
-        let valid_system_functions = [
-            "canister_init",
-            "canister_pre_upgrade",
-            "canister_post_upgrade",
-            "canister_inspect_message",
-            "canister_heartbeat",
-            "canister_global_timer",
-            "canister_on_low_wasm_memory",
-        ];
         let mut number_exported_functions = 0;
         let mut sum_exported_function_name_lengths = 0;
         for export in &module.exports {
@@ -935,7 +1028,7 @@ fn validate_export_section(
                 } else if func_name.starts_with("canister_") {
                     // The "canister_" prefix is reserved and only functions allowed by the spec
                     // can be exported.
-                    if !valid_system_functions.contains(&func_name) {
+                    if !WASM_VALID_SYSTEM_FUNCTIONS.contains(&func_name) {
                         return Err(WasmValidationError::InvalidExportSection(format!(
                             "Exporting reserved function '{}' with \"canister_\" prefix",
                             func_name
@@ -1496,12 +1589,15 @@ fn can_compile(
 ) -> Result<(), WasmValidationError> {
     let config = wasmtime_validation_config(embedders_config);
     let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
-    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|_err| {
-        WasmValidationError::WasmtimeValidation("wasmtime::Module::validate() failed".into())
+    wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
+        WasmValidationError::WasmtimeValidation(format!(
+            "wasmtime::Module::validate() failed with {}",
+            err
+        ))
     })
 }
 
-fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
+fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<NumBytes, WasmValidationError> {
     let parser = wasmparser::Parser::new(0);
     let payloads = parser.parse_all(wasm.as_slice());
     for payload in payloads {
@@ -1518,11 +1614,11 @@ fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidatio
                     allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
                 });
             } else {
-                return Ok(());
+                return Ok(NumBytes::from(size as u64));
             }
         }
     }
-    Ok(())
+    Ok(NumBytes::from(0))
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
@@ -1544,7 +1640,7 @@ pub(super) fn validate_wasm_binary<'a>(
     wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
-    check_code_section_size(wasm)?;
+    let code_section_size = check_code_section_size(wasm)?;
     can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
@@ -1573,6 +1669,7 @@ pub(super) fn validate_wasm_binary<'a>(
             wasm_metadata,
             largest_function_instruction_count,
             max_complexity,
+            code_section_size,
         },
         module,
     ))

@@ -28,6 +28,7 @@ mod claim_neuron;
 mod disburse_neuron;
 mod disburse_to_neuron;
 mod merge_neurons;
+mod refresh_neuron;
 mod spawn_neuron;
 mod spawn_neurons;
 mod split_neuron;
@@ -36,6 +37,7 @@ pub use claim_neuron::CLAIM_NEURON_DESC;
 pub use disburse_neuron::DISBURSE_NEURON_DESC;
 pub use disburse_to_neuron::DISBURSE_TO_NEURON_DESC;
 pub use merge_neurons::MERGE_NEURONS_DESC;
+pub use refresh_neuron::REFRESH_NEURON_DESC;
 pub use spawn_neuron::SPAWN_NEURON_DESC;
 pub use spawn_neurons::SPAWN_NEURONS_DESC;
 pub use split_neuron::SPLIT_NEURON_DESC;
@@ -61,6 +63,18 @@ fn neuron_global(gov: &Governance) -> TlaValue {
                             (
                                 "maturity".to_string(),
                                 neuron.maturity_e8s_equivalent.to_tla_value(),
+                            ),
+                            (
+                                ("state".to_string()),
+                                TlaValue::Variant {
+                                    tag: (if neuron.spawn_at_timestamp_seconds.is_some() {
+                                        "Spawning"
+                                    } else {
+                                        "NotSpawning"
+                                    })
+                                    .to_string(),
+                                    value: Box::new(TlaValue::Constant("UNIT".to_string())),
+                                },
                             ),
                         ])),
                     )

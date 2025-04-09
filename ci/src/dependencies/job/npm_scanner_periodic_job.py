@@ -25,7 +25,7 @@ REPOS_TO_SCAN = [
                 owner=Team.NNS_TEAM,
             )
         ],
-        "18.17.1",
+        "18.20.5",
     ),
     Repository(
         "internet-identity",
@@ -70,7 +70,7 @@ REPOS_TO_SCAN = [
             Project(
                 name="hardware-wallet-cli",
                 path="hardware-wallet-cli",
-                owner=Team.GIX_TEAM,
+                owner=Team.IDENTITY_TEAM,
             )
         ],
         DEFAULT_NODE_VERSION,
@@ -85,7 +85,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        "18.17.1",
+        "18.20.5",
     ),
     Repository(
         "oisy-wallet",
@@ -98,6 +98,18 @@ REPOS_TO_SCAN = [
             )
         ],
         "22.11.0",
+    ),
+    Repository(
+        "chain-fusion-signer",
+        "https://github.com/dfinity/chain-fusion-signer",
+        [
+            Project(
+                name="chain-fusion-signer",
+                path="chain-fusion-signer",
+                owner=Team.GIX_TEAM,
+            )
+        ],
+        DEFAULT_NODE_VERSION,
     ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm

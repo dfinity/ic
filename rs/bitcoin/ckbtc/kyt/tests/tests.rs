@@ -4,7 +4,7 @@ use ic_ckbtc_kyt::{
     Alert, AlertLevel, DepositRequest, Error as KytError, ExposureType, FetchAlertsResponse,
     InitArg, KytMode, LifecycleArg, SetApiKeyArg,
 };
-use ic_management_canister_types::CanisterHttpResponsePayload;
+use ic_management_canister_types_private::CanisterHttpResponsePayload;
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::canister_http::CanisterHttpRequestContext;
