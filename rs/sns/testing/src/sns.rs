@@ -28,7 +28,8 @@ use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
 
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_governance_api::pb::v1::{
-    manage_neuron::Follow, proposal::Action, Proposal, UpgradeSnsControlledCanister,
+    manage_neuron::SetFollowing, neuron::FolloweesForTopic, proposal::Action, topics::Topic,
+    Followee, Proposal, UpgradeSnsControlledCanister,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
@@ -139,16 +140,33 @@ pub async fn create_sns<C: CallCanisters + ProgressNetwork>(
         let swap_participant_neuron_id = get_caller_neuron(swap_participant_agent, sns_governance)
             .await
             .expect("Failed to get the caller neuron");
-        let follow = Follow {
-            followees: vec![dev_participant_neuron_id.clone()],
-            // UpgradeSnsControlledCanister
-            function_id: 3,
+
+        let set_following = SetFollowing {
+            topic_following: [
+                Topic::DappCanisterManagement,
+                Topic::ApplicationBusinessLogic,
+                Topic::Governance,
+                Topic::TreasuryAssetManagement,
+                Topic::CriticalDappOperations,
+                Topic::DaoCommunitySettings,
+                Topic::SnsFrameworkManagement,
+            ]
+            .iter()
+            .map(|topic| FolloweesForTopic {
+                topic: Some(*topic),
+                followees: vec![Followee {
+                    neuron_id: Some(dev_participant_neuron_id.clone()),
+                    alias: Some("Developer".to_string()),
+                }],
+            })
+            .collect(),
         };
+
         sns_governance
-            .follow(
+            .set_following(
                 swap_participant_agent,
                 swap_participant_neuron_id.clone(),
-                follow,
+                set_following,
             )
             .await
             .expect("Failed to follow the dev neuron");
@@ -393,19 +411,20 @@ pub mod pocket_ic {
         let dev_participant = PocketIcAgent::new(pocket_ic, dev_participant_id);
 
         let swap_treasury_agent = PocketIcAgent::new(pocket_ic, treasury_principal_id);
-        let swap_partipants_agents = swap_participant_secret_keys(DEFAULT_SWAP_PARTICIPANTS_NUMBER)
-            .iter()
-            .map(|secret_key| {
-                let identity = Secp256k1Identity::from_private_key(secret_key.clone());
-                PocketIcAgent::new(pocket_ic, identity.sender().unwrap())
-            })
-            .collect();
+        let swap_participants_agents =
+            swap_participant_secret_keys(DEFAULT_SWAP_PARTICIPANTS_NUMBER)
+                .iter()
+                .map(|secret_key| {
+                    let identity = Secp256k1Identity::from_private_key(secret_key.clone());
+                    PocketIcAgent::new(pocket_ic, identity.sender().unwrap())
+                })
+                .collect();
         super::create_sns(
             &dev_participant,
             NNS_NEURON_ID,
             &dev_participant,
             &swap_treasury_agent,
-            swap_partipants_agents,
+            swap_participants_agents,
             dapp_canister_ids,
         )
         .await
