@@ -6,6 +6,10 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
+[lib]
+name = "canister-http-correctness-tests-lib"
+path = "canister_http_correctness_tests_lib.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 assert_matches = { workspace = true }
@@ -49,6 +53,10 @@ url = { workspace = true }
 [[bin]]
 name = "ic-systest-canister-http-correctness"
 path = "canister_http_correctness_test.rs"
+
+[[bin]]
+name = "ic-systest-canister-http-cycles-correctness"
+path = "canister_http_cycles_correctness_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http-fault-tolerance"
