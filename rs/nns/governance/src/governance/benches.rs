@@ -41,6 +41,12 @@ use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
+const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
+const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
+const THREE_MONTHS: u64 = 3 * ONE_MONTH_SECONDS;
+const SIX_MONTHS: u64 = 6 * ONE_MONTH_SECONDS;
+
 enum SetUpStrategy {
     // Every neuron follows a single neuron.
     Centralized {
@@ -553,6 +559,7 @@ fn run_centralized_following_all_stable(dissolve_delay_seconds: u64) -> BenchRes
     cast_vote_cascade_helper(
         SetUpStrategy::Centralized { num_neurons: 151 },
         Topic::NetworkEconomics,
+        dissolve_delay_seconds,
     )
 }
 
@@ -834,20 +841,38 @@ fn run_list_neurons_heap(dissolve_delay_seconds: u64) -> BenchResult {
     list_neurons_benchmark(dissolve_delay_seconds)
 }
 
-/// Benchmark list_neurons
 #[bench(raw)]
-fn list_neurons_by_subaccount_stable() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
-    list_neurons_by_subaccount_benchmark()
+fn list_neurons_by_subaccount_stable_3_months() -> BenchResult {
+    run_list_neurons_by_subaccount_stable(THREE_MONTHS)
+}
+
+#[bench(raw)]
+fn list_neurons_by_subaccount_stable_6_months() -> BenchResult {
+    run_list_neurons_by_subaccount_stable(SIX_MONTHS)
 }
 
 /// Benchmark list_neurons
+fn run_list_neurons_by_subaccount_stable(dissolve_delay_seconds: u64) -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    list_neurons_by_subaccount_benchmark(dissolve_delay_seconds)
+}
+
 #[bench(raw)]
-fn list_neurons_by_subaccount_heap() -> BenchResult {
+fn list_neurons_by_subaccount_heap_3_months() -> BenchResult {
+    run_list_neurons_by_subaccount_heap(THREE_MONTHS)
+}
+
+#[bench(raw)]
+fn list_neurons_by_subaccount_heap_6_months() -> BenchResult {
+    run_list_neurons_by_subaccount_heap(SIX_MONTHS)
+}
+
+/// Benchmark list_neurons
+fn run_list_neurons_by_subaccount_heap(dissolve_delay_seconds: u64) -> BenchResult {
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
-    list_neurons_by_subaccount_benchmark()
+    list_neurons_by_subaccount_benchmark(dissolve_delay_seconds)
 }
 
 fn create_service_nervous_system_action_with_large_payload() -> CreateServiceNervousSystem {
@@ -950,7 +975,7 @@ fn list_proposals_6_months() -> BenchResult {
     run_list_proposals(SIX_MONTHS)
 }
 
-fn list_proposals(dissolve_delay_seconds: u64) -> BenchResult {
+fn run_list_proposals(dissolve_delay_seconds: u64) -> BenchResult {
     list_proposals_benchmark(dissolve_delay_seconds)
 }
 
@@ -965,6 +990,6 @@ fn update_empty() {
 /// embedders crate.
 #[export_name = "canister_query go"]
 fn go() {
-    let _ = list_neurons_stable();
+    let _ = run_list_neurons_stable(SIX_MONTHS);
     ic_cdk::api::call::reply_raw(&[]);
 }
