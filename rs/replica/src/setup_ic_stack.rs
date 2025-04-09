@@ -281,6 +281,7 @@ pub fn construct_ic_stack(
 
     let cancellation_token = CancellationToken::new();
 
+    // TODO(CON-1492): consider joining on the returned join handle
     let (_, nns_delegation_watcher) = start_nns_delegation_manager(
         metrics_registry,
         config.http_handler.clone(),
