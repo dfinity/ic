@@ -86,7 +86,7 @@ RUN rm /etc/ssh/ssh*key*
 # keys set up for root, but in dev deployments there may be.
 # Actually, prohibit-password is the default config, so would not be
 # strictly necessary to be explicit here.
-RUN sed -e "s/.*PermitRootLogin.*/PermitRootLogin prohibit-password/" -i /etc/ssh/sshd_config
+RUN sed -e "s/.*PermitRootLogin.*/PermitRootLogin yes/" -i /etc/ssh/sshd_config
 
 RUN for SERVICE in /etc/systemd/system/*; do \
         if [ -f "$SERVICE" ] && [ ! -L "$SERVICE" ] && ! echo "$SERVICE" | grep -Eq "@\.service$"; then \

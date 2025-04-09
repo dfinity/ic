@@ -7,11 +7,15 @@ name = "ic-os-upgrade"
 
 [[bin]]
 name = "server"
-path = "src/server.rs"
+path = "src/server/server.rs"
 
 [[bin]]
 name = "client"
-path = "src/client.rs"
+path = "src/client/client.rs"
+
+[[bin]]
+name = "print_measurement"
+path = "src/print_measurement.rs"
 
 [dependencies]
 tokio = { version = "1.44", features = ["rt-multi-thread"] }
@@ -24,6 +28,7 @@ rustls = "0.23.23"
 rand = "0.8.5" # FIXME
 ic-registry-client = { path = "../../../registry/client" }
 ic-registry-local-registry = { path = "../../../registry/local_registry" }
+ic-registry-local-store = { path = "../../../registry/local_store" }
 ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-canister-client = { path = "../../../registry/canister-client" }
 ic-registry-nns-data-provider-wrappers = { path = "../../../registry/nns_data_provider_wrappers" }
@@ -40,6 +45,17 @@ base64 = "0.22.1"
 ic-protobuf = { path = "../../../protobuf" }
 attestation = { path ="../attestation" }
 x509-parser = "0.17"
+der = { version = "0.8.0-rc.1", features = ["alloc", "derive", "std"] }
+rustls-webpki = "0.103.1"
+hyper-rustls = "0.27.5"
+hyper = "1.6.0"
+hyper-util = "0.1.10"
+ic-types = { path = "../../../types/types" }
+tower = "0.4.13"
+pin-project = "1.1.9"
 
 [build-dependencies]
 tonic-build = { version = "0.12", features = ["prost"] }
+
+[dev-dependencies]
+ic-interfaces-registry-mocks = { path = "../../../interfaces/registry/mocks" }

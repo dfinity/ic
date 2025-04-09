@@ -12,19 +12,15 @@ fn main() {
     let mut firmware = Firmware::open().unwrap();
     // let res = firmware.get_report(&[0; 64]).unwrap().certificates;
     let res = firmware.get_ext_report(None, Some([0; 64]), None).unwrap();
-    // let attestation_report = AttestationReport::from_bytes(&res.0).unwrap();
-    let attestation_report = res.0;
-    println!("New Attestation Report: {:?}", attestation_report);
+    let attestation_report = AttestationReport::from_bytes(&res.0).unwrap();
     let url = request_vcek(&attestation_report.chip_id, attestation_report.reported_tcb);
 
-    println!("VCEK URL: {}", url);
-
-    let vcek = include_bytes!("/tmp/out.der");
     // let mut vcek = vec![];
     // reqwest::blocking::get(url)
     //     .unwrap()
     //     .copy_to(&mut vcek)
     //     .unwrap();
+    let vcek = include_bytes!("/tmp/out3.der");
 
     let chain = sev::certs::snp::Chain::from((
         Certificate::from_pem(sev::certs::snp::builtin::milan::ASK).unwrap(),

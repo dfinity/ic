@@ -1,4 +1,4 @@
-// use crate::attestation::SevAttestationReport;
+// use crate::attestation::SevAttestationPackage;
 // use candid::CandidType;
 // use std::fmt::{Debug, Display};
 //
@@ -23,14 +23,14 @@
 // pub struct GenerateAttestationTokenRequest {
 //     pub tls_public_key_der: Vec<u8>,
 //     pub nonce: Vec<u8>,
-//     pub sev_attestation_report: SevAttestationReport,
+//     pub sev_attestation_report: SevAttestationPackage,
 // }
 //
 // #[derive(CandidType, candid::Deserialize)]
 // pub struct GenerateTlsCertificateRequest {
 //     pub tls_public_key_pem: String,
 //     pub nonce: Vec<u8>,
-//     pub sev_attestation_report: SevAttestationReport,
+//     pub sev_attestation_report: SevAttestationPackage,
 // }
 //
 // #[derive(CandidType, candid::Deserialize)]

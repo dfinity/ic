@@ -1,30 +1,33 @@
-package upgrade.api;
+syntax = "proto3";
+
+package verification.upgrade.api;
+
+import "attestation.proto";
 
 message GetDiskEncryptionKeyRequest {
-  optional bytes sev_attestation_report = 1;
+  optional verification.attestation.SevAttestationPackage sev_attestation_package = 1;
 }
 
 message GetDiskEncryptionKeyResponse {
   optional bytes key = 1;
-  optional bytes sev_attestation_report = 2;
+  optional verification.attestation.SevAttestationPackage sev_attestation_package = 2;
 }
 
 message InitializeGetDiskEncryptionKeyRequest {
-  optional bytes nonce = 1;
 }
 
 message InitializeGetDiskEncryptionKeyResponse {
-  optional bytes nonce = 1;
 }
 
 service UpgradeService {
+  // This is not called from the client at the moment and the server returns
+  // an empty response without doing anything.
+  // It serves as a placeholder if we want to add options in the future.
   rpc InitializeGetDiskEncryptionKey(InitializeGetDiskEncryptionKeyRequest)
     returns (InitializeGetDiskEncryptionKeyResponse) {
-
   }
 
   rpc GetDiskEncryptionKey(GetDiskEncryptionKeyRequest)
     returns (GetDiskEncryptionKeyResponse) {
-
   }
 }

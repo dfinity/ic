@@ -1,5 +1,4 @@
 use der::Encode;
-use std::error::Error;
 use std::fmt::Debug;
 use thiserror::Error;
 

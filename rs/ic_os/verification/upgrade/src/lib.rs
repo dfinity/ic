@@ -1,13 +1,25 @@
+pub mod api;
+pub mod custom_data;
+pub mod registry;
+pub mod tls;
+
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use ring::digest::Algorithm;
-use sev::firmware::guest::{DerivedKey, Firmware, GuestFieldSelect};
+use sev::firmware::guest::GuestFieldSelect;
 
 pub struct DiskEncryptionKeyProvider {
     // sev_firmware: Firmware,
 }
 
 impl DiskEncryptionKeyProvider {
-    fn get_disk_encryption_key(&mut self) -> anyhow::Result<String> {
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            // sev_firmware: Firmware::open()?,
+        })
+    }
+}
+
+impl DiskEncryptionKeyProvider {
+    pub fn get_disk_encryption_key(&mut self) -> anyhow::Result<Vec<u8>> {
         let mut field_select = GuestFieldSelect::default();
         // TODO: review this
         field_select.set_measurement(true);
@@ -22,7 +34,7 @@ impl DiskEncryptionKeyProvider {
         key.extend(b"ic-disk-encryption-key");
 
         let digest = ring::digest::digest(&ring::digest::SHA256, &key);
-        Ok(STANDARD.encode(digest.as_ref()))
+        Ok(STANDARD.encode(digest.as_ref()).into_bytes())
     }
 }
 
@@ -36,7 +48,7 @@ mod tests {
         // Mock a Firmware instance, or use a suitable framework for mocking where possible
         // let firmware = Firmware::default(); // Assuming default implementation exists for testing
         // let mut key_provider = DiskEncryptionKeyProvider { sev_firmware: firmware };
-        let mut key_provider = DiskEncryptionKeyProvider {};
+        let mut key_provider = DiskEncryptionKeyProvider::new().unwrap();
 
         let key_result = key_provider.get_disk_encryption_key();
 

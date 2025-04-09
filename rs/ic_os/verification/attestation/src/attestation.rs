@@ -1,7 +1,4 @@
 use der::asn1::OctetStringRef;
-use der::Encode;
-use std::error::Error;
-use thiserror::Error;
 
 #[derive(der::Sequence)]
 pub struct GenerateAttestationTokenCustomData<'a> {

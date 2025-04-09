@@ -97,6 +97,7 @@ def _custom_partitions(mode):
     else:
         fail("Unkown mode detected: " + mode)
 
+    # /tmp/upgrader_client --nns-url="https://icp-api.io,https://icp0.io,https://ic0.app" --server-address="2a00:fb01:400:44:6801:1bff:fe0a:f4f9" --nns-pub-key-pem="/var/lib/ic/data/nns_public_key.pem" --out="/tmp/test_kex.txt"
     copy_file(
         name = "copy_guestos_img",
         src = guest_image,

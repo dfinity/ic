@@ -1,21 +1,21 @@
 use anyhow::{Context, Result};
-use attestation::attestation::SevAttestationReport;
+use attestation::attestation::SevAttestationPackage;
 use der::Encode;
 use sev::firmware::guest::{AttestationReport, Firmware};
 use sev::firmware::host::CertTableEntry;
 use sha2::Digest;
 
 pub trait SevFirmware: Send + Sync {
-    fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationReport>;
+    fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationPackage>;
 }
 
 pub struct RealSevFirmware(pub Firmware);
 
 impl SevFirmware for RealSevFirmware {
-    fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationReport> {
+    fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationPackage> {
         let (attestation_report, certificates) =
             self.0.get_ext_report(None, Some(*custom_data), None)?;
-        Ok(SevAttestationReport {
+        Ok(SevAttestationPackage {
             attestation_report: attestation_report_to_byte_vec(&attestation_report),
             certificates: convert_cert_table_entries(
                 &certificates.context("Missing certificates")?,
@@ -57,10 +57,10 @@ pub mod mock {
     }
 
     impl SevFirmware for MockSevFirmware {
-        fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationReport> {
+        fn get_report(&mut self, custom_data: &[u8; 64]) -> Result<SevAttestationPackage> {
             let mut report = AttestationReport::default();
             report.report_data.copy_from_slice(custom_data);
-            Ok(SevAttestationReport {
+            Ok(SevAttestationPackage {
                 attestation_report: attestation_report_to_byte_vec(&report),
                 certificates: vec![],
             })

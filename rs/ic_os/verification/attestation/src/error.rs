@@ -1,6 +1,6 @@
 use candid::CandidType;
 use std::error::Error;
-use std::fmt::{Debug, Display, Formatter, Write};
+use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Debug, CandidType, candid::Deserialize, Clone)]
 pub enum VerificationErrorDetail {
@@ -11,6 +11,7 @@ pub enum VerificationErrorDetail {
     AttestationTokenNotFound,
     UnsupportedTlsKey { message: String },
     InvalidAttestationReport { message: String },
+    InvalidCertificateChain { message: String },
 }
 
 impl Display for VerificationErrorDetail {
@@ -28,7 +29,7 @@ pub struct VerificationError {
 }
 
 impl VerificationError {
-    pub fn internal(err: impl ToString) -> Self {
+    pub fn internal(err: impl Display) -> Self {
         // VerificationErrorDetail::Internal(err.to_string(), 0).into()
         VerificationErrorDetail::Internal {
             message: err.to_string(),
