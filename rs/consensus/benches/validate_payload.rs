@@ -16,6 +16,7 @@ use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressP
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
@@ -44,6 +45,7 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis};
+use ic_test_utilities_metrics::{fetch_histogram_vec_stats, fetch_int_gauge};
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
@@ -56,6 +58,7 @@ use ic_types::{
     consensus::{certification::*, *},
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
+    messages::MessageId,
     signature::*,
     time::UNIX_EPOCH,
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
@@ -63,6 +66,7 @@ use ic_types::{
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
+    vec,
 };
 
 type SignedCertificationContent =
@@ -79,11 +83,11 @@ const CERTIFIED_HEIGHT: u64 = 1;
 const PAST_PAYLOAD_HEIGHT: u64 = 4;
 
 /// Ingress history size: 5 min worth of messages at 1000/sec = 300K.
-const INGRESS_HISTORY_SIZE: usize = 300_000;
+const INGRESS_HISTORY_SIZE: usize = 600_000;
 
 fn run_test<T>(test_fn: T)
 where
-    T: FnOnce(Time, &mut ConsensusPoolImpl, &dyn PayloadBuilder),
+    T: FnOnce(Time, &mut ConsensusPoolImpl, &dyn PayloadBuilder, Arc<StateManagerImpl>),
 {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let time_source = FastForwardTimeSource::new();
@@ -126,8 +130,8 @@ where
         let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
             node_test_id(VALIDATOR_NODE_ID),
         ));
-        let mut state_manager = MockStateManager::new();
-        state_manager.expect_get_state_at().return_const(Ok(
+        let mut mock_state_manager = MockStateManager::new();
+        mock_state_manager.expect_get_state_at().return_const(Ok(
             ic_interfaces_state_manager::Labeled::new(
                 Height::new(0),
                 Arc::new(ReplicatedStateBuilder::default().build()),
@@ -156,7 +160,7 @@ where
             metrics_registry.clone(),
             subnet_id,
             no_op_logger(),
-            Arc::new(state_manager),
+            Arc::new(mock_state_manager),
             cycles_account_manager,
             ic_types::malicious_flags::MaliciousFlags::default(),
             RandomStateKind::Random,
@@ -172,11 +176,26 @@ where
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
-            metrics_registry,
+            metrics_registry.clone(),
             no_op_logger(),
         ));
 
-        test_fn(now, &mut consensus_pool, payload_builder.as_ref());
+        test_fn(
+            now,
+            &mut consensus_pool,
+            payload_builder.as_ref(),
+            state_manager,
+        );
+
+        panic!(
+            "{:?} {:?}",
+            fetch_int_gauge(&metrics_registry, "state_manager_resident_state_count"),
+            fetch_histogram_vec_stats(
+                &metrics_registry,
+                "state_manager_checkpoint_op_duration_seconds"
+            )
+        );
+        // metrics_registry.prometheus_registry().
     })
 }
 
@@ -205,11 +224,20 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
             .build();
         state.metadata.ingress_history.insert(
             ingress.id(),
+            // IngressStatus::Known {
+            //     receiver: canister_test_id(i as u64).get(),
+            //     user_id: UserId::from(PrincipalId::new_user_test_id(i as u64)),
+            //     time: now,
+            //     state: IngressState::Received,
+            // },
             IngressStatus::Known {
                 receiver: canister_test_id(i as u64).get(),
                 user_id: UserId::from(PrincipalId::new_user_test_id(i as u64)),
                 time: now,
-                state: IngressState::Received,
+                state: IngressState::Failed(UserError::new(
+                    ErrorCode::CanisterOutOfCycles,
+                    "All gone",
+                )),
             },
             now,
             NumBytes::from(u64::MAX),
@@ -345,7 +373,8 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
         run_test(
             |now: Time,
              consensus_pool: &mut ConsensusPoolImpl,
-             payload_builder: &dyn PayloadBuilder| {
+             payload_builder: &dyn PayloadBuilder,
+             _| {
                 let tip = add_past_blocks(consensus_pool, now, message_count);
                 let pool_reader = PoolReader::new(consensus_pool);
 
@@ -389,7 +418,7 @@ fn serialization_benchmark(criterion: &mut Criterion) {
         (1, 8_000_000, "1x8MB"),
     ] {
         run_test(
-            |now: Time, _: &mut ConsensusPoolImpl, _: &dyn PayloadBuilder| {
+            |now: Time, _: &mut ConsensusPoolImpl, _: &dyn PayloadBuilder, _| {
                 let seed = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 10;
                 let ingress =
                     prepare_ingress_payload(now, message_count, message_size_kb, seed as u8);
@@ -416,6 +445,53 @@ fn serialization_benchmark(criterion: &mut Criterion) {
         )
     }
 }
-criterion_group!(benches, serialization_benchmark, validate_payload_benchmark);
+
+fn commit_and_certify_benchmark(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("commit_and_certify");
+    group.sample_size(10);
+    group.measurement_time(std::time::Duration::from_secs(10));
+
+    run_test(
+        |now: Time,
+         _: &mut ConsensusPoolImpl,
+         _: &dyn PayloadBuilder,
+         state_manager: Arc<StateManagerImpl>| {
+            let mut h = Height::new(CERTIFIED_HEIGHT);
+            // let mut prev_memory_usage = NumBytes::new(0);
+            group.bench_function(format!("commit_and_certify"), |bench| {
+                bench.iter(|| {
+                    h.inc_assign();
+
+                    // Touch the ingress history so it actually gets cloned.
+                    let mut state = state_manager.take_tip().1;
+                    // state.metadata.ingress_history.insert(
+                    //     MessageId::try_from(vec![h.get() as u8; 32].as_slice()).unwrap(),
+                    //     IngressStatus::Known {
+                    //         receiver: canister_test_id(h.get() + 1).get(),
+                    //         user_id: UserId::from(PrincipalId::new_user_test_id(h.get())),
+                    //         time: now,
+                    //         state: IngressState::Failed(UserError::new(
+                    //             ErrorCode::CanisterOutOfCycles,
+                    //             "All gone",
+                    //         )),
+                    //     },
+                    //     now,
+                    //     NumBytes::from(u64::MAX),
+                    // );
+                    // assert_ne!(
+                    //     prev_memory_usage,
+                    //     state.metadata.ingress_history.memory_usage()
+                    // );
+                    // prev_memory_usage = state.metadata.ingress_history.memory_usage();
+
+                    state_manager.commit_and_certify(state, h, CertificationScope::Metadata, None);
+                })
+            });
+        },
+    )
+}
+
+// criterion_group!(benches, serialization_benchmark, validate_payload_benchmark);
+criterion_group!(benches, commit_and_certify_benchmark);
 
 criterion_main!(benches);

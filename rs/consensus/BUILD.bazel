@@ -168,6 +168,7 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":consensus",
+        "//packages/ic-error-types",
         "//rs/artifact_pool",
         "//rs/config",
         "//rs/consensus/utils",
@@ -186,6 +187,7 @@ rust_ic_bench(
         "//rs/state_manager",
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
+        "//rs/test_utilities/metrics",
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",
         "//rs/test_utilities/time",

@@ -1842,7 +1842,9 @@ impl StateManagerImpl {
                 state.metadata.prev_state_hash,
                 Some(CryptoHashOfPartialState::from(
                     metadata.certified_state_hash.clone(),
-                ))
+                )),
+                "Height {:?}",
+                height
             );
         } else {
             info!(
