@@ -106,6 +106,14 @@ impl TransportSecretKey {
     }
 }
 
+/// Return true iff the argument is a valid encoding of a transport public key
+pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
+    match bytes.try_into() {
+        Ok(bytes) => option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some(),
+        Err(_) => false,
+    }
+}
+
 #[cfg_attr(feature = "js", wasm_bindgen)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
