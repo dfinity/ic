@@ -2,6 +2,7 @@ use crate::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
         convert_backtrace,
+        system_api::SystemApiImpl,
         system_api_complexity::{overhead, overhead_native},
         StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
     },
@@ -18,7 +19,6 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_system_api::SystemApiImpl;
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError;
 use num_traits::ops::saturating::SaturatingAdd;
@@ -64,7 +64,7 @@ fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData
                 message: _,
                 backtrace,
             } => {
-                *backtrace = Some(convert_backtrace(&WasmBacktrace::capture(store)));
+                *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
             }
             _ => {}
         }
