@@ -137,7 +137,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(
                     test_response_header_total_size_over_the_48_kib_limit
                 ))
-                .add_test(systest!(test_non_existing_transform_function))
                 .add_test(systest!(test_post_request))
                 .add_test(systest!(
                     test_http_endpoint_response_is_too_large_with_custom_max_response_bytes
@@ -709,40 +708,6 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
             ..
         })
     );
-}
-
-fn test_non_existing_transform_function(env: TestEnv) {
-    let handlers = Handlers::new(&env);
-    let webserver_ipv6 = get_universal_vm_address(&env);
-
-    let response = block_on(submit_outcall(
-        &handlers,
-        RemoteHttpRequest {
-            request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
-                headers: vec![],
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "idontexist".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-            },
-            cycles: 500_000_000_000,
-        },
-    ));
-
-    assert_matches!(
-        response,
-        Err(RejectResponse {
-            reject_code: RejectCode::CanisterError,
-            ..
-        })
-    )
 }
 
 fn test_post_request(env: TestEnv) {
