@@ -1841,9 +1841,9 @@ impl SystemState {
         );
     }
 
-    /// Moves the given amount of cycles from the main balance to the reserved balance.
+    /// Checks if the given amount of cycles from the main balance can be moved to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
-    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+    pub fn can_reserve_cycles(&self, amount: Cycles) -> Result<(), ReservationError> {
         if amount == Cycles::zero() {
             return Ok(());
         }
@@ -1861,10 +1861,17 @@ impl SystemState {
                 available: self.cycles_balance,
             })
         } else {
-            self.cycles_balance -= amount;
-            self.reserved_balance += amount;
             Ok(())
         }
+    }
+
+    /// Moves the given amount of cycles from the main balance to the reserved balance.
+    /// Returns an error if the main balance is lower than the requested amount.
+    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+        self.can_reserve_cycles(amount)?;
+        self.cycles_balance -= amount;
+        self.reserved_balance += amount;
+        Ok(())
     }
 
     /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
