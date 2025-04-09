@@ -4646,59 +4646,88 @@ proptest! {
 #![proptest_config(ProptestConfig {
     cases: 100, .. ProptestConfig::default()
 })]
-#[test]
-fn test_topic_weights(stake in 1u64..1_000_000_000, minimum_dissolve_delay_to_vote in prop_oneof![Just(3 * ONE_MONTH_SECONDS), Just(6 * ONE_MONTH_SECONDS)]) {
-    let not_dissolving_min_dissolve_delay = Some(DissolveState::DissolveDelaySeconds(minimum_dissolve_delay_to_vote));
-    // Check that voting on
-    // 1. a governance proposal yields 20 times the voting power
-    // 2. an exchange rate proposal yields 0.01 times the voting power
-    // 3. other proposals yield 1 time the voting power
+    #[test]
+    fn test_topic_weights(
+        stake in 1u64..1_000_000_000,
+        minimum_dissolve_delay_to_vote in prop_oneof![Just(3 * ONE_MONTH_SECONDS), Just(6 * ONE_MONTH_SECONDS)]
+    ) {
+        let not_dissolving_min_dissolve_delay = Some(DissolveState::DissolveDelaySeconds(
+            minimum_dissolve_delay_to_vote,
+        ));
+        // Check that voting on
+        // 1. a governance proposal yields 20 times the voting power
+        // 2. an exchange rate proposal yields 0.01 times the voting power
+        // 3. other proposals yield 1 time the voting power
 
-    // Test alloacting 100 maturity to two neurons with equal stake where
-    // 1. first neuron voting on a network proposal (1x) and
-    // 2. second neuron voting on an exchange proposal (0.01x).
-    // Overall reward weights are 2 * (1+0.01) = 2.02
-    // First neuron gets 1/2.02 * 100 = 49.5 truncated to 49.
-    // Second neuron gets 0.01/2.02 * 100 = 0.495 truncated to 0.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-N", "-PE"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
-        vec![49, 0]
-    );
+        // Test alloacting 100 maturity to two neurons with equal stake where
+        // 1. first neuron voting on a network proposal (1x) and
+        // 2. second neuron voting on an exchange proposal (0.01x).
+        // Overall reward weights are 2 * (1+0.01) = 2.02
+        // First neuron gets 1/2.02 * 100 = 49.5 truncated to 49.
+        // Second neuron gets 0.01/2.02 * 100 = 0.495 truncated to 0.
+        assert_eq!(
+            compute_maturities(
+                vec![stake, stake],
+                vec!["P-N", "-PE"],
+                USUAL_REWARD_POT_E8S,
+                not_dissolving_min_dissolve_delay
+            ),
+            vec![49, 0]
+        );
 
-    // Test alloacting 100 maturity to two neurons with equal stake where
-    // 1. first neuron voting on a gov proposal (20x) and
-    // 2. second neuron voting on a network proposal (1x).
-    // Overall reward weights are 2 * (20+1) = 42
-    // First neuron gets 20/42 * 100 = 47.61 truncated to 47.
-    // Second neuron gets 1/42 * 100 = 2.38 truncated to 2.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PN"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
-        vec![47, 2],
-    );
+        // Test alloacting 100 maturity to two neurons with equal stake where
+        // 1. first neuron voting on a gov proposal (20x) and
+        // 2. second neuron voting on a network proposal (1x).
+        // Overall reward weights are 2 * (20+1) = 42
+        // First neuron gets 20/42 * 100 = 47.61 truncated to 47.
+        // Second neuron gets 1/42 * 100 = 2.38 truncated to 2.
+        assert_eq!(
+            compute_maturities(
+                vec![stake, stake],
+                vec!["P-G", "-PN"],
+                USUAL_REWARD_POT_E8S,
+                not_dissolving_min_dissolve_delay
+            ),
+            vec![47, 2],
+        );
 
-    // First neuron proposes and votes on a governance proposal.
-    // Second neuron proposes and votes on five network economics proposals.
-    // The first neuron receives 20x the voting power and
-    // the second neuron receives 5x the voting power.
-    // Thus, the ratio of voting rewards ought to be 20:5.
-    // Note that compute_maturities returns the resulting maturities
-    // when 100 e8s of voting rewards are distributed.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PN", "-PN", "-PN", "-PN", "-PN"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
-        vec![40, 10],
-    );
-    // Make sure that, when voting on proposals of the same type in
-    // the ratio 1:4, they get voting rewards in the ratio 1:4.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-N", "-PN", "-PN", "-PN", "-PN"], USUAL_REWARD_POT_E8S, not_dissolving_min_dissolve_delay),
-        vec![10, 40],
-    );
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-G", "-PG", "-PG", "-PG", "-PG"], USUAL_REWARD_POT_E8S,not_dissolving_min_dissolve_delay),
-        vec![10, 40],
-    );
-}
-
+        // First neuron proposes and votes on a governance proposal.
+        // Second neuron proposes and votes on five network economics proposals.
+        // The first neuron receives 20x the voting power and
+        // the second neuron receives 5x the voting power.
+        // Thus, the ratio of voting rewards ought to be 20:5.
+        // Note that compute_maturities returns the resulting maturities
+        // when 100 e8s of voting rewards are distributed.
+        assert_eq!(
+            compute_maturities(
+                vec![stake, stake],
+                vec!["P-G", "-PN", "-PN", "-PN", "-PN", "-PN"],
+                USUAL_REWARD_POT_E8S,
+                not_dissolving_min_dissolve_delay
+            ),
+            vec![40, 10],
+        );
+        // Make sure that, when voting on proposals of the same type in
+        // the ratio 1:4, they get voting rewards in the ratio 1:4.
+        assert_eq!(
+            compute_maturities(
+                vec![stake, stake],
+                vec!["P-N", "-PN", "-PN", "-PN", "-PN"],
+                USUAL_REWARD_POT_E8S,
+                not_dissolving_min_dissolve_delay
+            ),
+            vec![10, 40],
+        );
+        assert_eq!(
+            compute_maturities(
+                vec![stake, stake],
+                vec!["P-G", "-PG", "-PG", "-PG", "-PG"],
+                USUAL_REWARD_POT_E8S,
+                not_dissolving_min_dissolve_delay
+            ),
+            vec![10, 40],
+        );
+    }
 }
 
 #[test]
