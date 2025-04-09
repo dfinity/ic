@@ -70,7 +70,7 @@ pub(crate) fn make_unvalidated_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["strip_page_map_deltas"])
             .start_timer();
-        strip_page_map_deltas(state, fd_factory);
+        strip_page_map_deltas(state, Arc::clone(&fd_factory));
     }
 
     tip_channel
@@ -90,10 +90,12 @@ pub(crate) fn make_unvalidated_checkpoint(
         tip_channel
             .send(TipRequest::TipToCheckpoint {
                 height,
+                state: state.clone(),
+                fd_factory,
                 sender: send,
             })
             .unwrap();
-        let (cp, has_downgrade) = recv.recv().unwrap()?;
+        let (_state, cp, has_downgrade) = recv.recv().unwrap()?;
         (cp, has_downgrade)
     };
 
