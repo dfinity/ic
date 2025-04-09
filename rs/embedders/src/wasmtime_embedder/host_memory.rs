@@ -172,6 +172,15 @@ impl MmapMemory {
             size_in_bytes,
             Error::last_os_error()
         );
+        // SAFETY: the memory region was just successfully mapped.
+        // Enable Transparent Huge Pages (THP) for the newly allocated memory.
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        unsafe {
+            use nix::sys::mman::{madvise, MmapAdvise};
+            madvise(start, size_in_bytes, MmapAdvise::MADV_HUGEPAGE).unwrap_or_else(|err| {
+                eprintln!("[EXC-BUG] Error in `madvise` addr:{start:?} len:{size_in_bytes}: {err}")
+            });
+        }
 
         // SAFETY: The allocated region includes the prologue guard region.
         let wasm_memory =
