@@ -132,4 +132,3 @@ tokio-test = { workspace = true }
 test = ["ic-sns-swap/test"]
 canbench-rs = ["dep:canbench-rs"]
 tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]
-use-npr-canister = []
