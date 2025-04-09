@@ -3956,6 +3956,8 @@ impl Governance {
                 &self.proto.id_to_nervous_system_functions,
                 *topic,
             ) {
+                neuron.followees.remove(&function);
+
                 legacy::remove_neuron_from_function_followee_index_for_function(
                     &mut self.function_followee_index,
                     neuron,
@@ -3978,11 +3980,14 @@ impl Governance {
             })
             .collect::<BTreeSet<_>>();
 
-        let this_neurons_follows_on_all_topics = this_neurons_topics == *following::TOPICS;
-        let this_command_specifies_all_topics = mentioned_topics == *following::TOPICS;
+        let this_neurons_follows_on_all_topics =
+            this_neurons_topics == *following::NON_CRITICAL_TOPICS;
+        let this_command_specifies_all_topics = mentioned_topics == *following::NON_CRITICAL_TOPICS;
 
         if this_neurons_follows_on_all_topics || this_command_specifies_all_topics {
             let catchall_function = u64::from(&Action::Unspecified(Empty {}));
+
+            neuron.followees.remove(&catchall_function);
 
             legacy::remove_neuron_from_function_followee_index_for_function(
                 &mut self.function_followee_index,

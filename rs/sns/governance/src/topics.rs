@@ -334,6 +334,10 @@ impl pb::Topic {
             .any(|topic| *self == Self::from(topic.topic) && topic.is_critical)
     }
 
+    pub fn is_non_critical(&self) -> bool {
+        !self.is_critical()
+    }
+
     pub fn proposal_criticality(&self) -> ProposalCriticality {
         if self.is_critical() {
             ProposalCriticality::Critical

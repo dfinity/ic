@@ -23,6 +23,9 @@ lazy_static! {
     // One enum value is reserved for the unspecified topic.
     pub(crate) static ref TOPICS: BTreeSet<Topic> = Topic::iter().skip(1).collect();
 
+    /// All non-critical topics.
+    pub(crate) static ref NON_CRITICAL_TOPICS: BTreeSet<Topic> = TOPICS.iter().copied().filter(Topic::is_non_critical).collect();
+
     /// Number of topics that are available for following.
     static ref NUM_TOPICS: usize = TOPICS.len();
 }
