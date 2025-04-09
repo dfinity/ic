@@ -1,5 +1,10 @@
 name: Schedule Rust Benchmarks
 
+# This workflow is designed to execute a list of Rust benchmarks.
+# It runs on a dedicated runner machine labeled 'rust-benchmarks'.
+# Since there's only one machine available, the CI jobs will run one after the other.
+# The dedicated machine is identified as fr1-spm15.
+
 on:
   schedule:
     - cron: "0 1 * * *"
@@ -51,6 +56,8 @@ jobs:
           RUST_BACKTRACE: "full"
         with:
           run: |
+            echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
+
             while IFS= read -r tgt; do
                 bazel run --config=ci "$tgt"
             done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
@@ -74,3 +81,5 @@ jobs:
                 curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
                     "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-performance-test/_doc"
             done < <(find -L ./bazel-out -type d -path '*/new')
+
+            echo -e "\e[34mRust benchmarks on dedicated machine fr1-spm15 finished.\e[0m"
