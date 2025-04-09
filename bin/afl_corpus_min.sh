@@ -55,6 +55,7 @@ else
     done
 fi
 
+# To capture false crashes
 ASAN_OPTIONS="abort_on_error=1:\
             alloc_dealloc_mismatch=0:\
             allocator_may_return_null=1:\
@@ -98,5 +99,5 @@ for i in "${TARGETS[@]}"; do
     bazel build --config=afl $FUZZER
     SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=afl --output=files $FUZZER)"
     # Minimum 8 cores is assumed
-    ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS afl-cmin -i $TEMP_DIR -o $OUTPUT_DIR/$i -T 8 -t 20000 -- $SOURCE_BINARY @@
+    ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS afl-cmin.bash -i $TEMP_DIR -o $OUTPUT_DIR/$i -T 8 -t 20000 -- $SOURCE_BINARY @@
 done
