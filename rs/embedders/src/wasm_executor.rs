@@ -2,13 +2,17 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::wasmtime_embedder::system_api::{
+    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+    ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, ModificationTracking,
+    SystemApiImpl,
+};
+use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary,
     canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
-    ExportedFunctions, Global, Memory, NumWasmPages, PageMap,
+    ExportedFunctions, Memory, NumWasmPages, PageMap,
 };
-use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
-use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::NumOsPages;
 use prometheus::IntCounter;
@@ -30,9 +34,8 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-use ic_replicated_state::{EmbedderCache, ExecutionState};
+use ic_replicated_state::{EmbedderCache, ExecutionState, MessageMemoryUsage};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{ExecutionParameters, ModificationTracking, SystemApiImpl};
 use ic_types::ExecutionRound;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
@@ -491,8 +494,8 @@ pub fn wasm_execution_error(
         WasmExecutionOutput {
             wasm_result: Err(err),
             num_instructions_left,
-            allocated_bytes: NumBytes::from(0),
-            allocated_message_bytes: NumBytes::from(0),
+            allocated_bytes: NumBytes::new(0),
+            allocated_guaranteed_response_message_bytes: NumBytes::new(0),
             instance_stats: InstanceStats::default(),
             system_api_call_counters: SystemApiCallCounters::default(),
         },
@@ -603,7 +606,7 @@ pub fn process(
     func_ref: FuncRef,
     api_type: ApiType,
     canister_current_memory_usage: NumBytes,
-    canister_current_message_memory_usage: NumBytes,
+    canister_current_message_memory_usage: MessageMemoryUsage,
     execution_parameters: ExecutionParameters,
     subnet_available_memory: SubnetAvailableMemory,
     sandbox_safe_system_state: SandboxSafeSystemState,
@@ -658,8 +661,8 @@ pub fn process(
                 WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left: message_instruction_limit,
-                    allocated_bytes: NumBytes::from(0),
-                    allocated_message_bytes: NumBytes::from(0),
+                    allocated_bytes: NumBytes::new(0),
+                    allocated_guaranteed_response_message_bytes: NumBytes::new(0),
                     instance_stats: InstanceStats::default(),
                     system_api_call_counters: SystemApiCallCounters::default(),
                 },
@@ -705,7 +708,7 @@ pub fn process(
         if execution_parameters.instruction_limits.slicing_enabled()
             && dirty_pages.get() > embedder.config().max_dirty_pages_without_optimization as u64
         {
-            if let Err(err) = system_api.yield_for_dirty_memory_copy(instruction_counter) {
+            if let Err(err) = system_api.yield_for_dirty_memory_copy() {
                 // If there was an error slicing, propagate this error to the main result and return.
                 // Otherwise, the regular message path takes place.
                 return (
@@ -715,8 +718,8 @@ pub fn process(
                     WasmExecutionOutput {
                         wasm_result: Err(err),
                         num_instructions_left: message_instructions_left,
-                        allocated_bytes: NumBytes::from(0),
-                        allocated_message_bytes: NumBytes::from(0),
+                        allocated_bytes: NumBytes::new(0),
+                        allocated_guaranteed_response_message_bytes: NumBytes::new(0),
                         instance_stats,
                         system_api_call_counters,
                     },
@@ -755,8 +758,8 @@ pub fn process(
         }
     }
 
-    let mut allocated_bytes = NumBytes::from(0);
-    let mut allocated_message_bytes = NumBytes::from(0);
+    let mut allocated_bytes = NumBytes::new(0);
+    let mut allocated_guaranteed_response_message_bytes = NumBytes::new(0);
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -771,29 +774,17 @@ pub fn process(
                     ));
 
                     // Update the stable memory and serialize the delta.
-                    let stable_memory_delta =
-                        match embedder.config().feature_flags.wasm_native_stable_memory {
-                            FlagStatus::Enabled => {
-                                stable_memory.size = instance.heap_size(CanisterMemoryType::Stable);
-                                stable_memory.page_map.update(&compute_page_delta(
-                                    &mut instance,
-                                    &run_result.stable_memory_dirty_pages,
-                                    CanisterMemoryType::Stable,
-                                ))
-                            }
-                            FlagStatus::Disabled => {
-                                // unwrap should not fail, because we passed Some(system_api) when creating the instance
-                                let sys_api = instance.store_data_mut().system_api_mut().unwrap();
-                                stable_memory.size = sys_api.stable_memory_size();
-                                stable_memory
-                                    .page_map
-                                    .update(&sys_api.stable_memory_dirty_pages())
-                            }
-                        };
+                    stable_memory.size = instance.heap_size(CanisterMemoryType::Stable);
+                    let stable_memory_delta = stable_memory.page_map.update(&compute_page_delta(
+                        &mut instance,
+                        &run_result.stable_memory_dirty_pages,
+                        CanisterMemoryType::Stable,
+                    ));
                     // unwrap should not fail, because we passed Some(system_api) when creating the instance
                     let sys_api = instance.store_data().system_api().unwrap();
                     allocated_bytes = sys_api.get_allocated_bytes();
-                    allocated_message_bytes = sys_api.get_allocated_message_bytes();
+                    allocated_guaranteed_response_message_bytes =
+                        sys_api.get_allocated_guaranteed_response_message_bytes();
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,
@@ -825,7 +816,7 @@ pub fn process(
             wasm_result,
             num_instructions_left: message_instructions_left,
             allocated_bytes,
-            allocated_message_bytes,
+            allocated_guaranteed_response_message_bytes,
             instance_stats,
             system_api_call_counters,
         },

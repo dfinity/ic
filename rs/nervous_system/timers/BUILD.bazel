@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-timers",
+    "@crate_index//:slotmap",
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES + [
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "timers",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_timers",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "timers_integration_test",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":timers"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "timers_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEV_DEPENDENCIES,
+)

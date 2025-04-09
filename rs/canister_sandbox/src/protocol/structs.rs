@@ -1,11 +1,14 @@
-use ic_embedders::wasm_executor::SliceExecutionOutput;
-use ic_interfaces::execution_environment::{SubnetAvailableMemory, WasmExecutionOutput};
-use ic_replicated_state::{
-    page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
+use ic_embedders::{
+    wasm_executor::SliceExecutionOutput,
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+        ApiType, ExecutionParameters,
+    },
 };
-use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, ExecutionParameters,
+use ic_interfaces::execution_environment::{SubnetAvailableMemory, WasmExecutionOutput};
+use ic_management_canister_types_private::Global;
+use ic_replicated_state::{
+    page_map::PageDeltaSerialization, Memory, MessageMemoryUsage, NumWasmPages, PageIndex,
 };
 use ic_types::{methods::FuncRef, NumBytes};
 use serde::{Deserialize, Serialize};
@@ -21,7 +24,7 @@ pub struct SandboxExecInput {
     pub api_type: ApiType,
     pub globals: Vec<Global>,
     pub canister_current_memory_usage: NumBytes,
-    pub canister_current_message_memory_usage: NumBytes,
+    pub canister_current_message_memory_usage: MessageMemoryUsage,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
     pub next_wasm_memory_id: MemoryId,

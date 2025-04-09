@@ -1,11 +1,10 @@
 ---- MODULE Disburse_Neuron ----
 
-EXTENDS TLC, Integers, FiniteSets, Sequences, Variants
+EXTENDS TLC, Integers, FiniteSets, Sequences, Variants, Common
 
 CONSTANTS
     Governance_Account_Ids,
     Account_Ids,
-    Neuron_Ids,
     Minting_Account_Id
 
 CONSTANTS
@@ -17,17 +16,12 @@ CONSTANTS
     \* The transfer fee charged by the ledger canister
     TRANSACTION_FEE
 
-\* Initial value used for uninitialized accounts
-DUMMY_ACCOUNT == ""
+CONSTANT
+    \* Which argument to give as an amount; for Apalache, we can take Nat,
+    \* for TLC we want to limit this to some finite set
+    POSSIBLE_DISBURSE_AMOUNTS(_, _)
 
-\* @type: (a -> b, Set(a)) => a -> b;
-Remove_Arguments(f, S) == [ x \in (DOMAIN f \ S) |-> f[x]]
 Max(x, y) == IF x < y THEN y ELSE x
-
-request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
-transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to, amount |-> amount, fee |-> fee])
-
-o_deduct(disb_amount) == disb_amount + TRANSACTION_FEE
 
 (* --algorithm Governance_Ledger_Disburse_Neuron {
 
@@ -88,7 +82,7 @@ process ( Disburse_Neuron \in Disburse_Neuron_Process_Ids )
             \* our model is well-formed.
             \* Note that the user can request to disburse an arbitrary amount. This will only fail once
             \* we send a message to the ledger.
-            with(nid \in DOMAIN(neuron) \ locks; amt \in Nat; account \in Account_Ids) {
+            with(nid \in DOMAIN(neuron) \ locks; amt \in POSSIBLE_DISBURSE_AMOUNTS(neuron, nid); account \in Account_Ids) {
                 neuron_id := nid;
                 disburse_amount := amt;
                 fees_amount := neuron[neuron_id].fees;
@@ -136,7 +130,7 @@ process ( Disburse_Neuron \in Disburse_Neuron_Process_Ids )
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "49bb5804" /\ chksum(tla) = "fa8fb71a")
+\* BEGIN TRANSLATION (chksum(pcal) = "10c9c7f7" /\ chksum(tla) = "a1672e89")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, spawning_neurons, neuron_id, disburse_amount,
           to_account, fees_amount
@@ -165,7 +159,7 @@ DisburseNeuron1(self) == /\ pc[self] = "DisburseNeuron1"
                          /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
                                /\ UNCHANGED <<neuron, locks, governance_to_ledger, neuron_id, disburse_amount, to_account, fees_amount>>
                             \/ /\ \E nid \in DOMAIN(neuron) \ locks:
-                                    \E amt \in Nat:
+                                    \E amt \in POSSIBLE_DISBURSE_AMOUNTS(neuron, nid):
                                       \E account \in Account_Ids:
                                         /\ neuron_id' = [neuron_id EXCEPT ![self] = nid]
                                         /\ disburse_amount' = [disburse_amount EXCEPT ![self] = amt]

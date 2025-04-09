@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/prng",
@@ -28,9 +29,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_layout",
     "//rs/sys",
-    "//rs/system_api",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
@@ -83,6 +82,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:proptest",
     "@crate_index//:regex",
+    "@crate_index//:rstest",
     "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]
@@ -167,8 +167,10 @@ rust_doc_test(
 BENCH_DEPENDENCIES = [
     # Keep sorted.
     ":execution_environment",
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
+    "//rs/embedders",
     "//rs/interfaces",
     "//rs/limits",
     "//rs/monitoring/logger",
@@ -177,14 +179,12 @@ BENCH_DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/rust_canisters/canister_test",
-    "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",

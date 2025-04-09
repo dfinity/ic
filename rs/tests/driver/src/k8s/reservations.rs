@@ -101,8 +101,8 @@ pub async fn create_reservation(
     })
     .retry(
         &ConstantBuilder::default()
-            .with_max_times(10)
-            .with_delay(Duration::from_secs(1)),
+            .with_max_times(60)
+            .with_delay(Duration::from_secs(3)),
     )
     .await?;
 

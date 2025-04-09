@@ -4,8 +4,11 @@
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_embedders::wasm_executor::{
-    CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput,
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
+    wasmtime_embedder::system_api::sandbox_safe_system_state::{
+        RequestMetadataStats, SystemStateModifications,
+    },
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -18,7 +21,6 @@ use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
 };
-use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateModifications};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
@@ -422,7 +424,7 @@ fn try_apply_canister_state_changes(
     subnet_available_memory
         .try_decrement(
             output.allocated_bytes,
-            output.allocated_message_bytes,
+            output.allocated_guaranteed_response_message_bytes,
             NumBytes::from(0),
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;

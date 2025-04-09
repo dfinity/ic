@@ -9,7 +9,8 @@ use ic_artifact_pool::{
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
-use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
+use ic_consensus::consensus::batch_delivery::deliver_batches;
+use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{
     crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
     pool_reader::PoolReader,
@@ -762,6 +763,7 @@ impl Player {
             randomness,
             chain_key_subnet_public_keys: BTreeMap::new(),
             idkg_pre_signature_ids: BTreeMap::new(),
+            ni_dkg_ids: BTreeMap::new(),
             registry_version,
             time,
             consensus_responses: Vec::new(),

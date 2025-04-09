@@ -31,11 +31,10 @@ env:
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+    image: ghcr.io/dfinity/ic-build@sha256:45535cf9304320f8b3b995fd8eec6eeac77ec314deb6d560cfa7d34e2d755683
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -52,12 +51,6 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -68,20 +61,6 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
-  bazel-bep: &bazel-bep
-    name: Upload bazel-bep
-    # runs only if previous step succeeded or failed;
-    # we avoid collecting artifacts of jobs that were cancelled
-    if: success() || failure()
-    uses: actions/upload-artifact@v4
-    with:
-      name: ${{ github.job }}-bep
-      retention-days: 14
-      if-no-files-found: ignore
-      compression-level: 9
-      path: |
-        bazel-bep.pb.gpg
-        profile.json
 
 jobs:
   bazel-test-all:
@@ -91,16 +70,15 @@ jobs:
       group: zh1
       labels: dind-large
     env:
-      CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
       RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
+        id: bazel-extra-args
         run: |
           set -xeuo pipefail
           # Determine which tests to skip and append 'long_test' for pull requests, merge groups or push on dev-gh-*
@@ -127,25 +105,28 @@ jobs:
           # Prepend tags with '-' and join them with commas for Bazel
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
+          BAZEL_EXTRA_ARGS=( "--test_tag_filters=$TEST_TAG_FILTERS" )
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
+              BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
+              BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate )
           else
-              BAZEL_EXTRA_ARGS+=" --keep_going"
+              BAZEL_EXTRA_ARGS+=( --keep_going )
           fi
-          # Export BAZEL_EXTRA_ARGS to environment
-          echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
+          echo "BAZEL_EXTRA_ARGS=${BAZEL_EXTRA_ARGS[@]}" >> $GITHUB_OUTPUT
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: test --config=ci ${{ env.BAZEL_EXTRA_ARGS }}
+          BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_TOKEN }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
+
+      - name: Upload SHA256SUMS (cache)
+        uses: ./.github/actions/bazel-upload-checksums/
+        with:
+          artifact-name: shasums-cache
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
@@ -169,15 +150,11 @@ jobs:
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
-        env:
-          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
         with:
-          BAZEL_COMMAND: >-
-            test --config=ci --config=macos_ci
-            --test_tag_filters=test_macos
+          BAZEL_COMMAND: test --config=ci --config=macos_ci --test_tag_filters=test_macos
           BAZEL_TARGETS: //rs/... //publish/binaries/...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+          GPG_PASSPHRASE: ''
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -194,11 +171,9 @@ jobs:
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
         with:
-          BAZEL_COMMAND: >-
-            build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
+          BAZEL_COMMAND: build --config=ci --keep_going --config=fuzzing --build_tag_filters=libfuzzer
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -212,7 +187,6 @@ jobs:
           BAZEL_COMMAND: build --config=ci --keep_going --config=afl
           BAZEL_TARGETS: //rs/...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-      - <<: *bazel-bep
 
   python-ci-tests:
     name: Python CI Tests
@@ -242,38 +216,23 @@ jobs:
     <<: *dind-large-setup
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
-      group: ch1
       labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Build IC
         id: build-ic
-        shell: bash
-        run: |
-          set -eExuo pipefail
-          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-          mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
-          "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
+        run: ./ci/scripts/run-build-ic.sh
         env:
           BAZEL_COMMAND: build --config=ci
           BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
-      - name: Upload build-ic.tar
-        uses: actions/upload-artifact@v4
+      - name: Upload SHA256SUMS (nocache)
+        uses: ./.github/actions/bazel-upload-checksums/
         with:
-          name: build-ic
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            build-ic.tar
+          artifact-name: shasums-nocache
 
   build-determinism:
     name: Build Determinism
@@ -282,51 +241,47 @@ jobs:
     # NOTE: this expects "build-ic" to have built the same set of targets
     # as "bazel-test-all"
     needs: [build-ic, bazel-test-all]
-    strategy:
-      matrix:
-        include:
-          - TARGET: "//publish/binaries:upload"
-            PATH0: "release"
-            PATH1: "build-ic/release"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//publish/canisters:upload"
-            PATH0: "canisters"
-            PATH1: "build-ic/canisters"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
-            PATH0: "guest-os/update-img"
-            PATH1: "build-ic/icos/guestos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
-            PATH0: "host-os/update-img"
-            PATH1: "build-ic/icos/hostos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
-            PATH0: "setup-os/disk-img"
-            PATH1: "build-ic/icos/setupos"
-            SETUPOS_FLAG: "true"
     steps:
       - <<: *checkout
-      - name: Download build-ic.tar [build-ic]
+      - name: Download SHA256SUMS (cache)
         uses: actions/download-artifact@v4
         with:
-          name: build-ic
+          name: shasums-cache
+          path: shasums-cache
+      - name: Download SHA256SUMS (nocache)
+        uses: actions/download-artifact@v4
+        with:
+          name: shasums-nocache
+          path: shasums-nocache
+
       - name: Build Determinism Test
-        id: build-determinism
         run: |
-          tar -xf build-ic.tar # build-determinism.sh expects ./build-ic/
-          "$CI_PROJECT_DIR"/ci/scripts/build-determinism.sh
-        env:
-          TARGET: ${{ matrix.TARGET }}
-          PATH0: ${{ matrix.PATH0 }}
-          PATH1: ${{ matrix.PATH1 }}
-          SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
+          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
+          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
+          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
+
+          # running tests may not pull all targets locally. If that's the case,
+          # there will be 0 lines and nothing to compare.
+          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+            echo "No lines to compare"
+            exit 0
+          fi
+
+          # this checks that all lines in the first argument (subset) are identical
+          # in the second argument (set)
+          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
+          if [ -n "$difference" ]; then
+            echo "Build Determinism Check Failed! Please contact IDX."
+            echo "The following artifacts were different:"
+            echo "$difference"
+            exit 1
+          fi
+
+          echo "Build Determinism Check Successful"
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -356,8 +311,6 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-small-setup
-    runs-on:
-      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]

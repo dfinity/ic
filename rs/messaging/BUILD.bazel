@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_ic_test_suite")
+load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -15,6 +15,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
+        "//packages/ic-error-types",
         "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/crypto/utils/threshold_sig_der",
@@ -36,7 +37,6 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/base_types",
-        "//rs/types/error_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/utils/thread",
@@ -55,8 +55,6 @@ rust_test(
         "//rs/interfaces/state_manager/mocks",
         "//rs/registry/fake",
         "//rs/registry/local_registry",
-        "//rs/registry/local_store",
-        "//rs/registry/local_store/artifacts",
         "//rs/registry/proto_data_provider",
         "//rs/registry/transport",
         "//rs/state_manager",
@@ -76,13 +74,16 @@ rust_test(
         "@crate_index//:pretty_assertions",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
-        "@crate_index//:tempfile",
     ],
 )
 
-rust_ic_test_suite(
+rust_ic_test_suite_with_extra_srcs(
     name = "messaging_integration",
-    srcs = glob(["tests/**/*.rs"]),
+    srcs = [
+        "tests/call_tree_tests.rs",
+        "tests/memory_tests.rs",
+        "tests/queue_tests.rs",
+    ],
     data = [
         "//rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister",
         "//rs/rust_canisters/random_traffic_test:random-traffic-test-canister",
@@ -93,6 +94,9 @@ rust_ic_test_suite(
         "RANDOM_TRAFFIC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/random_traffic_test:random-traffic-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
+    extra_srcs = [
+        "tests/common/mod.rs",
+    ],
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:test-strategy",

@@ -315,7 +315,10 @@ impl Setup {
             wait_ledger_ready(&self.state_machine, LEDGER_CANISTER_ID, 100);
         }
         self.check_ledger_metrics(expect_migration);
-        self.upgrade_archive_canisters(&self.master_wasms.archive);
+        self.upgrade_archive_canisters(
+            &self.master_wasms.archive,
+            Encode!(&()).expect("failed to encode archive upgrade arg"),
+        );
     }
 
     pub fn downgrade_to_mainnet(&self, ledger_is_downgradable: bool) {
@@ -349,7 +352,7 @@ impl Setup {
             }
         }
         self.check_ledger_metrics(ExpectMigration::No);
-        self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
+        self.upgrade_archive_canisters(&self.mainnet_wasms.archive, vec![]);
     }
 
     pub fn perform_upgrade_downgrade_testing(
@@ -409,21 +412,16 @@ impl Setup {
         .expect("failed to decode archives response")
     }
 
-    fn upgrade_archive(&self, archive_canister_id: CanisterId, wasm_bytes: Vec<u8>) {
-        self.state_machine
-            .upgrade_canister(archive_canister_id, wasm_bytes, vec![])
-            .unwrap_or_else(|e| {
-                panic!(
-                    "should successfully upgrade archive '{}' to new local version: {}",
-                    archive_canister_id, e
-                )
-            });
-    }
-
-    fn upgrade_archive_canisters(&self, wasm: &Wasm) {
+    fn upgrade_archive_canisters(&self, wasm: &Wasm, upgrade_arg: Vec<u8>) {
         let archives = self.list_archives().archives;
         for archive_info in &archives {
-            self.upgrade_archive(archive_info.canister_id, wasm.clone().bytes());
+            self.state_machine
+                .upgrade_canister(
+                    archive_info.canister_id,
+                    wasm.clone().bytes(),
+                    upgrade_arg.clone(),
+                )
+                .expect("failed to upgrade archive");
         }
     }
 

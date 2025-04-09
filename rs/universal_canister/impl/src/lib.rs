@@ -113,5 +113,13 @@ try_from_u8!(
         MsgDeadline = 83,
         MemorySizeIsAtLeast = 84,
         MintCycles128 = 85,
+        CostCall = 86,
+        CostCreateCanister = 87,
+        CostHttpRequest = 88,
+        CostSignWithEcdsa = 89,
+        CostSignWithSchnorr = 90,
+        CostVetkdDeriveKey = 91,
+        LiquidCyclesBalance128 = 92,
+        CallDataAppendCyclesAddMax = 93,
     }
 );

@@ -1,8 +1,10 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
@@ -10,7 +12,7 @@ use ic_types::{
 use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::convert::TryFrom;
 
-use crate::canister_manager::CanisterManagerError;
+use crate::canister_manager::types::CanisterManagerError;
 
 /// These limit comes from the spec and is not expected to change,
 /// which is why it is not part of the replica config.
@@ -106,9 +108,24 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         };
 
         let freezing_threshold = match input.freezing_threshold {
-            Some(ft) => Some(NumSeconds::from(ft.0.to_u64().ok_or(
-                UpdateSettingsError::FreezingThresholdOutOfRange { provided: ft },
-            )?)),
+            Some(ft) => match ft.0.to_u64() {
+                Some(num) => {
+                    if num < MINIMUM_FREEZING_THRESHOLD {
+                        return Err(UpdateSettingsError::FreezingThresholdOutOfRange {
+                            provided: ft,
+                            minimum: candid::Nat::from(MINIMUM_FREEZING_THRESHOLD),
+                        });
+                    }
+                    Some(NumSeconds::from(num))
+                }
+                // Value cannot fit in a 64-bit integer.
+                None => {
+                    return Err(UpdateSettingsError::FreezingThresholdOutOfRange {
+                        provided: ft,
+                        minimum: candid::Nat::from(MINIMUM_FREEZING_THRESHOLD),
+                    });
+                }
+            },
             None => None,
         };
 
@@ -271,10 +288,19 @@ impl CanisterSettingsBuilder {
 pub enum UpdateSettingsError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),
-    FreezingThresholdOutOfRange { provided: candid::Nat },
-    ReservedCyclesLimitOutOfRange { provided: candid::Nat },
-    WasmMemoryLimitOutOfRange { provided: candid::Nat },
-    WasmMemoryThresholdOutOfRange { provided: candid::Nat },
+    FreezingThresholdOutOfRange {
+        provided: candid::Nat,
+        minimum: candid::Nat,
+    },
+    ReservedCyclesLimitOutOfRange {
+        provided: candid::Nat,
+    },
+    WasmMemoryLimitOutOfRange {
+        provided: candid::Nat,
+    },
+    WasmMemoryThresholdOutOfRange {
+        provided: candid::Nat,
+    },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -296,13 +322,15 @@ impl From<UpdateSettingsError> for UserError {
                     err.min, err.max, err.given
                 ),
             ),
-            UpdateSettingsError::FreezingThresholdOutOfRange { provided } => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "Freezing threshold expected to be in the range of [0..2^64-1], got {}",
-                    provided
-                ),
-            ),
+            UpdateSettingsError::FreezingThresholdOutOfRange { provided, minimum } => {
+                UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!(
+                        "Freezing threshold expected to be in the range of [{}..2^64-1], got {}",
+                        minimum, provided
+                    ),
+                )
+            }
             UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
@@ -407,7 +435,7 @@ impl ValidatedCanisterSettings {
 pub(crate) fn validate_canister_settings(
     settings: CanisterSettings,
     canister_memory_usage: NumBytes,
-    canister_message_memory_usage: NumBytes,
+    canister_message_memory_usage: MessageMemoryUsage,
     canister_memory_allocation: MemoryAllocation,
     subnet_available_memory: &SubnetAvailableMemory,
     subnet_memory_saturation: &ResourceSaturation,

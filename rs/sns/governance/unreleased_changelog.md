@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added the (currently disabled) `SetFollowing` neuron command.
+
 ## Changed
 
 ## Deprecated

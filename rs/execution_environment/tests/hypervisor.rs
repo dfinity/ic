@@ -1,49 +1,58 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_config::{
+    embedders::BestEffortResponsesFeature, execution_environment::MINIMUM_FREEZING_THRESHOLD,
+};
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+use ic_embedders::{
+    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
+};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
-use ic_replicated_state::testing::CanisterQueuesTesting;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
+    canister_state::execution_state::CustomSectionType, ExportedFunctions, MessageMemoryUsage,
+    NumWasmPages, PageIndex, PageMap,
 };
-use ic_replicated_state::{NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
     get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::fetch_int_counter;
-use ic_test_utilities_metrics::{fetch_histogram_vec_stats, metric_vec, HistogramStats};
-use ic_types::messages::{CanisterMessage, NO_DEADLINE};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
+};
+use ic_types::messages::{
+    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE,
+};
 use ic_types::time::CoarseTime;
-use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::CanisterTask,
-    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     methods::WasmMethod,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, Time,
+    MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::test_runner::{TestRng, TestRunner};
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+use rstest::rstest;
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::time::Duration;
@@ -1051,7 +1060,7 @@ fn ic0_canister_version_returns_correct_value() {
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
+    test.update_freezing_threshold(canister_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 5 for the previous ingress messages.
@@ -2663,8 +2672,9 @@ fn subnet_available_memory_is_updated() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2690,8 +2700,9 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2717,8 +2728,9 @@ fn subnet_available_memory_is_updated_in_global_timer() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2741,8 +2753,9 @@ fn subnet_available_memory_is_not_updated_in_query() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2763,8 +2776,9 @@ fn subnet_available_memory_is_updated_by_canister_init() {
             > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
     let memory_used = test.state().memory_taken().execution().get() as i64;
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
@@ -2794,8 +2808,9 @@ fn subnet_available_memory_is_updated_by_canister_start() {
             > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
     let mem_before_upgrade = test.subnet_available_memory().get_execution_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
@@ -2813,8 +2828,9 @@ fn subnet_available_memory_is_updated_by_canister_start() {
             + canister_history_memory as i64
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
 }
 
@@ -2840,8 +2856,9 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2864,8 +2881,9 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2888,8 +2906,9 @@ fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2913,8 +2932,9 @@ fn subnet_available_memory_does_not_change_after_failed_execution() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     )
 }
 
@@ -2950,8 +2970,9 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
-        initial_subnet_available_memory.get_message_memory(),
-        test.subnet_available_memory().get_message_memory()
+        initial_subnet_available_memory.get_guaranteed_response_message_memory(),
+        test.subnet_available_memory()
+            .get_guaranteed_response_message_memory()
     );
     assert_eq!(initial_memory_used, test.state().memory_taken().execution());
 }
@@ -3081,7 +3102,7 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
     let err = test.ingress(canister_id, "write", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
     assert_eq!(
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_dirty_pages"),
+        fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[
             (
                 &[("api_type", "update"), ("memory_type", "wasm")],
@@ -3093,8 +3114,11 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
             ),
         ])
     );
-    for (labels, stats) in
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_accessed_pages").iter()
+    for (labels, stats) in fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "sandboxed_execution_accessed_pages",
+    )
+    .iter()
     {
         let mem_type = labels.get("memory_type");
         match mem_type.as_ref().map(|a| String::as_ref(*a)) {
@@ -3111,6 +3135,51 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
             _ => panic!("Unexpected memory type"),
         }
     }
+}
+
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+#[rstest]
+#[case::canister_does_not_trap("", ErrorCode::CanisterDidNotReply)]
+#[case::canister_traps("(unreachable)", ErrorCode::CanisterTrapped)]
+fn wasm_page_metrics_are_recorded_for_many_writes(
+    #[case] inject_trap: &str,
+    #[case] expected_error_code: ErrorCode,
+) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"
+        (module
+            (func (export "canister_update write")
+                (local $i i32)
+                (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+                (loop $loop
+                    (i32.store (local.get $i) (i32.const 1))
+                    (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+                )
+                {inject_trap}
+            )
+            (memory 16385) ;; 1GiB + 65536
+        )"#
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let err = test.ingress(canister_id, "write", vec![]).unwrap_err();
+    assert_eq!(expected_error_code, err.code());
+    assert_eq!(
+        fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
+        metric_vec(&[
+            (
+                &[("api_type", "update"), ("memory_type", "wasm")],
+                HistogramStats {
+                    count: 1,
+                    sum: 262145.0 // (1GiB + 4096) / 4096
+                }
+            ),
+            (
+                &[("api_type", "update"), ("memory_type", "stable")],
+                HistogramStats { count: 1, sum: 0.0 }
+            ),
+        ])
+    );
 }
 
 #[test]
@@ -3143,7 +3212,7 @@ fn query_stable_memory_metrics_are_recorded() {
         .unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
     assert_eq!(
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_dirty_pages"),
+        fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
         metric_vec(&[
             (
                 &[
@@ -3161,8 +3230,11 @@ fn query_stable_memory_metrics_are_recorded() {
             ),
         ])
     );
-    for (labels, stats) in
-        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_accessed_pages").iter()
+    for (labels, stats) in fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "sandboxed_execution_accessed_pages",
+    )
+    .iter()
     {
         assert_eq!(
             labels.get("api_type"),
@@ -3292,6 +3364,8 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
+    // Clear `expected_compiled_wasms` so that the full execution cost is applied.
+    test.state_mut().metadata.expected_compiled_wasms.clear();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     // Compilation occurs once for original installation and again for upgrade.
@@ -6809,7 +6883,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
         freezing_threshold,
         ic_types::MemoryAllocation::Reserved(NumBytes::new(memory_allocation)),
         NumBytes::new(0),
-        NumBytes::new(0),
+        MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -6854,7 +6928,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
         freezing_threshold,
         ic_types::MemoryAllocation::BestEffort,
         NumBytes::new(memory_usage),
-        NumBytes::new(0),
+        MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -6894,7 +6968,7 @@ fn stable_memory_grow_reserves_cycles() {
             .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -6998,7 +7072,7 @@ fn wasm_memory_grow_reserves_cycles() {
 
         let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -7076,7 +7150,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7215,7 +7289,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7281,7 +7355,7 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7318,7 +7392,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7362,7 +7436,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     let canister_id = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
 
     let reserved_cycles_before = test
@@ -8140,4 +8214,311 @@ fn wasm64_correct_execution_state() {
 #[test]
 fn wasm32_correct_execution_state() {
     check_correct_execution_state(false);
+}
+
+#[test]
+fn invoke_cost_call() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let method_name = "inc";
+    let argument = vec![42; 2000];
+    let payload = wasm()
+        .cost_call(method_name.len() as u64, argument.len() as u64)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
+        (method_name.len() as u64 + argument.len() as u64).into(),
+        WasmExecutionMode::Wasm32,
+    );
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_create_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_create_canister()
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .canister_creation_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_http_request() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let request_size = 1000;
+    let max_res_bytes = 1_800_000;
+    let payload = wasm()
+        .cost_http_request(request_size, max_res_bytes)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().http_request_fee(
+        request_size.into(),
+        Some(max_res_bytes.into()),
+        subnet_size,
+    );
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_sign_with_ecdsa() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_ecdsa(key_name.as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .ecdsa_signature_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_sign_with_ecdsa_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_ecdsa(key_name.as_bytes(), curve_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_ecdsa failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_sign_with_ecdsa_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_ecdsa(String::from("yesn't").as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_ecdsa failed with error code 2",
+    );
+}
+
+#[test]
+fn invoke_cost_sign_with_schnorr() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test
+        .cycles_account_manager()
+        .schnorr_signature_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_sign_with_schnorr_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_schnorr failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_sign_with_schnorr_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let algorithm_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_sign_with_schnorr(String::from("yesn't").as_bytes(), algorithm_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_sign_with_schnorr failed with error code 2",
+    );
+}
+
+#[test]
+fn invoke_cost_vetkd_derive_key() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_key(key_name.as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().vetkd_fee(subnet_size);
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {:?}", res);
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_vetkd_derive_key_fails_bad_curve() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_key(key_name.as_bytes(), curve_variant + 10)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_vetkd_derive_key failed with error code 1",
+    );
+}
+
+#[test]
+fn cost_vetkd_derive_key_fails_bad_key_name() {
+    let key_name = String::from("testkey");
+    let curve_variant = 0;
+    let mut test = ExecutionTestBuilder::new()
+        .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::try_from(curve_variant).unwrap(),
+            name: key_name.clone(),
+        }))
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .cost_vetkd_derive_key(String::from("yesn't").as_bytes(), curve_variant)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let Err(err) = res else {
+        panic!("Expected Err, got Ok");
+    };
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ic0.cost_vetkd_derive_key failed with error code 2",
+    );
 }

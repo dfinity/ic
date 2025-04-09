@@ -21,6 +21,8 @@ thread_local! {
     pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
 }
 
+const MAX_TRANSFORM_SIZE: usize = 2_000_000;
+
 #[update]
 async fn send_request(
     request: RemoteHttpRequest,
@@ -146,8 +148,23 @@ fn bloat_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
     transformed.headers = vec![];
+    // TODO: size_of<CanisterHttpResponsePayload> = 64, so not exactly sure why 50 does it..
+    let overhead = 50;
     // Return response that is bigger than allowed limit.
-    transformed.body = vec![0; 2 * 1024 * 1024 + 1024];
+    // - 50 is small enough, but -49 is too large.
+    transformed.body = vec![0; MAX_TRANSFORM_SIZE - overhead + 1];
+
+    transformed
+}
+
+#[query]
+fn very_large_but_allowed_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, _) = (raw.response, raw.context);
+    let mut transformed = response;
+    transformed.headers = vec![];
+    let overhead = 50;
+    // Return response that is exactly equal to the allowed limit.
+    transformed.body = vec![0; MAX_TRANSFORM_SIZE - overhead];
 
     transformed
 }

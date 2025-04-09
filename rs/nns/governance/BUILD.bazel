@@ -45,6 +45,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
@@ -55,6 +56,9 @@ DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/temporary",
+    "//rs/nervous_system/time_helpers",
+    "//rs/nervous_system/timer_task",
+    "//rs/nervous_system/timers",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -231,6 +235,21 @@ rust_canbench(
     ],
 )
 
+# Used for benchmarking compilation/instrumentation/execution changes in the
+# embedders crate.
+rust_canister(
+    name = "governance-bench-canister",
+    srcs = ["canbench/main.rs"],
+    aliases = ALIASES,
+    compile_data = ["canbench/bench.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canbench/bench.did",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":governance--canbench_feature",
+    ],
+)
+
 rust_canister(
     name = "governance-canister",
     srcs = ["canister/canister.rs"],
@@ -242,7 +261,6 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -262,7 +280,6 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
-        "//rs/nervous_system/canisters",
         "//rs/tla_instrumentation",
     ],
 )
@@ -297,7 +314,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -311,7 +327,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -333,7 +348,6 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -345,6 +359,7 @@ rust_bench(
         # Keep sorted.
         ":governance",
         "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/canisters",
         "//rs/nervous_system/common",
         "//rs/nns/common",
         "//rs/types/base_types",

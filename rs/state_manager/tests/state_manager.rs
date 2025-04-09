@@ -6448,292 +6448,385 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
-proptest! {
-    #[test]
-    fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed  */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // we do not modify the slice before decoding it again - so this should succeed
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+fn stream_store_encode_decode(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed  */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // we do not modify the slice before decoding it again - so this should succeed
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_modified_hash_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed  */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, mut slice| {
-                let mut hash = slice.certification.signed.content.hash.get();
-                *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
-                slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_modified_hash_fails(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed  */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, mut slice| {
+            let mut hash = slice.certification.signed.content.hash.get();
+            *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
+            slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
 
-                (state_manager, slice)
-            }
-        );
-    }
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "Failed to deserialize witness")]
-    fn stream_store_decode_with_empty_witness_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, mut slice| {
-                slice.merkle_proof = vec![];
+#[test_strategy::proptest]
+#[should_panic(expected = "Failed to deserialize witness")]
+fn stream_store_decode_with_empty_witness_fails(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, mut slice| {
+            slice.merkle_proof = vec![];
 
-                (state_manager, slice)
-            }
-        );
-    }
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InconsistentPartialTree")]
-    fn stream_store_decode_slice_push_additional_message(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let mut messages = match decoded_slice.messages() {
-                        None => StreamIndexedQueue::default(),
-                        Some(messages) => messages.clone(),
-                    };
+#[test_strategy::proptest]
+#[should_panic(expected = "InconsistentPartialTree")]
+fn stream_store_decode_slice_push_additional_message(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let mut messages = match decoded_slice.messages() {
+                    None => StreamIndexedQueue::default(),
+                    Some(messages) => messages.clone(),
+                };
 
-                    let req = RequestBuilder::default()
-                        .sender(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[2][..]).unwrap()))
-                        .receiver(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[3][..]).unwrap()))
-                        .method_name("test".to_string())
-                        .sender_reply_callback(CallbackId::from(999))
-                        .build();
+                let req = RequestBuilder::default()
+                    .sender(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(&[2][..]).unwrap(),
+                    ))
+                    .receiver(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(&[3][..]).unwrap(),
+                    ))
+                    .method_name("test".to_string())
+                    .sender_reply_callback(CallbackId::from(999))
+                    .build();
 
-                    messages.push(req.into());
+                messages.push(req.into());
 
-                    let signals_end = decoded_slice.header().signals_end();
+                let signals_end = decoded_slice.header().signals_end();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    /// Depending on the specific input, may fail with either `InvalidSignature` or
-    /// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
-    #[test]
-    #[should_panic]
-    fn stream_store_decode_slice_modify_message_begin(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(
-                    state_manager,
-                    slice,
-                    |decoded_slice| {
-                    let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(99999));
-                    let signals_end = decoded_slice.header().signals_end();
+/// Depending on the specific input, may fail with either `InvalidSignature` or
+/// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
+#[test_strategy::proptest]
+#[should_panic]
+fn stream_store_decode_slice_modify_message_begin(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(99999));
+                let signals_end = decoded_slice.header().signals_end();
 
-                    if let Some(decoded_messages) = decoded_slice.messages() {
-                        for (_index, msg) in decoded_messages.iter() {
-                            messages.push(msg.clone());
-                        }
+                if let Some(decoded_messages) = decoded_slice.messages() {
+                    for (_index, msg) in decoded_messages.iter() {
+                        messages.push(msg.clone());
                     }
+                }
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_modify_signals_end(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let messages = decoded_slice.messages()
-                        .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let signals_end = decoded_slice.header().signals_end() + 99999.into();
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_slice_modify_signals_end(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let messages = decoded_slice
+                    .messages()
+                    .unwrap_or(&StreamIndexedQueue::default())
+                    .clone();
+                let signals_end = decoded_slice.header().signals_end() + 99999.into();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_push_signal(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let messages = decoded_slice.messages()
-                        .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let mut signals_end = decoded_slice.header().signals_end();
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_slice_push_signal(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let messages = decoded_slice
+                    .messages()
+                    .unwrap_or(&StreamIndexedQueue::default())
+                    .clone();
+                let mut signals_end = decoded_slice.header().signals_end();
 
-                    signals_end.inc_assign();
+                signals_end.inc_assign();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidDestination")]
-    fn stream_store_decode_with_invalid_destination(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            Some(subnet_test_id(1)),
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice before decoding it again - the wrong
-                // destination subnet should already make it fail
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidDestination")]
+fn stream_store_decode_with_invalid_destination(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        Some(subnet_test_id(1)),
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice before decoding it again - the wrong
+            // destination subnet should already make it fail
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should fail */
-            false,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice before decoding it again - the signature validation
-                // failure caused by passing the `RejectingVerifier` should already make it fail.
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_rejecting_verifier(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should fail */
+        false,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice before decoding it again - the signature validation
+            // failure caused by passing the `RejectingVerifier` should already make it fail.
+            (state_manager, slice)
+        },
+    );
+}
 
-    /// If both signature verification and slice decoding would fail, we expect to
-    /// see an error about the former.
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            Some(subnet_test_id(1)),
-            /* certification verification should fail  */
-            false,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice, the wrong destination subnet and rejecting verifier
-                // should make it fail regardless.
-                (state_manager, slice)
-            }
-        );
-    }
+/// If both signature verification and slice decoding would fail, we expect to
+/// see an error about the former.
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        Some(subnet_test_id(1)),
+        /* certification verification should fail  */
+        false,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice, the wrong destination subnet and rejecting verifier
+            // should make it fail regardless.
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    fn stream_store_encode_partial((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
-        // Partial slice with messages beginning at `begin + 1`.
-        encode_partial_slice_test(
-            stream,
-            begin,
-            begin.increment(),
-            count - 1,
-            byte_limit
-        );
-    }
+#[test_strategy::proptest]
+fn stream_store_encode_partial(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+    #[strategy(0..1000usize)] byte_limit: usize,
+) {
+    let (stream, begin, count) = test_slice;
+    // Partial slice with messages beginning at `begin + 1`.
+    encode_partial_slice_test(stream, begin, begin.increment(), count - 1, byte_limit);
 }
 
 // 1 test case is sufficient to test index validation.
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1))]
-
-    #[test]
-    #[should_panic(expected = "failed to encode certified stream: InvalidSliceIndices")]
-    fn stream_store_encode_partial_bad_indices((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
-        // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
-        encode_partial_slice_test(
-            stream,
-            begin.increment(),
-            begin,
-            count,
-            byte_limit
-        );
-    }
+#[test_strategy::proptest(ProptestConfig::with_cases(1))]
+#[should_panic(expected = "failed to encode certified stream: InvalidSliceIndices")]
+fn stream_store_encode_partial_bad_indices(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+    #[strategy(0..1000usize)] byte_limit: usize,
+) {
+    let (stream, begin, count) = test_slice;
+    // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
+    encode_partial_slice_test(stream, begin.increment(), begin, count, byte_limit);
 }
 
 /// Test if query stats are correctly aggregated into the canister state.
@@ -6917,16 +7010,17 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
     }
 }
 
-proptest! {
-#![proptest_config(ProptestConfig {
+#[test_strategy::proptest(ProptestConfig {
     // Fork to prevent flaky timeouts due to closed sandbox fds
     fork: true,
     // We go for fewer, but longer runs
     ..ProptestConfig::with_cases(5)
 })]
-
-#[test]
-fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
+fn random_canister_input(
+    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 1..50))] ops: Vec<
+        TestCanisterOp,
+    >,
+) {
     /// Execute op against the state machine `env`
     fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
         match op {
@@ -6951,7 +7045,8 @@ fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_caniste
             }
             TestCanisterOp::CanisterReinstall => {
                 env.reinstall_canister_wat(canister_id, TEST_CANISTER, vec![]);
-                env.execute_ingress(canister_id, "grow_page", vec![]).unwrap();
+                env.execute_ingress(canister_id, "grow_page", vec![])
+                    .unwrap();
                 env
             }
             TestCanisterOp::Checkpoint => {
@@ -6975,13 +7070,11 @@ fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_caniste
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
-    env
-        .execute_ingress(canister_id, "grow_page", vec![])
+    env.execute_ingress(canister_id, "grow_page", vec![])
         .unwrap();
 
     // Execute all operations the state machine.
     for op in ops {
         env = execute_op(env, canister_id, op.clone());
     }
-}
 }

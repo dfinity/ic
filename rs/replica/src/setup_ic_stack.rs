@@ -5,7 +5,7 @@ use ic_artifact_pool::{
 use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
-use ic_consensus::certification::VerifierImpl;
+use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
@@ -15,7 +15,6 @@ use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
 };
-use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
@@ -67,7 +66,7 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
-    registry: Arc<dyn RegistryClient + Send + Sync>,
+    registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
     tracing_handle: ReloadHandles,
@@ -207,8 +206,7 @@ pub fn construct_ic_stack(
         &state_manager.state_layout().tmp(),
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
-    let certified_stream_store: Arc<dyn CertifiedStreamStore> =
-        Arc::clone(&state_manager) as Arc<_>;
+    let certified_stream_store = Arc::clone(&state_manager);
     let message_router = if config
         .malicious_behaviour
         .malicious_flags
