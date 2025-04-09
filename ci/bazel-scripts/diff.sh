@@ -56,6 +56,6 @@ if [[ "$BAZEL_COMMAND" == "test" ]]; then
 elif [[ "$BAZEL_COMMAND" == "build" ]]; then
     bazel query "rdeps(//..., set(${files[*]}))"
 else
-  echo "Unknown bazel command: $BAZEL_COMMAND" >&2
-  exit 1
+    echo "Unknown bazel command: $BAZEL_COMMAND" >&2
+    exit 1
 fi
