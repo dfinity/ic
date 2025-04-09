@@ -1839,14 +1839,6 @@ impl CanisterManager {
             return (Err(err), instructions_used);
         }
 
-        // Actually deduct memory from the subnet. It's safe to unwrap
-        // here because we already checked the available memory above.
-        round_limits.subnet_available_memory.try_decrement(
-            new_memory_usage.saturating_sub(&old_memory_usage),
-            NumBytes::from(0),
-            NumBytes::from(0),
-        ).expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
-
         // Charge for loading the snapshot of the canister.
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
@@ -1862,6 +1854,14 @@ impl CanisterManager {
                 instructions_used,
             );
         };
+
+        // Actually deduct memory from the subnet. It's safe to unwrap
+        // here because we already checked the available memory above.
+        round_limits.subnet_available_memory.try_decrement(
+            new_memory_usage.saturating_sub(&old_memory_usage),
+            NumBytes::from(0),
+            NumBytes::from(0),
+        ).expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
 
         // Increment canister version.
         new_canister.system_state.canister_version += 1;
