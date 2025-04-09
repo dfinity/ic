@@ -3952,16 +3952,18 @@ impl Governance {
         // Fourth, remove any legacy following (based on individual proposal types under the topics
         // that were modified by this command).
         for topic in &mentioned_topics {
-            for function in GovernanceProto::get_custom_functions_for_topic(
+            let native_functions = topic.native_functions();
+            let custom_functions = GovernanceProto::get_custom_functions_for_topic(
                 &self.proto.id_to_nervous_system_functions,
                 *topic,
-            ) {
-                neuron.followees.remove(&function);
+            );
+            for function in native_functions.union(&custom_functions) {
+                neuron.followees.remove(function);
 
                 legacy::remove_neuron_from_function_followee_index_for_function(
                     &mut self.function_followee_index,
                     neuron,
-                    function,
+                    *function,
                 );
             }
         }
@@ -3980,11 +3982,15 @@ impl Governance {
             })
             .collect::<BTreeSet<_>>();
 
-        let this_neurons_follows_on_all_topics =
-            this_neurons_topics == *following::NON_CRITICAL_TOPICS;
-        let this_command_specifies_all_topics = mentioned_topics == *following::NON_CRITICAL_TOPICS;
+        let this_neurons_follows_on_all_non_critical_topics =
+            following::NON_CRITICAL_TOPICS.is_subset(&this_neurons_topics);
 
-        if this_neurons_follows_on_all_topics || this_command_specifies_all_topics {
+        let this_command_specifies_all_non_critical_topics =
+            following::NON_CRITICAL_TOPICS.is_subset(&mentioned_topics);
+
+        if this_neurons_follows_on_all_non_critical_topics
+            || this_command_specifies_all_non_critical_topics
+        {
             let catchall_function = u64::from(&Action::Unspecified(Empty {}));
 
             neuron.followees.remove(&catchall_function);

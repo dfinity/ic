@@ -346,6 +346,21 @@ impl pb::Topic {
         }
     }
 
+    pub fn native_functions(&self) -> BTreeSet<u64> {
+        topic_descriptions()
+            .iter()
+            .flat_map(|topic_info| {
+                let this_topic = Self::from(topic_info.topic);
+
+                if this_topic != *self {
+                    return vec![];
+                }
+
+                topic_info.functions.native_functions.clone()
+            })
+            .collect()
+    }
+
     pub fn get_topic_for_native_action(action: &pb::proposal::Action) -> Option<Self> {
         let action_code = u64::from(action);
 
