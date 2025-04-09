@@ -1313,8 +1313,8 @@ impl CanisterManager {
     // Runs the following checks on memory usage and return an error
     // if any fails:
     // 1. Check new usage will not freeze canister
-    // 2. Check that cycles can be reserved (if applicable)
-    // 3. Check subnet has available memory
+    // 2. Check subnet has available memory
+    // 3. Check that cycles can be reserved (if applicable)
     fn memory_usage_checks(
         &self,
         subnet_size: usize,
@@ -1342,8 +1342,8 @@ impl CanisterManager {
                     subnet_size,
                 );
 
-                // Memory usage might increase, so we need to
-                // check that it doesn't bump us over the freezing threshold.
+                // Check that the canister does not exceed its freezing threshold based
+                // on the new memory usage.
                 let threshold = self.cycles_account_manager.freeze_threshold_cycles(
                     canister.system_state.freeze_threshold,
                     canister.memory_allocation(),
@@ -1360,6 +1360,22 @@ impl CanisterManager {
                         required: threshold + reservation_cycles,
                     });
                 }
+
+                // Verify subnet has enough memory.
+                round_limits
+                    .subnet_available_memory
+                    .check_available_memory(memory_increase, NumBytes::from(0), NumBytes::from(0))
+                    .map_err(
+                        |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                            requested: memory_increase,
+                            available: NumBytes::from(
+                                round_limits
+                                    .subnet_available_memory
+                                    .get_execution_memory()
+                                    .max(0) as u64,
+                            ),
+                        },
+                    )?;
 
                 // Reserve needed cycles if the subnet is becoming saturated.
                 canister
@@ -1382,22 +1398,6 @@ impl CanisterManager {
                             }
                         }
                     })?;
-
-                // Verify subnet has enough memory.
-                round_limits
-                    .subnet_available_memory
-                    .check_available_memory(memory_increase, NumBytes::from(0), NumBytes::from(0))
-                    .map_err(
-                        |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: memory_increase,
-                            available: NumBytes::from(
-                                round_limits
-                                    .subnet_available_memory
-                                    .get_execution_memory()
-                                    .max(0) as u64,
-                            ),
-                        },
-                    )?;
             }
         };
 
@@ -1431,7 +1431,7 @@ impl CanisterManager {
                 );
 
                 // Reserve needed cycles if the subnet is becoming saturated.
-                // It's safe to unwrap here because we already checked the available memory before
+                // It's safe to unwrap here because we already checked that cycles can be reserved
                 // in `self.memory_usage_checks`.
                 canister
                     .system_state
