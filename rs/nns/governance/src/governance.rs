@@ -10,6 +10,7 @@ use crate::{
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
+    is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -70,6 +71,7 @@ use crate::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
+use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -130,6 +132,7 @@ use std::{
     string::ToString,
 };
 
+mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
@@ -3440,6 +3443,42 @@ impl Governance {
         Ok(child_nid)
     }
 
+    fn disburse_maturity(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        disburse_maturity: &manage_neuron::DisburseMaturity,
+    ) -> Result<u64, GovernanceError> {
+        if !is_disburse_maturity_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "DisburseMaturity is not yet supported.",
+            ));
+        }
+
+        self.check_heap_can_grow()?;
+
+        let now_seconds = self.env.now();
+
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now_seconds,
+            command: Some(InFlightCommand::SyncCommand(SyncCommand {})),
+        };
+
+        // Lock the neuron so that we're sure that we are not disbursing the maturity in the middle
+        // of another ongoing operation.
+        let _neuron_lock = self.lock_neuron_for_command(id.id, in_flight_command)?;
+
+        initiate_maturity_disbursement(
+            &mut self.neuron_store,
+            caller,
+            id,
+            disburse_maturity,
+            now_seconds,
+        )
+        .map_err(GovernanceError::from)
+    }
+
     /// Set the status of a proposal that is 'being executed' to
     /// 'executed' or 'failed' depending on the value of 'success'.
     ///
@@ -6366,10 +6405,9 @@ impl Governance {
             Some(Command::RefreshVotingPower(_)) => self
                 .refresh_voting_power(&id, caller)
                 .map(ManageNeuronResponse::refresh_voting_power_response),
-            Some(Command::DisburseMaturity(_)) => Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "Disbursing maturity is not implemented yet.",
-            )),
+            Some(Command::DisburseMaturity(disburse_maturity)) => self
+                .disburse_maturity(&id, caller, disburse_maturity)
+                .map(ManageNeuronResponse::disburse_maturity_response),
             None => panic!(),
         }
     }

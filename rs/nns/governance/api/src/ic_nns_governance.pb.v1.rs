@@ -1488,6 +1488,16 @@ pub mod manage_neuron_response {
                 )),
             }
         }
+
+        pub fn disburse_maturity_response(amount_disbursed_e8s: u64) -> Self {
+            ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::DisburseMaturity(
+                    manage_neuron_response::DisburseMaturityResponse {
+                        amount_disbursed_e8s: Some(amount_disbursed_e8s),
+                    },
+                )),
+            }
+        }
     }
 }
 
