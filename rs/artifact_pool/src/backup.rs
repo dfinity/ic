@@ -93,16 +93,12 @@ impl Metrics {
     }
 }
 
-// The number of backup rounds, that can queue up before we start
-// blocking consensus/certification.
-const BACKUP_QUEUE_LENGTH: usize = 50;
+// The number of backup / purging rounds, that can queue up before we start
+// blocking consensus. Currently, we have a full rendevouz, i.e. consensus
+// blocks when the artifacts of the last round have not persisted yet.
+const QUEUE_LENGTH: usize = 0;
 
-// The number of purging rounds, that can queue up before we start
-// blocking. Currently, we have a full rendevouz, i.e. the backup thread
-// blocks when the last purging request hasn't finished yet.
-const PURGING_QUEUE_LENGTH: usize = 0;
-
-pub enum BackupRequest {
+pub(crate) enum BackupRequest {
     Backup(Vec<ConsensusMessage>),
     BackupOriginalCUP(Height, pb::CatchUpPackage),
     Await(SyncSender<()>),
@@ -158,7 +154,7 @@ impl BackupThread {
     }
 
     fn start(mut self) -> (SyncSender<BackupRequest>, JoinHandle<()>) {
-        let (tx, rx) = sync_channel(BACKUP_QUEUE_LENGTH);
+        let (tx, rx) = sync_channel(QUEUE_LENGTH);
         let handle = thread::Builder::new()
             .name("BackupThread".to_string())
             .spawn(move || self.run(rx))
@@ -199,7 +195,7 @@ impl BackupThread {
         loop {
             match rx.recv() {
                 Ok(BackupRequest::Backup(artifacts)) => {
-                    let artifacts: Vec<BackupArtifact> = artifacts
+                    let artifacts = artifacts
                         .into_iter()
                         .flat_map(BackupArtifact::try_from)
                         .collect();
@@ -233,10 +229,10 @@ impl BackupThread {
 impl Drop for BackupThread {
     fn drop(&mut self) {
         let _ = self.purging_queue.send(PurgingRequest::Shutdown);
-        if self.purging_thread.take().unwrap().join().is_err() {
+        if let Err(err) = self.purging_thread.take().unwrap().join() {
             error!(
                 self.log,
-                "Purging thread exited prematurely during shutdown"
+                "Purging thread exited prematurely during shutdown: {err:?}"
             );
         }
     }
@@ -300,7 +296,7 @@ impl PurgingThread {
     }
 
     fn start(mut self) -> (SyncSender<PurgingRequest>, JoinHandle<()>) {
-        let (tx, rx) = sync_channel(PURGING_QUEUE_LENGTH);
+        let (tx, rx) = sync_channel(QUEUE_LENGTH);
         let handle = thread::Builder::new()
             .name("BackupPurgingThread".to_string())
             .spawn(move || self.run(rx))
@@ -346,12 +342,26 @@ pub struct BackupSender {
 }
 
 impl BackupSender {
-    pub fn send(&self, request: BackupRequest) {
+    pub(crate) fn send(&self, request: BackupRequest) {
         if let Err(err) = self.backup_queue.send(request) {
             error!(
                 self.log,
                 "Backup thread exited unexpectedly. This is a bug: {err}"
             );
+            self.metrics.io_errors.inc();
+        }
+    }
+
+    pub(crate) fn sync(&self) {
+        let (tx, rx) = sync_channel(0);
+        if let Err(err) = self.backup_queue.send(BackupRequest::Await(tx)) {
+            error!(
+                self.log,
+                "Backup thread exited unexpectedly. This is a bug: {err}"
+            );
+            self.metrics.io_errors.inc();
+        } else if let Err(e) = rx.recv() {
+            error!(self.log, "Error while syncing the backup thread: {e}");
             self.metrics.io_errors.inc();
         }
     }
@@ -489,8 +499,11 @@ fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
 impl Drop for Backup {
     fn drop(&mut self) {
         self.backup_sender.send(BackupRequest::Shutdown);
-        if self.backup_thread.take().unwrap().join().is_err() {
-            error!(self.log, "Backup thread exited prematurely during shutdown");
+        if let Err(err) = self.backup_thread.take().unwrap().join() {
+            error!(
+                self.log,
+                "Backup thread exited prematurely during shutdown: {err:?}"
+            );
         }
     }
 }

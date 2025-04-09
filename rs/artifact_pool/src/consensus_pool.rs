@@ -19,14 +19,13 @@ use ic_interfaces::{
     p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
 use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
-use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -442,13 +441,7 @@ impl ConsensusPoolImpl {
             let (artifacts, (height, cup)) = pool.get_all_persisted_artifacts();
             backup.send(BackupRequest::Backup(artifacts));
             backup.send(BackupRequest::BackupOriginalCUP(height, cup));
-
-            let (tx, rx) = sync_channel(0);
-            backup.send(BackupRequest::Await(tx));
-            if let Err(e) = rx.recv() {
-                error!(log, "Error while syncing the backup thread: {e}");
-                // self.metrics.io_errors.inc();
-            }
+            backup.sync();
         }
 
         // Initial update to the metrics, such that they always report the state, even
@@ -515,37 +508,27 @@ impl ConsensusPoolImpl {
         let notarization_pool = self.validated().notarization();
         let notarization_range = HeightRange::new(
             cup_height,
-            notarization_pool
-                .max_height()
-                .unwrap_or_else(|| Height::from(0)),
+            notarization_pool.max_height().unwrap_or_default(),
         );
         let finalization_pool = self.validated().finalization();
         let finalization_range = HeightRange::new(
             cup_height,
-            finalization_pool
-                .max_height()
-                .unwrap_or_else(|| Height::from(0)),
+            finalization_pool.max_height().unwrap_or_default(),
         );
         let block_proposal_pool = self.validated().block_proposal();
         let block_proposal_range = HeightRange::new(
             cup_height,
-            block_proposal_pool
-                .max_height()
-                .unwrap_or_else(|| Height::from(0)),
+            block_proposal_pool.max_height().unwrap_or_default(),
         );
         let random_tape_pool = self.validated().random_tape();
         let random_tape_range = HeightRange::new(
             cup_height,
-            random_tape_pool
-                .max_height()
-                .unwrap_or_else(|| Height::from(0)),
+            random_tape_pool.max_height().unwrap_or_default(),
         );
         let random_beacon_pool = self.validated().random_beacon();
         let random_beacon_range = HeightRange::new(
             cup_height,
-            random_beacon_pool
-                .max_height()
-                .unwrap_or_else(|| Height::from(0)),
+            random_beacon_pool.max_height().unwrap_or_default(),
         );
 
         let artifacts = finalization_pool
@@ -1696,12 +1679,6 @@ mod tests {
         });
     }
 
-    fn sync_backup(sender: &BackupSender) {
-        let (tx, rx) = sync_channel(0);
-        sender.send(BackupRequest::Await(tx));
-        rx.recv().unwrap();
-    }
-
     #[test]
     // We create multiple artifacts for multiple heights, check that all of them are
     // written to the disk and can be restored.
@@ -1865,7 +1842,7 @@ mod tests {
             pool.apply(changeset);
             // We sync the backup before checking the asserts to make sure all backups have
             // been written.
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             // Check backup for height 0
             assert!(
@@ -2024,7 +2001,7 @@ mod tests {
                 .set_time(time_source.get_relative_time() + purging_interval)
                 .unwrap();
             pool.apply(Vec::new());
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             // Make sure the subnet directory is empty, as we purged everything.
             assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
@@ -2037,7 +2014,7 @@ mod tests {
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
             pool.apply(Vec::new());
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
             assert!(!path.exists());
         })
     }
@@ -2152,7 +2129,7 @@ mod tests {
             // Apply changes
             pool.apply(changeset);
             // sync
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             let group_path = &path.join("0");
             // We expect 3 folders for heights 0 to 2.
@@ -2185,7 +2162,7 @@ mod tests {
 
             pool.apply(changeset);
             // sync
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             // We expect 5 folders for heights 0 to 4.
             assert_eq!(fs::read_dir(group_path).unwrap().count(), 5);
@@ -2202,7 +2179,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             // We expect only 2 folders to survive the purging: 3, 4
             assert_eq!(fs::read_dir(group_path).unwrap().count(), 2);
@@ -2218,7 +2195,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             // We deleted all artifacts, but the group folder was updated by this and needs
             // to age now.
@@ -2234,7 +2211,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 37));
             // The group folder expired and was deleted.
@@ -2251,7 +2228,7 @@ mod tests {
             // Trigger the purging.
             pool.apply(Vec::new());
             // sync
-            sync_backup(pool.backup.as_ref().unwrap());
+            pool.backup.as_ref().unwrap().sync();
 
             // The subnet_id folder expired and was deleted.
             assert!(!path.exists());
