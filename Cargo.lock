@@ -11009,6 +11009,7 @@ dependencies = [
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
  "ic-nns-handler-root-interface",
+ "ic-node-rewards-canister-api",
  "ic-protobuf",
  "ic-sns-init",
  "ic-sns-root",
