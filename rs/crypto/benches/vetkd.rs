@@ -48,7 +48,9 @@ fn vetkd_bench(criterion: &mut Criterion) {
         bench_create_encrypted_key_share(group, &config, &env, rng);
         bench_verify_encrypted_key_share(group, &config, &env, rng);
         bench_combine_encrypted_key_shares(group, &config, subnet_size, &env, rng);
-        bench_combine_encrypted_key_shares(group, &config, threshold, &env, rng);
+        if threshold != subnet_size {
+            bench_combine_encrypted_key_shares(group, &config, threshold, &env, rng);
+        }
         bench_verify_encrypted_key(group, &config, &env, rng);
     }
 }
