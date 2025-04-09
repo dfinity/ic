@@ -383,7 +383,7 @@ type ListProposals = record {
   include_topics : opt vec TopicSelector;
 };
 
-type TopicSelector = variant {
+type TopicSelector = record {
   topic : opt Topic;
 };
 

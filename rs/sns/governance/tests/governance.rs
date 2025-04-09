@@ -11,10 +11,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
-use ic_sns_governance::pb::v1::{
-    AdvanceSnsTargetVersion, ListProposals, ListProposalsResponse, Topic, TopicSelector,
-    TransferSnsTreasuryFunds, UpgradeSnsToNextVersion,
-};
+use ic_sns_governance::pb::v1::{ListProposals, ListProposalsResponse, Topic, TopicSelector};
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -1466,10 +1463,6 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
 
 #[test]
 fn list_proposals_filter_by_topic() {
-    // Boilerplate variables.
-    let target_neuron = NeuronId { id: vec![1, 2, 3] };
-    let caller = PrincipalId::new_anonymous();
-
     // Prepare the world.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
@@ -1497,11 +1490,6 @@ fn list_proposals_filter_by_topic() {
     ] {
         canister_fixture.directly_insert_proposal_data(proposal);
     }
-
-    println!(
-        ">>> Proposals: {:#?}",
-        canister_fixture.governance.proto.proposals
-    );
 
     let test_cases = [
         (

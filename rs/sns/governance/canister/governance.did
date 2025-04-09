@@ -371,10 +371,10 @@ type ListProposals = record {
   limit : nat32;
   exclude_type : vec nat64;
   include_status : vec int32;
-  include_topic : opt vec TopicSelector;
+  include_topics : opt vec TopicSelector;
 };
 
-type TopicSelector = variant {
+type TopicSelector = record {
   topic : opt Topic;
 };
 
