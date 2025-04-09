@@ -702,12 +702,6 @@ pub fn setup_nns_canisters_with_features(
     features: &[&str],
 ) {
     setup_registry_with_correct_canister_id(machine, init_payloads.registry);
-    // DO NOT MERGE: IF everything worked perfectly, this would work fine
-    ensure_canister_id_exists_at_position_with_settings(
-        machine,
-        NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
-        None,
-    );
 
     setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance, features);
 
