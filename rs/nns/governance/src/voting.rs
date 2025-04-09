@@ -894,12 +894,22 @@ mod test {
                 6 => make_ballot(deciding_voting_power(NeuronId { id: 6 }), Vote::Unspecified),
             }
         );
-        let expected_tally = Tally {
-            timestamp_seconds: 234,
-            yes: 530,
-            no: 0,
-            total: 636,
+        let expected_tally = if dissolve_delay_seconds == THREE_MONTHS {
+            Tally {
+                timestamp_seconds: 234,
+                yes: 515,
+                no: 0,
+                total: 618,
+            }
+        } else {
+            Tally {
+                timestamp_seconds: 234,
+                yes: 530,
+                no: 0,
+                total: 636,
+            }
         };
+
         assert_eq!(
             governance
                 .heap_data
