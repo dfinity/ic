@@ -55,6 +55,41 @@ else
     done
 fi
 
+ASAN_OPTIONS="abort_on_error=1:\
+            alloc_dealloc_mismatch=0:\
+            allocator_may_return_null=1:\
+            allocator_release_to_os_interval_ms=500:\
+            allow_user_segv_handler=1:\
+            check_malloc_usable_size=0:\
+            detect_leaks=0:\
+            detect_odr_violation=0:\
+            detect_stack_use_after_return=1:\
+            fast_unwind_on_fatal=0:\
+            handle_abort=2:\
+            handle_segv=1:\
+            handle_sigbus=2:\
+            handle_sigfpe=1:\
+            handle_sigill=0:\
+            max_uar_stack_size_log=16:\
+            print_scariness=1:\
+            print_summary=1:\
+            print_suppressions=0:\
+            quarantine_size_mb=64:\
+            redzone=512:\
+            strict_memcmp=1:\
+            symbolize=0:\
+            use_sigaltstack=1"
+
+LSAN_OPTIONS="handle_abort=1:\
+            handle_segv=1:\
+            handle_sigbus=1:\
+            handle_sigfpe=1:\
+            handle_sigill=0:\
+            print_summary=1:\
+            print_suppressions=0:\
+            symbolize=0:\
+            use_sigaltstack=1"
+
 # Perform corpus minimization
 WORKSPACE=$(bazel info workspace --ui_event_filters=-WARNING,-INFO 2>/dev/null)
 TARGET_PREFIX="//rs/embedders/fuzz"
@@ -63,5 +98,5 @@ for i in "${TARGETS[@]}"; do
     bazel build --config=afl $FUZZER
     SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=afl --output=files $FUZZER)"
     # Minimum 8 cores is assumed
-    afl-cmin -i $TEMP_DIR -o $OUTPUT_DIR/$i -T 8 -t 20000 -- $SOURCE_BINARY @@
+    ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS afl-cmin -i $TEMP_DIR -o $OUTPUT_DIR/$i -T 8 -t 20000 -- $SOURCE_BINARY @@
 done
