@@ -1313,7 +1313,8 @@ impl CanisterManager {
     // Runs the following checks on memory usage and return an error
     // if any fails:
     // 1. Check new usage will not freeze canister
-    // 2. Check subnet has available memory
+    // 2. Check that cycles can be reserved (if applicable)
+    // 3. Check subnet has available memory
     fn memory_usage_checks(
         &self,
         subnet_size: usize,
@@ -1408,7 +1409,7 @@ impl CanisterManager {
     //
     // Performs the following updates:
     // 1. Reserve cycles on canister
-    // 2. Actually deduct memory from subnet.
+    // 2. Actually deduct memory from subnet
     fn memory_usage_updates(
         &self,
         subnet_size: usize,
