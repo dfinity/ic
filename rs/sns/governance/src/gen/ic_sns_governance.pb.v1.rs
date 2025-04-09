@@ -1054,6 +1054,19 @@ pub struct Ballot {
     #[prost(uint64, tag = "3")]
     pub cast_timestamp_seconds: u64,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TopicSelector {
+    #[prost(enumeration = "Topic", optional, tag = "1")]
+    pub topic: ::core::option::Option<i32>,
+}
 /// A tally of votes associated with a proposal.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
@@ -3181,6 +3194,10 @@ pub struct ListProposals {
     /// If this list is empty, no restriction is applied.
     #[prost(enumeration = "ProposalDecisionStatus", repeated, tag = "5")]
     pub include_status: ::prost::alloc::vec::Vec<i32>,
+    /// A list of topics that should be included. If empty, all topics will be included.
+    /// The list may contain the None, expressing selection of proposals without topics.
+    #[prost(message, repeated, tag = "6")]
+    pub include_topics: ::prost::alloc::vec::Vec<TopicSelector>,
 }
 /// A response to the ListProposals command.
 #[derive(

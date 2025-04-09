@@ -801,6 +801,10 @@ pub struct Ballot {
     /// ballot is created.
     pub cast_timestamp_seconds: u64,
 }
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+pub struct TopicSelector {
+    pub topic: Option<topics::Topic>,
+}
 /// A tally of votes associated with a proposal.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct Tally {
@@ -2130,6 +2134,9 @@ pub struct ListProposals {
     /// in the list.
     /// If this list is empty, no restriction is applied.
     pub include_status: Vec<i32>,
+    /// A list of topics that should be included. If empty, all topics will be included.
+    /// The list may contain the None, expressing selection of proposals without topics.
+    pub include_topics: Option<Vec<TopicSelector>>,
 }
 /// A response to the ListProposals command.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]

@@ -753,6 +753,10 @@ enum ProposalDecisionStatus {
   PROPOSAL_DECISION_STATUS_FAILED = 5;
 }
 
+message TopicSelector {
+  optional Topic topic = 1;
+}
+
 // A proposal's status, with respect to reward distribution.
 enum ProposalRewardStatus {
   PROPOSAL_REWARD_STATUS_UNSPECIFIED = 0;
@@ -2044,6 +2048,10 @@ message ListProposals {
   // in the list.
   // If this list is empty, no restriction is applied.
   repeated ProposalDecisionStatus include_status = 5;
+
+  // A list of topics that should be included. If empty, all topics will be included.
+  // The list may contain the None, expressing selection of proposals without topics.
+  repeated TopicSelector include_topics = 6;
 }
 
 // A response to the ListProposals command.
