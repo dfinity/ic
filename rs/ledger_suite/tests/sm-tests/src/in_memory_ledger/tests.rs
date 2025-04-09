@@ -342,6 +342,62 @@ fn should_remove_allowance_when_set_to_zero() {
 }
 
 #[test]
+fn should_set_allowance_with_expected_allowance_and_no_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
+
+    let allowance_key = ApprovalKey::from((
+        &account_from_u64(ACCOUNT_ID_1),
+        &account_from_u64(ACCOUNT_ID_2),
+    ));
+    let account2_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance2: Allowance<Tokens> = Allowance {
+        amount: Tokens::from(APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: now,
+    };
+    assert_eq!(account2_allowance, Some(&expected_allowance2));
+}
+
+#[test]
+#[should_panic(expected = "does not match in-memory allowance")]
+fn should_panic_if_expected_allowance_and_no_existing_allowance() {
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    LedgerBuilder::new()
+        .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .with_approve(
+            &account_from_u64(ACCOUNT_ID_1),
+            &account_from_u64(ACCOUNT_ID_2),
+            &Tokens::from(APPROVE_AMOUNT),
+            &Some(Tokens::from(0u64)),
+            &None,
+            &Some(Tokens::from(FEE_AMOUNT)),
+            now,
+        )
+        .build();
+}
+
+#[test]
 fn should_remove_allowance_when_used_up() {
     let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
     let ledger = LedgerBuilder::new()

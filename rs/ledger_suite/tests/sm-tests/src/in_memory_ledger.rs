@@ -389,14 +389,36 @@ where
     ) {
         let key = ApprovalKey::from((from, spender));
         if let Some(expected_allowance) = expected_allowance {
-            if let Some(current_allowance) = self.allowances.get(&key) {
-                if let Some(expires_at) = current_allowance.expires_at {
-                    if expires_at >= arrived_at && current_allowance.amount != *expected_allowance {
-                        panic!(
-                                "Expected allowance of ({:?}) for key {:?} does not match current allowance ({:?})",
-                                expected_allowance, key, current_allowance.amount
-                            );
-                    }
+            match self.allowances.get(&key) {
+                None => {
+                    // No in-memory allowance, so the expected allowance should be zero
+                    assert!(expected_allowance.is_zero(),
+                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance (None, interpreted as 0)",
+                            expected_allowance,
+                            key
+                    );
+                }
+                Some(in_memory_allowance) => {
+                    // An in-memory allowance is set
+                    let in_memory_allowance_amount = match &in_memory_allowance.expires_at {
+                        // If the in-memory allowance has no expiration, use the amount as-is
+                        None => &in_memory_allowance.amount.clone(),
+                        Some(expires_at) => {
+                            &if expires_at >= &arrived_at {
+                                // If the in-memory allowance has not expired, use the amount as-is
+                                in_memory_allowance.amount.clone()
+                            } else {
+                                // If the in-memory allowance has expired, interpret as zero
+                                Tokens::zero()
+                            }
+                        }
+                    };
+                    assert_eq!(
+                        in_memory_allowance_amount,
+                        expected_allowance,
+                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance ({:?})",
+                        expected_allowance, key, in_memory_allowance_amount
+                    );
                 }
             }
         }
