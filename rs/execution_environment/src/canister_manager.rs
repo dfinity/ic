@@ -1335,7 +1335,6 @@ impl CanisterManager {
                 }
             }
             MemoryAllocation::BestEffort => {
-                // Calculate if any cycles will need to be reserved.
                 let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
                     memory_increase,
                     resource_saturation,
@@ -1353,6 +1352,7 @@ impl CanisterManager {
                     subnet_size,
                     canister.system_state.reserved_balance() + reservation_cycles,
                 );
+
                 if canister.system_state.balance() < threshold + reservation_cycles {
                     return Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
                         bytes: memory_increase,
@@ -1361,7 +1361,8 @@ impl CanisterManager {
                     });
                 }
 
-                // Verify subnet has enough memory.
+                // Verify that the subnet has enough memory available to satisfy the
+                // requested change by the canister.
                 round_limits
                     .subnet_available_memory
                     .check_available_memory(memory_increase, NumBytes::from(0), NumBytes::from(0))
@@ -1586,15 +1587,6 @@ impl CanisterManager {
             Err(err) => return (Err(err), instructions),
         };
 
-        self.memory_usage_updates(
-            subnet_size,
-            canister,
-            round_limits,
-            new_memory_usage,
-            old_memory_usage,
-            resource_saturation,
-        );
-
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
             state.canister_snapshots.remove(replace_snapshot);
@@ -1612,6 +1604,15 @@ impl CanisterManager {
                     .compute_memory_usage_by_canister(canister.canister_id()),
             );
         }
+
+        self.memory_usage_updates(
+            subnet_size,
+            canister,
+            round_limits,
+            new_memory_usage,
+            old_memory_usage,
+            resource_saturation,
+        );
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
