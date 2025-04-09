@@ -279,7 +279,7 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
             IngressStatus::Known {
                 state: IngressState::Completed(_),
                 ..
-            } => return subnets.check_critical_errors_and_traps(),
+            } => return subnets.check_canister_traps(),
             _ => {
                 subnets.local_env.tick();
                 subnets

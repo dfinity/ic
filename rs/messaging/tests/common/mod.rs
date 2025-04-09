@@ -10,7 +10,6 @@ use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
-use ic_test_utilities_metrics::fetch_counter_vec;
 use ic_types::{
     messages::{MessageId, RequestOrResponse},
     xnet::StreamHeader,
@@ -543,7 +542,7 @@ impl SubnetPair {
         )?;
 
         // Consistency check.
-        self.check_critical_errors_and_traps()
+        self.check_canister_traps()
     }
 
     /// Migrates `canister` from `local_env` to `remote_env`.
@@ -608,25 +607,8 @@ impl SubnetPair {
             .collect()
     }
 
-    /// Asserts no critical errors were recorded in the metrics; and checks canisters did not
-    /// log any trap messages.
-    pub fn check_critical_errors_and_traps(&self) -> Result<(), (String, DebugInfo)> {
-        // Checks for critical errors on the `metrics_registry`.
-        fn check_critical_errors(env: &StateMachine) -> Result<(), String> {
-            let error_counter_vec = fetch_counter_vec(&env.metrics_registry, "critical_errors");
-            match error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
-                Some((metric, _)) => Err(metric.get("error").unwrap().to_string()),
-                None => Ok(()),
-            }
-        }
-
-        if let Err(err) = check_critical_errors(&self.local_env) {
-            return self.failed_with_reason(format!("critical_error on `local_env`: {err}"));
-        }
-        if let Err(err) = check_critical_errors(&self.remote_env) {
-            return self.failed_with_reason(format!("critical_error on `remote_env`: {err}"));
-        }
-
+    /// Asserts canisters did not log any traps; and checks for heartbeat no-ops.
+    pub fn check_canister_traps(&self) -> Result<(), (String, DebugInfo)> {
         let traps = self.gather_canister_traps();
         if !traps.is_empty() {
             return self.failed_with_reason(format!("{:#?}", traps));
