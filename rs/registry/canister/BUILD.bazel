@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister/api",
+    "//rs/registry/canister/chunkify",
     "//rs/registry/keys",
     "//rs/registry/node_provider_rewards",
     "//rs/registry/routing_table",

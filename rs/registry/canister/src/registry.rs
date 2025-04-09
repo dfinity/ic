@@ -3,6 +3,7 @@ use crate::{
     pb::v1::{
         registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
     },
+    storage::maybe_chunkify_and_encode,
 };
 use ic_certified_map::RbTree;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
@@ -38,7 +39,7 @@ pub const MAX_REGISTRY_DELTAS_SIZE: usize =
 pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
 pub type Version = u64;
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
-pub struct EncodedVersion([u8; 8]);
+pub struct EncodedVersion([u8; std::mem::size_of::<Version>()]);
 
 impl EncodedVersion {
     pub const fn as_version(&self) -> Version {
@@ -92,8 +93,9 @@ pub struct Registry {
     /// representation that allows us change the index structure in future.
     ///
     /// Each entry contains a blob which is a serialized
-    /// RegistryAtomicMutateRequest.  We keep the serialized version around to
-    /// make sure that hash trees stay the same even if protobuf schema evolves.
+    /// HighCapacityRegistryAtomicMutateRequest. The serialized version is
+    /// retained to ensure that hash trees stay the same even if the protobuf
+    /// schema evolves.
     pub(crate) changelog: RbTree<EncodedVersion, Vec<u8>>,
 }
 
@@ -231,19 +233,19 @@ impl Registry {
             } as i32;
         }
 
-        let req = RegistryAtomicMutateRequest {
-            mutations,
-            preconditions: vec![],
-        };
-        self.changelog_insert(version, &req);
-
-        for mutation in req.mutations {
-            (*self.store.entry(mutation.key).or_default()).push_back(RegistryValue {
+        for mutation in &mutations {
+            (*self.store.entry(mutation.key.clone()).or_default()).push_back(RegistryValue {
                 version,
-                value: mutation.value,
+                value: mutation.value.clone(),
                 deletion_marker: mutation.mutation_type == Type::Delete as i32,
             });
         }
+
+        let request = RegistryAtomicMutateRequest {
+            mutations,
+            preconditions: vec![],
+        };
+        self.changelog_insert(version, request);
     }
 
     /// Applies the given mutations, without any check corresponding
@@ -366,10 +368,15 @@ impl Registry {
 
     /// Inserts a changelog entry at the given version, while enforcing the
     /// [`MAX_REGISTRY_DELTAS_SIZE`] limit.
-    fn changelog_insert(&mut self, version: u64, req: &RegistryAtomicMutateRequest) {
+    fn changelog_insert(&mut self, version: u64, req: RegistryAtomicMutateRequest) {
         let version = EncodedVersion::from(version);
-        let bytes = req.encode_to_vec();
+        let bytes = maybe_chunkify_and_encode(req);
 
+        // Once chunking is enabled, you would need a really degenerate
+        // composite/atomic mutation to reach this panic, but it is still
+        // possible (e.g. by touching a huge number of keys). Therefore, this
+        // should remain in place, even though it is not as easy to make overly
+        // large atomic/composite mutations anymore.
         let delta_size = version.as_ref().len() + bytes.len();
         if delta_size > MAX_REGISTRY_DELTAS_SIZE {
             panic!(
@@ -426,6 +433,7 @@ impl Registry {
                     }
                     // End code to fix ICSUP-2589
 
+                    // TODO(NNS1-3645): Switch to HighCapacity.
                     let req = RegistryAtomicMutateRequest::decode(&entry.encoded_mutation[..])
                         .unwrap_or_else(|err| {
                             panic!("Failed to decode mutation@{}: {}", entry.version, err)
@@ -469,7 +477,7 @@ impl Registry {
                 for (v, mutations) in mutations_by_version.into_iter() {
                     self.changelog_insert(
                         v,
-                        &RegistryAtomicMutateRequest {
+                        RegistryAtomicMutateRequest {
                             mutations,
                             preconditions: vec![],
                         },
@@ -1018,7 +1026,7 @@ mod tests {
             mutations,
             preconditions: vec![],
         };
-        registry.changelog_insert(version, &req);
+        registry.changelog_insert(version, req);
 
         // We should have one changelog entry.
         assert_eq!(1, registry.changelog().iter().count());
@@ -1042,7 +1050,7 @@ mod tests {
             preconditions: vec![],
         };
 
-        registry.changelog_insert(1, &req);
+        registry.changelog_insert(1, req);
     }
 
     #[test]

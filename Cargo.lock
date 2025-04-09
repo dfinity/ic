@@ -19557,6 +19557,7 @@ dependencies = [
  "ic-nns-test-utils-macros",
  "ic-protobuf",
  "ic-registry-canister-api",
+ "ic-registry-canister-chunkify",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
