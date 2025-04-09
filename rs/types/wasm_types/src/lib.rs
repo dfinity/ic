@@ -10,11 +10,10 @@ use ic_types::MemoryDiskBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::{
-    fmt,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::ops::DerefMut;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+use std::{fmt, path::Path, sync::Arc};
 
 const WASM_HASH_LENGTH: usize = 32;
 
@@ -71,8 +70,11 @@ impl CanisterModule {
         }
     }
 
-    pub fn new_from_file(path: PathBuf, module_hash: WasmHash) -> std::io::Result<Self> {
-        let module = ModuleStorage::mmap_file(path)?;
+    pub fn new_from_file(
+        wasm_file_layout: Box<dyn MemoryMappableWasmFile + Send + Sync>,
+        module_hash: WasmHash,
+    ) -> std::io::Result<Self> {
+        let module = ModuleStorage::from_file(wasm_file_layout);
         Ok(Self {
             module,
             module_hash: module_hash.0,
@@ -83,7 +85,7 @@ impl CanisterModule {
     pub fn file(&self) -> Option<&Path> {
         match &self.module {
             ModuleStorage::Memory(_) => None,
-            ModuleStorage::File(path, _) => Some(path),
+            ModuleStorage::File(storage) => Some(&storage.path),
         }
     }
 
@@ -102,7 +104,7 @@ impl CanisterModule {
     pub fn to_shared_vec(&self) -> Arc<Vec<u8>> {
         match &self.module {
             ModuleStorage::Memory(shared) => Arc::clone(shared),
-            ModuleStorage::File(_, _) => Arc::new(self.as_slice().to_vec()),
+            ModuleStorage::File(_) => Arc::new(self.as_slice().to_vec()),
         }
     }
 
@@ -202,45 +204,88 @@ fn wasmhash_display() {
     assert_eq!(expected, format!("{}", hash));
 }
 
+/// Trait representing a Wasm file that can be memory-mapped.
+///
+/// # Invariant
+/// Implementors **must guarantee** that the path returned by `path()`
+/// always points to a valid and accessible file whenever `mmap_file()` is called.
+pub trait MemoryMappableWasmFile {
+    fn mmap_file(&self) -> std::io::Result<ic_sys::mmap::ScopedMmap>;
+
+    fn path(&self) -> &Path;
+}
+
 // We introduce another enum instead of making `BinaryEncodedWasm` an enum to
 // keep constructors private. We want `BinaryEncodedWasm` to be visible, but not
 // its structure.
 #[derive(Clone)]
 enum ModuleStorage {
     Memory(Arc<Vec<u8>>),
-    File(PathBuf, Arc<ic_sys::mmap::ScopedMmap>),
+    File(WasmFileStorage),
+}
+
+#[derive(Clone)]
+pub struct WasmFileStorage {
+    path: PathBuf,
+    file: Arc<Mutex<Option<Box<dyn MemoryMappableWasmFile + Send + Sync>>>>,
+    mmap: Arc<OnceLock<ic_sys::mmap::ScopedMmap>>,
+}
+
+impl WasmFileStorage {
+    /// Creates a new `WasmFileStorage` that will lazily load the provided WASM file layout.
+    ///
+    /// This constructor is the only valid way to build a `WasmFileStorage`. It requires a
+    /// valid (non-empty) `MemoryMappableWasmFile` because any attempt to call [`init_or_die`] on
+    /// a storage built with an empty layout would result in a panic.
+    pub fn lazy_load(wasm_file_layout: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> Self {
+        Self {
+            path: wasm_file_layout.path().to_path_buf(),
+            file: Arc::new(Mutex::new(Some(wasm_file_layout))),
+            mmap: Arc::new(OnceLock::new()),
+        }
+    }
+    fn init_or_die(&self) -> &ic_sys::mmap::ScopedMmap {
+        self.mmap.get_or_init(|| {
+            let mut file = self.file.lock().expect("Failed to lock wasm file layout");
+            // We need to take the file out of the mutex to drop `CheckpointLayout` it holds and avoiding keeping the checkpoint for too long.
+            let file = file
+                .deref_mut()
+                .take()
+                .expect("WasmFileStorage::init_or_die: file already taken");
+            file.mmap_file().expect("Failed to mmap file")
+        })
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.mmap.get().is_some()
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        self.init_or_die().as_slice()
+    }
+
+    fn len(&self) -> usize {
+        self.init_or_die().len()
+    }
 }
 
 impl ModuleStorage {
-    fn mmap_file(path: PathBuf) -> std::io::Result<Self> {
-        use std::io;
-
-        let f = std::fs::File::open(&path)?;
-        let len = f.metadata()?.len();
-        if len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{}: Wasm file must not be empty", path.display()),
-            ));
-        }
-        match ic_sys::mmap::ScopedMmap::from_readonly_file(&f, len as usize) {
-            Ok(mmap) => Ok(Self::File(path, Arc::new(mmap))),
-            Err(_) => Err(io::Error::last_os_error()),
-        }
+    fn from_file(file: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> Self {
+        Self::File(WasmFileStorage::lazy_load(file))
     }
 
     fn as_slice(&self) -> &[u8] {
         match &self {
             Self::Memory(arc) => arc.as_slice(),
             // This is safe because the file is read-only.
-            Self::File(_, mmap) => mmap.as_slice(),
+            Self::File(storage) => storage.as_slice(),
         }
     }
 
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
-            ModuleStorage::File(_, mmap) => mmap.len(),
+            ModuleStorage::File(storage) => storage.len(),
         }
     }
 }
