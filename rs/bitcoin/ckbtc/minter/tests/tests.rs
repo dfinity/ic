@@ -544,7 +544,7 @@ pub fn get_btc_address(
             "get_btc_address",
             Encode!(arg).unwrap()
         )
-        .expect("failed to transfer funds")
+        .expect("failed to get btc address")
         .bytes(),
         String
     )
@@ -584,6 +584,13 @@ fn test_minter() {
     );
     let address_2 = Address::from_str(&btc_address_2).expect("invalid Bitcoin address");
     assert_ne!(address_1, address_2);
+}
+
+#[test]
+#[should_panic(expected = "the owner must be non-anonymous")]
+fn get_btc_address_with_anonymous_owner_should_panic() {
+    let ckbtc = CkBtcSetup::new();
+    ckbtc.get_btc_address(Principal::anonymous());
 }
 
 fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
