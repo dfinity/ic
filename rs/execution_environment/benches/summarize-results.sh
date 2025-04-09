@@ -11,6 +11,9 @@ which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPEND
 NOISE_THRESHOLD_PCT="2"
 TOP_N="10"
 
+NOISE_THRESHOLD_PCT="2"
+TOP_N="10"
+
 printf "    %-12s := %s\n" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
     "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}" >&2
