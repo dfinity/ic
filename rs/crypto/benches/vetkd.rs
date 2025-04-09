@@ -33,7 +33,7 @@ fn vetkd_bench(criterion: &mut Criterion) {
         name: "dummy_key_name".to_string(),
     }));
 
-    for subnet_size in [13, 34] {
+    for subnet_size in [1, 4, 13, 34, 40] {
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
 
         let group = &mut criterion.benchmark_group(format!(
