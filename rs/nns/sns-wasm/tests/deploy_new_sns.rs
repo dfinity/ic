@@ -9,7 +9,7 @@ use ic_nervous_system_common::ONE_TRILLION;
 use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     sns_wasm,
@@ -236,12 +236,10 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         }
     );
 
-    // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET because we deleted
+    // No canisters should exist above highest_nns_created_canister_index because we deleted
     // those canisters.
     for i in 1..=5 {
-        assert!(
-            !machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + i))
-        );
+        assert!(!machine.canister_exists(canister_test_id(highest_nns_created_canister_index + i)));
     }
 
     // 15_000_000_000_000 cycles are burned creating the canisters before the failure

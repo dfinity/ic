@@ -2,7 +2,7 @@ use crate::common::{get_deployed_sns_by_proposal_id, get_deployed_sns_by_proposa
 use common::set_up_state_machine_with_nns;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{sns_wasm, state_test_helpers};
 use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
@@ -42,7 +42,7 @@ fn test_get_deployed_sns_by_proposal_id() {
         sns_init_payload,
     );
 
-    let highest_nns_created_canister_index = SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET;
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
 
     let root_canister_id = canister_test_id(highest_nns_created_canister_index + 1);
     let governance_canister_id = canister_test_id(highest_nns_created_canister_index + 2);
