@@ -135,10 +135,6 @@ pub fn stress_setup(env: TestEnv) {
         .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
                 .add_nodes(1),
         );
     for subnet_size in APP_SUBNET_SIZES {

@@ -41,7 +41,6 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::Cycles;
-use proxy_canister::RemoteHttpResponse;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStressResponse};
 use serde::{Deserialize, Serialize};
@@ -117,7 +116,6 @@ pub fn test(env: TestEnv) {
                     average_latency_s: duration.as_secs_f64(),
                 });
             }
-            leave_proxy_canister_running(&proxy_canister, url.clone(), logger.clone()).await;
         });
     }
     let base_dir = env.base_path();
@@ -131,56 +129,6 @@ pub fn test(env: TestEnv) {
         logger,
         "All benchmark results have been written to {:?}", json_file
     );
-}
-
-async fn leave_proxy_canister_running(proxy_canister: &Canister<'_>, url: String, logger: Logger) {
-    ic_system_test_driver::retry_with_msg_async!(
-        format!(
-            "calling start_continuous_requests of proxy canister {} with URL {}",
-            proxy_canister.canister_id(),
-            url
-        ),
-        &logger,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || async {
-            let context = "There is context to be appended in body";
-            let res = proxy_canister
-                .update_(
-                    "start_continuous_requests",
-                    candid_one::<
-                        Result<RemoteHttpResponse, (RejectionCode, String)>,
-                        RemoteHttpRequest,
-                    >,
-                    RemoteHttpRequest {
-                        request: UnvalidatedCanisterHttpRequestArgs {
-                            url: url.to_string(),
-                            headers: vec![],
-                            body: None,
-                            transform: Some(TransformContext {
-                                function: TransformFunc(candid::Func {
-                                    principal: proxy_canister.canister_id().get().0,
-                                    method: "transform_with_context".to_string(),
-                                }),
-                                context: context.as_bytes().to_vec(),
-                            }),
-                            method: HttpMethod::GET,
-                            max_response_bytes: None,
-                        },
-                        cycles: 500_000_000_000,
-                    },
-                )
-                .await
-                .expect("Update call to proxy canister failed");
-            if !matches!(res, Ok(ref x) if x.status == 200) {
-                bail!("Http request failed response: {:?}", res);
-            }
-            info!(&logger, "Update call succeeded! {:?}", res);
-            Ok(())
-        }
-    )
-    .await
-    .expect("Timeout on doing a canister http call to the webserver");
 }
 
 async fn do_request(
