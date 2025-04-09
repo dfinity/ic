@@ -144,6 +144,7 @@ mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
+pub mod voting_power_snapshots;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;
