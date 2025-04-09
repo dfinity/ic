@@ -1,6 +1,6 @@
 use crate::benches_util::check_projected_instructions;
 use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
-use crate::pb::v1::{RewardEvent, VotingPowerEconomics, WaitForQuietState};
+use crate::pb::v1::{RewardEvent, WaitForQuietState};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
@@ -305,6 +305,7 @@ fn set_up_chain<R: Rng>(
         PrincipalId::new_user_test_id(start_neuron_id.id),
         10_000_000,
         hashmap! {topic.into() => Followees {followees}},
+        dissolve_delay_seconds,
     );
     ballots.insert(
         start_neuron_id.id,
@@ -443,13 +444,13 @@ fn make_neuron(
 }
 
 #[bench(raw)]
-fn cascading_vote_stable_everything_3_months() {
-    run_cascading_vote_stable_everything(THREE_MONTHS);
+fn cascading_vote_stable_everything_3_months() -> BenchResult {
+    run_cascading_vote_stable_everything(THREE_MONTHS)
 }
 
 #[bench(raw)]
-fn cascading_vote_stable_everything_6_months() {
-    run_cascading_vote_stable_everything(SIX_MONTHS);
+fn cascading_vote_stable_everything_6_months() -> BenchResult {
+    run_cascading_vote_stable_everything(SIX_MONTHS)
 }
 
 fn run_cascading_vote_stable_everything(dissolve_delay_seconds: u64) -> BenchResult {
@@ -467,13 +468,13 @@ fn run_cascading_vote_stable_everything(dissolve_delay_seconds: u64) -> BenchRes
 }
 
 #[bench(raw)]
-fn cascading_vote_all_heap_3_months() {
-    run_cascading_vote_all_heap(THREE_MONTHS);
+fn cascading_vote_all_heap_3_months() -> BenchResult {
+    run_cascading_vote_all_heap(THREE_MONTHS)
 }
 
 #[bench(raw)]
-fn cascading_vote_all_heap_6_months() {
-    run_cascading_vote_all_heap(SIX_MONTHS);
+fn cascading_vote_all_heap_6_months() -> BenchResult {
+    run_cascading_vote_all_heap(SIX_MONTHS)
 }
 
 fn run_cascading_vote_all_heap(dissolve_delay_seconds: u64) -> BenchResult {
@@ -491,13 +492,13 @@ fn run_cascading_vote_all_heap(dissolve_delay_seconds: u64) -> BenchResult {
 }
 
 #[bench(raw)]
-fn cascading_vote_heap_neurons_stable_index_3_months() {
-    run_cascading_vote_heap_neurons_stable_index(THREE_MONTHS);
+fn cascading_vote_heap_neurons_stable_index_3_months() -> BenchResult {
+    run_cascading_vote_heap_neurons_stable_index(THREE_MONTHS)
 }
 
 #[bench(raw)]
-fn cascading_vote_heap_neurons_stable_index_6_months() {
-    run_cascading_vote_heap_neurons_stable_index(SIX_MONTHS);
+fn cascading_vote_heap_neurons_stable_index_6_months() -> BenchResult {
+    run_cascading_vote_heap_neurons_stable_index(SIX_MONTHS)
 }
 
 fn run_cascading_vote_heap_neurons_stable_index(dissolve_delay_seconds: u64) -> BenchResult {
@@ -515,13 +516,13 @@ fn run_cascading_vote_heap_neurons_stable_index(dissolve_delay_seconds: u64) -> 
 }
 
 #[bench(raw)]
-fn single_vote_all_stable_3_months() {
-    run_single_vote_all_stable(THREE_MONTHS);
+fn single_vote_all_stable_3_months() -> BenchResult {
+    run_single_vote_all_stable(THREE_MONTHS)
 }
 
 #[bench(raw)]
-fn single_vote_all_stable_6_months() {
-    run_single_vote_all_stable(SIX_MONTHS);
+fn single_vote_all_stable_6_months() -> BenchResult {
+    run_single_vote_all_stable(SIX_MONTHS)
 }
 
 fn run_single_vote_all_stable(dissolve_delay_seconds: u64) -> BenchResult {
@@ -536,13 +537,13 @@ fn run_single_vote_all_stable(dissolve_delay_seconds: u64) -> BenchResult {
 }
 
 #[bench(raw)]
-fn centralized_following_all_stable_3_months() {
-    run_centralized_following_all_stable(THREE_MONTHS);
+fn centralized_following_all_stable_3_months() -> BenchResult {
+    run_centralized_following_all_stable(THREE_MONTHS)
 }
 
 #[bench(raw)]
-fn centralized_following_all_stable_6_months() {
-    run_centralized_following_all_stable(SIX_MONTHS);
+fn centralized_following_all_stable_6_months() -> BenchResult {
+    run_centralized_following_all_stable(SIX_MONTHS)
 }
 
 fn run_centralized_following_all_stable(dissolve_delay_seconds: u64) -> BenchResult {
@@ -556,7 +557,18 @@ fn run_centralized_following_all_stable(dissolve_delay_seconds: u64) -> BenchRes
 }
 
 #[bench(raw)]
-fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
+fn compute_ballots_for_new_proposal_with_stable_neurons_3_months() -> BenchResult {
+    run_compute_ballots_for_new_proposal_with_stable_neurons(THREE_MONTHS)
+}
+
+#[bench(raw)]
+fn compute_ballots_for_new_proposal_with_stable_neurons_6_months() -> BenchResult {
+    run_compute_ballots_for_new_proposal_with_stable_neurons(SIX_MONTHS)
+}
+
+fn run_compute_ballots_for_new_proposal_with_stable_neurons(
+    dissolve_delay_seconds: u64,
+) -> BenchResult {
     let now_seconds = 1732817584;
     let num_neurons = 100;
 
@@ -571,6 +583,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
+                    dissolve_delay_seconds,
                 )),
             )
         })
@@ -611,7 +624,16 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 }
 
 #[bench(raw)]
-fn distribute_rewards_with_stable_neurons() -> BenchResult {
+fn distribute_rewards_with_stable_neurons_3_months() -> BenchResult {
+    run_distribute_rewards_with_stable_neurons(THREE_MONTHS)
+}
+
+#[bench(raw)]
+fn distribute_rewards_with_stable_neurons_6_months() -> BenchResult {
+    run_distribute_rewards_with_stable_neurons(SIX_MONTHS)
+}
+
+fn run_distribute_rewards_with_stable_neurons(dissolve_delay_seconds: u64) -> BenchResult {
     let now_seconds = 1732817584;
 
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
@@ -625,6 +647,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
+                    dissolve_delay_seconds,
                 )),
             )
         })
@@ -678,7 +701,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
     bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))
 }
 
-fn list_neurons_by_subaccount_benchmark() -> BenchResult {
+fn list_neurons_by_subaccount_benchmark(dissolve_delay_seconds: u64) -> BenchResult {
     let num_neurons = 100;
     let neurons = (0..num_neurons)
         .map(|id| {
@@ -688,6 +711,7 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
+                    dissolve_delay_seconds,
                 )
                 .into();
                 neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
@@ -731,7 +755,7 @@ fn list_neurons_by_subaccount_benchmark() -> BenchResult {
     })
 }
 
-fn list_neurons_benchmark() -> BenchResult {
+fn list_neurons_benchmark(dissolve_delay_seconds: u64) -> BenchResult {
     let neurons = (0..100)
         .map(|id| {
             (id, {
@@ -740,6 +764,7 @@ fn list_neurons_benchmark() -> BenchResult {
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
+                    dissolve_delay_seconds,
                 ));
                 neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
                 neuron
@@ -775,20 +800,38 @@ fn list_neurons_benchmark() -> BenchResult {
     })
 }
 
-/// Benchmark list_neurons
 #[bench(raw)]
-fn list_neurons_stable() -> BenchResult {
-    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
-    list_neurons_benchmark()
+fn list_neurons_stable_3_months() -> BenchResult {
+    run_list_neurons_stable(THREE_MONTHS)
+}
+
+#[bench(raw)]
+fn list_neurons_stable_6_months() -> BenchResult {
+    run_list_neurons_stable(SIX_MONTHS)
 }
 
 /// Benchmark list_neurons
+fn run_list_neurons_stable(dissolve_delay_seconds: u64) -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    list_neurons_benchmark(dissolve_delay_seconds)
+}
+
 #[bench(raw)]
-fn list_neurons_heap() -> BenchResult {
+fn list_neurons_heap_3_months() -> BenchResult {
+    run_list_neurons_heap(THREE_MONTHS)
+}
+
+#[bench(raw)]
+fn list_neurons_heap_6_months() -> BenchResult {
+    run_list_neurons_heap(SIX_MONTHS)
+}
+
+/// Benchmark list_neurons
+fn run_list_neurons_heap(dissolve_delay_seconds: u64) -> BenchResult {
     let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
     let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
-    list_neurons_benchmark()
+    list_neurons_benchmark(dissolve_delay_seconds)
 }
 
 /// Benchmark list_neurons
@@ -820,7 +863,7 @@ fn create_service_nervous_system_action_with_large_payload() -> CreateServiceNer
     action
 }
 
-fn list_proposals_benchmark() -> BenchResult {
+fn list_proposals_benchmark(dissolve_delay_seconds: u64) -> BenchResult {
     let neurons = (1..=100)
         .map(|id| {
             (
@@ -830,6 +873,7 @@ fn list_proposals_benchmark() -> BenchResult {
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
+                    dissolve_delay_seconds,
                 )),
             )
         })
@@ -897,8 +941,17 @@ fn list_proposals_benchmark() -> BenchResult {
 }
 
 #[bench(raw)]
-fn list_proposals() -> BenchResult {
-    list_proposals_benchmark()
+fn list_proposals_3_months() -> BenchResult {
+    run_list_proposals(THREE_MONTHS)
+}
+
+#[bench(raw)]
+fn list_proposals_6_months() -> BenchResult {
+    run_list_proposals(SIX_MONTHS)
+}
+
+fn list_proposals(dissolve_delay_seconds: u64) -> BenchResult {
+    list_proposals_benchmark(dissolve_delay_seconds)
 }
 
 /// Used for benchmarking compilation/instrumentation/execution changes in the
