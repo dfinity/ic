@@ -60,6 +60,7 @@ WORKSPACE=$(bazel info workspace --ui_event_filters=-WARNING,-INFO 2>/dev/null)
 TARGET_PREFIX="//rs/embedders/fuzz"
 for i in "${TARGETS[@]}"; do
     FUZZER="$TARGET_PREFIX:$i"
+    bazel build --config=afl $FUZZER
     SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=afl --output=files $FUZZER)"
     # Minimum 8 cores is assumed
     afl-cmin -i $TEMP_DIR -o $OUTPUT_DIR/$i -T 8 -t 20000 -- $SOURCE_BINARY @@
