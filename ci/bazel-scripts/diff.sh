@@ -11,7 +11,8 @@
 set -euo pipefail
 
 COMMIT_RANGE="${1:?Please specify a commit range: "'0deadb33f..HEAD'"}"
-shift
+BAZEL_COMMAND="${2:?Please specify bazel command: "(build|test)"}"
+
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
 if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion|mainnet-canister-revisions\.json|^\.github)" <<<"$DIFF_FILES"; then
@@ -50,4 +51,11 @@ if [ ${#files[@]} -eq 0 ]; then
     exit 0
 fi
 
-bazel query "rdeps(//..., set(${files[*]}))"
+if [[ "$BAZEL_COMMAND" == "test" ]]; then
+    bazel query "kind(test, rdeps(//..., set(${files[*]}))"
+elif [[ "$BAZEL_COMMAND" == "build" ]]; then
+    bazel query "rdeps(//..., set(${files[*]}))"
+else
+  echo "Unknown bazel command: $BAZEL_COMMAND" >&2
+  exit 1
+fi
