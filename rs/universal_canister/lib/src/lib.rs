@@ -671,6 +671,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn root_key(mut self) -> Self {
+        self.0.push(Ops::RootKey as u8);
+        self
+    }
+
     pub fn certified_data_set(mut self, data: &[u8]) -> Self {
         self = self.push_bytes(data);
         self.0.push(Ops::CertifiedDataSet as u8);

@@ -33,6 +33,8 @@ pub mod overhead {
     pub const CANISTER_SELF_SIZE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_STATUS: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_VERSION: NumInstructions = NumInstructions::new(500);
+    pub const ROOT_KEY_SIZE: NumInstructions = NumInstructions::new(500);
+    pub const ROOT_KEY_COPY: NumInstructions = NumInstructions::new(500);
     pub const CERTIFIED_DATA_SET: NumInstructions = NumInstructions::new(500);
     pub const CONTROLLER_COPY: NumInstructions = NumInstructions::new(500);
     pub const CONTROLLER_SIZE: NumInstructions = NumInstructions::new(500);

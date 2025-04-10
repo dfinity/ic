@@ -61,6 +61,8 @@ mod ic0 {
         pub fn stable64_grow(additional_pages: u64) -> u64;
         pub fn stable64_read(dst: u64, offset: u64, size: u64) -> ();
         pub fn stable64_write(offset: u64, src: u64, size: u64) -> ();
+        pub fn root_key_size() -> u32;
+        pub fn root_key_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn certified_data_set(src: u32, size: u32) -> ();
         pub fn data_certificate_present() -> u32;
         pub fn data_certificate_size() -> u32;
@@ -343,6 +345,23 @@ pub fn stable64_write(offset: u64, data: &[u8]) {
     unsafe {
         ic0::stable64_write(offset, data.as_ptr() as u64, data.len() as u64);
     }
+}
+
+pub fn root_key_size() -> u32 {
+    unsafe { ic0::root_key_size() }
+}
+
+pub fn root_key_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::root_key_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
+/// Returns the root key.
+pub fn root_key() -> Vec<u8> {
+    root_key_copy(0, root_key_size())
 }
 
 pub fn certified_data_set(data: &[u8]) {
