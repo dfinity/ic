@@ -133,7 +133,7 @@ impl From<GetUtxosRequest> for ic_cdk::api::management_canister::bitcoin::GetUtx
         use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
         let filter = page
             .map(|page| UtxoFilter::Page(page.to_vec()))
-            .or_else(|| Some(UtxoFilter::MinConfirmations(min_confirmations)));
+            .or(Some(UtxoFilter::MinConfirmations(min_confirmations)));
         Self {
             address,
             network: network.into(),

@@ -434,7 +434,7 @@ impl CkBtcMinterState {
             kyt_fee,
         }: InitArgs,
     ) {
-        self.btc_network = btc_network.into();
+        self.btc_network = btc_network;
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
@@ -1459,7 +1459,7 @@ impl From<InitArgs> for CkBtcMinterState {
     #[allow(deprecated)]
     fn from(args: InitArgs) -> Self {
         Self {
-            btc_network: args.btc_network.into(),
+            btc_network: args.btc_network,
             ecdsa_key_name: args.ecdsa_key_name,
             ecdsa_public_key: None,
             min_confirmations: args
