@@ -22,7 +22,7 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common::{
     ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
-    NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
 };
 use ic_nns_common::init::LifelineCanisterInitPayload;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -118,7 +118,7 @@ pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, Stri
         vec![],
     )?;
     deserialize_get_latest_version_response(response)
-        .map_err(|e| "Could not decode response {e:?}".to_string())
+        .map_err(|e| format!("Could not decode response {e:?}"))
 }
 
 pub fn registry_get_changes_since(

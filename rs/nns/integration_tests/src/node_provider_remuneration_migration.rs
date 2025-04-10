@@ -1,7 +1,7 @@
 use candid::{Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
+use ic_nns_test_utils::common::{build_registry_wasm, NnsInitPayloadsBuilder};
 use ic_nns_test_utils::state_test_helpers::{
     registry_latest_version, setup_nns_canisters_with_features,
     state_machine_builder_for_nns_tests, update, update_with_sender_bytes,
@@ -154,8 +154,12 @@ fn get_rewards_at_version_with_registry(
         machine,
         REGISTRY_CANISTER_ID,
         "get_node_providers_monthly_xdr_rewards",
-        // TODO DO NOT MERGE, need to be able to pass the version
-        Encode!().unwrap(),
+        Encode!(
+            &ic_registry_canister_api::GetNodeProvidersMonthlyXdrRewardsRequest {
+                registry_version: version,
+            }
+        )
+        .unwrap(),
         GOVERNANCE_CANISTER_ID.get(),
     )
     .and_then(|r| {
@@ -236,11 +240,16 @@ fn get_rewards_at_version_with_node_rewards_canister(
 // }
 
 fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
+    machine
+        .upgrade_canister(REGISTRY_CANISTER_ID, build_registry_wasm().bytes(), vec![])
+        .expect("Failed to upgrade registry");
+
     let latest_registry_version =
         registry_latest_version(machine).expect("Could not fetch latest version");
 
     println!("Latest Registry Version: {}", latest_registry_version);
 
+    // Compare most recent 10, ensuring the errors are the same
     let latest_up_to_10 = (0..=latest_registry_version).rev().take(10);
 
     for version in latest_up_to_10 {
@@ -256,8 +265,8 @@ fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
             );
         }
 
-        assert_eq!(registry_result, nr_result);
+        assert_eq!(registry_result, nr_result, "Version: {:?}", version);
     }
 
-    // Compare most recent 10, ensuring the errors are the same
+    if latest_registry_version > 100 {}
 }
