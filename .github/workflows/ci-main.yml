@@ -166,53 +166,13 @@ jobs:
           diff-only: ${{ needs.config.outputs.diff_only }}
           release-build: ${{ needs.config.outputs.release_build }}
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
-          BAZEL_TARGETS: //rs/pocket_ic_server:test
+          BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Upload SHA256SUMS (cache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
           artifact-name: shasums-cache
-      - name: Compute PocketIC server path
-        id: pocket-ic-server-path
-        run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_OUTPUT
-      - name: Upload PocketIC
-        uses: actions/upload-artifact@v4
-        with:
-          name: pocket-ic-server
-          path: ${{ steps.pocket-ic-server-path.outputs.pocket_ic_server_path }}
-  pocket-ic-on-windows:
-    name: PocketIC tests on Windows
-    needs: [bazel-test-all]
-    runs-on: windows-2022
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Download PocketIC server
-        uses: actions/download-artifact@v4
-        with:
-          name: pocket-ic-server
-      - name: Setup WSLv2
-        uses: vedantmgoyal9/setup-wsl2@main
-      - name: Code linting
-        run: |
-          cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
-      - name: Build the test canister
-        run: |
-          cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
-      - name: Shrink the test canister
-        run: |
-          curl -L https://github.com/dfinity/ic-wasm/releases/download/0.9.3/ic-wasm-linux64 -o ic-wasm
-          chmod +x ic-wasm
-          ./ic-wasm -o test-canister.wasm target/wasm32-unknown-unknown/release/pocket-ic-test-canister.wasm shrink
-        shell: wsl-run {0}
-      - name: Run PocketIC tests
-        run: |
-          $env:WORKDIR=(Get-Location).Path
-          $env:RUST_TEST_THREADS=2
-          $env:POCKET_IC_BIN="$env:WORKDIR\pocket-ic-server"
-          $env:TEST_WASM="$env:WORKDIR\test-canister.wasm"
-          cargo test --locked -p pocket-ic
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
@@ -339,20 +299,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      #- name: Run Build IC
-      #  id: build-ic
-      #  uses: ./.github/actions/bazel
-      #  with:
-      #    run: ./ci/scripts/run-build-ic.sh
-      #  env:
-      #    MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      #    BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      #    RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
-      #    RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
-      #- name: Upload SHA256SUMS (nocache)
-      #  uses: ./.github/actions/bazel-upload-checksums/
-      #  with:
-      #    artifact-name: shasums-nocache
+      - name: Run Build IC
+        id: build-ic
+        uses: ./.github/actions/bazel
+        with:
+          run: ./ci/scripts/run-build-ic.sh
+        env:
+          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
+      - name: Upload SHA256SUMS (nocache)
+        uses: ./.github/actions/bazel-upload-checksums/
+        with:
+          artifact-name: shasums-nocache
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
@@ -365,40 +325,40 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      #- name: Download SHA256SUMS (cache)
-      #  uses: actions/download-artifact@v4
-      #  with:
-      #    name: shasums-cache
-      #    path: shasums-cache
-      #- name: Download SHA256SUMS (nocache)
-      #  uses: actions/download-artifact@v4
-      #  with:
-      #    name: shasums-nocache
-      #    path: shasums-nocache
-      #- name: Build Determinism Test
-      #  run: |
-      #    n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
-      #    n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
-      #    echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
+      - name: Download SHA256SUMS (cache)
+        uses: actions/download-artifact@v4
+        with:
+          name: shasums-cache
+          path: shasums-cache
+      - name: Download SHA256SUMS (nocache)
+        uses: actions/download-artifact@v4
+        with:
+          name: shasums-nocache
+          path: shasums-nocache
+      - name: Build Determinism Test
+        run: |
+          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
+          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
+          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
           # running tests may not pull all targets locally. If that's the case,
           # there will be 0 lines and nothing to compare.
-      #    if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
-      #      echo "No lines to compare"
-      #      exit 0
-      #    fi
+          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+            echo "No lines to compare"
+            exit 0
+          fi
 
           # this checks that all lines in the first argument (subset) are identical
           # in the second argument (set)
-      #    difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
-      #    if [ -n "$difference" ]; then
-      #      echo "Build Determinism Check Failed! Please contact IDX."
-      #      echo "The following artifacts were different:"
-      #      echo "$difference"
-      #      #exit 1
-      #    fi
+          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
+          if [ -n "$difference" ]; then
+            echo "Build Determinism Check Failed! Please contact IDX."
+            echo "The following artifacts were different:"
+            echo "$difference"
+            exit 1
+          fi
 
-      #    echo "Build Determinism Check Successful"
+          echo "Build Determinism Check Successful"
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
@@ -433,7 +393,7 @@ jobs:
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
-          #"$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+          "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:
@@ -468,4 +428,4 @@ jobs:
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
-          #cargo build --release --locked
+          cargo build --release --locked

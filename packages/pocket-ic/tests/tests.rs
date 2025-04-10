@@ -27,9 +27,10 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
     io::Read,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
     time::SystemTime,
 };
+#[cfg(windows)]
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -2563,6 +2564,7 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
+        #[cfg(windows)]
         let client = Client::builder()
             .resolve(
                 &host,
@@ -2573,6 +2575,8 @@ fn test_http_methods() {
             )
             .build()
             .unwrap();
+        #[cfg(not(windows))]
+        let client = Client::new();
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
         // and the error message "The request is not supported by the test canister.".
