@@ -34,6 +34,9 @@ thread_local! {
     /// A collection of timestamps and records; one record for each call. Keeps track of whether it was
     /// rejected or not and how many bytes were sent and received.
     static RECORDS: RefCell<BTreeMap<u32, (u64, Record)>> = RefCell::default();
+    /// Counter incremented at the end of the heartbeat to indicate successful invocations (as
+    /// opposed to silent abortions).
+    static SUCCESSFUL_HEARTBEAT_INVOCATIONS: Cell<u32> = Cell::default();
     /// A counter for synchronous rejections.
     static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
     /// A `COIN` that can be 'flipped' to determine whether to make a downstream call or not.
@@ -183,6 +186,12 @@ fn synchronous_rejections_count() -> u32 {
     SYNCHRONOUS_REJECTIONS_COUNT.get()
 }
 
+/// Returns the number of successful heartbeat invocations.
+#[query]
+fn successful_heartbeat_invocations() -> u32 {
+    SUCCESSFUL_HEARTBEAT_INVOCATIONS.get()
+}
+
 /// Flip the `DOWNSTREAM_CALL_COIN` to determine whether we should make a downstream call or reply
 /// instead.
 fn should_make_downstream_call() -> bool {
@@ -330,6 +339,7 @@ async fn pulse(calls_count: u32) -> u32 {
 #[heartbeat]
 async fn heartbeat() {
     pulse(CONFIG.with_borrow(|config| config.calls_per_heartbeat)).await;
+    SUCCESSFUL_HEARTBEAT_INVOCATIONS.replace(SUCCESSFUL_HEARTBEAT_INVOCATIONS.get() + 1);
 }
 
 /// Handles incoming calls; this method is called from the heartbeat method.

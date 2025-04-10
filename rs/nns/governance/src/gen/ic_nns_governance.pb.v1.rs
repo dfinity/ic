@@ -4171,6 +4171,43 @@ pub struct MaturityDisbursement {
     #[prost(uint64, tag = "4")]
     pub finalize_disbursement_timestamp_seconds: u64,
 }
+/// A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
+/// a proposal.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronIdToVotingPowerMap {
+    /// Map from neuron id to the voting power of the neuron.
+    #[prost(map = "fixed64, uint64", tag = "1")]
+    pub voting_power_map: ::std::collections::HashMap<u64, u64>,
+}
+/// Total voting power (deciding and potential) at a certain point in time. A history of the totals
+/// can be used to detect voting power spikes. See `Neuron::deciding_voting_power` and
+/// `Neuron::potential_voting_power` for more information.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerTotal {
+    /// The total deciding voting power.
+    #[prost(uint64, tag = "1")]
+    pub total_deciding_voting_power: u64,
+    /// The total potential voting power.
+    #[prost(uint64, tag = "2")]
+    pub total_potential_voting_power: u64,
+}
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.
