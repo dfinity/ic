@@ -16,12 +16,12 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
+      - name: 'Download PocketIC server'
+        uses: actions/download-artifact@v4
+        with:
+          name: pocket-ic-server
       - name: 'Setup WSLv2'
         uses: vedantmgoyal9/setup-wsl2@main
-      #- name: 'Download PocketIC server'
-      #  uses: actions/download-artifact@v4
-      #  with:
-      #    name: pocket-ic-server
       #- name: 'cargo clippy'
       #  run: |
       #    cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
