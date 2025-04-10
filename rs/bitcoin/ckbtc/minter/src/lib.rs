@@ -6,9 +6,7 @@ use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{
-    Address, GetUtxosResponse, MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo,
-};
+use ic_btc_interface::{Address, MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 use ic_management_canister_types_private::DerivationPath;
@@ -135,12 +133,42 @@ impl From<GetUtxosRequest> for ic_cdk::api::management_canister::bitcoin::GetUtx
     ) -> Self {
         use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
         let filter = page
-            .map(|page| UtxoFilter::Page(page.into_vec()))
+            .map(|page| UtxoFilter::Page(page.to_vec()))
             .or_else(|| Some(UtxoFilter::MinConfirmations(min_confirmations)));
         Self {
             address,
             network,
             filter,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct GetUtxosResponse {
+    pub utxos: Vec<Utxo>,
+    pub tip_height: u32,
+    pub next_page: Option<Page>,
+}
+
+impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse) -> Self {
+        Self {
+            utxos: response
+                .utxos
+                .into_iter()
+                .map(|utxo| Utxo {
+                    outpoint: OutPoint {
+                        txid: Txid::try_from(utxo.outpoint.txid.as_slice())
+                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
+                        vout: utxo.outpoint.vout,
+                    },
+                    value: utxo.value,
+                    height: utxo.height,
+                })
+                .collect(),
+
+            tip_height: response.tip_height,
+            next_page: response.next_page.map(Page::from),
         }
     }
 }

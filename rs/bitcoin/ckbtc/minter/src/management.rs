@@ -2,12 +2,12 @@
 use crate::logs::P0;
 use crate::metrics::observe_get_utxos_latency;
 use crate::ECDSAPublicKey;
-use crate::{tx, CanisterRuntime, GetUtxosRequest, Timestamp};
+use crate::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Timestamp};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
 };
-use ic_btc_interface::{Address, GetUtxosResponse, MillisatoshiPerByte, OutPoint, Txid, Utxo};
+use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
@@ -15,7 +15,6 @@ use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
 use serde::de::DeserializeOwned;
-use serde_bytes::ByteBuf;
 use std::fmt;
 
 /// Represents an error from a management canister call, such as
@@ -205,32 +204,9 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    fn parse_cdk_get_utxos_response(
-        response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse,
-    ) -> GetUtxosResponse {
-        GetUtxosResponse {
-            utxos: response
-                .utxos
-                .into_iter()
-                .map(|utxo| Utxo {
-                    outpoint: OutPoint {
-                        txid: Txid::try_from(utxo.outpoint.txid.as_slice())
-                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
-                        vout: utxo.outpoint.vout,
-                    },
-                    value: utxo.value,
-                    height: utxo.height,
-                })
-                .collect(),
-            tip_block_hash: response.tip_block_hash,
-            tip_height: response.tip_height,
-            next_page: response.next_page.map(ByteBuf::from),
-        }
-    }
-
     ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request.into())
         .await
-        .map(|(response,)| parse_cdk_get_utxos_response(response))
+        .map(|(response,)| response.into())
         .map_err(|err| CallError::from_cdk_error("bitcoin_get_utxos", err))
 }
 
