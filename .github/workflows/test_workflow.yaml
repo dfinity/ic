@@ -15,10 +15,10 @@ permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  # only triggered on PR, so head_ref will always be set
-  group: ${{ github.workflow }}-${{ github.head_ref }}
-  cancel-in-progress: true
+#concurrency:
+#  # only triggered on PR, so head_ref will always be set
+#  group: ${{ github.workflow }}-${{ github.head_ref }}
+#  cancel-in-progress: true
 
 jobs:
   ci-main-internal:
