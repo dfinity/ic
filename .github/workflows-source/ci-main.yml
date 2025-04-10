@@ -347,6 +347,8 @@ jobs:
           fi
 
           # sort the files by the field we join on (artifact path), see below
+          sponge=$(mktemp)
+
           sort -t, -k2 <shasums-cache/execution_log.csv >"$sponge"
           cp "$sponge" shasums-cache/execution_log.csv
 

@@ -107,7 +107,7 @@ runs:
         time (cat "$execlog_json_in" \
           | awk "$prog" \
           | jq -cMr --arg whitelist_pat "$whitelist_pat" \
-              'select(.targetLabel | test($whiltelist_pat)) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
+              'select(.targetLabel | test($whitelist_pat)) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
           >"$execlog_csv_out")
 
     - name: Upload execution log
