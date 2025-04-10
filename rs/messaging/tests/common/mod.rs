@@ -2,7 +2,6 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{
-    embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags},
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
@@ -101,13 +100,6 @@ impl SubnetPairConfig {
             HypervisorConfig {
                 guaranteed_response_message_memory_capacity: subnet_message_memory_capacity.into(),
                 best_effort_message_memory_capacity: subnet_message_memory_capacity.into(),
-                embedders_config: EmbeddersConfig {
-                    feature_flags: FeatureFlags {
-                        best_effort_responses: BestEffortResponsesFeature::Enabled,
-                        ..FeatureFlags::default()
-                    },
-                    ..EmbeddersConfig::default()
-                },
                 ..HypervisorConfig::default()
             },
         )

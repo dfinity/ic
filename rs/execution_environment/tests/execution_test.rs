@@ -3,7 +3,6 @@ use candid::Encode;
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_config::{
-    embedders::BestEffortResponsesFeature,
     execution_environment::{
         Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT, MINIMUM_FREEZING_THRESHOLD,
     },
@@ -2268,17 +2267,12 @@ fn helper_best_effort_responses(
     expected_deadline_seconds: u32,
 ) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.best_effort_responses = BestEffortResponsesFeature::Enabled;
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
-            HypervisorConfig {
-                embedders_config,
-                ..Default::default()
-            },
+            HypervisorConfig::default(),
         )))
         .build();
 

@@ -1,10 +1,8 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
+use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_config::{
-    embedders::BestEffortResponsesFeature, execution_environment::MINIMUM_FREEZING_THRESHOLD,
-};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
@@ -5666,9 +5664,7 @@ fn cycles_correct_if_update_fails() {
 
 #[test]
 fn call_with_best_effort_response_succeeds() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.universal_canister().unwrap();
 
@@ -5690,9 +5686,7 @@ fn call_with_best_effort_response_succeeds() {
 
 #[test]
 fn call_with_best_effort_response_fails_when_timeout_is_set() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.universal_canister().unwrap();
 
@@ -5720,7 +5714,6 @@ fn call_with_best_effort_response_test_helper(
     timeout_seconds: u32,
 ) -> CoarseTime {
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_manual_execution()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
@@ -5784,7 +5777,6 @@ fn ic0_msg_deadline_while_executing_ingress_message() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5806,7 +5798,6 @@ fn ic0_msg_deadline_when_deadline_is_not_set() {
     let start_time_seconds = 100;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
@@ -5844,7 +5835,6 @@ fn ic0_msg_deadline_when_deadline_is_set() {
     let timeout_seconds = 200;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_best_effort_responses(BestEffortResponsesFeature::Enabled)
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
