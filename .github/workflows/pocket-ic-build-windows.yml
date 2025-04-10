@@ -1,7 +1,8 @@
 name: 'PocketIC library build on Windows'
 on:
   workflow_run:
-    workflows: ["CI Main"]  # Name of the workflow that triggers this one
+    workflows:
+      - CI Main
     types:
       - completed  # Trigger when the first workflow completes (success or failure)
 
