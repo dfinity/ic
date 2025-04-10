@@ -69,8 +69,8 @@ fn make_checkpoint_and_get_state_impl(
     tip_channel: &Sender<TipRequest>,
     log: &ReplicaLogger,
 ) -> ReplicatedState {
-    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
-        state,
+    let (switched_state, cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
+        state.clone(),
         height,
         tip_channel,
         &state_manager_metrics(log).checkpoint_metrics,
@@ -82,6 +82,13 @@ fn make_checkpoint_and_get_state_impl(
             err
         )
     });
+    *state = (*switched_state).clone();
+    #[allow(clippy::disallowed_methods)]
+    let (sender, recv) = unbounded();
+    tip_channel
+        .send(TipRequest::Wait { sender })
+        .expect("failed to send TipHandler Wait message");
+    recv.recv().expect("failed to wait for TipHandler thread");
     load_checkpoint_and_validate_parallel(
         &cp_layout,
         state.metadata.own_subnet_type,
@@ -198,7 +205,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
         let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
         let replicated_state = make_unvalidated_checkpoint(
-            &mut state,
+            state,
             HEIGHT,
             &tip_channel,
             &state_manager_metrics.checkpoint_metrics,

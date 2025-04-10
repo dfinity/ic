@@ -52,37 +52,32 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
 /// layout. Returns a layout of the new state that is equivalent to the
 /// given one and a result of the operation.
 pub(crate) fn make_unvalidated_checkpoint(
-    state: &mut ReplicatedState,
+    mut state: ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
+) -> Result<
+    (
+        Arc<ReplicatedState>,
+        CheckpointLayout<ReadOnly>,
+        HasDowngrade,
+    ),
+    CheckpointError,
+> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["flush_page_map_deltas"])
             .start_timer();
-        flush_canister_snapshots_and_page_maps(state, height, tip_channel);
+        flush_canister_snapshots_and_page_maps(&mut state, height, tip_channel);
     }
     {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["strip_page_map_deltas"])
             .start_timer();
-        strip_page_map_deltas(state, fd_factory);
-    }
-    {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["serialize_to_tip_cloning"])
-            .start_timer();
-        tip_channel
-            .send(TipRequest::SerializeToTip {
-                height,
-                replicated_state: Box::new(state.clone()),
-            })
-            .unwrap();
+        strip_page_map_deltas(&mut state, Arc::clone(&fd_factory));
     }
 
     tip_channel
@@ -92,7 +87,7 @@ pub(crate) fn make_unvalidated_checkpoint(
         })
         .unwrap();
 
-    let (cp, has_downgrade) = {
+    {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
@@ -102,14 +97,13 @@ pub(crate) fn make_unvalidated_checkpoint(
         tip_channel
             .send(TipRequest::TipToCheckpoint {
                 height,
+                state,
+                fd_factory,
                 sender: send,
             })
             .unwrap();
-        let (cp, has_downgrade) = recv.recv().unwrap()?;
-        (cp, has_downgrade)
-    };
-
-    Ok((cp, has_downgrade))
+        Ok(recv.recv().unwrap()?)
+    }
 }
 
 pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
