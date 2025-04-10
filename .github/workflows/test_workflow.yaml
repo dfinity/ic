@@ -1,10 +1,24 @@
 name: Test Workflow Internal
 on:
+  merge_group:
+  push:
+    branches:
+      - master
+      - 'dev-gh-*'
   pull_request:
+    branches-ignore:
+      # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
+      # Used as reusable workflow within release-testing workflow
+      - hotfix-*
 
 permissions:
   contents: read
   pull-requests: read
+
+concurrency:
+  # only triggered on PR, so head_ref will always be set
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
 
 jobs:
   ci-main-internal:
@@ -14,3 +28,17 @@ jobs:
     secrets: inherit
     with:
       runner: dind-small
+
+  ci-pr-only-internal:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
+    name: CI Main
+    uses: ./.github/workflows/ci-pr-only.yml
+    secrets: inherit
+    with:
+      runner: dind-small
+
+  macos-arm64-internal:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
+    name: CI Main
+    uses: ./.github/workflows/test-namespace-darwin.yaml
+    secrets: inherit

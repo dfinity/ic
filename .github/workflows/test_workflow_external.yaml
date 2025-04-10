@@ -1,6 +1,8 @@
 name: Test Workflow External
 on:
+  merge_group:
   pull_request:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -11,6 +13,14 @@ jobs:
     if: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24-large
+
+  ci-pr-only-external:
+    if: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
+    name: CI Main
+    uses: ./.github/workflows/ci-pr-only.yml
     secrets: inherit
     with:
       runner: ubuntu-24-large

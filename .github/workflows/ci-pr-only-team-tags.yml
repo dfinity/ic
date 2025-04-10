@@ -24,7 +24,8 @@ env:
 jobs:
   set-team-tags:
     name: Set Team Tags
-    if: ${{ github.event.pull_request.draft == false }}
+    # Only consider internal PRs that are ready
+    if: ${{ github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

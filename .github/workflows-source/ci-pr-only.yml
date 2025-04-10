@@ -2,9 +2,11 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
-  merge_group:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      runner:
+        required: false
+        type: string
 
 concurrency:
   # only triggered on PR, so head_ref will always be set
@@ -21,7 +23,7 @@ anchors:
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
-      labels: dind-small
+      labels: ${{ inputs.runner }}
     container:
       <<: *image
       options: >-
@@ -29,7 +31,7 @@ anchors:
   dind-large-setup: &dind-large-setup
     timeout-minutes: 90
     runs-on:
-      labels: dind-large
+      labels: ${{ inputs.runner }}
     container:
       <<: *image
       options: >-
