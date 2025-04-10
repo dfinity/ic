@@ -358,6 +358,7 @@ fn test_multiple_large_xnet_payloads() {
     }
 }
 
+#[cfg(not(windows))]
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     let current_time = pic
         .get_time()

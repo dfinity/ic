@@ -194,12 +194,11 @@ jobs:
           name: pocket-ic-server
       - name: 'Setup WSLv2'
         uses: vedantmgoyal9/setup-wsl2@main
-      #- name: 'cargo clippy'
-      #  run: |
-      #    cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
-      - name: 'cargo build'
+      - name: 'Code linting'
         run: |
-          #cargo build --release --locked -p pocket-ic
+          cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+      - name: 'Build the test canister'
+        run: |
           cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
       - name: 'Shrink the test canister'
         run: |
@@ -207,13 +206,13 @@ jobs:
           chmod +x ic-wasm
           ./ic-wasm -o test-canister.wasm target/wasm32-unknown-unknown/release/pocket-ic-test-canister.wasm shrink
         shell: wsl-run {0}
-      - name: 'cargo test'
+      - name: 'Run PocketIC tests'
         run: |
           $env:WORKDIR=(Get-Location).Path
           $env:RUST_TEST_THREADS=2
           $env:POCKET_IC_BIN="$env:WORKDIR\pocket-ic-server"
           $env:TEST_WASM="$env:WORKDIR\test-canister.wasm"
-          cargo test -p pocket-ic
+          cargo test --locked -p pocket-ic
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
