@@ -311,5 +311,6 @@ rust_ic_bench(
         "//rs/state_machine_tests",
         "@crate_index//:candid",
         "@crate_index//:serde",
+        "@crate_index//:rand",
     ] + BENCH_DEPENDENCIES,
 )
