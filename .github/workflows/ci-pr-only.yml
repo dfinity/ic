@@ -2,9 +2,11 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
-  merge_group:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      runner:
+        required: false
+        type: string
 concurrency:
   # only triggered on PR, so head_ref will always be set
   group: ${{ github.workflow }}-${{ github.head_ref }}
@@ -18,7 +20,7 @@ jobs:
     name: Bazel Build Fuzzers Archives
     timeout-minutes: 90
     runs-on:
-      labels: dind-large
+      labels: ${{ inputs.runner }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
@@ -48,7 +50,7 @@ jobs:
     name: Lock Generate
     timeout-minutes: 30
     runs-on:
-      labels: dind-small
+      labels: ${{ inputs.runner }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
@@ -90,7 +92,7 @@ jobs:
   dependencies-check:
     name: Dependency Scan for PR
     runs-on:
-      labels: dind-small
+      labels: ${{ inputs.runner }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
@@ -151,7 +153,7 @@ jobs:
     name: Bazel Test Coverage
     timeout-minutes: 90
     runs-on:
-      labels: dind-large
+      labels: ${{ inputs.runner }}
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
