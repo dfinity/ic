@@ -25,12 +25,9 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{
-    io::Read,
-    time::SystemTime,
-};
 #[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{io::Read, time::SystemTime};
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
