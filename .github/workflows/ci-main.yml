@@ -177,7 +177,7 @@ jobs:
         id: pocket-ic-server-path
         run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_OUTPUT
       - name: Upload PocketIC
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pocket-ic-server
           path: ${{ steps.pocket-ic-server-path.outputs.pocket_ic_server_path }}
