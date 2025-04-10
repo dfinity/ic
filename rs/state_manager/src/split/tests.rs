@@ -3,7 +3,7 @@ use crate::{
     checkpoint::make_unvalidated_checkpoint,
     flush_canister_snapshots_and_page_maps,
     state_sync::types::{FileInfo, Manifest},
-    tip::spawn_tip_thread,
+    tip::{flush_tip_channel, spawn_tip_thread},
     CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use assert_matches::assert_matches;
@@ -416,6 +416,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
             err
         )
     });
+    flush_tip_channel(&tip_channel);
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
     validate_and_finalize_checkpoint_and_remove_unverified_marker(
         &cp_layout,

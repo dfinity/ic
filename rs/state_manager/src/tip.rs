@@ -10,7 +10,7 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::state_manager::LsmtConfig;
-use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_logger::{error, fatal, info, warn, ReplicaLogger};
 use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
@@ -144,6 +144,15 @@ pub enum HasDowngrade {
     No,
 }
 
+pub(crate) fn flush_tip_channel(tip_channel: &Sender<TipRequest>) {
+    #[allow(clippy::disallowed_methods)]
+    let (sender, recv) = unbounded();
+    tip_channel
+        .send(TipRequest::Wait { sender })
+        .expect("failed to send TipHandler Wait message");
+    recv.recv().expect("failed to wait for TipHandler thread");
+}
+
 pub(crate) fn spawn_tip_thread(
     log: ReplicaLogger,
     mut tip_handler: TipHandler,
@@ -208,6 +217,7 @@ pub(crate) fn spawn_tip_thread(
                                 let _timer =
                                     request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
                                 let result = tip_to_checkpoint(
+				    &log,
                                     &mut tip_handler,
                                     &state_layout,
                                     height,
@@ -464,6 +474,7 @@ pub(crate) fn spawn_tip_thread(
 }
 
 fn tip_to_checkpoint(
+    log: &ReplicaLogger,
     tip_handler: &mut TipHandler,
     state_layout: &StateLayout,
     height: Height,
@@ -478,9 +489,29 @@ fn tip_to_checkpoint(
     LayoutError,
 > {
     let tip = tip_handler.tip(height)?;
-    let cp = state_layout.promote_scratchpad_to_unverified_checkpoint(tip, height)?;
-    switch_to_checkpoint(&mut state, &cp, &fd_factory).expect("Failed to switch to checkpoint");
-    Ok((Arc::new(state), cp, HasDowngrade::No))
+    let (cp, has_downgrade) =
+        match state_layout.promote_scratchpad_to_unverified_checkpoint(tip, height) {
+            Ok(cp) => (cp, HasDowngrade::No),
+
+            Err(LayoutError::AlreadyExists(_)) => {
+                warn!(
+                    log,
+                    "Failed to create checkpoint @{} because it already exists, \
+                     re-loading the checkpoint from disk",
+                    height
+                );
+
+                let cp_layout = state_layout
+                    .checkpoint_in_verification(height)
+                    .unwrap_or_else(|err| {
+                        fatal!(log, "Failed to open checkpoint layout #{}: {}", height, err);
+                    });
+                (cp_layout, HasDowngrade::Yes)
+            }
+            Err(err) => return Err(err),
+        };
+    switch_to_checkpoint(&mut state, &cp, fd_factory).expect("Failed to switch to checkpoint");
+    Ok((Arc::new(state), cp, has_downgrade))
 }
 
 /// Switches `tip` to the most recent checkpoint file provided by `layout`.
