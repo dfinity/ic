@@ -31,7 +31,7 @@ jobs:
 
   ci-pr-only-internal:
     if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
-    name: CI Main
+    name: CI PR Only
     uses: ./.github/workflows/ci-pr-only.yml
     secrets: inherit
     with:
@@ -39,6 +39,6 @@ jobs:
 
   macos-arm64-internal:
     if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
-    name: CI Main
+    name: Darwin Arm64
     uses: ./.github/workflows/test-namespace-darwin.yaml
     secrets: inherit
