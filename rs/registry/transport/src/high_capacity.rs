@@ -1,13 +1,13 @@
 //! For background, see remarks about HighCapacity* types in ./.../transport.proto.
 //!
-//! At least for now, this module just contains conversion to and from
-//! HighCapacity* types. (The set of implemented conversions probably isn't
-//! comprehensive, so feel free to add needed conversions that seem to be
-//! missing.) As such, this module can stay private (which is nice).
+//! At least for now, this module just contains conversion to HighCapacity*
+//! types. (The set of implemented conversions probably isn't comprehensive, so
+//! feel free to add needed conversions that seem to be missing.) As such, this
+//! module can stay private (which is nice).
 //!
 //! Note that when converting TO HighCapacity the From trait is used, but when
-//! converting FROM HighCapacity, TryFrom is used. This asymetry is for the
-//! usual reason(s): every non-HighCapacity object has an equivalent
+//! converting FROM HighCapacity, TryFrom should be used. This asymetry is for
+//! the usual reason(s): every non-HighCapacity object has an equivalent
 //! HighCapacity version, but not necessarily the other way around. In
 //! particular, converting FROM HighCapacity does not really work if the
 //! original object uses LargeValueChunkKeys.
