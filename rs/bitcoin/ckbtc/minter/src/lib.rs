@@ -7,9 +7,10 @@ use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{
-    GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
+    Address, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Page, Satoshi, Txid, Utxo,
 };
 use ic_canister_log::log;
+use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -111,6 +112,45 @@ pub struct MinterInfo {
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct GetUtxosRequest {
+    created: Timestamp,
+    address: Address,
+    network: Network,
+    min_confirmations: u32,
+    page: Option<Page>,
+}
+
+impl From<GetUtxosRequest> for ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
+    fn from(
+        GetUtxosRequest {
+            address,
+            network,
+            min_confirmations,
+            page,
+            ..
+        }: GetUtxosRequest,
+    ) -> Self {
+        use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
+        let filter = page
+            .map(|page| UtxoFilter::Page(page.into_vec()))
+            .or_else(|| Some(UtxoFilter::MinConfirmations(min_confirmations)));
+        Self {
+            address,
+            network: cdk_network(network),
+            filter,
+        }
+    }
+}
+
+pub(crate) fn cdk_network(network: Network) -> BitcoinNetwork {
+    match network {
+        Network::Mainnet => BitcoinNetwork::Mainnet,
+        Network::Testnet => BitcoinNetwork::Testnet,
+        Network::Regtest => BitcoinNetwork::Regtest,
+    }
 }
 
 struct SignTxRequest {
@@ -1235,7 +1275,7 @@ impl CanisterRuntime for IcCanisterRuntime {
 }
 
 /// Time in nanoseconds since the epoch (1970-01-01).
-#[derive(Eq, Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Eq, Clone, Copy, PartialEq, Debug, Default, Serialize, CandidType, serde::Deserialize)]
 pub struct Timestamp(u64);
 
 impl Timestamp {
