@@ -73,8 +73,9 @@ baseline_commit=$(git rev-list --abbrev-commit -1 HEAD "${BASELINE_FILE}")
 min_commit=$(git rev-list --abbrev-commit -1 HEAD)
 read total_diff_ms total_diff_pct < <(echo_diff_ms_pct "${total_baseline_ns}" "${total_new_ns}")
 printf "= ${baseline_commit}..${min_commit}: ${NAME} total time: $((total_new_ns / 1000 / 1000)) ms "
-case "${total_diff_pct}" in
-    0) echo "(no change)" ;;
+case "${total_diff_pct}/${total_baseline_ns}" in
+    0/0) echo "(new)" ;;
+    0*) echo "(no change)" ;;
     -*) echo "(improved by ${total_diff_ms} ms / ${total_diff_pct}%)" ;;
     *) echo "(regressed by ${total_diff_ms} ms / ${total_diff_pct}%)" ;;
 esac
@@ -102,5 +103,6 @@ if [ "${total_diff_pct}" != "0" ]; then
 fi
 rm -f "${TMP_FILE}"
 
-# Return an error if there are changes, so the calling script might retry or report an error.
-[ "${total_diff_pct}" == "0" ]
+# Return an error if there are changes or the is no baseline (new benchmarks),
+# so the calling script might retry or report an error.
+[ "${total_diff_pct}" == "0" -a "${total_baseline_ns}" != "0" ]
