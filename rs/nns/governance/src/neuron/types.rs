@@ -732,6 +732,10 @@ impl Neuron {
         self.dissolve_delay_seconds(now_seconds) == 0
     }
 
+    pub fn maturity_disbursements_in_progress(&self) -> &[MaturityDisbursement] {
+        &self.maturity_disbursements_in_progress
+    }
+
     fn is_authorized_to_configure_or_err(
         &self,
         caller: &PrincipalId,
@@ -1132,6 +1136,14 @@ impl Neuron {
     #[cfg(test)] // This can be used in production, but so far, it is not needed.
     pub(crate) fn clear_known_neuron_data(&mut self) {
         self.known_neuron_data = None;
+    }
+
+    pub fn add_maturity_disbursement_in_progress(
+        &mut self,
+        maturity_disbursement: MaturityDisbursement,
+    ) {
+        self.maturity_disbursements_in_progress
+            .push(maturity_disbursement);
     }
 }
 
