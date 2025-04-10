@@ -59,14 +59,14 @@ done
 # Otherwise, create target-specific subdirectories to bootstrap
 if [ -z "$(ls $OUTPUT_DIR)" ]; then
     echo "Output directory is empty. Bootstrapping..."
-    for i in "${TARGETS[@]}"; do
-        mkdir -p $OUTPUT_DIR/$i
+    for target in "${TARGETS[@]}"; do
+        mkdir -p $OUTPUT_DIR/$target
     done
 else
     echo "Output directory is not empty. Moving files to temporary directory $TEMP_DIR ..."
-    for i in "${TARGETS[@]}"; do
-        cp -R $OUTPUT_DIR/$i/* $TEMP_DIR
-        rm -r $OUTPUT_DIR/$i/*
+    for target in "${TARGETS[@]}"; do
+        cp -R $OUTPUT_DIR/$target/* $TEMP_DIR
+        rm -r $OUTPUT_DIR/$target/*
     done
 fi
 
@@ -109,10 +109,18 @@ LSAN_OPTIONS="handle_abort=1:\
 # Perform corpus minimization for each target
 WORKSPACE=$(bazel info workspace --ui_event_filters=-WARNING,-INFO 2>/dev/null)
 TARGET_PREFIX="//rs/embedders/fuzz"
-for i in "${TARGETS[@]}"; do
-    FUZZER="$TARGET_PREFIX:$i"
+for target in "${TARGETS[@]}"; do
+    FUZZER="$TARGET_PREFIX:$target"
     bazel build --config=afl $FUZZER
     SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=afl --output=files $FUZZER)"
     # Minimum 8 cores is assumed
-    ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS afl-cmin.bash -i $TEMP_DIR -o $OUTPUT_DIR/$i -T 8 -t 20000 -- $SOURCE_BINARY @@
+    ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS afl-cmin.bash -i $TEMP_DIR -o $OUTPUT_DIR/$target -T 8 -t 20000 -- $SOURCE_BINARY @@
+
+    # Rename minimized corpus files to SHA256 hashes
+    for filename in "$OUTPUT_DIR/$target"/*; do
+        if [[ -f "$filename" ]]; then
+            hash=$(sha256sum "$filename" | awk '{print $1}')
+            mv "$filename" "$OUTPUT_DIR/$target/$hash"
+        fi
+    done
 done
