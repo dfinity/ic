@@ -1,4 +1,4 @@
-name: Test Workflow External
+name: CI External
 on:
   merge_group:
   pull_request_target:

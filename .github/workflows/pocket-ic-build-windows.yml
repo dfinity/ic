@@ -1,6 +1,6 @@
 name: 'PocketIC library build on Windows'
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - packages/pocket-ic/**
   push:

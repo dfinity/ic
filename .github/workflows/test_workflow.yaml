@@ -1,4 +1,4 @@
-name: Test Workflow Internal
+name: CI Internal
 on:
   merge_group:
   push:
