@@ -49,7 +49,7 @@ const WITHDRAWAL_ADDRESS: &str = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c";
 #[allow(deprecated)]
 fn default_init_args() -> CkbtcMinterInitArgs {
     CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: Network::Regtest,
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 2000,
         ledger_id: CanisterId::from(0),
@@ -656,7 +656,7 @@ impl CkBtcSetup {
             minter_id,
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-                btc_network: btc_network.into(),
+                btc_network,
                 retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
