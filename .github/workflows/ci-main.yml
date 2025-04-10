@@ -315,8 +315,8 @@ jobs:
         uses: ./.github/actions/bazel-upload-checksums/
         with:
           artifact-name: shasums-nocache
-  build-determinism-execlog:
-    name: Build Determinism execlog
+  build-determinism:
+    name: Build Determinism
     runs-on: ubuntu-latest
     needs: [build-ic, bazel-test-all]
     steps:
@@ -345,57 +345,25 @@ jobs:
             exit 0
           fi
 
+          # sort the files by the field we join on (artifact path), see below
+          sort -t, -k2 <shasums-cache/execution_log.csv >"$sponge"
+          cp "$sponge" shasums-cache/execution_log.csv
+
+          sort -t, -k2 <shasums-nocache/execution_log.csv >"$sponge"
+          cp "$sponge" shasums-nocache/execution_log.csv
+
+          rm "$sponge"
+
+          # join the CSVs (separator ',') and compare the hashes. This creates a table with the following columns:
+          # the join field (0, the artifact name specified as the 2nd argument of both file 1 & 2 by -12 and -22)
+          # the target label (1.2), and the hashes for both files (1.3 & 2.3).
+          # The output is then compared with awk, printing mismatches, and keeping track of how many mismatches we
+          # encountered.
           join \
             -t, -o 0,1.2,1.3,2.3 -12 -22 \
             shasums-cache/execution_log.csv \
             shasums-nocache/execution_log.csv \
-            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { print "done"; if (N_BAD) { print "bad" N_BAD; exit 1; } else { print "good"; }; }'
-  build-determinism:
-    name: Build Determinism
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # NOTE: this expects "build-ic" to have built the same set of targets
-    # as "bazel-test-all"
-    needs: [build-ic, bazel-test-all]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Download SHA256SUMS (cache)
-        uses: actions/download-artifact@v4
-        with:
-          name: shasums-cache
-          path: shasums-cache
-      - name: Download SHA256SUMS (nocache)
-        uses: actions/download-artifact@v4
-        with:
-          name: shasums-nocache
-          path: shasums-nocache
-      - name: Build Determinism Test
-        run: |
-          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
-          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
-          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
-
-          # running tests may not pull all targets locally. If that's the case,
-          # there will be 0 lines and nothing to compare.
-          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
-            echo "No lines to compare"
-            exit 0
-          fi
-
-          # this checks that all lines in the first argument (subset) are identical
-          # in the second argument (set)
-          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
-          if [ -n "$difference" ]; then
-            echo "Build Determinism Check Failed! Please contact IDX."
-            echo "The following artifacts were different:"
-            echo "$difference"
-            exit 1
-          fi
-
-          echo "Build Determinism Check Successful"
+            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
