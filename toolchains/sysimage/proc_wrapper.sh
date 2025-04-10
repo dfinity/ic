@@ -6,6 +6,6 @@
 
 set -euo pipefail
 
-tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
+tmpdir=$(mktemp -d --tmpdir=/tmp/tmpfs "icosbuildXXXX")
 trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
 ICOS_TMPDIR="$tmpdir" "$@"
