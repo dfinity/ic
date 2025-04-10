@@ -229,6 +229,11 @@ jobs:
   pocket-ic-on-windows:
     name: PocketIC tests on Windows
     needs: [bazel-test-all]
+    # Run on protected branches, but only on public repo
+    # Allow running if CI_ALL_BAZEL_TARGETS label is used
+    if: |
+      (github.ref_protected && github.repository == 'dfinity/ic') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS'))
     runs-on: windows-2022
     steps:
       - name: Checkout
