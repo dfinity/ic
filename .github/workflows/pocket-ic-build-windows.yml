@@ -33,7 +33,7 @@ jobs:
           #cargo build --release --locked -p pocket-ic
           cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
       - name: 'Shrink the test canister'
-      - run: |
+        run: |
           curl -L https://github.com/dfinity/ic-wasm/releases/download/0.9.3/ic-wasm-linux64 -o ic-wasm
           chmod +x ic-wasm
           ./ic-wasm -o test-canister.wasm target/wasm32-unknown-unknown/release/pocket-ic-test-canister.wasm shrink
