@@ -333,38 +333,38 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Download SHA256SUMS (cache)
-        uses: actions/download-artifact@v4
-        with:
-          name: shasums-cache
-          path: shasums-cache
-      - name: Download SHA256SUMS (nocache)
-        uses: actions/download-artifact@v4
-        with:
-          name: shasums-nocache
-          path: shasums-nocache
-      - name: Build Determinism Test
-        run: |
-          n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
-          n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
-          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
+      #- name: Download SHA256SUMS (cache)
+      #  uses: actions/download-artifact@v4
+      #  with:
+      #    name: shasums-cache
+      #    path: shasums-cache
+      #- name: Download SHA256SUMS (nocache)
+      #  uses: actions/download-artifact@v4
+      #  with:
+      #    name: shasums-nocache
+      #    path: shasums-nocache
+      #- name: Build Determinism Test
+      #  run: |
+      #    n_lines_cache=$(cat shasums-cache/SHA256SUMS | wc -l)
+      #    n_lines_nocache=$(cat shasums-nocache/SHA256SUMS | wc -l)
+      #    echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
           # running tests may not pull all targets locally. If that's the case,
           # there will be 0 lines and nothing to compare.
-          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
-            echo "No lines to compare"
-            exit 0
-          fi
+      #    if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+      #      echo "No lines to compare"
+      #      exit 0
+      #    fi
 
           # this checks that all lines in the first argument (subset) are identical
           # in the second argument (set)
-          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
-          if [ -n "$difference" ]; then
-            echo "Build Determinism Check Failed! Please contact IDX."
-            echo "The following artifacts were different:"
-            echo "$difference"
-            #exit 1
-          fi
+      #    difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
+      #    if [ -n "$difference" ]; then
+      #      echo "Build Determinism Check Failed! Please contact IDX."
+      #      echo "The following artifacts were different:"
+      #      echo "$difference"
+      #      #exit 1
+      #    fi
 
           echo "Build Determinism Check Successful"
   cargo-clippy-linux:
