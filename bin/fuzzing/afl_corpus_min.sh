@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -eou pipefail
+
 show_help() {
     cat <<EOF
 AFL Corpus Minimizer
@@ -26,8 +28,6 @@ EOF
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     show_help
 fi
-
-set -x
 
 # Input directory containing corpus from the latest fuzzing run
 INPUT_DIR=$1

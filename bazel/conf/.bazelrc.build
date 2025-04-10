@@ -114,7 +114,7 @@ build:afl --action_env="LLVM_CONFIG=llvm-config-18"
 build:afl --action_env="RANLIB=llvm-ranlib-18"
 build:afl --config=fuzzing
 build:afl --build_tag_filters=afl
-run:afl --run_under="//bin:afl_wrapper"
+run:afl --run_under="//bin/fuzzing:afl_wrapper"
 
 # Fuzzing w/ Canister Sandbox configuration
 # NOTE: This is only for --config=fuzzing

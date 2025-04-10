@@ -35,7 +35,7 @@ jobs:
       - name: Build and Push Fuzzers to GCP
         shell: bash
         run: |
-          cd bin
+          cd bin/fuzzing/
           gcloud auth activate-service-account --key-file fuzzing_service_account.json
           ./build-all-fuzzers.sh --zip
           cd fuzzer_build

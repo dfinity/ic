@@ -73,10 +73,10 @@ jobs:
       - <<: *checkout
       - name: Run Libfuzzer targets
         shell: bash
-        run: ./bin/run-all-fuzzers.sh --libfuzzer 100
+        run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
       - name: Run AFL targets
         shell: bash
-        run: ./bin/run-all-fuzzers.sh --afl 100
+        run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()
