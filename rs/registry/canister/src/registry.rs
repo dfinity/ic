@@ -491,6 +491,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flags::temporarily_disable_chunkifying_large_values;
     use ic_registry_transport::{delete, insert, update, upsert};
     use rand::{Rng, SeedableRng};
     use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
@@ -781,7 +782,7 @@ mod tests {
     #[test]
     fn test_count_fitting_deltas_max_size() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         let mut registry = Registry::new();
         let version = 1;
@@ -1043,7 +1044,7 @@ mod tests {
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_changelog_insert_delta_too_large() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         let mut registry = Registry::new();
         let version = 1;
@@ -1084,7 +1085,7 @@ mod tests {
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_apply_mutations_delta_too_large() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         let mut registry = Registry::new();
         let version = 1;
@@ -1141,7 +1142,7 @@ mod tests {
     #[test]
     fn test_from_serializable_form_version_unspecified_max_size_delta() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         test_from_serializable_form_impl(0, ReprVersion::Unspecified)
     }
@@ -1149,7 +1150,7 @@ mod tests {
     #[test]
     fn test_from_serializable_form_version1_max_size_delta() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         test_from_serializable_form_impl(0, ReprVersion::Version1)
     }
@@ -1158,7 +1159,7 @@ mod tests {
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version_unspecified_delta_too_large() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         test_from_serializable_form_impl(1, ReprVersion::Unspecified)
     }
@@ -1167,7 +1168,7 @@ mod tests {
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version1_delta_too_large() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
         test_from_serializable_form_impl(1, ReprVersion::Version1)
     }
