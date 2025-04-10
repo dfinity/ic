@@ -117,7 +117,7 @@ fn loop_body(op: &str, mem: Mem, dir: Dir, size: Size, step: Step) -> String {
                 (loop $loop
                     (local.set $address (i{mem}.sub (local.get $address) (i{mem}.const {step})))
                     {op}
-                    (br_if $loop (i{mem}.gt_s (local.get $address) (i{mem}.const 0)))
+                    (br_if $loop (i{mem}.ge_s (local.get $address) (i{mem}.const {step})))
                 )
             "#
         ),
