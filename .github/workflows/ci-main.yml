@@ -96,7 +96,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G -v /cache:/cache
     timeout-minutes: 90
     runs-on:
       group: zh1
@@ -215,7 +215,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G -v /cache:/cache
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -236,7 +236,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G -v /cache:/cache
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -288,7 +288,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,destination=/tmp/tmpfs,tmpfs-size=8G -v /cache:/cache
     timeout-minutes: 90
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
