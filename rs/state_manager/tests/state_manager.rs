@@ -5763,7 +5763,6 @@ fn checkpoints_are_readonly() {
     });
 }
 
-#[ignore]
 #[test]
 fn can_merge_unexpected_number_of_files() {
     state_manager_restart_test_with_lsmt(
