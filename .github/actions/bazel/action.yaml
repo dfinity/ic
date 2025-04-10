@@ -85,9 +85,24 @@ runs:
           exit 0
         fi
 
-        time jq -cMr <"$execlog_json_in" \
-          'select(.targetLabel | test("^//")) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
-          | sort >"$execlog_csv_out"
+
+        prog='
+          BEGIN { arr = 0; dict = 0; }
+          arr == 1 && /  }],?/ { arr = 0; next }
+          arr == 1 { next }
+          dict == 1 && /  },?/ { dict = 0; next }
+          dict == 1 { next }
+          /  "commandArgs":.*/ { next }
+          /  "environmentVariables": \[\{/ { arr = 1; next; }
+          /  "inputs": \[\{/ { arr = 1; next; }
+          { print }
+          '
+
+        time (cat "$execlog_json_in" \
+          | awk "$prog" \
+          | jq -cMr \
+              'select(.targetLabel | test("^//")) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
+          | sort >"$execlog_csv_out")
 
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlog-artifact-name != ''
