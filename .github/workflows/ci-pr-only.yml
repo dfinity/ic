@@ -9,7 +9,7 @@ on:
         type: string
 concurrency:
   # only triggered on PR, so head_ref will always be set
-  group: ${{ github.workflow }}-${{ github.head_ref }}
+  group: ci-pr-only-${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
