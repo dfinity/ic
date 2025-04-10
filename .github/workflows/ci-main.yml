@@ -301,10 +301,10 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Build IC
         id: build-ic
-        run: ./ci/scripts/run-build-ic.sh
+        uses: ./.github/actions/bazel
+        with:
+          run: ./ci/scripts/run-build-ic.sh
         env:
-          BAZEL_COMMAND: build --config=ci
-          BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}

@@ -31,6 +31,7 @@ use std::{
 };
 
 pub mod metrics;
+pub mod voting_power;
 use crate::governance::RandomnessGenerator;
 use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;

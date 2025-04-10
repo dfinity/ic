@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
+    "//packages/ic-vetkd-utils",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/prng",
@@ -139,12 +140,14 @@ rust_ic_test_suite(
     compile_data = glob(["tests/test-data/**"]),
     data = DATA + [
         "//rs/rust_canisters/backtrace_canister:backtrace-canister",
+        "//rs/rust_canisters/backtrace_canister:backtrace-canister-without-names",
         "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
         "//testnet/prebuilt-canisters:image-classification",
     ],
     env = dict(ENV.items() + [
         ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
+        ("BACKTRACE_CANISTER_WITHOUT_NAMES_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister-without-names)"),
         ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
         ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
         ("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH", "$(rootpath //testnet/prebuilt-canisters:image-classification)"),
