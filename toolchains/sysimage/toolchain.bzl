@@ -64,6 +64,7 @@ def _build_container_base_image_impl(ctx):
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run],
+        env = {"USE_TMPFS": "true"},
         # Base image is NOT reproducible (because `apt install`)
         execution_requirements = {"no-remote-cache": "1"},
     )
@@ -131,6 +132,7 @@ def _build_container_filesystem_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
+        env = {"USE_TMPFS": "true"},
         tools = [ctx.attr._tool.files_to_run],
     )
 

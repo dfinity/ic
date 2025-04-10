@@ -6,6 +6,18 @@
 
 set -euo pipefail
 
-tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
-TMPDIR="$tmpdir" "$@"
+if [ "${USE_TMPFS:-}" = "true" ]; then
+    while [ "$(ls /tmp/tmpfs | wc -l)" -gt 4 ]; do
+        echo "Waiting..."
+        sleep 1
+    done
+
+    tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
+    tmpfs_tmpdir=$(mktemp -d --tmpdir=/tmp/tmpfs "icosbuildXXXX")
+    trap 'sudo rm -rf "$tmpdir" "$tmpfs_tmpdir"' INT TERM EXIT
+    TMPDIR="$tmpdir" TMPFS_TMPDIR="$tmpfs_tmpdir" "$@"
+else
+    tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
+    trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
+    TMPDIR="$tmpdir" "$@"
+fi
