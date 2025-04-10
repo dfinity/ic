@@ -80,7 +80,7 @@ fn test_chunkify_reasonably_large_mutation() {
     let reassembled_monolitich_blob = with_chunks(|chunks| {
         let mut result = vec![];
         for key in chunk_content_sha256s {
-            result.append(&mut chunks.get_chunk(&key).unwrap());
+            result.append(&mut chunks.get_chunk(key).unwrap());
         }
         result
     });
