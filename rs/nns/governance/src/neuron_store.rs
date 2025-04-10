@@ -1168,6 +1168,31 @@ impl NeuronStore {
         })
     }
 
+    /// Returns the neuron ids that are ready to finalize maturity disbursement.
+    pub fn get_neuron_ids_ready_to_finalize_maturity_disbursement(
+        &self,
+        now_seconds: u64,
+    ) -> BTreeSet<NeuronId> {
+        with_stable_neuron_indexes(|indexes| {
+            indexes
+                .maturity_disbursement()
+                .get_neuron_ids_ready_to_finalize(now_seconds)
+                .into_iter()
+                .map(|id| NeuronId { id })
+                .collect()
+        })
+    }
+
+    /// Returns the finalization timestamp of the next maturity disbursement. Returns `None` if
+    /// there is no maturity disbursement at all.
+    pub fn get_next_maturity_disbursement_finalization_timestamp(&self) -> Option<u64> {
+        with_stable_neuron_indexes(|indexes| {
+            indexes
+                .maturity_disbursement()
+                .get_next_finalization_timestamp()
+        })
+    }
+
     /// Validates a batch of neurons in stable neuron store are all inactive.
     ///
     /// The batch is defined as the `next_neuron_id` to start and the `batch_size` for the upper
@@ -1215,12 +1240,13 @@ impl NeuronStore {
     }
 
     pub fn stable_indexes_lens(&self) -> NeuronIndexesLens {
-        with_stable_neuron_indexes_mut(|indexes| NeuronIndexesLens {
+        with_stable_neuron_indexes(|indexes| NeuronIndexesLens {
             subaccount: indexes.subaccount().num_entries(),
             principal: indexes.principal().num_entries(),
             following: indexes.following().num_entries(),
             known_neuron: indexes.known_neuron().num_entries(),
             account_id: indexes.account_id().num_entries(),
+            maturity_disbursement: indexes.maturity_disbursement().num_entries(),
         })
     }
 }
@@ -1363,6 +1389,7 @@ pub struct NeuronIndexesLens {
     pub following: usize,
     pub known_neuron: usize,
     pub account_id: usize,
+    pub maturity_disbursement: usize,
 }
 
 #[cfg(test)]

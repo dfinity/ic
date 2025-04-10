@@ -29,6 +29,7 @@ const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
 const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
 const REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID: MemoryId = MemoryId::new(17);
 const MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(18);
+const NEURON_MATURITY_DISBURSEMENT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(19);
 
 pub mod neuron_indexes;
 pub mod neurons;
@@ -113,6 +114,8 @@ impl State {
                 following: memory_manager.get(NEURON_FOLLOWING_INDEX_MEMORY_ID),
                 known_neuron: memory_manager.get(NEURON_KNOWN_NEURON_INDEX_MEMORY_ID),
                 account_id: memory_manager.get(NEURON_ACCOUNT_ID_INDEX_MEMORY_ID),
+                maturity_disbursement: memory_manager
+                    .get(NEURON_MATURITY_DISBURSEMENT_INDEX_MEMORY_ID),
             }
             .build()
         });
