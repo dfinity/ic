@@ -68,7 +68,7 @@ function read_config_variables() {
 
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
-    vm_nr_of_vcpus="$(jq -r ".hostos_settings.nr_of_vcpus" ${DEPLOYMENT})"
+    vm_nr_of_vcpus="$(jq -r ".hostos_settings.vm_nr_of_vcpus" ${DEPLOYMENT})"
 
 }
 
