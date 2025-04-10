@@ -20,7 +20,7 @@ use std::{
 // checkpoint file per signal handler call. Higher value gives higher
 // throughput in memory intensive workloads, but may regress performance
 // in other workloads because it increases work per signal handler call.
-const MAX_PAGES_TO_MAP: usize = 128;
+const MAX_PAGES_TO_MAP: usize = 512;
 
 // The new signal handler requires `AccessKind` which currently available only
 // on Linux without WSL.
