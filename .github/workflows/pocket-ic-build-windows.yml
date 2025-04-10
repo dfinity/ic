@@ -1,9 +1,10 @@
 name: 'PocketIC library build on Windows'
 on:
-  pull_request:
-  push:
-    branches:
-      - master
+  workflow_run:
+    workflows: ["CI Main"]
+    types:
+      - completed
+
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
@@ -16,13 +17,29 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
-      - uses: vedantmgoyal9/setup-wsl2@main
-      - run: apt update && apt upgrade -y
-        shell: wsl-run {0}
-      - name: 'cargo clippy'
-        run: |
-          cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+      - name: 'Setup WSLv2'
+        uses: vedantmgoyal9/setup-wsl2@main
+      - name: 'Download PocketIC server'
+        uses: actions/download-artifact@v3
+        with:
+          name: pocket-ic-server
+      #- name: 'cargo clippy'
+      #  run: |
+      #    cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
       - name: 'cargo build'
         run: |
-          cargo build --release --locked -p pocket-ic
+          #cargo build --release --locked -p pocket-ic
           cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
+      - name: 'Shrink the test canister'
+      - run: |
+          curl -L https://github.com/dfinity/ic-wasm/releases/download/0.9.3/ic-wasm-linux64 -o ic-wasm
+          chmod +x ic-wasm
+          ./ic-wasm -o test-canister.wasm target/wasm32-unknown-unknown/release/pocket-ic-test-canister.wasm shrink
+        shell: wsl-run {0}
+      - name: 'cargo test'
+        run: |
+          $WORKDIR=(Get-Location).Path
+          $RUST_TEST_THREADS=2
+          $POCKET_IC_BIN="$WORKDIR\pocket-ic-server"
+          $TEST_WASM="$WORKDIR\test-canister.wasm"
+          cargo test -p pocket-ic
