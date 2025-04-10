@@ -231,7 +231,7 @@ impl fmt::Display for ParseAddressError {
             Self::WrongNetwork { expected, actual } => {
                 write!(
                     fmt,
-                    "expected an address from network {:?}, got an address from network {:?}",
+                    "expected an address from network {}, got an address from network {}",
                     expected, actual
                 )
             }

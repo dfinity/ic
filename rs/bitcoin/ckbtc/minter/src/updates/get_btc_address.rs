@@ -75,7 +75,7 @@ mod tests {
         assert_eq!(
             network_and_public_key_to_p2wpkh(network, &hex::decode(pk_hex).unwrap()),
             expected,
-            "network: {:?} pk_hey: {}",
+            "network: {} pk_hey: {}",
             network,
             pk_hex
         );

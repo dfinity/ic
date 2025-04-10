@@ -285,7 +285,7 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
                 <tbody>
                     <tr>
                         <th>Network</th>
-                        <td>{:?}</td>
+                        <td>{}</td>
                     </tr>
                     <tr>
                         <th>Main address (do not send BTC here)</th>
