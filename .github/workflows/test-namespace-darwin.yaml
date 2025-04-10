@@ -9,7 +9,7 @@ on:
 # every commit
 concurrency:
   # never scheduled so head_ref or ref will always be set (no run_id fallback)
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ns-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.ref_name != 'master' }}
 
 jobs:
