@@ -13,7 +13,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   # only triggered on PR, so head_ref will always be set
