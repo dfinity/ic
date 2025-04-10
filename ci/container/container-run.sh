@@ -117,7 +117,6 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
     --mount type=bind,source="/tmp",target="/tmp"
     --mount type=volume,chown=true,destination=/tmp/zig-cache
-    --mount type=tmpfs,destination=/var/sysimage
     --mount type=tmpfs,target="/tmp/tmpfs"
 )
 
