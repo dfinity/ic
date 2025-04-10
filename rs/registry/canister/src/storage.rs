@@ -7,7 +7,10 @@ use ic_registry_transport::pb::v1::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
 use prost::Message;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+
+#[cfg(test)]
+use ic_nervous_system_temporary::Temporary;
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -39,6 +42,22 @@ thread_local! {
     static CHUNKS: RefCell<Chunks<VM>> = RefCell::new({
         MEMORY_MANAGER.with(|mm| Chunks::init(mm.borrow().get(CHUNKS_MEMORY_ID)))
     });
+
+    static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(false) };
+}
+
+fn is_chunkifying_large_values_enabled() -> bool {
+    IS_CHUNKIFYING_LARGE_VALUES_ENABLED.get()
+}
+
+#[cfg(test)]
+pub(crate) fn temporarily_enable_chunkifying_large_values() -> Temporary {
+    Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, true)
+}
+
+#[cfg(test)]
+pub(crate) fn temporarily_disable_chunkifying_large_values() -> Temporary {
+    Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, false)
 }
 
 pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
@@ -62,12 +81,10 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
 /// pieces of the original value, and each piece can be fetched via the
 /// `get_chunk` canister method.
 ///
-/// Possible panic reasons include: input is too large. See
+/// Possible panic reasons include: input is hyper too large. See
 /// MAX_CHUNKABLE_ATOMIC_MUTATION_LEN.
-pub(crate) fn maybe_chunkify_and_encode(
-    original_mutation: RegistryAtomicMutateRequest,
-) -> Vec<u8> {
-    if cfg!(not(test)) {
+pub(crate) fn maybe_chunkify_and_encode(original_mutation: RegistryAtomicMutateRequest) -> Vec<u8> {
+    if !is_chunkifying_large_values_enabled() {
         return original_mutation.encode_to_vec();
     }
     // In release builds, code bellow this line is not active. Instead, only the
@@ -98,8 +115,7 @@ fn maybe_chunkify(
 
     // If the input is small, simply transcribe it.
     const SIZE_OF_VERSION: usize = std::mem::size_of::<crate::registry::EncodedVersion>();
-    let is_small =
-        original_mutation.encoded_len() + SIZE_OF_VERSION < MAX_REGISTRY_DELTAS_SIZE;
+    let is_small = original_mutation.encoded_len() + SIZE_OF_VERSION < MAX_REGISTRY_DELTAS_SIZE;
     if is_small {
         return HighCapacityRegistryAtomicMutateRequest::from(original_mutation);
     }
@@ -111,3 +127,6 @@ fn maybe_chunkify(
         chunkify_composite_mutation(original_mutation, chunks)
     })
 }
+
+#[cfg(test)]
+mod tests;
