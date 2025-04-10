@@ -12,17 +12,6 @@ import sys
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
 
-def force_tmpfs(dir):
-    subprocess.run(["mkdir", dir + "/forced_tmpfs"], check=True)
-    subprocess.run(["sudo", "mount", "-t", "tmpfs", "forced_tmpfs", dir + "/forced_tmpfs"], check=True)
-
-    return dir + "/forced_tmpfs"
-
-
-def cleanup_forced_tmpfs(dir):
-    subprocess.run(["sudo", "umount", dir], check=True)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", help="Input (tzst) file of tree to operate in", type=str)
@@ -50,7 +39,6 @@ def main():
     args = parser.parse_args(sys.argv[1:])
 
     tmpdir = os.getenv("ICOS_TMPDIR")
-    tmpdir = force_tmpfs(tmpdir)
     if not tmpdir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
     partition = os.path.join(tmpdir, "partition.img")
@@ -125,8 +113,6 @@ def main():
         ],
         check=True,
     )
-
-    cleanup_forced_tmpfs(tmpdir)
 
 
 if __name__ == "__main__":
