@@ -44,6 +44,7 @@ const TRANSFER_FEE: u64 = 10;
 const MIN_CONFIRMATIONS: u32 = 12;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 const WITHDRAWAL_ADDRESS: &str = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c";
+const SENDER_ID: PrincipalId = PrincipalId::new_user_test_id(1);
 
 #[allow(deprecated)]
 fn default_init_args() -> CkbtcMinterInitArgs {
@@ -563,7 +564,7 @@ fn test_minter() {
 
     let btc_address_1 = get_btc_address(
         &env,
-        CanisterId::from_u64(100).into(),
+        SENDER_ID,
         minter_id,
         &GetBtcAddressArgs {
             owner: None,
@@ -573,7 +574,7 @@ fn test_minter() {
     let address_1 = Address::from_str(&btc_address_1).expect("invalid Bitcoin address");
     let btc_address_2 = get_btc_address(
         &env,
-        CanisterId::from_u64(100).into(),
+        SENDER_ID,
         minter_id,
         &GetBtcAddressArgs {
             owner: None,
@@ -596,7 +597,7 @@ fn get_btc_address_from_anonymous_caller_should_succeed() {
         PrincipalId::new_anonymous(),
         minter_id,
         &GetBtcAddressArgs {
-            owner: Some(PrincipalId::new_user_test_id(1).into()),
+            owner: Some(Principal::from(SENDER_ID)),
             subaccount: None,
         },
     );
@@ -613,7 +614,7 @@ fn get_btc_address_with_anonymous_owner_should_panic() {
 
     get_btc_address(
         &env,
-        PrincipalId::new_user_test_id(1),
+        SENDER_ID,
         minter_id,
         &GetBtcAddressArgs {
             owner: Some(Principal::anonymous()),
