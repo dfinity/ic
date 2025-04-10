@@ -114,7 +114,6 @@ pub struct ECDSAPublicKey {
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetUtxosRequest {
-    created: Timestamp,
     address: Address,
     network: Network,
     min_confirmations: u32,
@@ -178,16 +177,6 @@ pub enum Network {
     Mainnet,
     Testnet,
     Regtest,
-}
-
-impl From<BitcoinNetwork> for Network {
-    fn from(network: BitcoinNetwork) -> Self {
-        match network {
-            BitcoinNetwork::Mainnet => Network::Mainnet,
-            BitcoinNetwork::Testnet => Network::Testnet,
-            BitcoinNetwork::Regtest => Network::Regtest,
-        }
-    }
 }
 
 impl From<Network> for BitcoinNetwork {

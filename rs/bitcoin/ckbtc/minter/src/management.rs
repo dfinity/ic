@@ -1,9 +1,7 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
 use crate::metrics::observe_get_utxos_latency;
-use crate::{
-    tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, Timestamp,
-};
+use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
@@ -172,7 +170,6 @@ pub async fn get_utxos<R: CanisterRuntime>(
     // Record start time of method execution for metrics
     let start_time = runtime.time();
     let request = GetUtxosRequest {
-        created: Timestamp(start_time),
         address: address.clone(),
         network,
         min_confirmations,
