@@ -5668,15 +5668,20 @@ pub mod archiving {
         )
         .unwrap_or(Range { start: 0, end: 0 });
         let mut total_blocks_returned = get_blocks_response.blocks.len() as u64;
-        let mut ledger_range = Range {
-            start: req_start,
-            end: req_start,
+        let ledger_range = match get_blocks_response.blocks.is_empty() {
+            true => {
+                // Empty range
+                Range {
+                    start: req_start,
+                    end: req_start,
+                }
+            }
+            false => {
+                let start = get_blocks_response.first_block_index;
+                let length = get_blocks_response.blocks.len();
+                range_utils::make_range(start, length)
+            }
         };
-        if !get_blocks_response.blocks.is_empty() {
-            let start = get_blocks_response.first_block_index;
-            let length = get_blocks_response.blocks.len();
-            ledger_range = range_utils::make_range(start, length);
-        }
         let archived_ranges = &get_blocks_response.archived_ranges;
         for archive_info in archived_ranges {
             total_blocks_returned += range_utils::range_len(&archive_info.archived_range);
