@@ -108,6 +108,10 @@ LSAN_OPTIONS="handle_abort=1:\
             symbolize=0:\
             use_sigaltstack=1"
 
+SHOWMAP_TEMPFILE=$(mktemp)
+# This file result will be pushed to STDOUT before the script exits
+SHOWMAP_SUMMARY_TEMPFILE=$(mktemp)
+
 # Perform corpus minimization for each target
 WORKSPACE=$(bazel info workspace --ui_event_filters=-WARNING,-INFO 2>/dev/null)
 TARGET_PREFIX="//rs/embedders/fuzz"
@@ -117,7 +121,7 @@ for target in "${TARGETS[@]}"; do
     SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=afl --output=files $FUZZER)"
     # Minimum 8 cores is assumed
     ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS afl-cmin.bash -i $TEMP_DIR -o $OUTPUT_DIR/$target -T 8 -t 20000 -- $SOURCE_BINARY @@
-
+    ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS afl-showmap -i $OUTPUT_DIR/$target -o $SHOWMAP_TEMPFILE -C -- $SOURCE_BINARY @@ >>$SHOWMAP_SUMMARY_TEMPFILE
     # Rename minimized corpus files to SHA256 hashes
     for filename in "$OUTPUT_DIR/$target"/*; do
         if [[ -f "$filename" ]]; then
@@ -126,3 +130,6 @@ for target in "${TARGETS[@]}"; do
         fi
     done
 done
+
+echo "Coverage results"
+cat $SHOWMAP_SUMMARY_TEMPFILE
