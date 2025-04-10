@@ -164,7 +164,8 @@ impl Default for FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: BestEffortResponsesFeature::Enabled,
+            // Disabled everywhere.
+            best_effort_responses: BestEffortResponsesFeature::SpecificSubnets(vec![]),
             canister_backtrace: FlagStatus::Enabled,
         }
     }
