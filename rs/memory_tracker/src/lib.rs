@@ -444,26 +444,32 @@ impl SigsegvMemoryTracker {
         } = self.addr_range_from(&range);
         // Try to align the range start address up to the nearest Huge Page.
         let aligned_start_addr = (start_addr + hugepage_mask) & !hugepage_mask;
-        let start_idx = if faulting_addr >= aligned_start_addr && aligned_start_addr != start_addr {
+        let start_idx = if faulting_addr >= aligned_start_addr {
             self.page_index_from(aligned_start_addr as *mut libc::c_void)
         } else {
             range.start
         };
         // Try to align the range end address down to the nearest Huge Page.
         let aligned_end_addr = end_addr & !hugepage_mask;
-        let end_idx = if faulting_addr < aligned_end_addr && aligned_end_addr != end_addr {
+        let end_idx = if faulting_addr < aligned_end_addr {
             self.page_index_from(aligned_end_addr as *mut libc::c_void)
         } else {
             range.end
         };
 
-        let new_range = start_idx..end_idx;
+        let aligned_range = start_idx..end_idx;
         debug_assert!(
-            new_range.contains(&faulting_page),
-            "Error checking page:{faulting_page} ∈ new range:{new_range:?}"
+            aligned_range.contains(&faulting_page),
+            "Error checking page:{faulting_page} ∈ aligned range:{aligned_range:?}"
+        );
+        debug_assert!(
+            aligned_range.start >= range.start && aligned_range.end <= range.end,
+            "Error checking aligned range:{:?} ⊆ original range:{:?}",
+            aligned_range,
+            range
         );
 
-        new_range
+        aligned_range
     }
 
     fn add_dirty_pages(&self, dirty_page: PageIndex, prefetched_range: Range<PageIndex>) {
