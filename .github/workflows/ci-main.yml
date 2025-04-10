@@ -181,32 +181,32 @@ jobs:
         with:
           name: pocket-ic-server
           path: ${{ steps.pocket-ic-server-path.outputs.pocket_ic_server_path }}
-  pocket-ic-library-build-windows:
-    name: 'PocketIC library build on Windows'
+  pocket-ic-on-windows:
+    name: PocketIC tests on Windows
     needs: [bazel-test-all]
     runs-on: windows-2022
     steps:
-      - name: 'Checkout'
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: 'Download PocketIC server'
+      - name: Download PocketIC server
         uses: actions/download-artifact@v4
         with:
           name: pocket-ic-server
-      - name: 'Setup WSLv2'
+      - name: Setup WSLv2
         uses: vedantmgoyal9/setup-wsl2@main
-      - name: 'Code linting'
+      - name: Code linting
         run: |
           cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
-      - name: 'Build the test canister'
+      - name: Build the test canister
         run: |
           cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
-      - name: 'Shrink the test canister'
+      - name: Shrink the test canister
         run: |
           curl -L https://github.com/dfinity/ic-wasm/releases/download/0.9.3/ic-wasm-linux64 -o ic-wasm
           chmod +x ic-wasm
           ./ic-wasm -o test-canister.wasm target/wasm32-unknown-unknown/release/pocket-ic-test-canister.wasm shrink
         shell: wsl-run {0}
-      - name: 'Run PocketIC tests'
+      - name: Run PocketIC tests
         run: |
           $env:WORKDIR=(Get-Location).Path
           $env:RUST_TEST_THREADS=2
