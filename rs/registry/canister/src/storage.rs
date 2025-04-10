@@ -1,4 +1,4 @@
-use crate::registry::MAX_REGISTRY_DELTAS_SIZE;
+use crate::{flags::is_chunkifying_large_values_enabled, registry::MAX_REGISTRY_DELTAS_SIZE};
 use ic_nervous_system_chunks::Chunks;
 use ic_registry_canister_chunkify::chunkify_composite_mutation;
 use ic_registry_transport::pb::v1::{
@@ -7,10 +7,7 @@ use ic_registry_transport::pb::v1::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
 use prost::Message;
-use std::cell::{Cell, RefCell};
-
-#[cfg(test)]
-use ic_nervous_system_temporary::Temporary;
+use std::cell::RefCell;
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -42,22 +39,6 @@ thread_local! {
     static CHUNKS: RefCell<Chunks<VM>> = RefCell::new({
         MEMORY_MANAGER.with(|mm| Chunks::init(mm.borrow().get(CHUNKS_MEMORY_ID)))
     });
-
-    static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(false) };
-}
-
-fn is_chunkifying_large_values_enabled() -> bool {
-    IS_CHUNKIFYING_LARGE_VALUES_ENABLED.get()
-}
-
-#[cfg(test)]
-pub(crate) fn temporarily_enable_chunkifying_large_values() -> Temporary {
-    Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, true)
-}
-
-#[cfg(test)]
-pub(crate) fn temporarily_disable_chunkifying_large_values() -> Temporary {
-    Temporary::new(&IS_CHUNKIFYING_LARGE_VALUES_ENABLED, false)
 }
 
 pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
