@@ -199,6 +199,14 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
     .0
 }
 
+#[cfg(feature = "self_check")]
+#[update]
+async fn upload_events(events: Vec<Event>) {
+    for event in events {
+        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+    }
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {

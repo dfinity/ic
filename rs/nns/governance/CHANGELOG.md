@@ -11,6 +11,101 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-04-05: Proposal 136071
+
+http://dashboard.internetcomputer.org/proposal/136071
+
+## Changed
+
+* Disable Neuron's Funds for ongoing SNSs, as approved in
+  proposal [135970](https://dashboard.internetcomputer.org/proposal/135970).
+
+## Removed
+
+* The `topic_followee_index` in the heap is removed, along with the flag
+  `USE_STABLE_MEMORY_FOLLOWING_INDEX` that was set to true in the proposal 135063.
+
+# 2025-03-28: Proposal 136006
+
+http://dashboard.internetcomputer.org/proposal/136006
+
+## Added
+
+* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
+  removed in the future, giving clients time to migrate.
+
+## Changed
+
+* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
+* Increase the neurons limit to 500K now that neurons are stored in stable memory.
+
+# 2025-03-25: Proposal 135955
+
+https://dashboard.internetcomputer.org/proposal/135955
+
+## Security
+
+* Prevent large manage neuron proposals by making sure their proposal payloads are bounded, and
+  lower the maximum number of open manage neuron proposals. More details can be seen here:
+  https://forum.dfinity.org/t/nns-updates-2025-03-25-nns-governance-security-hotfix/42978.
+
+# 2025-03-21: Proposal 135933
+
+http://dashboard.internetcomputer.org/proposal/135933
+
+## Changed
+
+* Refactor `prune_following` task to use the `timer_task` library, and therefore enables metrics to
+  be collected about its execution.
+
+
+# 2025-03-17: Proposal 135847
+
+https://dashboard.internetcomputer.org/proposal/135847
+
+## Added
+
+* Added `NetworkEconomics.voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds`.
+
+## Removed
+
+* Removed a migration mechanism previously used for data migrations through heartbeat.
+
+
+# 2025-03-08: Proposal 135702
+
+http://dashboard.internetcomputer.org/proposal/135702
+
+## Added
+
+* Collect metrics about timer tasks defined using ic_nervous_system_timer_task library.
+* Re-enable neuron migration to stable memory:
+  * Setting `MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY` to true, which will cause active neurons
+  to be continously moved from heap memory to stable memory.
+  * Compared to the last time it was enabled, several improvements were made:
+    * Distribute rewards is moved to timer, and has a mechanism to distribute in batches in
+    multiple messages.
+    * Unstaking maturity task has a limit of 100 neurons per message, which prevents it from 
+    exceeding instruction limit.
+    * The execution of `ApproveGenesisKyc` proposals have a limit of 1000 neurons, above which
+    the proposal will fail.
+    * More benchmarks were added.
+* Enable timer task metrics for better observability.
+
+## Changed
+
+* Voting Rewards will be scheduled by a timer instead of by heartbeats.
+* Unstaking maturity task will be processing up to 100 neurons in a single message, to avoid
+  exceeding the instruction limit in a single execution.
+* Voting Rewards will be distributed asynchronously in the background after being calculated.  
+  * This will allow rewards to be compatible with neurons being stored in Stable Memory. 
+* Ramp up the failure rate of _pb method to 0.7 again.
+
+## Fixed
+
+* Avoid applying `approve_genesis_kyc` to an unbounded number of neurons, but at most 1000 neurons.
+
+
 # 2025-03-01: Proposal 135613
 
 http://dashboard.internetcomputer.org/proposal/135613

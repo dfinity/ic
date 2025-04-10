@@ -1,16 +1,14 @@
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
 
-use crate::{
-    consensus::{
-        check_protocol_version,
-        metrics::ValidatorMetrics,
-        status::{self, Status},
-        ConsensusMessageId,
-    },
-    idkg,
+use crate::consensus::{
+    check_protocol_version,
+    metrics::ValidatorMetrics,
+    status::{self, Status},
+    ConsensusMessageId,
 };
 use ic_consensus_dkg as dkg;
+use ic_consensus_idkg as idkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -970,6 +968,17 @@ impl Validator {
             .get_by_height_range(range)
         {
             // Handle integrity check and verification errors early
+            let verification_result = self.verify_artifact(pool_reader, &proposal);
+            if let Err(error) = verification_result {
+                if let Some(action) = self.compute_action_from_validation_error(
+                    pool_reader,
+                    error,
+                    proposal.into_message(),
+                ) {
+                    change_set.push(action);
+                }
+                continue;
+            }
             if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
                     proposal.clone().into_message(),
@@ -980,17 +989,6 @@ impl Validator {
                         proposal.as_ref().payload.as_ref()
                     ),
                 ));
-                continue;
-            }
-            let verification_result = self.verify_artifact(pool_reader, &proposal);
-            if let Err(error) = verification_result {
-                if let Some(action) = self.compute_action_from_validation_error(
-                    pool_reader,
-                    error,
-                    proposal.into_message(),
-                ) {
-                    change_set.push(action);
-                }
                 continue;
             }
 
@@ -1896,14 +1894,7 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::{
-        consensus::block_maker::get_block_maker_delay,
-        idkg::test_utils::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-            fake_state_with_signature_requests,
-        },
-    };
+    use crate::consensus::block_maker::get_block_maker_delay;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -1923,7 +1914,16 @@ pub mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
-    use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
+    use ic_test_utilities_consensus::{
+        assert_changeset_matches_pattern,
+        fake::*,
+        idkg::{
+            add_available_quadruple_to_payload, empty_idkg_payload,
+            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
+            fake_state_with_signature_requests, request_id,
+        },
+        matches_pattern,
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
@@ -1942,7 +1942,6 @@ pub mod test {
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
-    use idkg::test_utils::request_id;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {

@@ -88,8 +88,7 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
     };
     let unstoppable_sns_wasm = sns_wasm::add_wasm_via_proposal(&machine, unstoppable_sns_wasm);
 
-    // To get an SNS neuron, we airdrop our new tokens to this user.
-    let user = PrincipalId::new_user_test_id(0);
+    let developer_neuron_controller = PrincipalId::new_user_test_id(0);
 
     let payload = SnsInitPayload {
         dapp_canisters: None,
@@ -98,12 +97,12 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
         token_symbol: Some("AST".to_string()),
         proposal_reject_cost_e8s: Some(E8S_PER_TOKEN),
         neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN),
-        fallback_controller_principal_ids: vec![user.to_string()],
+        fallback_controller_principal_ids: vec![developer_neuron_controller.to_string()],
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {
                 developer_distribution: Some(DeveloperDistribution {
                     developer_neurons: vec![NeuronDistribution {
-                        controller: Some(user),
+                        controller: Some(developer_neuron_controller),
                         stake_e8s: 10_000_000_000,
                         memo: 0,
                         dissolve_delay_seconds: 15780000, // 6 months
@@ -117,7 +116,6 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
                     total_e8s: 10_000_000_000,
                     initial_swap_amount_e8s: 10_000_000_000,
                 }),
-                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
@@ -126,7 +124,7 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
     // Will be used to make proposals and such. Fortunately, this guy has lots
     // of money -> he'll be able to push proposals though.
     let developer_sns_neuron_id = sns_governance_pb::NeuronId {
-        id: compute_neuron_staking_subaccount(user, /* memo */ 0)
+        id: compute_neuron_staking_subaccount(developer_neuron_controller, /* memo */ 0)
             .0
             .to_vec(),
     };
@@ -160,11 +158,11 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
 
     sns_wasm::add_wasm_via_proposal(&machine, sns_wasm_to_add);
 
-    // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
+    // Make a proposal to upgrade (that is auto-executed) from the developer_neuron_controller.
     state_test_helpers::sns_make_proposal(
         &machine,
         governance,
-        user,
+        developer_neuron_controller,
         developer_sns_neuron_id,
         Proposal {
             title: "Upgrade Canister.".into(),
@@ -226,8 +224,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     let wasm_map = sns_wasm::add_freshly_built_sns_wasms(&machine, ensure_sns_wasm_gzipped);
 
-    // To get an SNS neuron, we airdrop our new tokens to this user.
-    let user = PrincipalId::new_user_test_id(0);
+    let developer_neuron_controller = PrincipalId::new_user_test_id(0);
 
     let payload = SnsInitPayload {
         dapp_canisters: None,
@@ -236,12 +233,12 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         token_symbol: Some("AST".to_string()),
         proposal_reject_cost_e8s: Some(E8S_PER_TOKEN),
         neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN),
-        fallback_controller_principal_ids: vec![user.to_string()],
+        fallback_controller_principal_ids: vec![developer_neuron_controller.to_string()],
         initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
             FractionalDeveloperVotingPower {
                 developer_distribution: Some(DeveloperDistribution {
                     developer_neurons: vec![NeuronDistribution {
-                        controller: Some(user),
+                        controller: Some(developer_neuron_controller),
                         stake_e8s: 100_000_000_000,
                         memo: 0,
                         dissolve_delay_seconds: 15780000, // 6 months
@@ -255,7 +252,6 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
                     total_e8s: 100_000_000_000,
                     initial_swap_amount_e8s: 10_000_000_000,
                 }),
-                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
@@ -263,8 +259,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     // Will be used to make proposals and such. Fortunately, this guy has lots
     // of money -> he'll be able to push proposals though.
-    let airdrop_sns_neuron_id = sns_governance_pb::NeuronId {
-        id: compute_neuron_staking_subaccount(user, /* memo */ 0)
+    let sns_neuron_id = sns_governance_pb::NeuronId {
+        id: compute_neuron_staking_subaccount(developer_neuron_controller, /* memo */ 0)
             .0
             .to_vec(),
     };
@@ -290,7 +286,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     let governance = CanisterId::unchecked_from_principal(governance.unwrap());
 
     // Validate that upgrading Swap doesn't prevent upgrading other SNS canisters
-    let old_version = upgrade_swap(&machine, &wasm_map, governance, &airdrop_sns_neuron_id);
+    let old_version = upgrade_swap(&machine, &wasm_map, governance, &sns_neuron_id);
 
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
@@ -308,8 +304,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     let proposal_id = state_test_helpers::sns_make_proposal(
         &machine,
         governance,
-        user,
-        airdrop_sns_neuron_id,
+        developer_neuron_controller,
+        sns_neuron_id,
         Proposal {
             title: "Upgrade Canister.".into(),
             action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
@@ -519,7 +515,6 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                     total_e8s: 100_000_000_000,
                     initial_swap_amount_e8s: 10_000_000_000,
                 }),
-                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()
@@ -768,7 +763,6 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
                     total_e8s: 100_000_000_000,
                     initial_swap_amount_e8s: 100_000_000_000,
                 }),
-                airdrop_distribution: None,
             },
         )),
         ..SnsInitPayload::with_valid_values_for_testing_post_execution()

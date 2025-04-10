@@ -86,62 +86,17 @@ go_deps.module(
     version = "v1.13.0",
 )
 go_deps.module(
-    path = "github.com/golang/protobuf",
-    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
-    version = "v1.5.2",
-)
-go_deps.module(
-    path = "github.com/google/go-cmp",
-    sum = "h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=",
-    version = "v0.5.9",
-)
-go_deps.module(
-    path = "github.com/honeycombio/beeline-go",
-    sum = "h1:cyrfwgxM32DKzUhZFJ0KLbPkoyf5lHOyn+7GISwEVZQ=",
-    version = "v1.11.1",
-)
-go_deps.module(
-    path = "github.com/schollz/closestmatch",
-    sum = "h1:Uel2GXEpJqOWBrlyI+oY9LTiyyjYS17cCYRqP13/SHk=",
-    version = "v2.1.0+incompatible",
-)
-go_deps.module(
     path = "github.com/spf13/cobra",
     sum = "h1:o94oiPyS4KD1mPy2fmcYYHHfCxLqYjJOhGsCHFZtEzA=",
     version = "v1.6.1",
 )
-go_deps.module(
-    path = "github.com/stretchr/testify",
-    sum = "h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=",
-    version = "v1.8.1",
-)
-go_deps.module(
-    path = "google.golang.org/genproto",
-    sum = "h1:wtujag7C+4D6KMoulW9YauvK2lgdvCMS260jsqqBXr0=",
-    version = "v0.0.0-20210602131652-f16073e35f0c",
-)
-go_deps.module(
-    path = "google.golang.org/grpc",
-    sum = "h1:WTLtQzmQori5FUH25Pq4WT22oCsv8USpQ+F6rqtsmxw=",
-    version = "v1.49.0",
-)
-go_deps.module(
-    path = "google.golang.org/protobuf",
-    sum = "h1:d0NfwRgPtno5B1Wa6L2DAG+KivqkdutMf1UhdNx175w=",
-    version = "v1.28.1",
-)
 use_repo(
     go_deps,
     "com_github_fatih_color",
-    "com_github_golang_protobuf",
     "com_github_google_go_cmp",
-    "com_github_honeycombio_beeline_go",
     "com_github_schollz_closestmatch",
     "com_github_spf13_cobra",
     "com_github_stretchr_testify",
-    "org_golang_google_genproto",
-    "org_golang_google_grpc",
-    "org_golang_google_protobuf",
 )
 
 # Docker/OCI & archive rules with image definitions
@@ -855,14 +810,6 @@ http_file(
     url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
 )
 
-# Patches
-
-http_file(
-    name = "rustix-patch",
-    sha256 = "ffe807170f06b579098f948eca42ba1ea1fd2cb7b8290c9d41101efe976337f7",
-    url = "https://github.com/nmattia/rustix/commit/330bcc07796f4b8e6443987fbb1b9be79c446bd2.diff",
-)
-
 # Management canister candid interface
 
 http_file(
@@ -878,4 +825,11 @@ http_file(
     downloaded_file_path = "cacert.pem",
     sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
+)
+
+mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
+
+mainnet_icos_versions(
+    name = "mainnet_icos_versions",
+    path = "//:mainnet-icos-revisions.json",
 )

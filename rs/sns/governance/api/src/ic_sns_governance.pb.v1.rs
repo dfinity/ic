@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use serde::Serialize;
+
 pub mod topics;
 
 /// A principal with a particular set of permissions over a neuron.
@@ -16,6 +18,7 @@ pub struct NeuronPermission {
     Default,
     candid::CandidType,
     candid::Deserialize,
+    comparable::Comparable,
     Debug,
     Eq,
     std::hash::Hash,
@@ -27,6 +30,25 @@ pub struct NeuronPermission {
 pub struct NeuronId {
     #[serde(with = "serde_bytes")]
     pub id: Vec<u8>,
+}
+/// Neuron whose voting decisions are being followed.
+#[derive(
+    Default,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Debug,
+    Eq,
+    std::hash::Hash,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
+)]
+pub struct Followee {
+    pub neuron_id: Option<NeuronId>,
+    /// Human-readable alias that helps identify this followee among other neurons.
+    pub alias: Option<String>,
 }
 /// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
@@ -88,9 +110,12 @@ pub struct Neuron {
     /// dissolving neurons always has age zero. The canonical value of
     /// this field for a dissolving neuron is `u64::MAX`.
     pub aging_since_timestamp_seconds: u64,
-    /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-    /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+    /// The neuron's legacy followees (per proposal type), specified as a map of
+    /// proposal functions IDs. The map's keys are represented by integers as Protobuf does
+    /// not support enum keys in maps.
     pub followees: BTreeMap<u64, neuron::Followees>,
+    /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+    pub topic_followees: Option<neuron::TopicFollowees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -152,11 +177,36 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
+    use super::*;
     /// A list of a neuron's followees for a specific function.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
     pub struct Followees {
         pub followees: Vec<super::NeuronId>,
     }
+
+    /// A list of a neuron's followees for a specific function.
+    #[derive(
+        Default,
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Debug,
+        Clone,
+        PartialEq,
+    )]
+    pub struct FolloweesForTopic {
+        pub followees: Vec<super::Followee>,
+        pub topic: Option<topics::Topic>,
+    }
+
+    // A collection of a neuron's followees (per topic).
+    #[derive(
+        candid::CandidType, candid::Deserialize, Clone, comparable::Comparable, Debug, PartialEq,
+    )]
+    pub struct TopicFollowees {
+        pub topic_id_to_followees: BTreeMap<i32, FolloweesForTopic>,
+    }
+
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///
@@ -204,7 +254,7 @@ pub mod neuron {
 ///
 /// Note that the target, validator and rendering methods can all coexist in
 /// the same canister or be on different canisters.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize)]
 pub struct NervousSystemFunction {
     /// The unique id of this function.
     ///
@@ -219,9 +269,13 @@ pub struct NervousSystemFunction {
 }
 /// Nested message and enum types in `NervousSystemFunction`.
 pub mod nervous_system_function {
+    use serde::Serialize;
+
     use super::*;
 
-    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    #[derive(
+        Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize,
+    )]
     pub struct GenericNervousSystemFunction {
         /// The id of the target canister that will be called to execute the proposal.
         pub target_canister_id: Option<::ic_base_types::PrincipalId>,
@@ -240,7 +294,7 @@ pub mod nervous_system_function {
         /// The topic this function belongs to
         pub topic: Option<topics::Topic>,
     }
-    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize)]
     pub enum FunctionType {
         /// Whether this is a native function (i.e. a Action::Motion or
         /// Action::UpgradeSnsControlledCanister) or one of user-defined
@@ -772,7 +826,7 @@ pub struct WaitForQuietState {
 }
 /// The ProposalData that contains everything related to a proposal:
 /// the proposal itself (immutable), as well as mutable data such as ballots.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(candid::CandidType, Default, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct ProposalData {
     /// The proposal's action.
     /// Types 0-999 are reserved for current (and future) core governance
@@ -897,6 +951,8 @@ pub struct ProposalData {
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     pub action_auxiliary: Option<proposal_data::ActionAuxiliary>,
+    /// This proposal's topic.
+    pub topic: Option<topics::Topic>,
 }
 /// Nested message and enum types in `ProposalData`.
 pub mod proposal_data {
@@ -1351,6 +1407,7 @@ pub mod governance {
             RemoveNeuronPermissions(super::super::manage_neuron::RemoveNeuronPermissions),
             Configure(super::super::manage_neuron::Configure),
             Follow(super::super::manage_neuron::Follow),
+            SetFollowing(super::super::manage_neuron::SetFollowing),
             MakeProposal(super::super::Proposal),
             RegisterVote(super::super::manage_neuron::RegisterVote),
             FinalizeDisburseMaturity(super::super::manage_neuron::FinalizeDisburseMaturity),
@@ -1644,6 +1701,8 @@ pub struct ManageNeuron {
 }
 /// Nested message and enum types in `ManageNeuron`.
 pub mod manage_neuron {
+    use super::*;
+
     /// The operation that increases a neuron's dissolve delay. It can be
     /// increased up to a maximum defined in the nervous system parameters.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -1799,6 +1858,13 @@ pub mod manage_neuron {
         /// The list of followee neurons, specified by their neuron ID.
         pub followees: Vec<super::NeuronId>,
     }
+    #[derive(
+        candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+    )]
+    pub struct SetFollowing {
+        /// The neuron's topic-based following, specified as a sequence of `FolloweesForTopic`.
+        pub topic_following: Vec<neuron::FolloweesForTopic>,
+    }
     /// The operation that registers a given vote from the neuron for a given
     /// proposal (a directly cast vote as opposed to a vote that is cast as
     /// a result of a follow relation).
@@ -1872,6 +1938,7 @@ pub mod manage_neuron {
         Configure(Configure),
         Disburse(Disburse),
         Follow(Follow),
+        SetFollowing(SetFollowing),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         MakeProposal(super::Proposal),
@@ -1930,6 +1997,11 @@ pub mod manage_neuron_response {
     /// The response to the ManageNeuron command 'follow'.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
     pub struct FollowResponse {}
+
+    /// The response to the ManageNeuron command 'set_following'.
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
+    pub struct SetFollowingResponse {}
+
     /// The response to the ManageNeuron command 'make_proposal'.
     #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
     pub struct MakeProposalResponse {
@@ -1964,6 +2036,7 @@ pub mod manage_neuron_response {
         Configure(ConfigureResponse),
         Disburse(DisburseResponse),
         Follow(FollowResponse),
+        SetFollowing(SetFollowingResponse),
         MakeProposal(MakeProposalResponse),
         RegisterVote(RegisterVoteResponse),
         Split(SplitResponse),
@@ -2402,6 +2475,7 @@ pub struct Account {
     candid::Deserialize,
     Debug,
     clap::ValueEnum,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     PartialEq,

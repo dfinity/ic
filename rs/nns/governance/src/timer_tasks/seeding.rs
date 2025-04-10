@@ -55,5 +55,5 @@ impl RecurringAsyncTask for SeedingTask {
         Duration::from_secs(0)
     }
 
-    const NAME: &'static str = "Seeding";
+    const NAME: &'static str = "seeding";
 }

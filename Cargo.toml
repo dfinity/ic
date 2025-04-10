@@ -65,6 +65,9 @@ members = [
     "rs/certification/test-utils",
     "rs/config",
     "rs/consensus",
+    "rs/consensus/certification",
+    "rs/consensus/dkg",
+    "rs/consensus/idkg",
     "rs/consensus/mocks",
     "rs/consensus/utils",
     "rs/criterion_time",
@@ -109,6 +112,7 @@ members = [
     "rs/crypto/test_utils/metrics",
     "rs/crypto/test_utils/ni-dkg",
     "rs/crypto/test_utils/tls",
+    "rs/crypto/test_utils/vetkd",
     "rs/crypto/tls_interfaces",
     "rs/crypto/tls_interfaces/mocks",
     "rs/crypto/tree_hash",
@@ -178,6 +182,7 @@ members = [
     "rs/monitoring/tracing/logging_layer",
     "rs/nervous_system/agent",
     "rs/nervous_system/candid_utils",
+    "rs/nervous_system/chunks",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
     "rs/nervous_system/common",
@@ -232,6 +237,8 @@ members = [
     "rs/nns/gtc_accounts",
     "rs/nns/sns-wasm",
     "rs/nns/sns-wasm/protobuf_generator",
+    "rs/node_rewards/canister",
+    "rs/node_rewards/canister/api",
     "rs/determinism_test",
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
@@ -255,7 +262,6 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
-    "rs/registry/canister_data_provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
@@ -337,6 +343,8 @@ members = [
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
+    "rs/sns/governance/api",
+    "rs/sns/governance/api_helpers",
     "rs/sns/governance/proposal_criticality",
     "rs/sns/governance/protobuf_generator",
     "rs/sns/governance/token_valuation",
@@ -356,7 +364,6 @@ members = [
     "rs/state_layout",
     "rs/state_tool",
     "rs/sys",
-    "rs/system_api",
     "rs/test_utilities",
     "rs/test_utilities/artifact_pool",
     "rs/test_utilities/consensus",
@@ -437,7 +444,6 @@ members = [
     "rs/validator/http_request_arbitrary",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
-    "rs/workload_generator",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
@@ -494,6 +500,7 @@ opt-level = 3
 
 [workspace.dependencies]
 actix-web = "4.9.0"
+actix-web-prom = "0.9.0"
 actix-rt = "2.10.0"
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
@@ -504,7 +511,9 @@ assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
 async-trait = "0.1.83"
-axum = "0.7.9"
+axum = "0.8.1"
+axum-extra = { version = "0.10.0", features = ["typed-header"] }
+axum-server = { version = "0.7.1", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
@@ -564,7 +573,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.39.2", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "530f8e8ea577740213aff4b6dfa7a49cc32bae4a" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "686cff6ccd422716d48767a299ab33044a27d4ad" }
 ic-btc-interface = "0.2.2"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
 ic-cbor = "3"
@@ -573,13 +582,13 @@ ic-cdk-macros = "0.17.0"
 ic-cdk-timers = "0.11.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "8590b8e9f0af4cdc3b95cd09a0c7a89037b3c038" }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "469d2daee8b44aadb46400bcb2832d560baf7272" }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.2.0"
 ic-management-canister-types = "0.2.1"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"
-ic-stable-structures = "0.6.5"
+ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.39.2" }
 ic-utils = { version = "0.39", features = ["raw"] }
 ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
@@ -617,7 +626,7 @@ memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
-mockito = "1.2.0"
+mockito = "1.6.1"
 nftables = "0.4"
 nix = { version = "0.24.3", features = ["ptrace"] }
 num_cpus = "1.16.0"
@@ -685,6 +694,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "brotli",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
+scopeguard = "1.2.0"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
@@ -752,12 +762,12 @@ turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
 walkdir = "2.3.3"
-walrus = "0.21.1"
-wasm-encoder = { version = "0.221.0", features = ["wasmparser"] }
-wasmparser = "0.221.0"
-wasmprinter = "0.221.0"
-wast = "221.0.0"
-wat = "1.221.0"
+walrus = "0.23.2"
+wasm-encoder = { version = "0.224.0", features = ["wasmparser"] }
+wasmparser = "0.224.0"
+wasmprinter = "0.224.0"
+wast = "224.0.0"
+wat = "1.224.0"
 which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }

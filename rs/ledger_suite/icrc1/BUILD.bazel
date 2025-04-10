@@ -120,7 +120,7 @@ rust_test(
         data = [
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "//rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz",
             "@mainnet_ckbtc-index-ng//file",
             "@mainnet_ckbtc_ic-icrc1-archive//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
@@ -146,7 +146,7 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger-v2//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz)",
         },
         tags = [
             "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.
@@ -200,7 +200,7 @@ rust_test(
         crate_root = "tests/upgrade_downgrade.rs",
         data = [
             "//rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz",
             "@" + mainnet_ledger + "//file",
             "@" + mainnet_index + "//file",
         ],
@@ -209,7 +209,7 @@ rust_test(
             "IC_ICRC1_INDEX_NG_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_index + "//file)",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_ledger + "//file)",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz)",
         },
         deps = [
             # Keep sorted.
@@ -222,7 +222,6 @@ rust_test(
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
-            "//rs/rust_canisters/dfn_http_metrics",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",

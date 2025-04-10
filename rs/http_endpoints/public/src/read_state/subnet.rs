@@ -45,7 +45,7 @@ pub struct SubnetReadStateServiceBuilder {
 
 impl SubnetReadStateService {
     pub(crate) fn route() -> &'static str {
-        "/api/v2/subnet/:effective_canister_id/read_state"
+        "/api/v2/subnet/{effective_canister_id}/read_state"
     }
 }
 

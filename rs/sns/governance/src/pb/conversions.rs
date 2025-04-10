@@ -30,6 +30,23 @@ impl From<pb_api::NeuronId> for pb::NeuronId {
     }
 }
 
+impl From<pb::Followee> for pb_api::Followee {
+    fn from(item: pb::Followee) -> Self {
+        Self {
+            neuron_id: item.neuron_id.map(pb_api::NeuronId::from),
+            alias: item.alias,
+        }
+    }
+}
+impl From<pb_api::Followee> for pb::Followee {
+    fn from(item: pb_api::Followee) -> Self {
+        Self {
+            neuron_id: item.neuron_id.map(pb::NeuronId::from),
+            alias: item.alias,
+        }
+    }
+}
+
 impl From<pb::NeuronIds> for pb_api::NeuronIds {
     fn from(item: pb::NeuronIds) -> Self {
         Self {
@@ -77,6 +94,46 @@ impl From<pb_api::DisburseMaturityInProgress> for pb::DisburseMaturityInProgress
     }
 }
 
+impl From<pb::neuron::TopicFollowees> for pb_api::neuron::TopicFollowees {
+    fn from(value: pb::neuron::TopicFollowees) -> Self {
+        let pb::neuron::TopicFollowees {
+            topic_id_to_followees,
+        } = value;
+
+        let topic_id_to_followees = topic_id_to_followees
+            .into_iter()
+            .map(|(topic, followees)| {
+                let followees = pb_api::neuron::FolloweesForTopic::from(followees);
+                (topic, followees)
+            })
+            .collect();
+
+        Self {
+            topic_id_to_followees,
+        }
+    }
+}
+
+impl From<pb_api::neuron::TopicFollowees> for pb::neuron::TopicFollowees {
+    fn from(value: pb_api::neuron::TopicFollowees) -> Self {
+        let pb_api::neuron::TopicFollowees {
+            topic_id_to_followees,
+        } = value;
+
+        let topic_id_to_followees = topic_id_to_followees
+            .into_iter()
+            .map(|(topic, followees)| {
+                let followees = pb::neuron::FolloweesForTopic::from(followees);
+                (topic, followees)
+            })
+            .collect();
+
+        Self {
+            topic_id_to_followees,
+        }
+    }
+}
+
 impl From<pb::Neuron> for pb_api::Neuron {
     fn from(item: pb::Neuron) -> Self {
         Self {
@@ -91,6 +148,9 @@ impl From<pb::Neuron> for pb_api::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            topic_followees: item
+                .topic_followees
+                .map(pb_api::neuron::TopicFollowees::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -120,6 +180,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            topic_followees: item.topic_followees.map(pb::neuron::TopicFollowees::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -147,6 +208,23 @@ impl From<pb_api::neuron::Followees> for pb::neuron::Followees {
     fn from(item: pb_api::neuron::Followees) -> Self {
         Self {
             followees: item.followees.into_iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<pb::neuron::FolloweesForTopic> for pb_api::neuron::FolloweesForTopic {
+    fn from(item: pb::neuron::FolloweesForTopic) -> Self {
+        Self {
+            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            topic: item.topic.and_then(topic_id_to_api),
+        }
+    }
+}
+impl From<pb_api::neuron::FolloweesForTopic> for pb::neuron::FolloweesForTopic {
+    fn from(item: pb_api::neuron::FolloweesForTopic) -> Self {
+        Self {
+            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }
@@ -188,6 +266,7 @@ impl From<pb::NervousSystemFunction> for pb_api::NervousSystemFunction {
         }
     }
 }
+
 impl From<pb_api::NervousSystemFunction> for pb::NervousSystemFunction {
     fn from(item: pb_api::NervousSystemFunction) -> Self {
         Self {
@@ -199,16 +278,29 @@ impl From<pb_api::NervousSystemFunction> for pb::NervousSystemFunction {
     }
 }
 
+/// Converts an internal encoding of a topic into an optional `pb_api::Topic` instance.
+fn topic_id_to_api(topic_id: i32) -> Option<pb_api::topics::Topic> {
+    let Ok(topic) = pb::Topic::try_from(topic_id) else {
+        // The topic ID is invalid; this could happen in a highly unexpected situation, e.g.,
+        // if Governance is downgraded from a version that had new topics to an older version
+        // with fewer topics.
+        return None;
+    };
+    let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
+        // This is `pb::Topic::Unspecified`, which should be a forbidden value throughout
+        // the implementation of Governance. This case is there because of Prost's encoding
+        // of enumerations, which always starts with a special `0_i32` value.
+        return None;
+    };
+    Some(topic)
+}
+
 impl From<pb::nervous_system_function::GenericNervousSystemFunction>
     for pb_api::nervous_system_function::GenericNervousSystemFunction
 {
     fn from(item: pb::nervous_system_function::GenericNervousSystemFunction) -> Self {
-        let topic = item
-            .topic
-            .and_then(|topic| pb::Topic::try_from(topic).ok())
-            .and_then(|topic| pb_api::topics::Topic::try_from(topic).ok());
         Self {
-            topic,
+            topic: item.topic.and_then(topic_id_to_api),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -216,6 +308,7 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
         }
     }
 }
+
 impl From<pb_api::nervous_system_function::GenericNervousSystemFunction>
     for pb::nervous_system_function::GenericNervousSystemFunction
 {
@@ -593,16 +686,8 @@ impl From<pb::SetTopicsForCustomProposals> for pb_api::SetTopicsForCustomProposa
         let custom_function_id_to_topic = item
             .custom_function_id_to_topic
             .into_iter()
-            .filter_map(|(custom_function_id, topic)| {
-                let Ok(topic) = pb::Topic::try_from(topic) else {
-                    return None;
-                };
-
-                let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
-                    return None;
-                };
-
-                Some((custom_function_id, topic))
+            .filter_map(|(custom_function_id, topic_id)| {
+                topic_id_to_api(topic_id).map(|topic| (custom_function_id, topic))
             })
             .collect();
 
@@ -968,6 +1053,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.and_then(topic_id_to_api),
         }
     }
 }
@@ -1000,6 +1086,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }
@@ -1462,6 +1549,9 @@ impl From<pb::governance::neuron_in_flight_command::Command>
             pb::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::Follow(v.into())
             }
+            pb::governance::neuron_in_flight_command::Command::SetFollowing(v) => {
+                pb_api::governance::neuron_in_flight_command::Command::SetFollowing(v.into())
+            }
             pb::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
             }
@@ -1510,6 +1600,9 @@ impl From<pb_api::governance::neuron_in_flight_command::Command>
             }
             pb_api::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb::governance::neuron_in_flight_command::Command::Follow(v.into())
+            }
+            pb_api::governance::neuron_in_flight_command::Command::SetFollowing(v) => {
+                pb::governance::neuron_in_flight_command::Command::SetFollowing(v.into())
             }
             pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
@@ -2142,6 +2235,31 @@ impl From<pb::manage_neuron::Follow> for pb_api::manage_neuron::Follow {
         }
     }
 }
+
+impl From<pb_api::manage_neuron::SetFollowing> for pb::manage_neuron::SetFollowing {
+    fn from(item: pb_api::manage_neuron::SetFollowing) -> Self {
+        Self {
+            topic_following: item
+                .topic_following
+                .into_iter()
+                .map(pb::neuron::FolloweesForTopic::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<pb::manage_neuron::SetFollowing> for pb_api::manage_neuron::SetFollowing {
+    fn from(item: pb::manage_neuron::SetFollowing) -> Self {
+        Self {
+            topic_following: item
+                .topic_following
+                .into_iter()
+                .map(pb_api::neuron::FolloweesForTopic::from)
+                .collect(),
+        }
+    }
+}
+
 impl From<pb_api::manage_neuron::Follow> for pb::manage_neuron::Follow {
     fn from(item: pb_api::manage_neuron::Follow) -> Self {
         Self {
@@ -2279,6 +2397,9 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::Follow(v) => {
                 pb_api::manage_neuron::Command::Follow(v.into())
             }
+            pb::manage_neuron::Command::SetFollowing(v) => {
+                pb_api::manage_neuron::Command::SetFollowing(v.into())
+            }
             pb::manage_neuron::Command::MakeProposal(v) => {
                 pb_api::manage_neuron::Command::MakeProposal(v.into())
             }
@@ -2318,6 +2439,9 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             }
             pb_api::manage_neuron::Command::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
+            }
+            pb_api::manage_neuron::Command::SetFollowing(v) => {
+                pb::manage_neuron::Command::SetFollowing(v.into())
             }
             pb_api::manage_neuron::Command::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(v.into())
@@ -2475,6 +2599,21 @@ impl From<pb_api::manage_neuron_response::FollowResponse>
     }
 }
 
+impl From<pb::manage_neuron_response::SetFollowingResponse>
+    for pb_api::manage_neuron_response::SetFollowingResponse
+{
+    fn from(_: pb::manage_neuron_response::SetFollowingResponse) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron_response::SetFollowingResponse>
+    for pb::manage_neuron_response::SetFollowingResponse
+{
+    fn from(_: pb_api::manage_neuron_response::SetFollowingResponse) -> Self {
+        Self {}
+    }
+}
+
 impl From<pb::manage_neuron_response::MakeProposalResponse>
     for pb_api::manage_neuron_response::MakeProposalResponse
 {
@@ -2592,6 +2731,9 @@ impl From<pb::manage_neuron_response::Command> for pb_api::manage_neuron_respons
             pb::manage_neuron_response::Command::Follow(v) => {
                 pb_api::manage_neuron_response::Command::Follow(v.into())
             }
+            pb::manage_neuron_response::Command::SetFollowing(v) => {
+                pb_api::manage_neuron_response::Command::SetFollowing(v.into())
+            }
             pb::manage_neuron_response::Command::MakeProposal(v) => {
                 pb_api::manage_neuron_response::Command::MakeProposal(v.into())
             }
@@ -2636,6 +2778,9 @@ impl From<pb_api::manage_neuron_response::Command> for pb::manage_neuron_respons
             }
             pb_api::manage_neuron_response::Command::Follow(v) => {
                 pb::manage_neuron_response::Command::Follow(v.into())
+            }
+            pb_api::manage_neuron_response::Command::SetFollowing(v) => {
+                pb::manage_neuron_response::Command::SetFollowing(v.into())
             }
             pb_api::manage_neuron_response::Command::MakeProposal(v) => {
                 pb::manage_neuron_response::Command::MakeProposal(v.into())

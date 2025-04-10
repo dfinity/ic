@@ -4,12 +4,12 @@ version = "8.0.0"
 edition = "2021"
 
 [dependencies]
-aide = { version = "^0.13.4", features = ["axum"] }
+aide = { version = "^0.14.1", features = ["axum", "axum-json"] }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-axum-extra = { version = "^0.9", features = ["typed-header"] }
-axum-server = { version = "0.6.0", features = ["tls-rustls"] }
+axum-extra = { workspace = true }
+axum-server = { workspace = true }
 backoff = { workspace = true }
 base64 = { workspace = true }
 bitcoin = { workspace = true }
@@ -57,6 +57,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-starter = { path = "../starter" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
+ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types = { path = "../types/types" }

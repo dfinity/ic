@@ -20,7 +20,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -33,7 +33,7 @@ jobs:
         with:
           filters: |
             fuzzers:
-              - '.github/workflows/pr-only.yml'
+              - '.github/workflows/ci-pr-only.yml'
               - 'bin/build-all-fuzzers.sh'
               - 'bazel/fuzz_testing.bzl'
       - name: Run Bazel Build Fuzzers Archives
@@ -50,13 +50,27 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            lock-generate:
+              - '.github/workflows/ci-pr-only.yml'
+              - '.bazelrc'
+              - '.bazelversion'
+              - '**/*.bazel'
+              - '**/*.bzl'
+              - '**/*.lock'
+              - '**/*.rs'
+              - '**/*.toml'
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
         id: app-token
@@ -66,22 +80,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ steps.app-token.outputs.token }}
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          filters: |
-            lock-generate:
-              - '.github/workflows/pr-only.yml'
-              - '.bazelrc'
-              - '.bazelversion'
-              - '**/*.bazel'
-              - '**/*.bzl'
-              - '**/*.lock'
-              - '**/*.rs'
-              - '**/*.toml'
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
@@ -91,7 +92,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -114,18 +115,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 256
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            depcheck:
+              - '.github/workflows/ci-pr-only.yml'
+              - 'bazel/external_crates.bzl'
+              - '**/*.lock'
+              - '**/*.toml'
       - name: Set up Python
         uses: actions/setup-python@v5
+        if: steps.filter.outputs.depcheck == 'true'
         with:
           python-version: "3.12"
       - name: Setup python deps
         id: setup-python-deps
+        if: steps.filter.outputs.depcheck == 'true'
         shell: bash
         run: |
           # Ignore externally-managed-environment pip error, install packages system-wide.
           PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       - name: Dependency Scan for Pull Request
         id: dependencies-check
+        if: steps.filter.outputs.depcheck == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -139,7 +153,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:908c9b2abe0647cd54a2485117c263b0dae4a8aba8f25bc073813b09be9b1d59
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')

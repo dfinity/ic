@@ -163,6 +163,9 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
+/// The minimum allowed value for freezing threshold in seconds.
+pub const MINIMUM_FREEZING_THRESHOLD: u64 = 604800; // 1 week in seconds.
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -320,6 +323,14 @@ pub struct Config {
 
     /// The maximum number of snapshots allowed per canister.
     pub max_number_of_snapshots_per_canister: usize,
+
+    /// Whether canister snapshot metadata and data can be downloaded
+    /// by controllers.
+    pub canister_snapshot_download: FlagStatus,
+
+    /// Whether canister snapshot metadata and data can be uploaded
+    /// by controllers.
+    pub canister_snapshot_upload: FlagStatus,
 }
 
 impl Default for Config {
@@ -399,6 +410,8 @@ impl Default for Config {
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
             max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+            canister_snapshot_download: FlagStatus::Disabled,
+            canister_snapshot_upload: FlagStatus::Disabled,
         }
     }
 }

@@ -6,7 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "vetkd_key_life_cycle_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.

@@ -1351,23 +1351,6 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     }
                 };
 
-                // TODO(NNS1-3625): Remove this once proposal criticality is determined by the topic
-                match topic {
-                    Some(pb_api::topics::Topic::CriticalDappOperations) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    Some(pb_api::topics::Topic::TreasuryAssetManagement) => {
-                        defects.push(
-                            "CriticalDappOperations is not yet supported for custom functions"
-                                .to_string(),
-                        );
-                    }
-                    _ => {}
-                }
-
                 if !defects.is_empty() {
                     return Err(format!(
                         "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
@@ -1832,19 +1815,6 @@ fn validate_and_render_advance_sns_target_version_proposal(
     ))
 }
 
-fn topic_to_str(topic: &Topic) -> &'static str {
-    match topic {
-        Topic::Unspecified => "Unspecified",
-        Topic::DaoCommunitySettings => "DaoCommunitySettings",
-        Topic::SnsFrameworkManagement => "SnsFrameworkManagement",
-        Topic::DappCanisterManagement => "DappCanisterManagement",
-        Topic::ApplicationBusinessLogic => "ApplicationBusinessLogic",
-        Topic::Governance => "Governance",
-        Topic::TreasuryAssetManagement => "TreasuryAssetManagement",
-        Topic::CriticalDappOperations => "CriticalDappOperations",
-    }
-}
-
 pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
     set_topics_for_custom_proposals: &SetTopicsForCustomProposals,
     existing_custom_functions: &BTreeMap<u64, (String, Option<Topic>)>,
@@ -1885,20 +1855,16 @@ pub(crate) fn validate_and_render_set_topics_for_custom_proposals(
             continue;
         };
 
-        let proposed_topic_str = topic_to_str(&proposed_topic);
-
         let topic_change_str = if let Some(current_topic) = current_topic {
             // Is this proposal trying to modify a previously set topic?
 
             if proposed_topic == *current_topic {
-                format!("{proposed_topic_str} (keeping unchanged)")
+                format!("{proposed_topic} (keeping unchanged)")
             } else {
-                let existing_topic_str = topic_to_str(current_topic);
-
-                format!("{proposed_topic_str} (changing from {existing_topic_str})")
+                format!("{proposed_topic} (changing from {current_topic})")
             }
         } else {
-            format!("{proposed_topic_str} (topic not currently set)")
+            format!("{proposed_topic} (topic not currently set)")
         };
 
         table.push(format!("{function_name} under topic {topic_change_str}"));
@@ -2439,6 +2405,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised,
             action_auxiliary,
+            topic,
         } = self;
 
         let limited_ballots: BTreeMap<_, _> = ballots
@@ -2468,6 +2435,7 @@ impl ProposalData {
             minimum_yes_proportion_of_total: *minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: *minimum_yes_proportion_of_exercised,
             action_auxiliary: action_auxiliary.clone(),
+            topic: *topic,
 
             // The following fields are truncated:
             payload_text_rendering: None,
@@ -2735,7 +2703,7 @@ mod tests {
         pb::v1::{
             governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
-            ProposalId, Subaccount, WaitForQuietState,
+            ProposalId, Subaccount, Topic, WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -4781,6 +4749,7 @@ Version {
             // This is because the proposal was rejected (see the latest_tally field).
             executed_timestamp_seconds: 0,
             action_auxiliary: None,
+            topic: Some(Topic::Governance as i32),
         };
     }
 

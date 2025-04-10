@@ -252,8 +252,8 @@ message FractionalDeveloperVotingPower {
   // The swap bucket.
   SwapDistribution swap_distribution = 3;
 
-  // OBSOLETE.
-  AirdropDistribution airdrop_distribution = 4;
+  reserved 4;
+  reserved "airdrop_distribution";
 }
 
 // The distributions awarded to developers at SNS genesis.
@@ -284,11 +284,6 @@ message SwapDistribution {
   // The initial number of tokens denominated in e8s (10E-8 of a token)
   // deposited in the swap canister's account for the initial token swap.
   uint64 initial_swap_amount_e8s = 2;
-}
-
-// OBSOLETE.
-message AirdropDistribution {
-  repeated NeuronDistribution airdrop_neurons = 1;
 }
 
 // A tuple of values used to create a Neuron available at SNS genesis.

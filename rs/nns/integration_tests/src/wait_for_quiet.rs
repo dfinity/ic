@@ -22,10 +22,16 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
+use std::time::SystemTime;
 
 #[test]
 fn test_deadline_is_extended_with_wait_for_quiet() {
     state_machine_test_on_nns_subnet(|runtime| async move {
+        let now_timestamp_seconds = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
 
         nns_init_payload_builder.with_initial_invariant_compliant_mutations();
@@ -48,6 +54,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
                 controller: Some(neuron_4_owner_principal_id),
                 cached_neuron_stake_e8s: 200_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_DAY_SECONDS * 365)),
+                voting_power_refreshed_timestamp_seconds: Some(now_timestamp_seconds),
                 ..Default::default()
             },
         );
@@ -137,15 +144,24 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pi: Option<ProposalInfo> = nns_canisters
+        let final_proposal_info: Option<ProposalInfo> = nns_canisters
             .governance
             .query_("get_proposal_info", candid, (pid.id,))
             .await
             .unwrap();
 
-        let final_deadline = pi.unwrap().deadline_timestamp_seconds.unwrap();
+        let final_deadline = final_proposal_info
+            .as_ref()
+            .unwrap()
+            .deadline_timestamp_seconds
+            .unwrap();
 
-        assert!(final_deadline > initial_deadline);
+        assert!(
+            final_deadline > initial_deadline,
+            "{:?}\n{:#?}",
+            initial_deadline,
+            final_proposal_info,
+        );
 
         Ok(())
     });

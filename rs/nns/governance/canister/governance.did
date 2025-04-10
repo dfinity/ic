@@ -281,14 +281,6 @@ type Followees = record {
   followees : vec NeuronId;
 };
 
-type Followers = record {
-  followers : vec NeuronId;
-};
-
-type FollowersMap = record {
-  followers_map : vec record { nat64; Followers };
-};
-
 type GetNeuronsFundAuditInfoRequest = record {
   nns_proposal_id : opt ProposalId;
 };
@@ -317,8 +309,6 @@ type Governance = record {
   latest_reward_event : opt RewardEvent;
   to_claim_transfers : vec NeuronStakeTransfer;
   short_voting_period_seconds : nat64;
-  topic_followee_index : vec record { int32; FollowersMap };
-  migrations : opt Migrations;
   proposals : vec record { nat64; ProposalData };
   xdr_conversion_rate : opt XdrConversionRate;
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
@@ -600,17 +590,6 @@ type MergeResponse = record {
   source_neuron_info : opt NeuronInfo;
 };
 
-type Migration = record {
-  status : opt int32;
-  failure_reason : opt text;
-  progress : opt Progress;
-};
-
-type Migrations = record {
-  neuron_indexes_migration : opt Migration;
-  copy_inactive_neurons_to_stable_memory_migration : opt Migration;
-};
-
 type MonthlyNodeProviderRewards = record {
   minimum_xdr_permyriad_per_icp : opt nat64;
   registry_version : opt nat64;
@@ -661,6 +640,15 @@ type VotingPowerEconomics = record {
   //
   // Initially, set to 1/12 years.
   clear_following_after_seconds : opt nat64;
+
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have 
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
 };
 
 type Neuron = record {
@@ -963,10 +951,6 @@ type Percentage = record {
 
 type Principals = record {
   principals : vec principal;
-};
-
-type Progress = variant {
-  LastNeuronId : NeuronId;
 };
 
 type Proposal = record {

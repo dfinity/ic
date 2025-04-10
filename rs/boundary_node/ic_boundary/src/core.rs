@@ -467,8 +467,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 v.start_polling(cli.registry.registry_nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
-                    .await
-                    .context("registry replicator failed")?;
+                    .await;
 
                 Ok::<(), Error>(())
             });
@@ -838,6 +837,8 @@ pub fn setup_router(
         http_client.clone(),
         Arc::clone(&routing_table),
         Arc::clone(&registry_snapshot),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
     );
 
     let proxy_router = Arc::new(proxy_router);
@@ -849,13 +850,9 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new()
-        .route(routes::PATH_QUERY, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        })
-        .layer(option_layer(cache.map(|x| {
-            middleware::from_fn_with_state(x.clone(), cache_middleware)
-        })));
+    let query_route = Router::new().route(routes::PATH_QUERY, {
+        post(routes::handle_canister).with_state(proxy.clone())
+    });
 
     let call_route = {
         let mut route = Router::new()
@@ -1004,6 +1001,9 @@ pub fn setup_router(
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
+        .layer(option_layer(cache.map(|x| {
+            middleware::from_fn_with_state(x.clone(), cache_middleware)
+        })))
         .layer(middleware_retry.clone());
 
     let service_subnet_read = ServiceBuilder::new()
@@ -1066,12 +1066,6 @@ impl<T: Run> Run for WithMetrics<T> {
         out
     }
 }
-
-#[allow(dead_code)]
-pub struct WithRetry<T>(
-    pub T,
-    pub Duration, // attempt_interval
-);
 
 pub struct ThrottleParams {
     pub throttle_duration: Duration,

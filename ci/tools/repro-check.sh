@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+##################################################################################
+# NOTE: This script is deprecated and will be removed in the future.
+#       Please use the new script ci/tools/repro-check instead.
+##################################################################################
+
 # This script verifies a specific commit hash or a proposal for reproducibility.
 # If it's a proposal, we need to make sure that proposal_hash == CDN_hash == build_hash.
 # Otherwise, we only need to make sure that CDN_hash == build_hash.
@@ -117,6 +122,13 @@ check_ic_repo() {
         error "When not specifying any option please run this script inside an IC git repository"
     fi
 }
+
+log_warning ""
+log_warning "************************************************"
+log_warning "This script is deprecated and will be removed in the near future."
+log_warning "Please use the new script ci/tools/repro-check instead."
+log_warning "************************************************"
+log_warning ""
 
 #################### Set-up
 if [ "${DEBUG:-}" == "2" ]; then

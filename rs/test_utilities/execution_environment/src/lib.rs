@@ -11,6 +11,7 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
+    wasmtime_embedder::system_api::InstructionLimits,
     WasmtimeEmbedder,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -52,7 +53,6 @@ use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::crypto::threshold_sig::ni_dkg::{
@@ -1767,7 +1767,7 @@ impl Default for ExecutionTestBuilder {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
-                composite_queries: FlagStatus::Disabled,
+                composite_queries: FlagStatus::Enabled,
                 allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
@@ -2009,8 +2009,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_composite_queries(mut self) -> Self {
-        self.execution_config.composite_queries = FlagStatus::Enabled;
+    pub fn without_composite_queries(mut self) -> Self {
+        self.execution_config.composite_queries = FlagStatus::Disabled;
         self
     }
 
@@ -2148,14 +2148,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_non_native_stable(mut self) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .wasm_native_stable_memory = FlagStatus::Disabled;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, stage: BestEffortResponsesFeature) -> Self {
         self.execution_config
             .embedders_config
@@ -2201,6 +2193,24 @@ impl ExecutionTestBuilder {
 
     pub fn with_max_snapshots_per_canister(mut self, max_snapshots_per_canister: usize) -> Self {
         self.execution_config.max_number_of_snapshots_per_canister = max_snapshots_per_canister;
+        self
+    }
+
+    pub fn with_cycles_account_manager_config(
+        mut self,
+        cycles_account_manager_config: CyclesAccountManagerConfig,
+    ) -> Self {
+        self.cycles_account_manager_config = Some(cycles_account_manager_config);
+        self
+    }
+
+    pub fn with_snapshot_metadata_download(mut self) -> Self {
+        self.execution_config.canister_snapshot_download = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_snapshot_metadata_upload(mut self) -> Self {
+        self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
         self
     }
 
@@ -2413,7 +2423,6 @@ impl ExecutionTestBuilder {
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
-            self.own_subnet_id,
             self.subnet_type,
             config.clone(),
             &metrics_registry,
@@ -2593,6 +2602,87 @@ pub fn get_routing_table_with_specified_ids_allocation_range(
     routing_table.insert(specified_ids_range, subnet_id)?;
     routing_table.insert(subnets_allocation_range, subnet_id)?;
     Ok(routing_table)
+}
+
+/// Specifies fees to keep in `CyclesAccountManagerConfig` for specific operations,
+/// eg. `ingress induction cost`, `execution cost` etc.
+pub enum KeepFeesFilter {
+    Execution,
+    IngressInduction,
+    XnetCall,
+}
+
+/// Specifies fees to drop from `CyclesAccountManagerConfig` for specific operations,
+/// eg. `idle resources charge`, etc.
+pub enum DropFeesFilter {
+    IdleResources,
+}
+
+pub enum ExecutionFeesFilter {
+    Keep(KeepFeesFilter),
+    Drop(DropFeesFilter),
+}
+
+/// Helps to distinguish different costs that are withdrawn within the same execution round.
+/// All irrelevant fees in `CyclesAccountManagerConfig` are dropped to zero.
+/// This hack allows to calculate operation cost by comparing canister's balance before and after
+/// execution round.
+fn apply_filter(
+    initial_config: CyclesAccountManagerConfig,
+    filter: ExecutionFeesFilter,
+) -> CyclesAccountManagerConfig {
+    match filter {
+        ExecutionFeesFilter::Keep(keep_filter) => {
+            let mut filtered_config = CyclesAccountManagerConfig::system_subnet();
+            match keep_filter {
+                KeepFeesFilter::Execution => {
+                    filtered_config.update_message_execution_fee =
+                        initial_config.update_message_execution_fee;
+                    filtered_config.ten_update_instructions_execution_fee =
+                        initial_config.ten_update_instructions_execution_fee;
+                    filtered_config.ten_update_instructions_execution_fee_wasm64 =
+                        initial_config.ten_update_instructions_execution_fee_wasm64;
+                    filtered_config
+                }
+                KeepFeesFilter::IngressInduction => {
+                    filtered_config.ingress_message_reception_fee =
+                        initial_config.ingress_message_reception_fee;
+                    filtered_config.ingress_byte_reception_fee =
+                        initial_config.ingress_byte_reception_fee;
+                    filtered_config
+                }
+                KeepFeesFilter::XnetCall => {
+                    filtered_config.xnet_call_fee = initial_config.xnet_call_fee;
+                    filtered_config.xnet_byte_transmission_fee =
+                        initial_config.xnet_byte_transmission_fee;
+                    filtered_config
+                }
+            }
+        }
+        ExecutionFeesFilter::Drop(drop_filter) => {
+            let mut filtered_config = CyclesAccountManagerConfig::application_subnet();
+            match drop_filter {
+                DropFeesFilter::IdleResources => {
+                    filtered_config.compute_percent_allocated_per_second_fee = Cycles::new(0);
+                    filtered_config.gib_storage_per_second_fee = Cycles::new(0);
+                    filtered_config
+                }
+            }
+        }
+    }
+}
+
+/// Create a `SubnetConfig` with an adjusted `CyclesAccountManagerConfig` to have the fees
+/// as specified by the provided `ExecutionFeesFilter`.
+pub fn filtered_subnet_config(
+    subnet_type: SubnetType,
+    filter: ExecutionFeesFilter,
+) -> SubnetConfig {
+    let mut subnet_config = SubnetConfig::new(subnet_type);
+    subnet_config.cycles_account_manager_config =
+        apply_filter(subnet_config.cycles_account_manager_config, filter);
+
+    subnet_config
 }
 
 /// Due to the `scale(cost) != scale(prepay) - scale(prepay - cost)`,

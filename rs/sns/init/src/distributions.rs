@@ -99,16 +99,6 @@ impl FractionalDeveloperVotingPower {
             .as_ref()
             .ok_or("Error: swap_distribution must be specified")?;
 
-        let airdrop_neurons = self
-            .airdrop_distribution
-            .clone()
-            .map(|airdrop_distribution| airdrop_distribution.airdrop_neurons)
-            .unwrap_or_default();
-
-        if !airdrop_neurons.is_empty() {
-            return Err("Error: airdrop_distribution is obsolete.".to_string());
-        }
-
         self.validate_neurons(developer_distribution, nervous_system_parameters)?;
 
         if swap_distribution.initial_swap_amount_e8s == 0 {
@@ -438,7 +428,6 @@ impl FractionalDeveloperVotingPower {
                 total_e8s: 10_000_000_000,
                 initial_swap_amount_e8s: 10_000_000_000,
             }),
-            airdrop_distribution: None,
         }
     }
 }
@@ -577,7 +566,6 @@ mod test {
                 total_e8s: swap_total,
                 initial_swap_amount_e8s: swap_initial_round,
             }),
-            airdrop_distribution: None,
         };
 
         let canister_ids = create_canister_ids();
@@ -685,7 +673,6 @@ mod test {
                 total_e8s: swap_total,
                 initial_swap_amount_e8s: swap_initial_round,
             }),
-            airdrop_distribution: None,
         };
 
         let parameters = NervousSystemParameters::with_default_values();
@@ -776,7 +763,6 @@ mod test {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
             }),
-            airdrop_distribution: None,
         };
 
         // A basic valid NervousSystemParameter
@@ -982,7 +968,6 @@ mod test {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
             }),
-            airdrop_distribution: None,
         };
 
         // A basic valid NervousSystemParameter
@@ -1030,7 +1015,6 @@ mod test {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
             }),
-            airdrop_distribution: None,
         };
 
         // A basic valid NervousSystemParameter
@@ -1096,7 +1080,6 @@ mod test {
                 total_e8s: 1_000_000_000,
                 initial_swap_amount_e8s: 100_000_000,
             }),
-            airdrop_distribution: None,
         };
 
         // A basic valid NervousSystemParameter

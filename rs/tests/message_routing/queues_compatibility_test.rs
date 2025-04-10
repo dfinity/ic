@@ -8,7 +8,7 @@
 //! 2. We add a test that uses:
 //!
 //!    a. the binary from the commit that matches the latest mainnet versions, as
-//!    defined in mainnet-subnet-revisions.json, (the binary is downloaded from S3)
+//!    defined in mainnet-icos-revisions.json, (the binary is downloaded from S3)
 //!
 //!    b. the binary from the current commit
 //!
@@ -31,9 +31,7 @@
 //! neither fun nor profitable.
 
 use anyhow::Result;
-use serde::Deserialize;
 use slog::{info, Logger};
-use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -235,22 +233,20 @@ impl TestCase {
     }
 }
 
-#[derive(Deserialize)]
-struct Subnets {
-    subnets: HashMap<String, String>,
-}
-
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let versions_json =
-        read_dependency_to_string("mainnet-subnet-revisions.json").expect("mainnet IC versions");
+    let mainnet_nns_version = get_mainnet_nns_revision();
+    let mainnet_application_subnet_version = get_mainnet_application_subnet_revision();
 
-    let parsed: Subnets =
-        serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");
-    let mainnet_versions: Vec<String> = parsed.subnets.values().cloned().collect();
+    info!(
+        logger,
+        "Mainnet versions: \nNNS version: {:?}\nApplication subnet version: {:?}",
+        mainnet_nns_version,
+        mainnet_application_subnet_version
+    );
 
-    info!(logger, "Mainnet versions: {:?}", mainnet_versions);
+    let mainnet_versions = [mainnet_nns_version, mainnet_application_subnet_version];
 
     let tests = mainnet_versions.iter().flat_map(|v| {
         [

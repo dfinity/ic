@@ -119,9 +119,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     )
 
     # The finalized wasm (optimized, versioned, etc)
-    # NOTE: the name should be .wasm.gz, but '.wasm' is used by some targets
-    # and kept for legacy reasons
-    final_name = name + ".wasm"
+    final_name = name + ".wasm.gz"
     finalize_wasm(
         name = final_name,
         src_wasm = wasm_name,
@@ -134,7 +132,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
 
     native.alias(
         name = name,
-        actual = name + ".wasm",
+        actual = final_name,
         visibility = visibility,
     )
 
@@ -160,6 +158,7 @@ def motoko_canister(name, entry, deps):
 
     raw_wasm = entry.replace(".mo", ".raw")
     raw_did = entry.replace(".mo", ".did")
+    final_name = name + ".wasm.gz"
 
     native.alias(
         name = name + ".didfile",
@@ -175,7 +174,7 @@ def motoko_canister(name, entry, deps):
     )
 
     finalize_wasm(
-        name = name + ".wasm",
+        name = final_name,
         src_wasm = raw_wasm,
         version_file = "//bazel:version.txt",
         testonly = False,
@@ -183,7 +182,7 @@ def motoko_canister(name, entry, deps):
 
     native.alias(
         name = name,
-        actual = name + ".wasm",
+        actual = final_name,
     )
 
 def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False):
@@ -195,9 +194,9 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
         'icp:public candid:service': the canister's candid service description
     """
     native.genrule(
-        name = name,
+        name = "_" + name + "_finalize",
         srcs = [src_wasm, version_file] + ([service_file] if not (service_file == None) else []),
-        outs = [name + ".gz"],
+        outs = [name],
         visibility = visibility,
         testonly = testonly,
         message = "Finalizing canister " + name,

@@ -9,12 +9,11 @@ use crate::{
     neuron_data_validation::NeuronDataValidator,
     neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
-    pb::v1::{neuron::Followees, BallotInfo, Vote},
+    pb::v1::{neuron::Followees, BallotInfo, KnownNeuronData, Vote},
     temporarily_disable_allow_active_neurons_in_stable_memory,
     temporarily_disable_migrate_active_neurons_to_stable_memory,
     temporarily_enable_allow_active_neurons_in_stable_memory,
     temporarily_enable_migrate_active_neurons_to_stable_memory,
-    temporarily_enable_stable_memory_following_index,
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
 use ic_nervous_system_common::E8;
@@ -25,19 +24,19 @@ use std::collections::BTreeSet;
 
 /// Whether the neuron should be stored in heap or stable storage.
 #[derive(Copy, Clone)]
-enum NeuronLocation {
-    Heap,
-    Stable,
+enum NeuronActiveness {
+    Active,
+    Inactive,
 }
 
-impl NeuronLocation {
+impl NeuronActiveness {
     fn dissolve_state_and_age(self) -> DissolveStateAndAge {
         match self {
-            NeuronLocation::Heap => DissolveStateAndAge::NotDissolving {
+            NeuronActiveness::Active => DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds: 1_000_000,
                 aging_since_timestamp_seconds: 1,
             },
-            NeuronLocation::Stable => DissolveStateAndAge::DissolvingOrDissolved {
+            NeuronActiveness::Inactive => DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 1,
             },
         }
@@ -45,8 +44,8 @@ impl NeuronLocation {
 
     fn cached_neuron_stake_e8s(self) -> u64 {
         match self {
-            NeuronLocation::Heap => 1_000_000_000,
-            NeuronLocation::Stable => 0,
+            NeuronActiveness::Active => 1_000_000_000,
+            NeuronActiveness::Inactive => 0,
         }
     }
 }
@@ -102,7 +101,7 @@ fn subaccount_from_id(id: u64) -> Subaccount {
 
 fn new_neuron_builder(
     rng: &mut impl RngCore,
-    location: NeuronLocation,
+    location: NeuronActiveness,
     size: NeuronSize,
 ) -> NeuronBuilder {
     let id = rng.next_u64();
@@ -144,10 +143,10 @@ fn set_up_neuron_store(
     // We insert 200 inactive neurons and 100 active neurons. They are not very realistic sizes, but
     // it would take too long to prepare those neurons for each benchmark.
     let inactive_neurons: Vec<_> = (0..inactive_count)
-        .map(|_| new_neuron_builder(rng, NeuronLocation::Stable, NeuronSize::Typical).build())
+        .map(|_| new_neuron_builder(rng, NeuronActiveness::Inactive, NeuronSize::Typical).build())
         .collect();
     let active_neurons: Vec<_> = (0..active_count)
-        .map(|_| new_neuron_builder(rng, NeuronLocation::Heap, NeuronSize::Typical).build())
+        .map(|_| new_neuron_builder(rng, NeuronActiveness::Active, NeuronSize::Typical).build())
         .collect();
     let neurons: BTreeMap<u64, Neuron> = inactive_neurons
         .into_iter()
@@ -159,10 +158,13 @@ fn set_up_neuron_store(
 }
 
 #[bench(raw)]
-fn add_neuron_active_typical() -> BenchResult {
+fn add_neuron_active_typical_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Typical).build();
+    let neuron =
+        new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Typical).build();
 
     bench_fn(|| {
         neuron_store.add_neuron(neuron).unwrap();
@@ -170,10 +172,43 @@ fn add_neuron_active_typical() -> BenchResult {
 }
 
 #[bench(raw)]
-fn add_neuron_active_maximum() -> BenchResult {
+fn add_neuron_active_typical_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum).build();
+    let neuron =
+        new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Typical).build();
+
+    bench_fn(|| {
+        neuron_store.add_neuron(neuron).unwrap();
+    })
+}
+
+#[bench(raw)]
+fn add_neuron_active_maximum_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+
+    let mut rng = new_rng();
+    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let neuron =
+        new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Maximum).build();
+
+    bench_fn(|| {
+        neuron_store.add_neuron(neuron).unwrap();
+    })
+}
+
+#[bench(raw)]
+fn add_neuron_active_maximum_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+
+    let mut rng = new_rng();
+    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let neuron =
+        new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Maximum).build();
 
     bench_fn(|| {
         neuron_store.add_neuron(neuron).unwrap();
@@ -184,7 +219,8 @@ fn add_neuron_active_maximum() -> BenchResult {
 fn add_neuron_inactive_typical() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = new_neuron_builder(&mut rng, NeuronLocation::Stable, NeuronSize::Typical).build();
+    let neuron =
+        new_neuron_builder(&mut rng, NeuronActiveness::Inactive, NeuronSize::Typical).build();
 
     bench_fn(|| {
         neuron_store.add_neuron(neuron).unwrap();
@@ -195,21 +231,110 @@ fn add_neuron_inactive_typical() -> BenchResult {
 fn add_neuron_inactive_maximum() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = new_neuron_builder(&mut rng, NeuronLocation::Stable, NeuronSize::Maximum).build();
+    let neuron =
+        new_neuron_builder(&mut rng, NeuronActiveness::Inactive, NeuronSize::Maximum).build();
 
     bench_fn(|| {
         neuron_store.add_neuron(neuron).unwrap();
     })
 }
 
+fn with_neuron_mut_benchmark(size: NeuronSize, f: impl FnOnce(&mut Neuron)) -> BenchResult {
+    let mut rng = new_rng();
+    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let neuron = new_neuron_builder(&mut rng, NeuronActiveness::Active, size).build();
+    let neuron_id = neuron.id();
+    neuron_store.add_neuron(neuron).unwrap();
+
+    bench_fn(|| {
+        neuron_store.with_neuron_mut(&neuron_id, f).unwrap();
+    })
+}
+
+fn modify_neuron_all_sections(neuron: &mut Neuron) {
+    neuron.cached_neuron_stake_e8s += 1;
+    neuron.hot_keys.push(PrincipalId::new_user_test_id(1));
+    neuron.register_recent_ballot(Topic::Governance, &ProposalId { id: 1 }, Vote::Yes);
+    neuron.followees.insert(
+        Topic::Governance as i32,
+        Followees {
+            followees: vec![NeuronId { id: 1 }],
+        },
+    );
+    neuron.set_known_neuron_data(KnownNeuronData {
+        name: "name".to_string(),
+        description: Some("description".to_string()),
+    });
+}
+
+fn modify_neuron_main_section(neuron: &mut Neuron) {
+    neuron.cached_neuron_stake_e8s += 1;
+}
+
+#[bench(raw)]
+fn with_neuron_mut_all_sections_typical_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Typical, modify_neuron_all_sections)
+}
+
+#[bench(raw)]
+fn with_neuron_mut_all_sections_typical_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Typical, modify_neuron_all_sections)
+}
+
+#[bench(raw)]
+fn with_neuron_mut_all_sections_maximum_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Maximum, modify_neuron_all_sections)
+}
+
+#[bench(raw)]
+fn with_neuron_mut_all_sections_maximum_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Maximum, modify_neuron_all_sections)
+}
+
+#[bench(raw)]
+fn with_neuron_mut_main_section_typical_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Typical, modify_neuron_main_section)
+}
+
+#[bench(raw)]
+fn with_neuron_mut_main_section_typical_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Typical, modify_neuron_main_section)
+}
+
+#[bench(raw)]
+fn with_neuron_mut_main_section_maximum_heap() -> BenchResult {
+    let _a = temporarily_disable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Maximum, modify_neuron_main_section)
+}
+
+#[bench(raw)]
+fn with_neuron_mut_main_section_maximum_stable() -> BenchResult {
+    let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_migrate_active_neurons_to_stable_memory();
+    with_neuron_mut_benchmark(NeuronSize::Maximum, modify_neuron_main_section)
+}
+
 #[bench(raw)]
 fn update_recent_ballots_stable_memory() -> BenchResult {
     let _a = temporarily_enable_allow_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
     let _c = temporarily_enable_migrate_active_neurons_to_stable_memory();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum).build();
+    let neuron =
+        new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Maximum).build();
 
     let id = neuron.id();
 
@@ -402,7 +527,7 @@ fn draw_maturity_from_neurons_fund_benchmark() -> BenchResult {
     let mut neurons_fund_neurons = BTreeSet::new();
     let num_neurons = 100;
     for _ in 0..num_neurons {
-        let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Typical)
+        let neuron = new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Typical)
             .with_maturity_e8s_equivalent(2_000_000_000)
             .build();
         neurons_fund_neurons.insert(build_neurons_fund_portion(&neuron, 1_000_000_000));
@@ -443,7 +568,7 @@ fn list_active_neurons_fund_neurons_benchmark() -> BenchResult {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let num_neurons = 100;
     for _ in 0..num_neurons {
-        let neuron = new_neuron_builder(&mut rng, NeuronLocation::Heap, NeuronSize::Typical)
+        let neuron = new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Typical)
             .with_joined_community_fund_timestamp_seconds(Some(now_seconds()))
             .build();
         neuron_store.add_neuron(neuron).unwrap();

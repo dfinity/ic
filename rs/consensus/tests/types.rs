@@ -1,11 +1,10 @@
 use ic_protobuf::types::v1 as pb;
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_test_utilities_consensus::{fake::*, make_genesis};
-use ic_types::consensus::catchup::*;
-use ic_types::consensus::dkg;
-use ic_types::consensus::hashed::Hashed;
-use ic_types::crypto::Signable;
-use ic_types::crypto::{CryptoHash, CryptoHashOf};
+use ic_types::{
+    consensus::{catchup::*, dkg, hashed::Hashed},
+    crypto::{CryptoHash, CryptoHashOf, Signable},
+};
 use std::convert::TryFrom;
 use tempfile::Builder;
 

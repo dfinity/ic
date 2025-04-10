@@ -1,6 +1,5 @@
 mod execution_tests {
-    use std::path::PathBuf;
-
+    use crate::CompilationCostHandling;
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
         canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
@@ -12,6 +11,7 @@ mod execution_tests {
     use ic_types::Cycles;
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
+    use std::path::PathBuf;
 
     const WAT_EMPTY: &str = "(module)";
     const WAT_WITH_GO: &str = r#"
@@ -246,22 +246,24 @@ mod execution_tests {
             .canister_from_cycles_and_wat(initial_balance, WAT_EMPTY)
             .unwrap();
 
-        // Only the first install should have cost instructions.
+        let compilation_instructions = wat_compilation_cost(WAT_EMPTY);
         assert_eq!(
             test.canister_executed_instructions(canister_id1),
-            wat_compilation_cost(WAT_EMPTY)
+            compilation_instructions
         );
+        let reduced_compilation_instructions = CompilationCostHandling::CountReducedAmount
+            .adjusted_compilation_cost(compilation_instructions);
         assert_eq!(
             test.canister_executed_instructions(canister_id2),
-            wat_compilation_cost(WAT_EMPTY)
+            reduced_compilation_instructions,
         );
-        // Even though we didn't need to recompile, the canister should still be
-        // charged for it.
+
+        // Check that the canister has been charged cycles for the reduced compilation cost
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
                 - test.cycles_account_manager().execution_cost(
-                    wat_compilation_cost(WAT_EMPTY),
+                    reduced_compilation_instructions,
                     test.subnet_size(),
                     WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
                 )
@@ -278,15 +280,30 @@ mod execution_tests {
         // Install two canisters with the same wat.
         let canister_id1 = test.canister_from_wat(WAT_EMPTY).unwrap();
         test.state_mut().metadata.expected_compiled_wasms.clear();
-        let canister_id2 = test.canister_from_wat(WAT_EMPTY).unwrap();
+        let initial_balance = Cycles::new(1_000_000_000_000);
+        let canister_id2 = test
+            .canister_from_cycles_and_wat(initial_balance, WAT_EMPTY)
+            .unwrap();
 
+        let compilation_instructions = wat_compilation_cost(WAT_EMPTY);
         assert_eq!(
             test.canister_executed_instructions(canister_id1),
-            wat_compilation_cost(WAT_EMPTY)
+            compilation_instructions
         );
         assert_eq!(
             test.canister_executed_instructions(canister_id2),
-            wat_compilation_cost(WAT_EMPTY)
+            compilation_instructions,
+        );
+
+        // Check that the canister has been charged cycles for the full compilation cost
+        assert_eq!(
+            test.canister_state(canister_id2).system_state.balance(),
+            initial_balance
+                - test.cycles_account_manager().execution_cost(
+                    compilation_instructions,
+                    test.subnet_size(),
+                    WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
+                )
         );
     }
 

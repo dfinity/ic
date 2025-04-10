@@ -418,6 +418,15 @@ impl TestConsensusPool {
         height
     }
 
+    pub fn advance_round_normal_operation_no_finalization_n(&mut self, steps: u64) -> Height {
+        assert!(steps > 0, "Cannot advance for 0 steps.");
+        let mut height = Height::from(0);
+        for _ in 0..steps {
+            height = self.advance_round_normal_operation_no_finalization();
+        }
+        height
+    }
+
     // Advances the pool mimicking an idealized situation: 1 notarized and finalized
     // block in every round, and creating a CUP for summary heights.
     pub fn advance_round_normal_operation(&mut self) -> Height {
@@ -452,6 +461,33 @@ impl TestConsensusPool {
         let new_blocks = 1;
         let blocks_to_notarize = 1;
         let should_finalize = true;
+        let add_catch_up_package_if_needed = false;
+        let should_add_random_tape = true;
+        let n_shares = 0;
+        let rb_shares = 0;
+        let f_shares = 0;
+        let certified_height = None;
+        self.advance_round(
+            max_replicas,
+            new_blocks,
+            blocks_to_notarize,
+            add_catch_up_package_if_needed,
+            should_finalize,
+            should_add_random_tape,
+            n_shares,
+            rb_shares,
+            f_shares,
+            certified_height,
+        )
+    }
+
+    // Advances the pool mimicking an idealized situation: 1 notarized
+    // block in every round. However, no CUPs or finalizations are created.
+    pub fn advance_round_normal_operation_no_finalization(&mut self) -> Height {
+        let max_replicas = 10;
+        let new_blocks = 1;
+        let blocks_to_notarize = 1;
+        let should_finalize = false;
         let add_catch_up_package_if_needed = false;
         let should_add_random_tape = true;
         let n_shares = 0;

@@ -216,24 +216,24 @@ async fn add_deterministic_headers(res: Response) -> impl IntoResponse {
 fn router() -> Router {
     Router::new()
         .route("/", get(root_handler))
-        .route("/bytes/:size", get(bytes_or_equal_bytes_handler))
-        .route("/equal_bytes/:size", get(bytes_or_equal_bytes_handler))
-        .route("/ascii/:body", get(ascii_handler))
-        .route("/delay/:d", get(delay_handler))
-        .route("/redirect/:n", get(redirect_handler))
-        .route("/relative-redirect/:n", get(redirect_handler))
+        .route("/bytes/{size}", get(bytes_or_equal_bytes_handler))
+        .route("/equal_bytes/{size}", get(bytes_or_equal_bytes_handler))
+        .route("/ascii/{body}", get(ascii_handler))
+        .route("/delay/{d}", get(delay_handler))
+        .route("/redirect/{n}", get(redirect_handler))
+        .route("/relative-redirect/{n}", get(redirect_handler))
         .route("/post", post(anything_handler))
         .route("/request_size", post(request_size_handler))
         .route(
-            "/many_response_headers/:size",
+            "/many_response_headers/{size}",
             get(many_response_headers_handler),
         )
         .route(
-            "/long_response_header_name/:size",
+            "/long_response_header_name/{size}",
             get(long_response_header_name_handler),
         )
         .route(
-            "/long_response_header_value/:size",
+            "/long_response_header_value/{size}",
             get(long_response_header_value_handler),
         )
         .route(
@@ -243,13 +243,13 @@ fn router() -> Router {
                 .head(anything_handler),
         )
         .route(
-            "/anything/*key",
+            "/anything/{*key}",
             get(anything_handler)
                 .post(anything_handler)
                 .head(anything_handler),
         )
         .route(
-            "/large_response_total_header_size/:n/:m",
+            "/large_response_total_header_size/{n}/{m}",
             get(large_response_total_header_size_handler),
         )
         .fallback(fallback)

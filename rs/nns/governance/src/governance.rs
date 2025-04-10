@@ -1,5 +1,5 @@
 use crate::{
-    decoder_config,
+    are_nf_fund_proposals_disabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -10,11 +10,12 @@ use crate::{
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
-    migrations::maybe_run_migrations,
+    is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
+        approve_genesis_kyc, metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics,
+        NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -66,19 +67,22 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
+    use_node_provider_reward_canister,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
+use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
-    cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
-    ONE_YEAR_SECONDS,
+    ledger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
@@ -88,8 +92,8 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     pb::v1::{
@@ -101,6 +105,9 @@ use ic_nns_governance_api::{
     },
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
+};
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -117,6 +124,7 @@ use registry_canister::{
 };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{
     borrow::Cow,
@@ -129,12 +137,14 @@ use std::{
     string::ToString,
 };
 
+mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
+pub mod voting_power_snapshots;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;
@@ -183,9 +193,6 @@ pub const MAX_DISSOLVE_DELAY_SECONDS: u64 = 8 * ONE_YEAR_SECONDS;
 // computation.
 pub const MAX_NEURON_AGE_FOR_AGE_BONUS: u64 = 4 * ONE_YEAR_SECONDS;
 
-/// The minimum dissolve delay so that a neuron may vote.
-pub const MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
-
 /// The maximum number of followees each neuron can establish for each topic.
 pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 
@@ -203,7 +210,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 400_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 500_000;
 
 // Spawning is exempted from rate limiting, so we don't need large of a limit here.
 pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
@@ -225,7 +232,7 @@ const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 200;
 
 /// The max number of open manage neuron proposals.
-pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 100000;
+pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 10_000;
 
 /// Max number of hot key for each neuron.
 pub const MAX_NUM_HOT_KEYS_PER_NEURON: usize = 10;
@@ -1671,13 +1678,8 @@ impl Governance {
         // the rest live in heap.
 
         // Note: We do not carry over the RNG seed in new governance, only in restored governance.
-        let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
+        let (neurons, heap_governance_proto, _maybe_rng_seed) =
             split_governance_proto(governance_proto);
-
-        assert!(
-            topic_followee_index.is_empty(),
-            "Topic followee index should be empty when initializing for the first time"
-        );
 
         // Step 3: Final assembly.
         Self {
@@ -1710,7 +1712,7 @@ impl Governance {
         cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
+        let (heap_neurons, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
         // Carry over the previous rng seed to avoid race conditions in handling queued ingress
@@ -1721,7 +1723,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
+            neuron_store: NeuronStore::new_restored(heap_neurons),
             env,
             ledger,
             cmc,
@@ -1739,28 +1741,17 @@ impl Governance {
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let neuron_store = std::mem::take(&mut self.neuron_store);
-        let (neurons, heap_topic_followee_index) = neuron_store.take();
+        let neurons = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(
-            neurons,
-            heap_topic_followee_index,
-            heap_governance_proto,
-            rng_seed,
-        )
+        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
         let neurons = self.neuron_store.__get_neurons_for_tests();
-        let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.randomness.get_rng_seed();
-        reassemble_governance_proto(
-            neurons,
-            heap_topic_followee_index,
-            heap_governance_proto,
-            rng_seed,
-        )
+        reassemble_governance_proto(neurons, heap_governance_proto, rng_seed)
     }
 
     pub fn seed_rng(&mut self, seed: [u8; 32]) {
@@ -2070,7 +2061,7 @@ impl Governance {
     /// Neurons that directly follow the `followees` w.r.t. the
     /// topic `NeuronManagement`.
     pub fn get_managed_neuron_ids_for(&self, followees: Vec<NeuronId>) -> Vec<NeuronId> {
-        // Tap into the `topic_followee_index` for followers of level zero neurons.
+        // Tap into the neuron followee index for followers of level zero neurons.
         let mut managed: Vec<NeuronId> = followees.clone();
         for followee in followees {
             managed.extend(
@@ -3458,6 +3449,42 @@ impl Governance {
         Ok(child_nid)
     }
 
+    fn disburse_maturity(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        disburse_maturity: &manage_neuron::DisburseMaturity,
+    ) -> Result<u64, GovernanceError> {
+        if !is_disburse_maturity_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "DisburseMaturity is not yet supported.",
+            ));
+        }
+
+        self.check_heap_can_grow()?;
+
+        let now_seconds = self.env.now();
+
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now_seconds,
+            command: Some(InFlightCommand::SyncCommand(SyncCommand {})),
+        };
+
+        // Lock the neuron so that we're sure that we are not disbursing the maturity in the middle
+        // of another ongoing operation.
+        let _neuron_lock = self.lock_neuron_for_command(id.id, in_flight_command)?;
+
+        initiate_maturity_disbursement(
+            &mut self.neuron_store,
+            caller,
+            id,
+            disburse_maturity,
+            now_seconds,
+        )
+        .map_err(GovernanceError::from)
+    }
+
     /// Set the status of a proposal that is 'being executed' to
     /// 'executed' or 'failed' depending on the value of 'success'.
     ///
@@ -4396,8 +4423,8 @@ impl Governance {
                 }
             }
             Action::ApproveGenesisKyc(proposal) => {
-                self.approve_genesis_kyc(&proposal.principals);
-                self.set_proposal_execution_status(pid, Ok(()));
+                let result = self.approve_genesis_kyc(&proposal.principals);
+                self.set_proposal_execution_status(pid, result);
             }
             Action::AddOrRemoveNodeProvider(ref proposal) => {
                 if let Some(change) = &proposal.change {
@@ -4563,10 +4590,6 @@ impl Governance {
                 )
             })?;
 
-        println!(
-            "{}INFO: Committing new NetworkEconomics:\n{:#?}",
-            LOG_PREFIX, new_network_economics,
-        );
         self.heap_data.economics = Some(new_network_economics);
         Ok(())
     }
@@ -4848,19 +4871,11 @@ impl Governance {
 
     /// Mark all Neurons controlled by the given principals as having passed
     /// KYC verification
-    pub fn approve_genesis_kyc(&mut self, principals: &[PrincipalId]) {
-        let principal_set: HashSet<&PrincipalId> = principals.iter().collect();
-
-        for principal in principal_set {
-            for neuron_id in self.get_neuron_ids_by_principal(principal) {
-                self.with_neuron_mut(&neuron_id, |neuron| {
-                    if neuron.controller() == *principal {
-                        neuron.kyc_verified = true;
-                    }
-                })
-                .ok();
-            }
-        }
+    pub fn approve_genesis_kyc(
+        &mut self,
+        principals: &[PrincipalId],
+    ) -> Result<(), GovernanceError> {
+        approve_genesis_kyc(&mut self.neuron_store, principals)
     }
 
     fn validate_manage_neuron_proposal(
@@ -4884,9 +4899,59 @@ impl Governance {
         })?;
 
         // Early exit for deprecated commands.
-        if let Command::MergeMaturity(_) = manage_neuron.command.as_ref().unwrap() {
+        if let Command::MergeMaturity(_) = command {
             return Self::merge_maturity_removed_error();
         }
+
+        // Below we make sure the manage neuron proposal is not too large. Otherwise they can occupy
+        // a lot of space due to its low fee (0.01 ICP) and high limit of open proposals (100K).
+        //
+        // TODO: consolidate the validation logic with the `manage_neuron` implementation.
+        match command {
+            // We could implement more complicated logic to check its encoded size, or treat each
+            // type of proposal differently, but in the hotfix we simply disable it.
+            Command::MakeProposal(_) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot issue a make proposal command through a proposal",
+                ))
+            }
+            // DisburseMaturity contains a subaccount which can be unbounded without checking. This
+            // command is not implemented yet, and before we implement it we should also validate
+            // its subaccount.
+            Command::DisburseMaturity(_) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Disburse maturity is not supported yet",
+                ))
+            }
+            // Similar to DisburseMaturity, Disburse has a blob as the ICP account address. A
+            // successful conversion should indicate that the blob does not contain a large amount
+            // of data.
+            Command::Disburse(disburse) => {
+                if let Some(to_account) = &disburse.to_account {
+                    if AccountIdentifier::try_from(to_account).is_err() {
+                        return Err(GovernanceError::new_with_message(
+                            ErrorType::InvalidCommand,
+                            "The to_account field is invalid",
+                        ));
+                    }
+                }
+            }
+            Command::Follow(follow) => {
+                if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        format!(
+                            "Too many followees: {} (max: {})",
+                            follow.followees.len(),
+                            MAX_FOLLOWEES_PER_TOPIC
+                        ),
+                    ));
+                }
+            }
+            _ => {}
+        };
 
         let is_managed_neuron_not_for_profit = self
             .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
@@ -4979,6 +5044,12 @@ impl Governance {
                 &VotingPowerEconomics::DEFAULT
             }
         }
+    }
+
+    pub fn neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> u64 {
+        self.voting_power_economics()
+            .neuron_minimum_dissolve_delay_to_vote_seconds
+            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS)
     }
 
     /// The proposal id of the next proposal.
@@ -5225,10 +5296,21 @@ impl Governance {
         let conversion_result = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
             create_service_nervous_system.clone(),
         ));
-        if let Err(err) = conversion_result {
+
+        let validated = conversion_result.map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid CreateServiceNervousSystem: {}", e),
+            )
+        })?;
+
+        if are_nf_fund_proposals_disabled()
+            && validated.neurons_fund_participation.unwrap_or_default()
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Invalid CreateServiceNervousSystem: {}", err),
+                "Invalid CreateServiceNervousSystem: NeuronsFundParticipation is not currently allowed \
+                as decided by motion proposal 135970: https://dashboard.internetcomputer.org/proposal/135970.",
             ));
         }
 
@@ -5360,7 +5442,7 @@ impl Governance {
         let min_dissolve_delay_seconds_to_vote = if let Action::ManageNeuron(_) = action {
             0
         } else {
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+            self.neuron_minimum_dissolve_delay_to_vote_seconds()
         };
 
         // The proposer must be eligible to vote. This also ensures that the
@@ -5811,10 +5893,6 @@ impl Governance {
         caller: &PrincipalId,
         follow_request: &manage_neuron::Follow,
     ) -> Result<(), GovernanceError> {
-        // The implementation of this method is complicated by the
-        // fact that we have to maintain a reverse index of all follow
-        // relationships, i.e., the `topic_followee_index`.
-
         // Find the neuron to modify.
         let (is_neuron_controlled_by_caller, is_caller_authorized_to_vote) =
             self.with_neuron(id, |neuron| {
@@ -6333,10 +6411,9 @@ impl Governance {
             Some(Command::RefreshVotingPower(_)) => self
                 .refresh_voting_power(&id, caller)
                 .map(ManageNeuronResponse::refresh_voting_power_response),
-            Some(Command::DisburseMaturity(_)) => Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "Disbursing maturity is not implemented yet.",
-            )),
+            Some(Command::DisburseMaturity(disburse_maturity)) => self
+                .disburse_maturity(&id, caller, disburse_maturity)
+                .map(ManageNeuronResponse::disburse_maturity_response),
             None => panic!(),
         }
     }
@@ -6364,13 +6441,6 @@ impl Governance {
         }?;
 
         Ok(id)
-    }
-
-    fn maybe_run_migrations(&mut self) {
-        self.heap_data.migrations = Some(maybe_run_migrations(
-            self.heap_data.migrations.clone().unwrap_or_default(),
-            &mut self.neuron_store,
-        ));
     }
 
     /// Increment neuron allowances if enough time has passed.
@@ -6456,7 +6526,6 @@ impl Governance {
         }
 
         self.maybe_gc();
-        self.maybe_run_migrations();
         self.maybe_increase_neuron_allowances();
     }
 
@@ -7658,8 +7727,15 @@ impl Governance {
         let mut rewards = vec![];
 
         // Maps node providers to their rewards in XDR
-        let xdr_permyriad_rewards: NodeProvidersMonthlyXdrRewards =
-            self.get_node_providers_monthly_xdr_rewards().await?;
+        let (reg_rewards, maybe_version) = self.get_node_providers_monthly_xdr_rewards().await?;
+        let registry_version = maybe_version.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                "Registry version was not available in the response to \
+                    get_node_providers_monthly_xdr_rewards, which indicates a problem."
+                    .to_string(),
+            )
+        })?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
@@ -7679,9 +7755,7 @@ impl Governance {
         // `rewards`
         for np in &self.heap_data.node_providers {
             if let Some(np_id) = &np.id {
-                let np_id_str = np_id.to_string();
-                let xdr_permyriad_reward =
-                    *xdr_permyriad_rewards.rewards.get(&np_id_str).unwrap_or(&0);
+                let xdr_permyriad_reward = *reg_rewards.get(np_id).unwrap_or(&0);
 
                 if let Some(reward_node_provider) =
                     get_node_provider_reward(np, xdr_permyriad_reward, xdr_permyriad_per_icp)
@@ -7696,8 +7770,6 @@ impl Governance {
             xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
         };
 
-        let registry_version = xdr_permyriad_rewards.registry_version.unwrap();
-
         Ok(MonthlyNodeProviderRewards {
             timestamp: self.env.now(),
             rewards,
@@ -7711,8 +7783,83 @@ impl Governance {
 
     /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
     async fn get_node_providers_monthly_xdr_rewards(
-        &mut self,
-    ) -> Result<NodeProvidersMonthlyXdrRewards, GovernanceError> {
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
+        if use_node_provider_reward_canister() {
+            self.get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister()
+                .await
+        } else {
+            self.get_node_providers_monthly_xdr_rewards_from_registry()
+                .await
+        }
+    }
+
+    async fn get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister(
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
+        let response: Vec<u8> = self.env.call_canister_method(
+            NODE_REWARDS_CANISTER_ID,
+            "get_node_providers_monthly_xdr_rewards",
+            Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {registry_version: None }).unwrap(),
+        ).await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
+                        code, msg
+                    ),
+                )
+            })?;
+
+        let response =
+            Decode!(&response, GetNodeProvidersMonthlyXdrRewardsResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Cannot decode return type from get_node_providers_monthly_xdr_rewards \
+                        as GetNodeProvidersMonthlyXdrRewardsResponse'. Error: {}",
+                        err,
+                    ),
+                )
+            })?;
+
+        let GetNodeProvidersMonthlyXdrRewardsResponse { rewards, error } = response;
+
+        if let Some(err_msg) = error {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Error calling 'get_node_providers_monthly_xdr_rewards': {}",
+                    err_msg
+                ),
+            ));
+        }
+
+        if let Some(rewards) = rewards {
+            let ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+                rewards,
+                registry_version,
+            } = rewards;
+            let rewards = rewards
+                .into_iter()
+                .map(|(principal, amount)| (PrincipalId::from(principal), amount))
+                .collect();
+            return Ok((rewards, registry_version));
+        }
+
+        Err(GovernanceError::new_with_message(
+            ErrorType::Unspecified,
+            "get_node_providers_monthly_xdr_rewards returned empty response, \
+                which should be impossible.",
+        ))
+    }
+
+    /// A helper to get the node provider rewards from registry (instead of Node Provider Reward Canister)
+    /// This will be removed once the Node Provider Reward Canister is in use.
+    async fn get_node_providers_monthly_xdr_rewards_from_registry(
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
         let registry_response:
             Vec<u8> = self
             .env
@@ -7733,14 +7880,35 @@ impl Governance {
             })?;
 
         Decode!(&registry_response, Result<NodeProvidersMonthlyXdrRewards, String>)
-            .map_err(|err| GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
-                    err,
-                ),
-            ))?
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
+                        err,
+                    ),
+                )
+            })?
             .map_err(|msg| GovernanceError::new_with_message(ErrorType::External, msg))
+            .map(|response| {
+                let NodeProvidersMonthlyXdrRewards {
+                    rewards,
+                    registry_version,
+                } = response;
+
+                let rewards = rewards
+                    .into_iter()
+                    .map(|(principal_str, amount)| {
+                        (
+                            PrincipalId::from_str(&principal_str)
+                                .expect("Could not get principal from string"),
+                            amount,
+                        )
+                    })
+                    .collect();
+
+                (rewards, registry_version)
+            })
     }
 
     /// A helper for the CMC's get_average_icp_xdr_conversion_rate method

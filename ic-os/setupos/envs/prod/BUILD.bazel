@@ -10,6 +10,9 @@ load("//publish:defs.bzl", "checksum_rule")
 icos_build(
     name = "prod",
     image_deps_func = image_deps,
+    max_file_sizes = {
+        "disk-img.tar.zst": 2100 * 1000 * 1000,  # 2.1 GB on 2025-03-21
+    },
     upgrades = False,
     upload_prefix = "setup-os",
     vuln_scan = False,

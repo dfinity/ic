@@ -5,7 +5,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "ipv4_integration_test",
-    flaky = True,
     proc_macro_deps = [
         "@crate_index//:indoc",
     ],

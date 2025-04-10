@@ -563,15 +563,6 @@ impl ExhaustiveSet for BitcoinAdapterResponse {
     }
 }
 
-// TODO(CRP-2703): Remove once the AlgorithmId::VetKD variant is supported on mainnet
-impl ExhaustiveSet for AlgorithmId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        AlgorithmId::iter()
-            .filter(|alg_id| *alg_id != AlgorithmId::VetKD)
-            .collect()
-    }
-}
-
 impl ExhaustiveSet for CryptoHash {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut data = [0; 32];

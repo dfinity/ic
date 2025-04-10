@@ -140,6 +140,7 @@ use std::{
     io,
     time::{Duration, SystemTime},
 };
+use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
@@ -162,7 +163,6 @@ pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
-mod migrations;
 mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
@@ -205,9 +205,16 @@ thread_local! {
 
     static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
-    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
+    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
-    static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
+
+    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool>
+        = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
+
+    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -218,7 +225,7 @@ thread_local! {
 }
 
 pub fn is_voting_power_adjustment_enabled() -> bool {
-    IS_VOTING_POWER_ADJUSTMENT_ENABLED.with(|ok| ok.get())
+    IS_VOTING_POWER_ADJUSTMENT_ENABLED.get()
 }
 
 /// Only integration tests should use this.
@@ -234,7 +241,7 @@ pub fn temporarily_disable_voting_power_adjustment() -> Temporary {
 }
 
 pub fn is_prune_following_enabled() -> bool {
-    IS_PRUNE_FOLLOWING_ENABLED.with(|ok| ok.get())
+    IS_PRUNE_FOLLOWING_ENABLED.get()
 }
 
 /// Only integration tests should use this.
@@ -250,7 +257,7 @@ pub fn temporarily_disable_prune_following() -> Temporary {
 }
 
 pub fn allow_active_neurons_in_stable_memory() -> bool {
-    ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY.with(|ok| ok.get())
+    ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY.get()
 }
 
 /// Only integration tests should use this.
@@ -265,24 +272,8 @@ pub fn temporarily_disable_allow_active_neurons_in_stable_memory() -> Temporary 
     Temporary::new(&ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY, false)
 }
 
-pub fn use_stable_memory_following_index() -> bool {
-    USE_STABLE_MEMORY_FOLLOWING_INDEX.with(|ok| ok.get())
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_stable_memory_following_index() -> Temporary {
-    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_stable_memory_following_index() -> Temporary {
-    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, false)
-}
-
 pub fn migrate_active_neurons_to_stable_memory() -> bool {
-    MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY.with(|ok| ok.get())
+    MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY.get()
 }
 
 /// Only integration tests should use this.
@@ -295,6 +286,52 @@ pub fn temporarily_enable_migrate_active_neurons_to_stable_memory() -> Temporary
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_migrate_active_neurons_to_stable_memory() -> Temporary {
     Temporary::new(&MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY, false)
+}
+
+pub fn are_nf_fund_proposals_disabled() -> bool {
+    DISABLE_NF_FUND_PROPOSALS.get()
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
+    Temporary::new(&DISABLE_NF_FUND_PROPOSALS, false)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
+    Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
+}
+
+pub fn is_disburse_maturity_enabled() -> bool {
+    IS_DISBURSE_MATURITY_ENABLED.get()
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_disburse_maturity() -> Temporary {
+    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_disburse_maturity() -> Temporary {
+    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, false)
+}
+
+pub fn use_node_provider_reward_canister() -> bool {
+    USE_NODE_PROVIDER_REWARD_CANISTER.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_node_provider_reward_canister() -> Temporary {
+    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_node_provider_reward_canister() -> Temporary {
+    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -641,6 +678,9 @@ pub fn encode_metrics(
             .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
+
+    // Timer tasks
+    encode_timer_task_metrics(w)?;
 
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 

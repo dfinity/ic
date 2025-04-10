@@ -124,7 +124,7 @@ impl From<IngressError> for CallV3Response {
 }
 
 pub(crate) fn route() -> &'static str {
-    "/api/v3/canister/:effective_canister_id/call"
+    "/api/v3/canister/{effective_canister_id}/call"
 }
 
 pub(crate) fn new_router(

@@ -398,7 +398,11 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 
 #[cfg(test)]
 mod tests {
-    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::*;
+    use crate::test_utils::{
+        complement_state_manager_with_reshare_chain_key_request,
+        complement_state_manager_with_setup_initial_dkg_request,
+    };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
@@ -686,7 +690,7 @@ mod tests {
                 );
 
                 let target_id = NiDkgTargetId::new([0u8; 32]);
-                complement_state_manager_with_remote_dkg_requests(
+                complement_state_manager_with_setup_initial_dkg_request(
                     state_manager,
                     registry.get_latest_version(),
                     vec![10, 11, 12],
@@ -792,7 +796,7 @@ mod tests {
             );
 
             let target_id = NiDkgTargetId::new([0u8; 32]);
-            complement_state_manager_with_remote_dkg_requests(
+            complement_state_manager_with_setup_initial_dkg_request(
                 state_manager,
                 registry.get_latest_version(),
                 vec![], // an erroneous request with no nodes.
@@ -1272,7 +1276,7 @@ mod tests {
                     [&dependencies_1, &dependencies_2]
                         .iter()
                         .for_each(|dependencies| {
-                            complement_state_manager_with_remote_dkg_requests(
+                            complement_state_manager_with_setup_initial_dkg_request(
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
                                 vec![],
@@ -1280,7 +1284,7 @@ mod tests {
                                 None,
                             );
 
-                            complement_state_manager_with_remote_dkg_requests(
+                            complement_state_manager_with_setup_initial_dkg_request(
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
                                 vec![10, 11, 12],
@@ -1446,7 +1450,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dkg_payload_has_transcripts_for_remote_subnets() {
+    fn test_dkg_payload_has_transcripts_for_initial_dkg_requests() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids = vec![node_test_id(0), node_test_id(1)];
             let dkg_interval_length = 99;
@@ -1468,7 +1472,7 @@ mod tests {
             );
 
             let target_id = NiDkgTargetId::new([0u8; 32]);
-            complement_state_manager_with_remote_dkg_requests(
+            complement_state_manager_with_setup_initial_dkg_request(
                 state_manager,
                 registry.get_latest_version(),
                 vec![10, 11, 12],
@@ -1541,6 +1545,137 @@ mod tests {
                     block.height.get()
                 );
             }
+        })
+    }
+
+    #[test]
+    fn test_dkg_payload_has_transcript_for_reshare_chain_key_request() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let node_ids = vec![node_test_id(0), node_test_id(1)];
+            let dkg_interval_length = 99;
+            let subnet_id = subnet_test_id(0);
+            let key_id = VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: String::from("some_vetkey"),
+            };
+            let target_id = NiDkgTargetId::new([0u8; 32]);
+
+            let Dependencies {
+                mut pool,
+                registry,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    10,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .with_chain_key_config(ChainKeyConfig {
+                            key_configs: vec![KeyConfig {
+                                key_id: MasterPublicKeyId::VetKd(key_id.clone()),
+                                pre_signatures_to_create_in_advance: 20,
+                                max_queue_size: 20,
+                            }],
+                            signature_request_timeout_ns: None,
+                            idkg_key_rotation_period_ms: None,
+                        })
+                        .build(),
+                )],
+            );
+
+            // Wait for creation of local VetKD transcripts
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let block: Block = pool
+                .validated()
+                .block_proposal()
+                .get_highest()
+                .unwrap()
+                .content
+                .into_inner();
+
+            let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+            assert_eq!(dkg_summary.configs.len(), 3);
+            assert_eq!(
+                dkg_summary
+                    .configs
+                    .keys()
+                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+                    .count(),
+                0
+            );
+            assert_eq!(dkg_summary.current_transcripts().len(), 3);
+            assert_eq!(dkg_summary.next_transcripts().len(), 3);
+            assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
+
+            // Put a reshare_chain_key request into the state
+            // NOTE: The checkpoint evaluates and resets the mockall expectations rules,
+            // such that we can modify the state.
+            state_manager.get_mut().checkpoint();
+            complement_state_manager_with_reshare_chain_key_request(
+                state_manager,
+                registry.get_latest_version(),
+                key_id,
+                vec![10, 11, 12],
+                None,
+                Some(target_id),
+            );
+
+            // Wait for creation of VetKD config
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let block: Block = pool
+                .validated()
+                .block_proposal()
+                .get_highest()
+                .unwrap()
+                .content
+                .into_inner();
+
+            let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+            assert_eq!(dkg_summary.configs.len(), 4);
+            assert_eq!(
+                dkg_summary
+                    .configs
+                    .keys()
+                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+                    .count(),
+                1
+            );
+            assert_eq!(dkg_summary.current_transcripts().len(), 3);
+            assert_eq!(dkg_summary.next_transcripts().len(), 3);
+            assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
+
+            // Wait for creation of VetKD transcript
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let block: Block = pool
+                .validated()
+                .block_proposal()
+                .get_highest()
+                .unwrap()
+                .content
+                .into_inner();
+
+            let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+            assert_eq!(dkg_summary.configs.len(), 3);
+            assert_eq!(
+                dkg_summary
+                    .configs
+                    .keys()
+                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+                    .count(),
+                0
+            );
+            assert_eq!(dkg_summary.current_transcripts().len(), 3);
+            assert_eq!(dkg_summary.next_transcripts().len(), 3);
+            assert_eq!(
+                dkg_summary
+                    .transcripts_for_remote_subnets
+                    .iter()
+                    .filter(|(id, _, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+                    .count(),
+                1
+            );
         })
     }
 

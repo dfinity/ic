@@ -61,7 +61,7 @@ pub struct CanisterReadStateServiceBuilder {
 
 impl CanisterReadStateService {
     pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/:effective_canister_id/read_state"
+        "/api/v2/canister/{effective_canister_id}/read_state"
     }
 }
 

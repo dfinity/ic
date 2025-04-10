@@ -35,6 +35,9 @@ const BURN_MULTIPLIER: u64 = 1;
 // Corresponds to ic_icrc1_ledger::LEDGER_VERSION where allowances and balances are
 // migrated to stable structures
 const LEDGER_VERSION_2: u64 = 2;
+#[cfg(not(feature = "u256-tokens"))]
+// Corresponds to ic_icrc1_ledger::LEDGER_VERSION where blocks are migrated to stable structures
+const LEDGER_VERSION_3: u64 = 3;
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -67,7 +70,7 @@ lazy_static! {
         Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         )),
-        LEDGER_VERSION_2,
+        LEDGER_VERSION_3,
         Some(Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH"
         ))),
@@ -79,12 +82,12 @@ lazy_static! {
         ic_icrc1_ledger::LEDGER_VERSION,
         None,
     );
-    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-01-07
+    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-02-27
     // This shall be the ledger version referenced using
     // `CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` and
     // `IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` above.
-    pub static ref BALANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
-        hex::decode("3b03d1bb1145edbcd11101ab2788517bc0f427c3bd7b342b9e3e7f42e29d5822").unwrap();
+    pub static ref BLOCKS_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("dca85fc694c18181b5c67c93194a7fc72f00226f3b54ac6e4630a9dfe8187503").unwrap();
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -109,11 +112,11 @@ lazy_static! {
         ic_icrc1_ledger::LEDGER_VERSION,
         None,
     );
-    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-01-07
+    // Corresponds to https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-02-27
     // This shall be the ledger version referenced using
     // `CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH` above.
-    pub static ref BALANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
-        hex::decode("8b2e3e596a147780b0e99ce36d0b8f1f3ba41a98b819b42980a7c08c309b44c1").unwrap();
+    pub static ref BLOCKS_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("d94d8283e2a71550bac5da0365ca719545e97d05c88787efb679993e2e8c12f4").unwrap();
 }
 
 pub struct Wasms {
@@ -206,7 +209,7 @@ impl LedgerSuiteConfig {
         let deployed_module_hash = canister_status
             .module_hash()
             .expect("should have ledger canister module hash");
-        if deployed_module_hash.as_slice() == BALANCES_MIGRATED_LEDGER_MODULE_HASH.as_slice() {
+        if deployed_module_hash.as_slice() == BLOCKS_MIGRATED_LEDGER_MODULE_HASH.as_slice() {
             ExpectMigration::No
         } else {
             ExpectMigration::Yes

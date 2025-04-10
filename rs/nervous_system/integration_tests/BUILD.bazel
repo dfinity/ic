@@ -37,6 +37,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
     "@crate_index//:tempfile",
@@ -99,9 +100,11 @@ DEV_DATA = [
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
+    "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/node_rewards/canister:node-rewards-canister",
     "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
@@ -120,6 +123,7 @@ DEV_DATA = [
     "@mainnet_nns_registry_canister//file",
     "@mainnet_nns_root-canister//file",
     "@mainnet_nns_sns-wasm-canister//file",
+    "@mainnet_node-rewards-canister//file",
     "@mainnet_sns-governance-canister//file",
     "@mainnet_sns-root-canister//file",
     "@mainnet_sns-swap-canister//file",
@@ -130,6 +134,7 @@ DEV_ENV = {
     "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
+    "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
     "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
@@ -142,6 +147,7 @@ DEV_ENV = {
     "MAINNET_IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-archive//file)",
     "MAINNET_IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-index-ng//file)",
     "MAINNET_SNS_WASM_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_sns-wasm-canister//file)",
+    "MAINNET_NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath @mainnet_node-rewards-canister//file)",
     "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     "MAINNET_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_governance_canister//file)",
     "MAINNET_LIFELINE_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_lifeline_canister//file)",
@@ -150,6 +156,7 @@ DEV_ENV = {
     "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
     "MAINNET_SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-governance-canister//file)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
@@ -192,13 +199,13 @@ rust_test_suite_with_extra_srcs(
             "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
             "tests/custom_upgrade_path.rs",
             "tests/sns_topics.rs",
+            "tests/set_following.rs",
         ],
     ),
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:6",
@@ -217,7 +224,6 @@ rust_test(
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:6",
@@ -234,7 +240,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -251,7 +256,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -268,7 +272,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -286,7 +289,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -303,7 +305,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -320,7 +321,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",
@@ -337,7 +337,22 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "set_following",
+    timeout = "long",
+    srcs = [
+        "tests/set_following.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:4",

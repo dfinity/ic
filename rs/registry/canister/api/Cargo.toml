@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
+ic-utils = { path = "../../../utils" }
 candid = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

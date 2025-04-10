@@ -9,30 +9,26 @@ use ic_stable_structures::{
 };
 use std::cell::RefCell;
 
-/// Constants to define memory segments.  Must not change.
+/// Constants to define memory segments.  Must not change. Keep sorted.
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const AUDIT_EVENTS_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
 const AUDIT_EVENTS_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
-
 const MAIN_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const HOT_KEYS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(4);
 const FOLLOWEES_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(5);
 const RECENT_BALLOTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(6);
 const KNOWN_NEURON_DATA_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(7);
 const TRANSFER_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(8);
-
 const NEURON_SUBACCOUNT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(9);
 const NEURON_PRINCIPAL_INDEX_MEMORY_ID: MemoryId = MemoryId::new(10);
 const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
 const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
 const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
-
 const NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
 const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
-
 const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
-
 const REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID: MemoryId = MemoryId::new(17);
+const MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(18);
 
 pub mod neuron_indexes;
 pub mod neurons;
@@ -99,6 +95,8 @@ impl State {
                 hot_keys: memory_manager.get(HOT_KEYS_NEURONS_MEMORY_ID),
                 followees: memory_manager.get(FOLLOWEES_NEURONS_MEMORY_ID),
                 recent_ballots: memory_manager.get(RECENT_BALLOTS_NEURONS_MEMORY_ID),
+                maturity_disbursements: memory_manager
+                    .get(MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID),
 
                 // Singletons
                 known_neuron_data: memory_manager.get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),

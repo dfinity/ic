@@ -3,17 +3,17 @@ use super::*;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
+use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
-    canister_state::system_state::{CanisterHistory, OnLowWasmMemoryHookStatus},
-    metadata_state::subnet_call_context_manager::InstallCodeCallId,
-    page_map::Shard,
-    NumWasmPages,
+    canister_state::system_state::CanisterHistory,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
-use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
+use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
 use proptest::prelude::*;
@@ -48,7 +48,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),
         time_of_last_allocation_charge_nanos: 0,
-        task_queue: vec![],
+        task_queue: TaskQueue::default(),
         global_timer_nanos: None,
         canister_version: 0,
         consumed_cycles_by_use_cases: BTreeMap::new(),
@@ -60,7 +60,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
     }
 }
 
@@ -216,6 +215,9 @@ fn test_canister_snapshots_decode() {
         wasm_memory_size: NumWasmPages::new(10),
         total_size: NumBytes::new(100),
         exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
+        source: SnapshotSource::TakenFromCanister,
+        global_timer: Some(CanisterTimer::Inactive),
+        on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
     };
 
     let pb_bits =
@@ -258,7 +260,8 @@ fn test_encode_decode_task_queue() {
             prepaid_execution_cycles: Cycles::new(5),
         },
     ] {
-        let task_queue = vec![task];
+        let mut task_queue = TaskQueue::default();
+        task_queue.enqueue(task);
         let canister_state_bits = CanisterStateBits {
             task_queue: task_queue.clone(),
             ..default_canister_state_bits()
@@ -328,6 +331,63 @@ fn test_removal_when_last_dropped() {
         assert_eq!(
             vec![Height::new(3)],
             state_layout.checkpoint_heights().unwrap(),
+        );
+    });
+}
+
+#[test]
+fn checkpoints_files_are_removed_after_flushing_removal_channel() {
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+        let scratchpad_dir = tmpdir("scratchpad");
+
+        let create_checkpoint_with_dummy_files = |h: Height| -> CheckpointLayout<ReadOnly> {
+            let scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+                scratchpad_dir
+                    .path()
+                    .to_path_buf()
+                    .join(h.get().to_string()),
+                h,
+            )
+            .unwrap();
+
+            // Write 500 dummy files to the scratchpad directory so that removing checkpoint files takes longer than dropping a `CheckpointLayout`.
+            // This is to create some backlog in the checkpoint removal channel.
+            for i in 0..500 {
+                let file_path = scratchpad_layout.raw_path().join(i.to_string());
+                File::create(file_path).unwrap();
+            }
+            let cp = state_layout
+                .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, h)
+                .unwrap();
+            cp.finalize_and_remove_unverified_marker(None).unwrap();
+            cp
+        };
+
+        let mut checkpoints = vec![];
+        for i in 1..=20 {
+            checkpoints.push(create_checkpoint_with_dummy_files(Height::new(i)));
+        }
+        for i in 1..=19 {
+            state_layout.remove_checkpoint_when_unused(Height::new(i));
+        }
+        drop(checkpoints);
+
+        // Dropping `CheckpointLayout` should immediately remove checkpoints 1 through 19
+        // from the checkpoints directory, leaving only checkpoint @20.
+        assert_eq!(
+            vec![Height::new(20)],
+            state_layout.checkpoint_heights().unwrap(),
+        );
+
+        state_layout.flush_checkpoint_removal_channel();
+        // After flushing the removal channel, all temporary folders of checkpoints should be cleared from the `fs_tmp` directory.
+        assert!(
+            state_layout.fs_tmp().read_dir().unwrap().next().is_none(),
+            "fs_tmp directory is not empty"
         );
     });
 }
@@ -813,4 +873,56 @@ fn can_add_and_delete_canister_snapshots(
             .unwrap();
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i + 1)..]);
     }
+}
+
+#[test]
+fn test_encode_decode_empty_task_queue() {
+    let task_queue = TaskQueue::default();
+    // A canister state with empty TaskQueue.
+    let canister_state_bits = CanisterStateBits {
+        task_queue: task_queue.clone(),
+        ..default_canister_state_bits()
+    };
+
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(canister_state_bits.task_queue, task_queue);
+}
+
+#[test]
+fn test_encode_decode_non_empty_task_queue() {
+    let mut task_queue = TaskQueue::default();
+    task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+
+    task_queue.enqueue(ExecutionTask::AbortedExecution {
+        input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        prepaid_execution_cycles: Cycles::zero(),
+    });
+
+    // A canister state with non empty TaskQueue.
+    let canister_state_bits = CanisterStateBits {
+        task_queue: task_queue.clone(),
+        ..default_canister_state_bits()
+    };
+
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(canister_state_bits.task_queue, task_queue);
+}
+
+#[test]
+#[should_panic = "Attempt to serialize ephemeral task"]
+fn test_encode_task_queue_with_paused_task_fails() {
+    let mut task_queue = TaskQueue::default();
+    task_queue.enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(1)));
+
+    // A canister state with non empty TaskQueue.
+    let canister_state_bits = CanisterStateBits {
+        task_queue: task_queue.clone(),
+        ..default_canister_state_bits()
+    };
+
+    let _ = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
 }

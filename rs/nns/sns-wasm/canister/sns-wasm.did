@@ -7,10 +7,6 @@ type AddWasmResponse = record {
   result : opt Result;
 };
 
-type AirdropDistribution = record {
-  airdrop_neurons : vec NeuronDistribution;
-};
-
 type Canister = record {
   id : opt principal;
 };
@@ -56,9 +52,6 @@ type FractionalDeveloperVotingPower = record {
   treasury_distribution : opt TreasuryDistribution;
   developer_distribution : opt DeveloperDistribution;
   swap_distribution : opt SwapDistribution;
-
-  // Obsolete fields.
-  airdrop_distribution : opt AirdropDistribution;
 };
 
 type GetAllowedPrincipalsResponse = record {

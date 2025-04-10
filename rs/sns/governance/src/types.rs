@@ -1,6 +1,6 @@
 use crate::{
     governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::{ERROR, INFO},
+    logs::INFO,
     pb::{
         sns_root_types::{
             set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
@@ -24,7 +24,7 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::Followees,
+            neuron::{Followees, TopicFollowees},
             proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
@@ -55,14 +55,12 @@ use ic_nervous_system_common::{
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_api::format_full_hash;
-use ic_sns_governance_proposal_criticality::{
-    ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
-};
+use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
     fmt,
 };
@@ -136,10 +134,10 @@ pub mod native_action_ids {
     pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
 
     /// SetTopicsForCustomProposals Action.
-    pub const SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
+    pub const SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
     // When adding something to this list, make sure to update the below function.
-    pub fn native_functions() -> Vec<NervousSystemFunction> {
+    pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
             NervousSystemFunction::motion(),
             NervousSystemFunction::manage_nervous_system_parameters(),
@@ -349,6 +347,7 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
             S::Configure              (x) => D::Configure              (x),
             S::Disburse               (x) => D::Disburse               (x),
             S::Follow                 (x) => D::Follow                 (x),
+            S::SetFollowing           (x) => D::SetFollowing           (x),
             S::MakeProposal           (x) => D::MakeProposal           (x),
             S::RegisterVote           (x) => D::RegisterVote           (x),
             S::Split                  (x) => D::Split                  (x),
@@ -1072,6 +1071,14 @@ impl NervousSystemFunction {
             Some(FunctionType::NativeNervousSystemFunction(_))
         )
     }
+
+    /// The special case if for `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
+    /// proposals of this SNS. While technically being a native function, this one does not have
+    /// its own topic.
+    pub fn needs_topic(&self) -> bool {
+        self.id != native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION
+    }
+
     fn unspecified() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::UNSPECIFIED,
@@ -1238,7 +1245,7 @@ impl NervousSystemFunction {
 
     fn set_topics_for_custom_proposals() -> NervousSystemFunction {
         NervousSystemFunction {
-            id: native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
+            id: native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
             name: "Set topics for custom proposals".to_string(),
             description: Some("Proposal to set the topics for custom SNS proposals.".to_string()),
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
@@ -1349,6 +1356,7 @@ impl manage_neuron::Command {
             manage_neuron::Command::Configure(_) => "Configure",
             manage_neuron::Command::Disburse(_) => "Disburse",
             manage_neuron::Command::Follow(_) => "Follow",
+            manage_neuron::Command::SetFollowing(_) => "SetFollowing",
             manage_neuron::Command::MakeProposal(_) => "MakeProposal",
             manage_neuron::Command::RegisterVote(_) => "RegisterVote",
             manage_neuron::Command::Split(_) => "Split",
@@ -1442,6 +1450,14 @@ impl ManageNeuronResponse {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Follow(
                 manage_neuron_response::FollowResponse {},
+            )),
+        }
+    }
+
+    pub fn set_following_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::SetFollowing(
+                manage_neuron_response::SetFollowingResponse {},
             )),
         }
     }
@@ -1682,21 +1698,16 @@ impl Action {
         }
     }
 
-    pub(crate) fn voting_power_thresholds(&self) -> VotingPowerThresholds {
-        // This just reduces to the method of the same name in
-        // ProposalCriticality
-        self.proposal_criticality().voting_power_thresholds()
-    }
-
     pub(crate) fn voting_duration_parameters(
         &self,
         nervous_system_parameters: &NervousSystemParameters,
+        proposal_criticality: ProposalCriticality,
     ) -> VotingDurationParameters {
         let initial_voting_period_seconds = nervous_system_parameters.initial_voting_period_seconds;
         let wait_for_quiet_deadline_increase_seconds =
             nervous_system_parameters.wait_for_quiet_deadline_increase_seconds;
 
-        match self.proposal_criticality() {
+        match proposal_criticality {
             ProposalCriticality::Normal => VotingDurationParameters {
                 initial_voting_period: PbDuration {
                     seconds: initial_voting_period_seconds,
@@ -1725,69 +1736,6 @@ impl Action {
             }
         }
     }
-
-    fn proposal_criticality(&self) -> ProposalCriticality {
-        use Action::*;
-        match self {
-            DeregisterDappCanisters(_)
-            | TransferSnsTreasuryFunds(_)
-            | MintSnsTokens(_)
-            | SetTopicsForCustomProposals(_) => ProposalCriticality::Critical,
-
-            Unspecified(_)
-            | ManageNervousSystemParameters(_)
-            | UpgradeSnsControlledCanister(_)
-            | Motion(_)
-            | AddGenericNervousSystemFunction(_)
-            | RemoveGenericNervousSystemFunction(_)
-            | ExecuteGenericNervousSystemFunction(_)
-            | UpgradeSnsToNextVersion(_)
-            | AdvanceSnsTargetVersion(_)
-            | ManageSnsMetadata(_)
-            | ManageLedgerParameters(_)
-            | RegisterDappCanisters(_)
-            | ManageDappCanisterSettings(_) => ProposalCriticality::Normal,
-        }
-    }
-}
-
-pub(crate) fn function_id_to_proposal_criticality(function_id: u64) -> ProposalCriticality {
-    lazy_static! {
-        static ref FUNCTION_ID_TO_PROPOSAL_CRITICALITY: HashMap</* function_id */ u64, ProposalCriticality> = {
-            let mut result = HashMap::new();
-
-            for action in Action::iter() {
-                // Skip non-native, aka generic functions.
-                if let Action::ExecuteGenericNervousSystemFunction(_) = action {
-                    continue;
-                }
-
-                let function_id = u64::from(&action);
-                let previous_value = result.insert(function_id, action.proposal_criticality());
-                debug_assert!(previous_value.is_none(), "{:#?}", previous_value);
-            }
-
-            result
-        };
-    }
-
-    if let Some(result) = FUNCTION_ID_TO_PROPOSAL_CRITICALITY.get(&function_id) {
-        return *result;
-    }
-
-    // Default to Normal. This is not unusual; it happens when the function is a generic
-    // (user-defined) nervous system functions. Such functions have IDs that are >= MIN_ID.
-
-    if function_id < ValidGenericNervousSystemFunction::MIN_ID {
-        log!(
-            ERROR,
-            "Defaulting to ProposalCriticality::Normal, but the function ID is too small \
-             to be that of a generic nervous system function: {}",
-            function_id,
-        );
-    }
-
-    ProposalCriticality::Normal
 }
 
 impl UpgradeSnsControlledCanister {
@@ -1900,9 +1848,6 @@ fn summarize_blob_field(blob: &[u8]) -> Vec<u8> {
 }
 
 // Mapping of action to the unique function id of that action.
-//
-// When adding/removing an action here, also add/remove from
-// `Action::native_actions_metadata()`.
 impl From<&Action> for u64 {
     fn from(action: &Action) -> Self {
         match action {
@@ -1933,7 +1878,7 @@ impl From<&Action> for u64 {
             }
             Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
             Action::SetTopicsForCustomProposals(_) => {
-                native_action_ids::SET_CUSTOM_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
+                native_action_ids::SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION
             }
         }
     }
@@ -2364,6 +2309,14 @@ impl NeuronRecipe {
                 followees: followees.clone(),
             };
             btreemap! { catch_all => followees }
+        }
+    }
+
+    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
+    // TODO[NNS1-3676]: to begin using topics-based following.
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        TopicFollowees {
+            topic_id_to_followees: btreemap! {},
         }
     }
 

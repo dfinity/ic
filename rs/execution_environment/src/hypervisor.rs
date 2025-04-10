@@ -5,7 +5,11 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
-    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+    },
+    CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
+    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
@@ -17,9 +21,6 @@ use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
 };
 use ic_types::{
     messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
@@ -168,10 +169,10 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
-                round_limits.instructions -= as_round_instructions(
-                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost),
-                );
-                (compilation_cost, Ok(execution_state))
+                let adjusted_compilation_cost =
+                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
+                round_limits.instructions -= as_round_instructions(adjusted_compilation_cost);
+                (adjusted_compilation_cost, Ok(execution_state))
             }
             Err(err) => {
                 round_limits.instructions -= as_round_instructions(compilation_cost);
@@ -189,8 +190,6 @@ impl Hypervisor {
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        // TODO(EXC-1821): Create a temp dir in this directory for use in the
-        // compilation cache.
         temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
@@ -225,10 +224,12 @@ impl Hypervisor {
             own_subnet_id,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(
-                MAX_COMPILATION_CACHE_SIZE,
-                tempfile::tempdir_in(temp_dir).unwrap(),
-            )),
+            compilation_cache: Arc::new(
+                CompilationCacheBuilder::new()
+                    .with_memory_capacity(MAX_COMPILATION_CACHE_SIZE)
+                    .with_dir(tempfile::tempdir_in(temp_dir).unwrap())
+                    .build(),
+            ),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
@@ -256,10 +257,12 @@ impl Hypervisor {
             own_subnet_id,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(
-                MAX_COMPILATION_CACHE_SIZE,
-                tempfile::tempdir().unwrap(),
-            )),
+            compilation_cache: Arc::new(
+                CompilationCacheBuilder::new()
+                    .with_memory_capacity(MAX_COMPILATION_CACHE_SIZE)
+                    .with_dir(tempfile::tempdir().unwrap())
+                    .build(),
+            ),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,

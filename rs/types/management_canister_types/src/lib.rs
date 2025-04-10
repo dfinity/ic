@@ -21,7 +21,8 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
-use ic_protobuf::state::canister_state_bits::v1::{self as pb_canister_state_bits};
+use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
+use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
 use ic_protobuf::types::v1::{
@@ -29,6 +30,8 @@ use ic_protobuf::types::v1::{
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
+use std::hash::{Hash, Hasher};
+
 use num_traits::cast::ToPrimitive;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 use serde::Serialize;
@@ -92,8 +95,8 @@ pub enum Method {
     // VetKd interface.
     #[strum(serialize = "vetkd_public_key")]
     VetKdPublicKey,
-    #[strum(serialize = "vetkd_derive_encrypted_key")]
-    VetKdDeriveEncryptedKey,
+    #[strum(serialize = "vetkd_derive_key")]
+    VetKdDeriveKey,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -126,6 +129,12 @@ pub enum Method {
     LoadCanisterSnapshot,
     ListCanisterSnapshots,
     DeleteCanisterSnapshot,
+
+    // Support for import and export of canister snapshots
+    ReadCanisterSnapshotMetadata,
+    ReadCanisterSnapshotData,
+    UploadCanisterSnapshotMetadata,
+    UploadCanisterSnapshotData,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -813,26 +822,33 @@ impl Payload<'_> for LogVisibilityV2 {}
 
 impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
     fn from(item: &LogVisibilityV2) -> Self {
-        use pb_canister_state_bits as pb;
         match item {
-            LogVisibilityV2::Controllers => pb::LogVisibilityV2 {
-                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Controllers(1)),
+            LogVisibilityV2::Controllers => pb_canister_state_bits::LogVisibilityV2 {
+                log_visibility_v2: Some(
+                    pb_canister_state_bits::log_visibility_v2::LogVisibilityV2::Controllers(1),
+                ),
             },
-            LogVisibilityV2::Public => pb::LogVisibilityV2 {
-                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Public(2)),
+            LogVisibilityV2::Public => pb_canister_state_bits::LogVisibilityV2 {
+                log_visibility_v2: Some(
+                    pb_canister_state_bits::log_visibility_v2::LogVisibilityV2::Public(2),
+                ),
             },
-            LogVisibilityV2::AllowedViewers(principals) => pb::LogVisibilityV2 {
-                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(
-                    pb::LogVisibilityAllowedViewers {
-                        principals: principals
-                            .get()
-                            .iter()
-                            .map(|c| (*c).into())
-                            .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
-                            .clone(),
-                    },
-                )),
-            },
+            LogVisibilityV2::AllowedViewers(principals) => {
+                pb_canister_state_bits::LogVisibilityV2 {
+                    log_visibility_v2: Some(
+                        pb_canister_state_bits::log_visibility_v2::LogVisibilityV2::AllowedViewers(
+                            pb_canister_state_bits::LogVisibilityAllowedViewers {
+                                principals: principals
+                                    .get()
+                                    .iter()
+                                    .map(|c| (*c).into())
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                                    .clone(),
+                            },
+                        ),
+                    ),
+                }
+            }
         }
     }
 }
@@ -841,16 +857,19 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
     type Error = ProxyDecodeError;
 
     fn try_from(item: pb_canister_state_bits::LogVisibilityV2) -> Result<Self, Self::Error> {
-        use pb_canister_state_bits as pb;
         let Some(log_visibility_v2) = item.log_visibility_v2 else {
             return Err(ProxyDecodeError::MissingField(
                 "LogVisibilityV2::log_visibility_v2",
             ));
         };
         match log_visibility_v2 {
-            pb::log_visibility_v2::LogVisibilityV2::Controllers(_) => Ok(Self::Controllers),
-            pb::log_visibility_v2::LogVisibilityV2::Public(_) => Ok(Self::Public),
-            pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
+            pb_canister_state_bits::log_visibility_v2::LogVisibilityV2::Controllers(_) => {
+                Ok(Self::Controllers)
+            }
+            pb_canister_state_bits::log_visibility_v2::LogVisibilityV2::Public(_) => {
+                Ok(Self::Public)
+            }
+            pb_canister_state_bits::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
                 let principals = data
                     .principals
                     .iter()
@@ -2916,27 +2935,27 @@ impl ComputeInitialIDkgDealingsResponse {
     }
 }
 
-// Represents the argument of the vetkd_derive_encrypted_key API.
+// Represents the argument of the vetkd_derive_key API.
 /// ```text
 /// (record {
-///   derivation_id: blob;
-///   derivation_path : vec blob;
+///   input: blob;
+///   context : blob;
+///   transport_public_key: blob;
 ///   key_id : record { curve : vetkd_curve; name : text };
-///   encryption_public_key: blob;
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct VetKdDeriveEncryptedKeyArgs {
+pub struct VetKdDeriveKeyArgs {
     #[serde(with = "serde_bytes")]
-    pub derivation_domain: Vec<u8>,
+    pub context: Vec<u8>,
     #[serde(with = "serde_bytes")]
-    pub derivation_id: Vec<u8>,
+    pub input: Vec<u8>,
     pub key_id: VetKdKeyId,
     #[serde(with = "serde_bytes")]
-    pub encryption_public_key: [u8; 48],
+    pub transport_public_key: [u8; 48],
 }
 
-impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
+impl Payload<'_> for VetKdDeriveKeyArgs {}
 
 /// Struct used to return vet KD result.
 /// ```text
@@ -2945,18 +2964,18 @@ impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
 /// })
 /// ```
 #[derive(Debug, CandidType, Deserialize)]
-pub struct VetKdDeriveEncryptedKeyResult {
+pub struct VetKdDeriveKeyResult {
     #[serde(with = "serde_bytes")]
     pub encrypted_key: Vec<u8>,
 }
 
-impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
+impl Payload<'_> for VetKdDeriveKeyResult {}
 
 /// Represents the argument of the vetkd_public_key API.
 /// ```text
 /// (record {
 ///   canister_id : opt canister_id;
-///   derivation_path : vec blob;
+///   context : blob;
 ///   key_id : record { curve : vetkd_curve; name : text };
 /// })
 /// ```
@@ -2964,7 +2983,7 @@ impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
 pub struct VetKdPublicKeyArgs {
     pub canister_id: Option<CanisterId>,
     #[serde(with = "serde_bytes")]
-    pub derivation_domain: Vec<u8>,
+    pub context: Vec<u8>,
     pub key_id: VetKdKeyId,
 }
 
@@ -3583,11 +3602,13 @@ impl DeleteCanisterSnapshotArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
+    // TODO: EXC-1997.
     pub fn get_snapshot_id(&self) -> SnapshotId {
         SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
+// TODO: EXC-1997.
 impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
@@ -3626,10 +3647,554 @@ impl ListCanisterSnapshotArgs {
 
 impl Payload<'_> for ListCanisterSnapshotArgs {}
 
+/// An enum representing the possible values of a global variable.
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, EnumIter, CandidType)]
+pub enum Global {
+    I32(i32),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+    V128(u128),
+}
+
+impl Global {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Global::I32(_) => "i32",
+            Global::I64(_) => "i64",
+            Global::F32(_) => "f32",
+            Global::F64(_) => "f64",
+            Global::V128(_) => "v128",
+        }
+    }
+}
+
+impl Hash for Global {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let bytes = match self {
+            Global::I32(val) => val.to_le_bytes().to_vec(),
+            Global::I64(val) => val.to_le_bytes().to_vec(),
+            Global::F32(val) => val.to_le_bytes().to_vec(),
+            Global::F64(val) => val.to_le_bytes().to_vec(),
+            Global::V128(val) => val.to_le_bytes().to_vec(),
+        };
+        bytes.hash(state)
+    }
+}
+
+impl PartialEq<Global> for Global {
+    fn eq(&self, other: &Global) -> bool {
+        match (self, other) {
+            (Global::I32(val), Global::I32(other_val)) => val == other_val,
+            (Global::I64(val), Global::I64(other_val)) => val == other_val,
+            (Global::F32(val), Global::F32(other_val)) => val == other_val,
+            (Global::F64(val), Global::F64(other_val)) => val == other_val,
+            (Global::V128(val), Global::V128(other_val)) => val == other_val,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Global {}
+
+impl From<&Global> for pb_canister_state_bits::Global {
+    fn from(item: &Global) -> Self {
+        match item {
+            Global::I32(value) => Self {
+                global: Some(pb_canister_state_bits::global::Global::I32(*value)),
+            },
+            Global::I64(value) => Self {
+                global: Some(pb_canister_state_bits::global::Global::I64(*value)),
+            },
+            Global::F32(value) => Self {
+                global: Some(pb_canister_state_bits::global::Global::F32(*value)),
+            },
+            Global::F64(value) => Self {
+                global: Some(pb_canister_state_bits::global::Global::F64(*value)),
+            },
+            Global::V128(value) => Self {
+                global: Some(pb_canister_state_bits::global::Global::V128(
+                    value.to_le_bytes().to_vec(),
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<pb_canister_state_bits::Global> for Global {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb_canister_state_bits::Global) -> Result<Self, Self::Error> {
+        match try_from_option_field(value.global, "Global::global")? {
+            pb_canister_state_bits::global::Global::I32(value) => Ok(Self::I32(value)),
+            pb_canister_state_bits::global::Global::I64(value) => Ok(Self::I64(value)),
+            pb_canister_state_bits::global::Global::F32(value) => Ok(Self::F32(value)),
+            pb_canister_state_bits::global::Global::F64(value) => Ok(Self::F64(value)),
+            pb_canister_state_bits::global::Global::V128(value) => Ok(Self::V128(
+                u128::from_le_bytes(value.as_slice().try_into().unwrap()),
+            )),
+        }
+    }
+}
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id : principal;
+///     snapshot_id : blob;
+/// })`
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct ReadCanisterSnapshotMetadataArgs {
+    canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    snapshot_id: Vec<u8>,
+}
+
+impl ReadCanisterSnapshotMetadataArgs {
+    pub fn new(canister_id: CanisterId, snapshot_id: SnapshotId) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id: snapshot_id.to_vec(),
+        }
+    }
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+    // TODO: EXC-1997.
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+}
+
+// TODO: EXC-1997.
+impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
+pub enum SnapshotSource {
+    #[default]
+    TakenFromCanister,
+    UploadedManually,
+}
+
+impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
+    fn from(value: SnapshotSource) -> Self {
+        match value {
+            SnapshotSource::TakenFromCanister => {
+                pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
+            }
+            SnapshotSource::UploadedManually => {
+                pb_canister_snapshot_bits::SnapshotSource::UploadedManually
+            }
+        }
+    }
+}
+
+impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_canister_snapshot_bits::SnapshotSource) -> Result<Self, Self::Error> {
+        match value {
+            pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "SnapshotSource",
+                    err: format!("Unexpected value of SnapshotSource: {:?}", value),
+                })
+            }
+            pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
+                Ok(SnapshotSource::TakenFromCanister)
+            }
+            pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
+                Ok(SnapshotSource::UploadedManually)
+            }
+        }
+    }
+}
+
+/// Struct used for encoding/decoding
+/// (record {
+///     source : variant {
+///         taken_from_canister;
+///         uploaded_manually;
+///     };
+///     taken_at_timestamp : nat64;
+///     wasm_module_size : nat64;
+///     exported_globals : vec variant {
+///         i32 : int32;
+///         i64 : int64;
+///         f32 : float32;
+///         f64 : float64;
+///         v128 : nat;
+///     };
+///     wasm_memory_size : nat64;
+///     stable_memory_size : nat64;
+///     wasm_chunk_store : vec record {
+///         hash : blob;
+///     };
+///     canister_version : nat64;
+///     certified_data : blob;
+///     global_timer : variant {
+///         inactive;
+///         active : nat64;
+///     };
+///     on_low_wasm_memory_hook_status : variant {
+///         condition_not_satisfied;
+///         ready;
+///         executed;
+///     };
+/// })
+
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+pub struct ReadCanisterSnapshotMetadataResponse {
+    pub source: SnapshotSource,
+    pub taken_at_timestamp: u64,
+    pub wasm_module_size: u64,
+    pub exported_globals: Vec<Global>,
+    pub wasm_memory_size: u64,
+    pub stable_memory_size: u64,
+    pub wasm_chunk_store: Vec<ChunkHash>,
+    pub canister_version: u64,
+    #[serde(with = "serde_bytes")]
+    pub certified_data: Vec<u8>,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
+}
+
+/// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
+///
+/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub enum GlobalTimer {
+    Inactive,
+    Active(u64),
+}
+
+/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
+#[derive(
+    Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, CandidType, Serialize, EnumIter,
+)]
+pub enum OnLowWasmMemoryHookStatus {
+    #[default]
+    ConditionNotSatisfied,
+    Ready,
+    Executed,
+}
+
+impl OnLowWasmMemoryHookStatus {
+    pub fn update(&mut self, is_hook_condition_satisfied: bool) {
+        *self = if is_hook_condition_satisfied {
+            match *self {
+                Self::ConditionNotSatisfied | Self::Ready => Self::Ready,
+                Self::Executed => Self::Executed,
+            }
+        } else {
+            Self::ConditionNotSatisfied
+        };
+    }
+
+    pub fn is_ready(&self) -> bool {
+        *self == Self::Ready
+    }
+}
+
+impl From<&OnLowWasmMemoryHookStatus> for pb_canister_state_bits::OnLowWasmMemoryHookStatus {
+    fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
+        use OnLowWasmMemoryHookStatus::*;
+
+        match *item {
+            ConditionNotSatisfied => Self::ConditionNotSatisfied,
+            Ready => Self::Ready,
+            Executed => Self::Executed,
+        }
+    }
+}
+
+impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
+    type Error = ProxyDecodeError;
+
+    fn try_from(
+        value: pb_canister_state_bits::OnLowWasmMemoryHookStatus,
+    ) -> Result<Self, Self::Error> {
+        match value {
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "OnLowWasmMemoryHookStatus",
+                    err: format!(
+                        "Unexpected value of status of on low wasm memory hook: {:?}",
+                        value
+                    ),
+                })
+            }
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
+                Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+            }
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus::Ready => {
+                Ok(OnLowWasmMemoryHookStatus::Ready)
+            }
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus::Executed => {
+                Ok(OnLowWasmMemoryHookStatus::Executed)
+            }
+        }
+    }
+}
+
+/// Struct for encoding/decoding
+/// (record {
+///  canister_id : principal;
+///  snapshot_id : blob;
+///  kind : variant {
+///         wasm_module : record {
+///         offset : nat64;
+///         size : nat64;
+///     };
+///     main_memory : record {
+///         offset : nat64;
+///         size : nat64;
+///     };
+///     stable_memory : record {
+///         offset : nat64;
+///         size : nat64;
+///     };
+///     wasm_chunk : record {
+///         hash : blob;
+///     };
+///  };
+/// })
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct ReadCanisterSnapshotDataArgs {
+    pub canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
+    pub kind: CanisterSnapshotDataKind,
+}
+
+impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
+
+impl ReadCanisterSnapshotDataArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        kind: CanisterSnapshotDataKind,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id: snapshot_id.to_vec(),
+            kind,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    // TODO: EXC-1997 strengthen types
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub enum CanisterSnapshotDataKind {
+    WasmModule {
+        offset: u64,
+        size: u64,
+    },
+    MainMemory {
+        offset: u64,
+        size: u64,
+    },
+    StableMemory {
+        offset: u64,
+        size: u64,
+    },
+    WasmChunk {
+        #[serde(with = "serde_bytes")]
+        hash: Vec<u8>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+
+/// Struct to encode/decode
+/// (record { chunk: blob }; )
+pub struct ReadCanisterSnapshotDataResponse {
+    #[serde(with = "serde_bytes")]
+    pub chunk: Vec<u8>,
+}
+
+impl ReadCanisterSnapshotDataResponse {
+    pub fn new(chunk: Vec<u8>) -> Self {
+        Self { chunk }
+    }
+}
+
+/// Struct to encode/decode
+/// (record {
+///     canister_id : principal;
+///     replace_snapshot : opt blob;
+///     wasm_module_size : nat64;
+///     exported_globals : vec variant {
+///         i32 : int32;
+///         i64 : int64;
+///         f32 : float32;
+///         f64 : float64;
+///         v128 : nat;
+///     };
+///     wasm_memory_size : nat64;
+///     stable_memory_size : nat64;
+///     certified_data : blob;
+///     global_timer : variant {
+///         inactive;
+///         active : nat64;
+///     };
+///     on_low_wasm_memory_hook_status : variant {
+///         condition_not_satisfied;
+///         ready;
+///         executed;
+///     };
+/// };)
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotMetadataArgs {
+    pub canister_id: PrincipalId,
+    pub replace_snapshot: Option<ByteBuf>,
+    pub wasm_module_size: u64,
+    pub exported_globals: Vec<Global>,
+    pub wasm_memory_size: u64,
+    pub stable_memory_size: u64,
+    #[serde(with = "serde_bytes")]
+    pub certified_data: Vec<u8>,
+    pub global_timer: GlobalTimer,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+}
+
+impl Payload<'_> for UploadCanisterSnapshotMetadataArgs {}
+
+impl UploadCanisterSnapshotMetadataArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        replace_snapshot: Option<Vec<u8>>,
+        wasm_module_size: u64,
+        exported_globals: Vec<Global>,
+        wasm_memory_size: u64,
+        stable_memory_size: u64,
+        certified_data: Vec<u8>,
+        global_timer: GlobalTimer,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            replace_snapshot: replace_snapshot.map(ByteBuf::from),
+            wasm_module_size,
+            exported_globals,
+            wasm_memory_size,
+            stable_memory_size,
+            certified_data,
+            global_timer,
+            on_low_wasm_memory_hook_status,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+/// Struct to encode/decode
+/// (record {
+///     canister_id : principal;
+///     snapshot_id : blob;
+///     kind : variant {
+///         wasm_module : record {
+///             offset : nat64;
+///         };
+///         main_memory : record {
+///             offset : nat64;
+///         };
+///         stable_memory : record {
+///             offset : nat64;
+///         };
+///         wasm_chunk;
+///     };
+///     chunk : blob;
+/// };)
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotDataArgs {
+    pub canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
+    pub kind: CanisterSnapshotDataOffset,
+    #[serde(with = "serde_bytes")]
+    pub chunk: Vec<u8>,
+}
+
+impl Payload<'_> for UploadCanisterSnapshotDataArgs {}
+
+impl UploadCanisterSnapshotDataArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        snapshot_id: Vec<u8>,
+        kind: CanisterSnapshotDataOffset,
+        chunk: Vec<u8>,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id,
+            kind,
+            chunk,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub enum CanisterSnapshotDataOffset {
+    WasmModule { offset: u64 },
+    MainMemory { offset: u64 },
+    StableMemory { offset: u64 },
+    WasmChunk,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use strum::IntoEnumIterator;
+
+    use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
+    use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
+
+    #[test]
+    fn snapshot_source_exhaustive() {
+        for initial in SnapshotSource::iter() {
+            let encoded = pb_canister_snapshot_bits::SnapshotSource::from(initial);
+            let round_trip = SnapshotSource::try_from(encoded).unwrap();
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn on_low_wasm_memory_hook_status_exhaustive() {
+        for initial in OnLowWasmMemoryHookStatus::iter() {
+            let encoded = pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&initial);
+            let round_trip = OnLowWasmMemoryHookStatus::try_from(encoded).unwrap();
+            assert_eq!(initial, round_trip);
+        }
+    }
 
     #[test]
     fn ecdsa_from_u32_exhaustive() {
@@ -3692,6 +4257,26 @@ mod tests {
                 .collect::<Vec<i32>>(),
             [1, 2, 3]
         );
+    }
+
+    #[test]
+    fn compatibility_for_snapshot_source() {
+        // If this fails, you are making a potentially incompatible change to `SnapshotSource`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        let actual_variants: Vec<i32> = SnapshotSource::iter().map(|x| x as i32).collect();
+        let expected_variants = vec![0, 1];
+        assert_eq!(actual_variants, expected_variants);
+    }
+
+    #[test]
+    fn compatibility_for_on_low_wasm_memory_hook_status() {
+        // If this fails, you are making a potentially incompatible change to `OnLowWasmMemoryHookStatus`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        let actual_variants: Vec<i32> = OnLowWasmMemoryHookStatus::iter()
+            .map(|x| x as i32)
+            .collect();
+        let expected_variants = vec![0, 1, 2];
+        assert_eq!(actual_variants, expected_variants);
     }
 
     #[test]

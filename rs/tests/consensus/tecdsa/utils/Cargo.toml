@@ -13,6 +13,7 @@ canister-test = { path = "../../../../rust_canisters/canister_test" }
 ed25519-dalek = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
+ic_bls12_381 = { workspace = true }
 ic-canister-client = { path = "../../../../canister_client" }
 ic-config = { path = "../../../../config" }
 ic-limits = { path = "../../../../limits" }
@@ -28,6 +29,7 @@ ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../../driver" }
 ic-types = { path = "../../../../types/types" }
 ic-types-test-utils = { path = "../../../../types/types_test_utils" }
+ic-vetkd-utils = { path = "../../../../../packages/ic-vetkd-utils" }
 k256 = { workspace = true }
 registry-canister = { path = "../../../../registry/canister" }
 serde = { workspace = true }

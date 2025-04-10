@@ -474,16 +474,34 @@ fn eval(ops_bytes: OpsBytes) {
                     )),
                 }
             }
-            Ops::CostVetkdDeriveEncryptedKey => {
+            Ops::CostVetkdDeriveKey => {
                 let vetkd_curve = stack.pop_int();
                 let key_name = stack.pop_blob();
-                match api::cost_vetkd_derive_encrypted_key(&key_name, vetkd_curve) {
+                match api::cost_vetkd_derive_key(&key_name, vetkd_curve) {
                     Ok(bytes) => stack.push_blob(bytes),
                     Err(err_code) => api::trap_with(&format!(
-                        "ic0.cost_vetkd_derive_encrypted_key failed with error code {}",
+                        "ic0.cost_vetkd_derive_key failed with error code {}",
                         err_code
                     )),
                 }
+            }
+            Ops::LiquidCyclesBalance128 => stack.push_blob(api::liquid_balance128()),
+            Ops::CallDataAppendCyclesAddMax => {
+                let method_name_size = stack.pop_int64();
+                let payload = stack.pop_blob();
+                api::call_data_append(&payload);
+                let payload_size = payload.len() as u64;
+                let cost_call = u128::from_le_bytes(
+                    api::cost_call(method_name_size, payload_size)
+                        .try_into()
+                        .unwrap(),
+                );
+                let liquid_balance =
+                    u128::from_le_bytes(api::liquid_balance128().try_into().unwrap());
+                let balance = liquid_balance.saturating_sub(cost_call);
+                let amount_low = (balance & 0xffff_ffff_ffff_ffff) as u64;
+                let amount_high = (balance >> 64) as u64;
+                api::call_cycles_add128(amount_high, amount_low)
             }
         }
     }

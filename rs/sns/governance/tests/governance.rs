@@ -2389,10 +2389,10 @@ fn test_neurons_can_follow_themselves() {
         follower_neuron.followees,
         btreemap! {
             native_action_ids::UNSPECIFIED => neuron::Followees {
-                followees: vec![followee_neuron_id.clone()]
+                followees: vec![followee_neuron_id.clone()],
             },
             native_action_ids::MOTION => neuron::Followees {
-                followees: vec![follower_neuron_id.clone()]
+                followees: vec![follower_neuron_id.clone()],
             }
         }
     );

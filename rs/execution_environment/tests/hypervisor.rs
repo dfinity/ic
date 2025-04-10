@@ -1,13 +1,18 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
-use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_config::{
+    embedders::BestEffortResponsesFeature, execution_environment::MINIMUM_FREEZING_THRESHOLD,
+};
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+use ic_embedders::{
+    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
+};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
@@ -19,11 +24,10 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, ExportedFunctions, Global,
-    MessageMemoryUsage, NumWasmPages, PageIndex, PageMap,
+    canister_state::execution_state::CustomSectionType, ExportedFunctions, MessageMemoryUsage,
+    NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
-use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
@@ -1056,7 +1060,7 @@ fn ic0_canister_version_returns_correct_value() {
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
+    test.update_freezing_threshold(canister_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 5 for the previous ingress messages.
@@ -3360,6 +3364,8 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
+    // Clear `expected_compiled_wasms` so that the full execution cost is applied.
+    test.state_mut().metadata.expected_compiled_wasms.clear();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     // Compilation occurs once for original installation and again for upgrade.
@@ -6962,7 +6968,7 @@ fn stable_memory_grow_reserves_cycles() {
             .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -7066,7 +7072,7 @@ fn wasm_memory_grow_reserves_cycles() {
 
         let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -7144,7 +7150,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7283,7 +7289,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7349,7 +7355,7 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7386,7 +7392,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7430,7 +7436,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     let canister_id = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
         .unwrap();
 
     let reserved_cycles_before = test
@@ -8440,7 +8446,7 @@ fn cost_sign_with_schnorr_fails_bad_key_name() {
 }
 
 #[test]
-fn invoke_cost_vetkd_derive_encrypted_key() {
+fn invoke_cost_vetkd_derive_key() {
     let key_name = String::from("testkey");
     let curve_variant = 0;
     let mut test = ExecutionTestBuilder::new()
@@ -8452,7 +8458,7 @@ fn invoke_cost_vetkd_derive_encrypted_key() {
     let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
-        .cost_vetkd_derive_encrypted_key(key_name.as_bytes(), curve_variant)
+        .cost_vetkd_derive_key(key_name.as_bytes(), curve_variant)
         .reply_data_append()
         .reply()
         .build();
@@ -8466,7 +8472,7 @@ fn invoke_cost_vetkd_derive_encrypted_key() {
 }
 
 #[test]
-fn cost_vetkd_derive_encrypted_key_fails_bad_curve() {
+fn cost_vetkd_derive_key_fails_bad_curve() {
     let key_name = String::from("testkey");
     let curve_variant = 0;
     let mut test = ExecutionTestBuilder::new()
@@ -8477,7 +8483,7 @@ fn cost_vetkd_derive_encrypted_key_fails_bad_curve() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
-        .cost_vetkd_derive_encrypted_key(key_name.as_bytes(), curve_variant + 10)
+        .cost_vetkd_derive_key(key_name.as_bytes(), curve_variant + 10)
         .reply_data_append()
         .reply()
         .build();
@@ -8487,12 +8493,12 @@ fn cost_vetkd_derive_encrypted_key_fails_bad_curve() {
     };
     err.assert_contains(
         ErrorCode::CanisterCalledTrap,
-        "ic0.cost_vetkd_derive_encrypted_key failed with error code 1",
+        "ic0.cost_vetkd_derive_key failed with error code 1",
     );
 }
 
 #[test]
-fn cost_vetkd_derive_encrypted_key_fails_bad_key_name() {
+fn cost_vetkd_derive_key_fails_bad_key_name() {
     let key_name = String::from("testkey");
     let curve_variant = 0;
     let mut test = ExecutionTestBuilder::new()
@@ -8503,7 +8509,7 @@ fn cost_vetkd_derive_encrypted_key_fails_bad_key_name() {
         .build();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
-        .cost_vetkd_derive_encrypted_key(String::from("yesn't").as_bytes(), curve_variant)
+        .cost_vetkd_derive_key(String::from("yesn't").as_bytes(), curve_variant)
         .reply_data_append()
         .reply()
         .build();
@@ -8513,6 +8519,6 @@ fn cost_vetkd_derive_encrypted_key_fails_bad_key_name() {
     };
     err.assert_contains(
         ErrorCode::CanisterCalledTrap,
-        "ic0.cost_vetkd_derive_encrypted_key failed with error code 2",
+        "ic0.cost_vetkd_derive_key failed with error code 2",
     );
 }

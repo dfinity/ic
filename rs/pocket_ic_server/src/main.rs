@@ -6,8 +6,8 @@ use aide::{
     },
     openapi::{Info, OpenApi},
 };
+use async_trait::async_trait;
 use axum::{
-    async_trait,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
@@ -26,7 +26,7 @@ use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
-use pocket_ic_server::state_api::routes::{handler_read_graph, timeout_or_default};
+use pocket_ic_server::state_api::routes::handler_read_graph;
 use pocket_ic_server::state_api::{
     routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
     state::{ApiState, PocketIcApiStateBuilder},
@@ -36,6 +36,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::channel;
@@ -147,6 +148,7 @@ async fn start(runtime: Arc<Runtime>) {
     let min_alive_until = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
         api_state,
+        pending_requests: Arc::new(AtomicU64::new(0)),
         min_alive_until,
         runtime,
         blob_store: Arc::new(InMemoryBlobStore::new()),
@@ -164,13 +166,13 @@ async fn start(runtime: Arc<Runtime>) {
         .directory_route("/blobstore", post(set_blob_store_entry))
         //
         // Get a blob store entry.
-        .directory_route("/blobstore/:id", get(get_blob_store_entry))
+        .directory_route("/blobstore/{id}", get(get_blob_store_entry))
         //
         // Verify signature.
         .directory_route("/verify_signature", post(verify_signature))
         //
         // Read state: Poll a result based on a received Started{} reply.
-        .directory_route("/read_graph/:state_label/:op_id", get(handler_read_graph))
+        .directory_route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
@@ -210,8 +212,9 @@ async fn start(runtime: Arc<Runtime>) {
     // This is a safeguard against orphaning this child process.
     tokio::spawn(async move {
         loop {
+            let pending_requests = app_state.pending_requests.load(Ordering::Relaxed);
             let guard = app_state.min_alive_until.read().await;
-            if guard.elapsed() > Duration::from_secs(args.ttl) {
+            if pending_requests == 0 && guard.elapsed() > Duration::from_secs(args.ttl) {
                 break;
             }
             drop(guard);
@@ -344,24 +347,29 @@ fn create_file<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File>
 
 async fn bump_last_request_timestamp(
     State(AppState {
-        min_alive_until, ..
+        pending_requests,
+        min_alive_until,
+        ..
     }): State<AppState>,
-    headers: HeaderMap,
     request: http::Request<axum::body::Body>,
     next: Next,
 ) -> impl IntoApiResponse {
-    // TTL should not decrease: If now + header_timeout is later
+    pending_requests.fetch_add(1, Ordering::Relaxed);
+    let resp = next.run(request).await;
+    // TTL should not decrease: If now is later
     // than the current TTL (from previous requests), reset it.
     // Otherwise, a previous request set a larger TTL and we don't
     // touch it.
-    let timeout = timeout_or_default(headers).unwrap_or(Duration::from_secs(1));
-    let alive_until = Instant::now().checked_add(timeout).unwrap();
+    let alive_until = Instant::now();
     let mut min_alive_until = min_alive_until.write().await;
     if *min_alive_until < alive_until {
         *min_alive_until = alive_until;
     }
     drop(min_alive_until);
-    next.run(request).await
+    // Only mark the pending request as completed (by subtracting the counter)
+    // *after* updating TTL!
+    pending_requests.fetch_sub(1, Ordering::Relaxed);
+    resp
 }
 
 async fn get_blob_store_entry(
@@ -505,7 +513,12 @@ mod test {
 
     #[test]
     fn test_setup_router() {
-        let args = vec!["", "--domain", "ic0.app"];
+        let args = vec![
+            "",
+            "--domain",
+            "ic0.app",
+            "--domain-canister-id-from-query-params",
+        ];
         let cli = Cli::parse_from(args);
 
         rustls::crypto::ring::default_provider()

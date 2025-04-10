@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIc::auto_progress_enabled` to determine whether the automatic progress was enabled for the PocketIC instance.
+- The function `PocketIcBuilder::with_read_only_state_dir` to specify a directory from which the state of the PocketIC instance should be loaded.
+  The provided directory is not modified (i.e., it is read-only).
+
 ### Removed
 - The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.
+- The subnet ID from the functions `SubnetSpec::with_state_dir`, `PocketIcBuilder::with_nns_state`, and `PocketIcBuilder::with_subnet_state`;
+  the subnet ID from the type `SubnetStateConfig`; and the functions `SubnetSpec::get_subnet_id` and `SubnetStateConfig::get_subnet_id`.
+
+### Changed
+- The functions `PocketIcBuilder::with_nns_subnet`, `PocketIcBuilder::with_sns_subnet`, `PocketIcBuilder::with_ii_subnet`, `PocketIcBuilder::with_fiduciary_subnet`, and `PocketIcBuilder::with_bitcoin_subnet` do not add a new empty subnet if a subnet of the corresponding kind has already been specified (e.g., with state loaded from a given state directory).
+- The function `PocketIc::make_live_with_params` takes an optional IP address to which the HTTP gateway should bind.
 
 
 

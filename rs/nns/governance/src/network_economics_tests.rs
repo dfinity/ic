@@ -87,3 +87,59 @@ fn test_inherit_from_recursively() {
 fn test_network_economics_with_default_values_is_valid() {
     assert_eq!(NetworkEconomics::with_default_values().validate(), Ok(()));
 }
+
+#[test]
+fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
+    // Define constants for better readability and maintainability
+    const LOWER_BOUND_SECONDS: u64 = 3 * ONE_MONTH_SECONDS;
+    const UPPER_BOUND_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+    const DEFAULT_SECONDS: u64 = LOWER_BOUND_SECONDS; // Assuming default is the minimum
+
+    // Test cases: (delay in seconds, expected result)
+    let test_cases = [
+        (
+            None,
+            Err(vec!["neuron_minimum_dissolve_delay_to_vote_seconds must be set.".to_string()]),
+        ),
+        (
+            Some(LOWER_BOUND_SECONDS - 1),
+            Err(vec![
+                format!("neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.", LOWER_BOUND_SECONDS -1)
+            ]),
+        ),
+        (
+            Some(UPPER_BOUND_SECONDS + 1),
+            Err(vec![
+                format!("neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.", UPPER_BOUND_SECONDS + 1)
+            ]),
+        ),
+        (
+            Some(DEFAULT_SECONDS),
+            Ok(()),
+        ),
+        (
+            Some(LOWER_BOUND_SECONDS),
+            Ok(()),
+        ),
+        (
+            Some(UPPER_BOUND_SECONDS),
+            Ok(()),
+        ),
+    ];
+
+    for (delay_seconds, expected_result) in test_cases {
+        let mut economics = NetworkEconomics::with_default_values();
+        economics
+            .voting_power_economics
+            .as_mut()
+            .expect("bug: voting_power_economics missing")
+            .neuron_minimum_dissolve_delay_to_vote_seconds = delay_seconds;
+
+        assert_eq!(
+            economics.validate(),
+            expected_result,
+            "Failed for delay: {:?}",
+            delay_seconds
+        );
+    }
+}

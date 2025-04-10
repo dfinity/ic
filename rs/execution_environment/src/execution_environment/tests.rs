@@ -7,16 +7,16 @@ use ic_management_canister_types_private::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CanisterStatusType, ClearChunkStoreArgs, DerivationPath, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
-    UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId, IC_00,
+    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
+    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
+        system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
     },
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, ReplicatedState, SystemState,
@@ -210,15 +210,15 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             aux: None,
         }
         .encode(),
-        Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
-            derivation_id: vec![],
-            encryption_public_key: [
+        Method::VetKdDeriveKey => ic00::VetKdDeriveKeyArgs {
+            input: vec![],
+            transport_public_key: [
                 // Generated via TransportSecretKey::from_seed(vec![0; 32]).unwrap().public_key()
                 178, 211, 206, 216, 102, 5, 127, 108, 175, 41, 31, 129, 99, 3, 1, 87, 24, 22, 102,
                 58, 81, 137, 170, 178, 61, 6, 208, 161, 20, 14, 134, 241, 34, 50, 176, 194, 32, 5,
                 19, 249, 66, 219, 9, 120, 165, 15, 9, 211,
             ],
-            derivation_domain: vec![],
+            context: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
@@ -3628,7 +3628,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_domain: vec![],
+            context: vec![],
             key_id: nonexistent_key_id.clone(),
         }
         .encode(),
@@ -3638,7 +3638,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
-            derivation_domain: vec![],
+            context: vec![],
             key_id: into_inner_vetkd(key_id),
         }
         .encode(),
@@ -3663,12 +3663,12 @@ fn test_vetkd_public_key_api_is_enabled() {
     let response = test.xnet_messages()[1].clone();
     assert_eq!(
         get_reject_message(response),
-        "failed to retrieve VetKD public key: InvalidPublicKey",
+        "Invalid VetKD subnet key: InvalidPublicKey",
     )
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
+fn test_vetkd_derive_key_api_is_disabled_without_key() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3677,7 +3677,7 @@ fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .build();
-    let method = Method::VetKdDeriveEncryptedKey;
+    let method = Method::VetKdDeriveKey;
     test.inject_call_to_ic00(
         method,
         sign_with_threshold_key_payload(method, make_vetkd_key("some_key")),
@@ -3692,7 +3692,7 @@ fn test_vetkd_derive_encrypted_key_api_is_disabled_without_key() {
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
+fn test_vetkd_derive_key_rejects_invalid_transport_keys() {
     let key_id = make_vetkd_key("some_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
@@ -3703,12 +3703,12 @@ fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
         .with_caller(nns_subnet, nns_canister)
         .with_chain_key(key_id.clone())
         .build();
-    let method = Method::VetKdDeriveEncryptedKey;
-    let args = ic00::VetKdDeriveEncryptedKeyArgs {
-        derivation_id: vec![],
+    let method = Method::VetKdDeriveKey;
+    let args = ic00::VetKdDeriveKeyArgs {
+        input: vec![],
         // invalid transport key
-        encryption_public_key: [1; 48],
-        derivation_domain: vec![],
+        transport_public_key: [1; 48],
+        context: vec![],
         key_id: into_inner_vetkd(key_id),
     };
     test.inject_call_to_ic00(method, args.encode(), Cycles::new(0));
@@ -3721,7 +3721,7 @@ fn test_vetkd_derive_encrypted_key_rejects_invalid_transport_keys() {
 }
 
 #[test]
-fn test_vetkd_derive_encrypted_key_api_is_enabled() {
+fn test_vetkd_derive_key_api_is_enabled() {
     // Arrange.
     let key_id = make_vetkd_key("some_key");
     let own_subnet = subnet_test_id(1);
@@ -3744,7 +3744,7 @@ fn test_vetkd_derive_encrypted_key_api_is_enabled() {
     );
 
     // Act.
-    let method = Method::VetKdDeriveEncryptedKey;
+    let method = Method::VetKdDeriveKey;
     let run = wasm()
         .call_with_cycles(
             ic00::IC_00,
@@ -3791,22 +3791,17 @@ fn reshare_chain_key_api_is_disabled() {
         .with_caller(nns_subnet, nns_canister)
         .build();
     let method = Method::ReshareChainKey;
+    let key = make_vetkd_key("some_key");
     test.inject_call_to_ic00(
         method,
-        ic00::ReshareChainKeyArgs::new(
-            make_vetkd_key("some_key"),
-            nns_subnet,
-            nodes,
-            registry_version,
-        )
-        .encode(),
+        ic00::ReshareChainKeyArgs::new(key.clone(), nns_subnet, nodes, registry_version).encode(),
         Cycles::new(0),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "reshare_chain_key API is not yet implemented.",
+        format!("Subnet {} does not hold threshold key {}.", own_subnet, key),
     )
 }
 

@@ -28,6 +28,7 @@ pub mod overhead {
     pub const CYCLES_BURN128: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE128: NumInstructions = NumInstructions::new(500);
+    pub const CANISTER_LIQUID_CYCLE_BALANCE128: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_SELF_COPY: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_SELF_SIZE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_STATUS: NumInstructions = NumInstructions::new(500);

@@ -229,9 +229,9 @@ impl From<RewardsDistributionInProgress> for RewardsDistribution {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS};
+    use crate::governance::Governance;
     use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
-    use crate::pb::v1::Governance as GovernanceProto;
+    use crate::pb::v1::{Governance as GovernanceProto, VotingPowerEconomics};
     use crate::test_utils::{
         test_subaccount_for_neuron_id, MockEnvironment, MockRandomness, StubCMC, StubIcpLedger,
     };
@@ -244,10 +244,15 @@ mod test {
     fn make_neuron(id: u64, maturity_e8s: u64, staked_maturity_e8s: u64) -> Neuron {
         let subaccount =
             Subaccount::try_from(test_subaccount_for_neuron_id(id).as_slice()).unwrap();
-        let now = 123_234_789;
+
+        let now = 123_456_789;
+        let dissolve_delay_seconds =
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+        let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
+
         let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-            aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            dissolve_delay_seconds,
+            aging_since_timestamp_seconds,
         };
 
         NeuronBuilder::new(

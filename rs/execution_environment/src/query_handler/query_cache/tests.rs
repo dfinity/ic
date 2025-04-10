@@ -5,6 +5,7 @@ use crate::{
     InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
+use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
@@ -88,9 +89,7 @@ fn query_cache_metrics(test: &ExecutionTest) -> &QueryCacheMetrics {
 /// Return `ExecutionTestBuilder` with query caching, composite queries
 /// and query stats enabled.
 fn builder_with_query_caching() -> ExecutionTestBuilder {
-    ExecutionTestBuilder::new()
-        .with_composite_queries()
-        .with_query_stats()
+    ExecutionTestBuilder::new().with_query_stats()
 }
 
 /// Return `ExecutionTestBuilder` with specified query cache `capacity`.
@@ -1341,9 +1340,9 @@ fn query_cache_returns_different_results_on_canister_going_above_freezing_thresh
         assert_eq!(1, m.misses.get());
         assert_eq!(1, m.invalidated_entries_by_transient_error.get());
 
-        // Remove the freezing threshold.
+        // Decrease the freezing threshold, so the query should be successful.
         // The update setting message, so it invalidates the cache entry.
-        test.update_freezing_threshold(b_id, 0.into())
+        test.update_freezing_threshold(b_id, MINIMUM_FREEZING_THRESHOLD.into())
             .expect("The settings update must succeed.");
 
         // Run the same query for the second time.
@@ -1474,6 +1473,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
+        | SystemApiCallId::CanisterLiquidCycleBalance128
         | SystemApiCallId::CanisterSelfCopy
         | SystemApiCallId::CanisterSelfSize
         | SystemApiCallId::CanisterStatus
@@ -1484,7 +1484,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CostHttpRequest
         | SystemApiCallId::CostSignWithEcdsa
         | SystemApiCallId::CostSignWithSchnorr
-        | SystemApiCallId::CostVetkdDeriveEncryptedKey
+        | SystemApiCallId::CostVetkdDeriveKey
         | SystemApiCallId::CyclesBurn128
         | SystemApiCallId::DataCertificateCopy
         | SystemApiCallId::DataCertificatePresent

@@ -628,7 +628,6 @@ impl CreateVmRequest {
 #[serde(rename_all = "camelCase")]
 pub enum VmType {
     Production,
-    Nested,
     Test,
     Sev,
 }
@@ -641,7 +640,6 @@ pub enum ImageLocation {
     ImageViaUrl { url: Url, sha256: String },
     IcOsImageViaId { id: FileId },
     IcOsImageViaUrl { url: Url, sha256: String },
-    PersistentVolumeClaim { name: String },
 }
 
 #[derive(Debug, Error)]

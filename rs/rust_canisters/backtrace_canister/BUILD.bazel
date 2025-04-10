@@ -30,6 +30,18 @@ rust_canister(
     deps = DEPENDENCIES,
 )
 
+# The same canister, but without the name section. Used to test that we don't
+# clutter errors with useless backtraces when the name section is missing.
+rust_canister(
+    name = "backtrace-canister-without-names",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    keep_name_section = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":backtrace_canister.did",
+    deps = DEPENDENCIES,
+)
+
 rust_test(
     name = "backtrace_canister_test",
     srcs = ["src/main.rs"],

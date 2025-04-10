@@ -15,6 +15,7 @@ ic-canister-client = { path = "../canister_client" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-certification = { path = "../consensus/certification" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
@@ -54,6 +55,7 @@ tower = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 

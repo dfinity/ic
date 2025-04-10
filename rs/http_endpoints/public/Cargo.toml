@@ -42,6 +42,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 ic-validator = { path = "../../validator" }
 inferno = { workspace = true }
 prometheus = { workspace = true }
@@ -61,7 +62,7 @@ tracing-flame = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-axum-server = { version = "0.6.0", features = ["tls-rustls"] }
+axum-server = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
