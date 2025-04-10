@@ -3362,7 +3362,6 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
     );
 }
 
-
 #[test]
 fn test_set_following() {
     // Boilerplate variables.
@@ -3378,18 +3377,18 @@ fn test_set_following() {
     };
 
     let cleared_topic_following_for_all_non_critical_proposals = [
-            Topic::DaoCommunitySettings,
-            Topic::SnsFrameworkManagement,
-            Topic::DappCanisterManagement,
-            Topic::ApplicationBusinessLogic,
-            Topic::Governance,
-        ]
-        .iter()
-        .map(|topic| FolloweesForTopic {
-            followees: vec![],
-            topic: Some(*topic as i32),
-        })
-        .collect();
+        Topic::DaoCommunitySettings,
+        Topic::SnsFrameworkManagement,
+        Topic::DappCanisterManagement,
+        Topic::ApplicationBusinessLogic,
+        Topic::Governance,
+    ]
+    .iter()
+    .map(|topic| FolloweesForTopic {
+        followees: vec![],
+        topic: Some(*topic as i32),
+    })
+    .collect::<Vec<_>>();
 
     let test_cases = [
         (
@@ -3522,7 +3521,7 @@ fn test_set_following() {
             },
         ),
         (
-            "Following on all non-critical proposals in one command clears catch-all following.",
+            "Specifying following for all non-critical topics in one command clears catch-all following.",
             vec![
                 Follow {
                     function_id: 0, // catch-all
@@ -3531,7 +3530,7 @@ fn test_set_following() {
             ],
             vec![
                 SetFollowing {
-                    topic_following: cleared_topic_following_for_all_non_critical_proposals,
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals.clone(),
                 },
             ],
             Some(TopicFollowees {
@@ -3540,21 +3539,155 @@ fn test_set_following() {
             // catch-all following is cleared.
             btreemap! {},
         ),
+        (
+            "Specifying fewer than all non-critical topics doesn't clear catch-all following.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    // Remove one non-critical topic and add the two critical ones.
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(1)
+                        .cloned()
+                        .chain(vec![
+                            FolloweesForTopic {
+                                followees: vec![],
+                                topic: Some(Topic::TreasuryAssetManagement as i32),
+                            },
+                            FolloweesForTopic {
+                                followees: vec![],
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                            },
+                        ].into_iter())
+                        .collect()
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {}
+            }),
+            // catch-all following is preserved.
+            btreemap! {
+                0 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+        ),
+        (
+            "Setting following for all non-critical topics in two commands clears catch-all following.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .take(2)
+                        .cloned()
+                        .map(|mut followees_for_topic| {
+                            followees_for_topic.followees = vec![expected_followee.clone()];
+                            followees_for_topic
+                        })
+                        .collect()
+                },
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(2)
+                        .cloned()
+                        .map(|mut followees_for_topic| {
+                            followees_for_topic.followees = vec![expected_followee.clone()];
+                            followees_for_topic
+                        })
+                        .collect()
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::DaoCommunitySettings as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DaoCommunitySettings as i32) },
+                    Topic::SnsFrameworkManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::SnsFrameworkManagement as i32) },
+                    Topic::DappCanisterManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DappCanisterManagement as i32) },
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::ApplicationBusinessLogic as i32) },
+                    Topic::Governance as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::Governance as i32) },
+                }
+            }),
+            // catch-all following is cleared.
+            btreemap! {},
+        ),
+        (
+            "Complex scenario.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                },
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                // Follow on `Topic::Governance` (clears legacy following on MOTION proposals).
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+                // Set up some topic following for a critical topic.
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    }],
+                },
+                // Clear all part of the non-critical topic following. This should remove
+                // following on `Topic::Governance` but preserve `Topic::CriticalDappOperations`.
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(1)
+                        .cloned()
+                        .collect()
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    }
+                }
+            }),
+            // legacy following on MOTION proposals is cleared; catch-all following is preserved.
+            btreemap! {
+                0 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+        )
     ];
 
     // Follow is the legacy command, set_following is the new command.
     for (
-        label, follow_commands, set_following_commands, expected_topic_followees, expected_followees,
-    ) in test_cases {
-
+        label,
+        follow_commands,
+        set_following_commands,
+        expected_topic_followees,
+        expected_followees,
+    ) in test_cases
+    {
         // Prepare the world.
         let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
-        .add_neuron(NeuronBuilder::new(
-            my_sns_neuron_id.clone(),
-            E8 * 1000,
-            NeuronPermission::all(&my_principal),
-        ))
-        .create();
+            .add_neuron(NeuronBuilder::new(
+                my_sns_neuron_id.clone(),
+                E8 * 1000,
+                NeuronPermission::all(&my_principal),
+            ))
+            .create();
 
         for follow in follow_commands {
             canister_fixture
@@ -3578,8 +3711,16 @@ fn test_set_following() {
             ..
         } = canister_fixture.get_neuron(&my_sns_neuron_id);
 
-        assert_eq!(topic_followees, expected_topic_followees, "unexpected topic_followees: {}", label);
+        assert_eq!(
+            topic_followees, expected_topic_followees,
+            "unexpected topic_followees: {}",
+            label
+        );
 
-        assert_eq!(followees, expected_followees, "unexpected followees: {}", label);
+        assert_eq!(
+            followees, expected_followees,
+            "unexpected followees: {}",
+            label
+        );
     }
 }
