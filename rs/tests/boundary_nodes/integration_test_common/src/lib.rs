@@ -2017,7 +2017,7 @@ pub fn cors_headers_test(env: TestEnv) {
                 let expect = normalize(v);
 
                 if hdr != expect {
-                    bail!("{name} OPTIONS failed: wrong {k} header: {hdr} expected {expect}")
+                    bail!("{name} OPTIONS failed: wrong {k} header: {hdr} expected: {expect}")
                 }
             }
 
@@ -2044,7 +2044,7 @@ pub fn cors_headers_test(env: TestEnv) {
                 let expect = normalize(v);
 
                 if hdr != expect {
-                    bail!("{name} failed: wrong {k} header: {hdr} expected {expect}")
+                    bail!("{name} failed: wrong {k} header: {hdr} expected: {expect}")
                 }
             }
 
