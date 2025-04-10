@@ -8808,6 +8808,7 @@ dependencies = [
  "mach2",
  "maplit",
  "memory_tracker",
+ "more-asserts",
  "nix 0.24.3",
  "num-traits",
  "pretty_assertions",
