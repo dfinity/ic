@@ -3358,3 +3358,42 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
         Percentage::from_basis_points(2000)
     );
 }
+
+
+#[test]
+fn test_set_following() {
+    // Boilerplate variables.
+    let my_sns_neuron_id = NeuronId { id: vec![1, 2, 3] };
+    let caller = PrincipalId::new_user_test_id(1000);
+
+    // Prepare the world.
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(NeuronBuilder::new(
+            my_sns_neuron_id.clone(),
+            E8 * 1000,
+            NeuronPermission::new(&caller, vec![]),
+        ))
+        .add_neuron(NeuronBuilder::new(
+            id.clone(),
+            E8 * 1000,
+            NeuronPermission::new(&caller, vec![]),
+        ))
+        .create();
+
+    let test_cases = [
+        (
+            "Set following for the first time",
+            SetFollowing::default(),
+
+        )
+    ];
+
+    for (label, set_following, expected) in test_cases {
+        canister_fixture.governance.set_following(
+            &my_sns_neuron_id, &caller, set_following,
+        ).unwrap();
+
+        let observed = canister_fixture.get_neuron(&my_sns_neuron_id);
+        assert_eq!(observed, expected);
+    }
+}

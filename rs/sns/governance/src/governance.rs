@@ -3807,7 +3807,7 @@ impl Governance {
     ///   as voting required, i.e., permission `Vote`)
     /// - the list of followers is not too long (does not exceed max_followees_per_function
     ///   as defined in the nervous system parameters)
-    fn follow(
+    pub(crate) fn follow(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -3901,7 +3901,7 @@ impl Governance {
         }
     }
 
-    fn set_following(
+    pub(create) fn set_following(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
