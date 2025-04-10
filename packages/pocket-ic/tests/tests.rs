@@ -10,13 +10,15 @@ use ic_management_canister_types::{
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+#[cfg(not(windows))]
+use pocket_ic::query_candid;
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, RejectCode,
+    update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc,
+    PocketIcBuilder, RejectCode,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
