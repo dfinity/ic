@@ -215,7 +215,7 @@ jobs:
           (github.ref_protected && github.repository == 'dfinity/ic') ||
           (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS'))
         run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_OUTPUT
-      - name: Upload PocketIC
+      - name: Upload PocketIC server
         uses: actions/upload-artifact@v4
         # Run on protected branches, but only on public repo
         # Allow running if CI_ALL_BAZEL_TARGETS label is used
