@@ -6,7 +6,7 @@ use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{Address, MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
+use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
 use ic_management_canister_types_private::DerivationPath;
@@ -112,35 +112,7 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct GetUtxosRequest {
-    address: Address,
-    network: Network,
-    min_confirmations: u32,
-    page: Option<Page>,
-}
-
-impl From<GetUtxosRequest> for ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
-    fn from(
-        GetUtxosRequest {
-            address,
-            network,
-            min_confirmations,
-            page,
-            ..
-        }: GetUtxosRequest,
-    ) -> Self {
-        use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
-        let filter = page
-            .map(|page| UtxoFilter::Page(page.to_vec()))
-            .or(Some(UtxoFilter::MinConfirmations(min_confirmations)));
-        Self {
-            address,
-            network: network.into(),
-            filter,
-        }
-    }
-}
+pub type GetUtxosRequest = ic_cdk::api::management_canister::bitcoin::GetUtxosRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetUtxosResponse {

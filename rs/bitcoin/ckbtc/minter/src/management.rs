@@ -9,6 +9,7 @@ use ic_btc_checker::{
 use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
 use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
@@ -171,9 +172,8 @@ pub async fn get_utxos<R: CanisterRuntime>(
     let start_time = runtime.time();
     let request = GetUtxosRequest {
         address: address.clone(),
-        network,
-        min_confirmations,
-        page: None,
+        network: network.into(),
+        filter: Some(UtxoFilter::MinConfirmations(min_confirmations)),
     };
 
     let mut response = bitcoin_get_utxos(request.clone(), source, runtime).await?;
@@ -184,7 +184,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
         let paged_request = GetUtxosRequest {
-            page: Some(page),
+            filter: Some(UtxoFilter::Page(page.to_vec())),
             ..request.clone()
         };
         response = bitcoin_get_utxos(paged_request, source, runtime).await?;
