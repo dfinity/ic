@@ -8,12 +8,14 @@ use ic_btc_checker::{
     BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
     UpgradeArg as CheckerUpgradeArg,
 };
-use ic_btc_interface::{Network, Txid};
+use ic_btc_interface::Txid;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
+use ic_ckbtc_minter::state::{
+    BtcRetrievalStatusV2, Mode, Network, RetrieveBtcStatus, RetrieveBtcStatusV2,
+};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
     ErrorCode, RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,

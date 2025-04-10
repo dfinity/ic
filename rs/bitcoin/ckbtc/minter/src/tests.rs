@@ -4,7 +4,7 @@ use crate::{
     lifecycle::init::InitArgs,
     state::invariants::CheckInvariantsImpl,
     state::{
-        ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
+        ChangeOutput, CkBtcMinterState, Mode, Network, RetrieveBtcRequest, RetrieveBtcStatus,
         SubmittedBtcTransaction,
     },
     test_fixtures::arbitrary,
@@ -14,7 +14,7 @@ use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{Network, OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreeset;
 use proptest::{

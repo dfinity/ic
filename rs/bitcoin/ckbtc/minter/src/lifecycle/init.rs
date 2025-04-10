@@ -1,9 +1,8 @@
 use crate::lifecycle::upgrade::UpgradeArgs;
 pub use crate::state::Mode;
-use crate::state::{replace_state, CkBtcMinterState};
+use crate::state::{replace_state, CkBtcMinterState, Network};
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
-use ic_btc_interface::Network;
 use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
@@ -15,11 +14,6 @@ pub enum MinterArg {
     Upgrade(Option<UpgradeArgs>),
 }
 
-// TODO: Use `ic_btc_interface::Network` directly.
-// The Bitcoin canister's network enum no longer has snake-case versions
-// (refer to [PR171](https://github.com/dfinity/bitcoin-canister/pull/171)),
-// instead it uses lower-case candid variants.
-// A temporary fix for ckbtc minter is to create a new enum with capital letter variants.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum BtcNetwork {
     Mainnet,

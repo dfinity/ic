@@ -7,10 +7,10 @@ use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{
-    Address, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Page, Satoshi, Txid, Utxo,
+    Address, GetUtxosResponse, MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo,
 };
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
+use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -139,17 +139,9 @@ impl From<GetUtxosRequest> for ic_cdk::api::management_canister::bitcoin::GetUtx
             .or_else(|| Some(UtxoFilter::MinConfirmations(min_confirmations)));
         Self {
             address,
-            network: cdk_network(network),
+            network,
             filter,
         }
-    }
-}
-
-pub(crate) fn cdk_network(network: Network) -> BitcoinNetwork {
-    match network {
-        Network::Mainnet => BitcoinNetwork::Mainnet,
-        Network::Testnet => BitcoinNetwork::Testnet,
-        Network::Regtest => BitcoinNetwork::Regtest,
     }
 }
 

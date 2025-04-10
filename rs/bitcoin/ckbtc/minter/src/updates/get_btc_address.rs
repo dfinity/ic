@@ -68,15 +68,14 @@ pub async fn init_ecdsa_public_key() -> ECDSAPublicKey {
 
 #[cfg(test)]
 mod tests {
-    use ic_btc_interface::Network;
-
     use crate::address::network_and_public_key_to_p2wpkh;
+    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 
     fn check_network_and_public_key_result(network: Network, pk_hex: &str, expected: &str) {
         assert_eq!(
             network_and_public_key_to_p2wpkh(network, &hex::decode(pk_hex).unwrap()),
             expected,
-            "network: {} pk_hey: {}",
+            "network: {:?} pk_hey: {}",
             network,
             pk_hex
         );

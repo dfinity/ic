@@ -1,7 +1,8 @@
 use crate::address;
 use crate::state;
 use crate::tx::DisplayAmount;
-use ic_btc_interface::{Network, Txid};
+use ic_btc_interface::Txid;
+use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 use icrc_ledger_types::icrc1::account::Account;
 use state::CkBtcMinterState;
 use std::io::Write;
@@ -284,7 +285,7 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
                 <tbody>
                     <tr>
                         <th>Network</th>
-                        <td>{}</td>
+                        <td>{:?}</td>
                     </tr>
                     <tr>
                         <th>Main address (do not send BTC here)</th>

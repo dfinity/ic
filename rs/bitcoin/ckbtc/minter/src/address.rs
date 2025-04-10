@@ -2,7 +2,7 @@
 
 use crate::ECDSAPublicKey;
 use bech32::Variant;
-use ic_btc_interface::Network;
+use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -195,9 +195,9 @@ pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: &[u8]) -> 
 /// Returns the human-readable part of a bech32 address
 pub fn hrp(network: Network) -> &'static str {
     match network {
-        ic_btc_interface::Network::Mainnet => "bc",
-        ic_btc_interface::Network::Testnet => "tb",
-        ic_btc_interface::Network::Regtest => "bcrt",
+        Network::Mainnet => "bc",
+        Network::Testnet => "tb",
+        Network::Regtest => "bcrt",
     }
 }
 
@@ -232,7 +232,7 @@ impl fmt::Display for ParseAddressError {
             Self::WrongNetwork { expected, actual } => {
                 write!(
                     fmt,
-                    "expected an address from network {}, got an address from network {}",
+                    "expected an address from network {:?}, got an address from network {:?}",
                     expected, actual
                 )
             }
@@ -426,7 +426,7 @@ fn parse_bip173_address(
 mod tests {
     use super::{hrp, BitcoinAddress, ParseAddressError};
     use bech32::u5;
-    use ic_btc_interface::Network;
+    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
         let data: Vec<u5> = witness_version
