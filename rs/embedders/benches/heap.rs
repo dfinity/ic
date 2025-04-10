@@ -49,6 +49,12 @@ enum Step {
     Page = 4096,
     #[strum(serialize = "step_16kb")]
     FourPages = 16384,
+    #[strum(serialize = "step_2mb")]
+    HugePage = 2 * 1024 * 1024,
+    #[strum(serialize = "step_5mb")]
+    FiveMegabytes = 5 * 1024 * 1024,
+    #[strum(serialize = "step_500mb")]
+    FiveHundredMegabytes = 500 * 1024 * 1024,
 }
 
 #[derive(Copy, Clone, Display, EnumIter)]
