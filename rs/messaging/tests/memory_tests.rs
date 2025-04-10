@@ -13,6 +13,13 @@ use random_traffic_test::Config as CanisterConfig;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 
+
+#[test]
+fn heartbeat_no_op_demo() {
+    
+}
+
+
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
 fn check_message_memory_limits_are_respected(
     #[strategy(proptest::collection::vec(any::<u64>().no_shrink(), 3))] seeds: Vec<u64>,
