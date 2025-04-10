@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/sys",
     "//rs/types/types",
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",

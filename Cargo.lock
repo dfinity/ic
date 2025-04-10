@@ -12445,6 +12445,7 @@ dependencies = [
  "ic-nns-handler-root",
  "ic-nns-test-utils",
  "ic-rosetta-test-utils",
+ "ic-sys",
  "ic-types",
  "icp-ledger",
  "icrc-ledger-agent",
