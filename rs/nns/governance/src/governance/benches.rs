@@ -918,6 +918,16 @@ fn list_proposals_benchmark(dissolve_delay_seconds: u64) -> BenchResult {
         Box::new(MockRandomness::new()),
     );
 
+    governance
+        .heap_data
+        .economics
+        .as_mut()
+        .unwrap()
+        .voting_power_economics
+        .as_mut()
+        .expect("bug: voting_power_economics missing")
+        .neuron_minimum_dissolve_delay_to_vote_seconds = Some(dissolve_delay_seconds);
+
     let request = ListProposalInfo {
         limit: 100,
         omit_large_fields: Some(true),
