@@ -40,7 +40,7 @@ anchors:
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
-    runs-on: 
+    runs-on:
       labels: ${{ inputs.runner }}
     container:
       <<: *image
