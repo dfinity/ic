@@ -9,7 +9,8 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
-use ic_ckbtc_minter::state::{CkBtcMinterState, Network};
+use ic_ckbtc_minter::state::CkBtcMinterState;
+use ic_ckbtc_minter::Network;
 use std::path::PathBuf;
 
 fn assert_useless_events_is_empty(events: impl Iterator<Item = Event>) {

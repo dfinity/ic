@@ -4,11 +4,11 @@ use crate::{
     lifecycle::init::InitArgs,
     state::invariants::CheckInvariantsImpl,
     state::{
-        ChangeOutput, CkBtcMinterState, Mode, Network, RetrieveBtcRequest, RetrieveBtcStatus,
+        ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
         SubmittedBtcTransaction,
     },
     test_fixtures::arbitrary,
-    tx, BuildTxError, MINTER_ADDRESS_DUST_LIMIT,
+    tx, BuildTxError, Network, MINTER_ADDRESS_DUST_LIMIT,
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};

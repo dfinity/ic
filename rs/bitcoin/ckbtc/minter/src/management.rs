@@ -1,8 +1,9 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
 use crate::metrics::observe_get_utxos_latency;
-use crate::ECDSAPublicKey;
-use crate::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Timestamp};
+use crate::{
+    tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, Timestamp,
+};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
@@ -10,7 +11,6 @@ use ic_btc_checker::{
 use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
@@ -213,7 +213,9 @@ pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosRespo
 /// Returns the current fee percentiles on the Bitcoin network.
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
     ic_cdk::api::management_canister::bitcoin::bitcoin_get_current_fee_percentiles(
-        ic_cdk::api::management_canister::bitcoin::GetCurrentFeePercentilesRequest { network },
+        ic_cdk::api::management_canister::bitcoin::GetCurrentFeePercentilesRequest {
+            network: network.into(),
+        },
     )
     .await
     .map(|(result,)| result)
@@ -228,7 +230,7 @@ pub async fn send_transaction(
     ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
         ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
             transaction: transaction.serialize(),
-            network,
+            network: network.into(),
         },
     )
     .await

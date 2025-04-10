@@ -1,6 +1,7 @@
 use crate::lifecycle::upgrade::UpgradeArgs;
 pub use crate::state::Mode;
-use crate::state::{replace_state, CkBtcMinterState, Network};
+use crate::state::{replace_state, CkBtcMinterState};
+use crate::Network;
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
 use serde::Serialize;
@@ -14,37 +15,10 @@ pub enum MinterArg {
     Upgrade(Option<UpgradeArgs>),
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
-pub enum BtcNetwork {
-    Mainnet,
-    Testnet,
-    Regtest,
-}
-
-impl From<BtcNetwork> for Network {
-    fn from(network: BtcNetwork) -> Self {
-        match network {
-            BtcNetwork::Mainnet => Network::Mainnet,
-            BtcNetwork::Testnet => Network::Testnet,
-            BtcNetwork::Regtest => Network::Regtest,
-        }
-    }
-}
-
-impl From<Network> for BtcNetwork {
-    fn from(network: Network) -> Self {
-        match network {
-            Network::Mainnet => BtcNetwork::Mainnet,
-            Network::Testnet => BtcNetwork::Testnet,
-            Network::Regtest => BtcNetwork::Regtest,
-        }
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct InitArgs {
     /// The Bitcoin network that the minter will connect to
-    pub btc_network: BtcNetwork,
+    pub btc_network: Network,
 
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
     /// a testing key for testnet and mainnet

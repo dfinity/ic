@@ -1,6 +1,5 @@
-use crate::lifecycle::init::{BtcNetwork, InitArgs};
-use crate::Timestamp;
-use crate::{lifecycle, ECDSAPublicKey, GetUtxosResponse};
+use crate::lifecycle::init::InitArgs;
+use crate::{lifecycle, ECDSAPublicKey, GetUtxosResponse, Network, Timestamp};
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};
@@ -16,7 +15,7 @@ pub const BTC_CHECKER_CANISTER_ID: Principal =
 #[allow(deprecated)]
 pub fn init_args() -> InitArgs {
     InitArgs {
-        btc_network: BtcNetwork::Mainnet,
+        btc_network: Network::Mainnet,
         ecdsa_key_name: "key_1".to_string(),
         retrieve_btc_min_amount: 10_000,
         ledger_id: CanisterId::unchecked_from_principal(
@@ -325,16 +324,14 @@ pub mod arbitrary {
     #[allow(deprecated)]
     mod event {
         use super::*;
-        use crate::lifecycle::{
-            init::{BtcNetwork, InitArgs},
-            upgrade::UpgradeArgs,
-        };
+        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
+        use crate::Network;
 
-        fn btc_network() -> impl Strategy<Value = BtcNetwork> {
+        fn btc_network() -> impl Strategy<Value = Network> {
             prop_oneof![
-                Just(BtcNetwork::Mainnet),
-                Just(BtcNetwork::Testnet),
-                Just(BtcNetwork::Regtest),
+                Just(Network::Mainnet),
+                Just(Network::Testnet),
+                Just(Network::Regtest),
             ]
         }
 

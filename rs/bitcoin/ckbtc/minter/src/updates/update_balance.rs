@@ -244,7 +244,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     let token_name = match btc_network {
-        ic_cdk::api::management_canister::bitcoin::BitcoinNetwork::Mainnet => "ckBTC",
+        crate::Network::Mainnet => "ckBTC",
         _ => "ckTESTBTC",
     };
 

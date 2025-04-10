@@ -1,8 +1,7 @@
 //! Utilities to derive, display, and parse Bitcoin addresses.
 
-use crate::ECDSAPublicKey;
+use crate::{ECDSAPublicKey, Network};
 use bech32::Variant;
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -425,8 +424,8 @@ fn parse_bip173_address(
 #[cfg(test)]
 mod tests {
     use super::{hrp, BitcoinAddress, ParseAddressError};
+    use crate::Network;
     use bech32::u5;
-    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
         let data: Vec<u5> = witness_version

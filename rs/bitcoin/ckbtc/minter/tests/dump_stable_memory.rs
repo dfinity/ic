@@ -2,7 +2,8 @@ use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::state::eventlog::Event;
-use ic_ckbtc_minter::state::{Mode, Network};
+use ic_ckbtc_minter::state::Mode;
+use ic_ckbtc_minter::Network;
 use ic_test_utilities_load_wasm::load_wasm;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 

@@ -8,7 +8,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{Address, MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as Network;
+use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -137,7 +137,7 @@ impl From<GetUtxosRequest> for ic_cdk::api::management_canister::bitcoin::GetUtx
             .or_else(|| Some(UtxoFilter::MinConfirmations(min_confirmations)));
         Self {
             address,
-            network,
+            network: network.into(),
             filter,
         }
     }
@@ -169,6 +169,33 @@ impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUt
 
             tip_height: response.tip_height,
             next_page: response.next_page.map(Page::from),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+    Regtest,
+}
+
+impl From<BitcoinNetwork> for Network {
+    fn from(network: BitcoinNetwork) -> Self {
+        match network {
+            BitcoinNetwork::Mainnet => Network::Mainnet,
+            BitcoinNetwork::Testnet => Network::Testnet,
+            BitcoinNetwork::Regtest => Network::Regtest,
+        }
+    }
+}
+
+impl From<Network> for BitcoinNetwork {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => BitcoinNetwork::Mainnet,
+            Network::Testnet => BitcoinNetwork::Testnet,
+            Network::Regtest => BitcoinNetwork::Regtest,
         }
     }
 }
