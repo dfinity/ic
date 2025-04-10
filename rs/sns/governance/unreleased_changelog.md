@@ -9,9 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added the `SetFollowing` neuron command that allows setting up following based on proposal topics.
+* The new `SetFollowing` neuron command allows following voting decisions based on proposal topics.
 
-    This command can be used to set or change following for any number of topics at once.
+    This command can be used to set or change following for any number of topics at once. Users
+    are encouraged to set following based on topics, although _legacy following_ (based on
+    individual proposal types) will still work until further notice. However, this command may clear
+    some legacy following if it becomes redundant, specifically, in the following cases:
+
+    1. Following on proposal types within the topics explicitly mentioned by `SetFollowing`.
+    2. Legacy catch-all following, if a neuron has topic-based following for all non-critical
+       topics, or if the `SetFollowing` command mentions each non-critical topic.
 
     For example:
 
@@ -33,7 +40,7 @@ on the process that this file is part of, see
             record {
               topic = opt variant { CriticalDappOperations };
               followees = vec {};
-            }}}}})'
+      }}}}})'
     ```
 
     In this example, following on the `ApplicationBusinessLogic` topic is changed (from whatever has
@@ -44,11 +51,10 @@ on the process that this file is part of, see
     (a.k.a. followees), which helps remember why a particular one has been added in the first place.
 
     **Backward compatibility.**
-    _Legacy_ following (i.e., following based on individual proposal types) still works
-    for proposal types and for neurons that do not have any topic-based following for covering that
-    proposal type. For example, after executing the following command, the modified neuron would
-    still follow on, e.g., `DeregisterDappCanisters` proposals, assuming it had followed some neuron
-    on this proposal type.
+    Legacy following still works for proposal types and for neurons that do not have any topic-based
+    following for covering that proposal type. For example, after executing the following command,
+    the modified neuron would still follow on, e.g., `DeregisterDappCanisters` proposals, assuming
+    it had followed some neuron on this proposal type.
 
     Topic-based following takes precedence over legacy following, e.g., regardless of which
     legacy following has been set up for the neuron modified in the above example, that neuron will

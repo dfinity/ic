@@ -1,5 +1,5 @@
+use ic_embedders::wasmtime_embedder::system_api::{ApiType, NonReplicatedQueryKind};
 use ic_interfaces::execution_environment::SystemApiCallCounters;
-use ic_system_api::NonReplicatedQueryKind;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::time::UNIX_EPOCH;
@@ -7,7 +7,7 @@ use ic_types::time::UNIX_EPOCH;
 fn call_counters_on_ok_call(wat: &str) -> SystemApiCallCounters {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
-        .with_api_type(ic_system_api::ApiType::non_replicated_query(
+        .with_api_type(ApiType::non_replicated_query(
             UNIX_EPOCH,
             user_test_id(0).get(),
             subnet_test_id(1),
@@ -31,7 +31,7 @@ fn call_counters_on_ok_call(wat: &str) -> SystemApiCallCounters {
 fn call_counters_on_err_call(wat: &str) -> SystemApiCallCounters {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
-        .with_api_type(ic_system_api::ApiType::start(UNIX_EPOCH))
+        .with_api_type(ApiType::start(UNIX_EPOCH))
         .build();
     instance
         .run(ic_types::methods::FuncRef::Method(
