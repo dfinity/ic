@@ -2985,6 +2985,7 @@ impl From<pb::ListProposalsResponse> for pb_api::ListProposalsResponse {
         Self {
             proposals: item.proposals.into_iter().map(|x| x.into()).collect(),
             include_ballots_by_caller: item.include_ballots_by_caller,
+            include_topic_filtering: item.include_topic_filtering,
         }
     }
 }
@@ -2993,6 +2994,7 @@ impl From<pb_api::ListProposalsResponse> for pb::ListProposalsResponse {
         Self {
             proposals: item.proposals.into_iter().map(|x| x.into()).collect(),
             include_ballots_by_caller: item.include_ballots_by_caller,
+            include_topic_filtering: item.include_topic_filtering,
         }
     }
 }

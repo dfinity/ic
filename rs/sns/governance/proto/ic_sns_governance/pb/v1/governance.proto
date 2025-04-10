@@ -2060,6 +2060,8 @@ message ListProposalsResponse {
   repeated ProposalData proposals = 1;
   // Whether ballots cast by the caller are included in the returned proposals.
   optional bool include_ballots_by_caller = 2;
+  // Whether topic-based filtering has been taken into account.
+  optional bool include_topic_filtering = 3;
 }
 
 // An operation that lists all neurons tracked in the Governance state in a

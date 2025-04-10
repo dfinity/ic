@@ -1576,6 +1576,7 @@ fn list_proposals_filter_by_topic() {
         let ListProposalsResponse {
             proposals,
             include_ballots_by_caller: _,
+            include_topic_filtering: _,
         } = canister_fixture
             .governance
             .list_proposals(&request, &PrincipalId::new_anonymous());

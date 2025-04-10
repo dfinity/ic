@@ -801,6 +801,8 @@ pub struct Ballot {
     /// ballot is created.
     pub cast_timestamp_seconds: u64,
 }
+/// Indicates which topics are of interest for a particular purpose. Currently supports
+/// specifying a single topic or the absance of a topic.
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
 pub struct TopicSelector {
     pub topic: Option<topics::Topic>,
@@ -2135,7 +2137,7 @@ pub struct ListProposals {
     /// If this list is empty, no restriction is applied.
     pub include_status: Vec<i32>,
     /// A list of topics that should be included. If empty, all topics will be included.
-    /// The list may contain the None, expressing selection of proposals without topics.
+    /// The list may contain None, expressing selection of proposals not assigned to a topic.
     pub include_topics: Option<Vec<TopicSelector>>,
 }
 /// A response to the ListProposals command.
@@ -2145,6 +2147,8 @@ pub struct ListProposalsResponse {
     pub proposals: Vec<ProposalData>,
     /// Whether ballots cast by the caller are included in the returned proposals.
     pub include_ballots_by_caller: Option<bool>,
+    /// Whether topic-based filtering has been taken into account.
+    pub include_topic_filtering: Option<bool>,
 }
 /// An operation that lists all neurons tracked in the Governance state in a
 /// paginated fashion.

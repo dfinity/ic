@@ -1854,6 +1854,7 @@ impl Governance {
         ListProposalsResponse {
             proposals: proposal_info,
             include_ballots_by_caller: Some(true),
+            include_topic_filtering: Some(true),
         }
     }
 

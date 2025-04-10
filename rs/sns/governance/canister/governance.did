@@ -380,6 +380,7 @@ type TopicSelector = record {
 
 type ListProposalsResponse = record {
   include_ballots_by_caller : opt bool;
+  include_topic_filtering : opt bool;
   proposals : vec ProposalData;
 };
 

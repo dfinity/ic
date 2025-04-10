@@ -3215,6 +3215,9 @@ pub struct ListProposalsResponse {
     /// Whether ballots cast by the caller are included in the returned proposals.
     #[prost(bool, optional, tag = "2")]
     pub include_ballots_by_caller: ::core::option::Option<bool>,
+    /// Whether topic-based filtering has been taken into account.
+    #[prost(bool, optional, tag = "3")]
+    pub include_topic_filtering: ::core::option::Option<bool>,
 }
 /// An operation that lists all neurons tracked in the Governance state in a
 /// paginated fashion.
