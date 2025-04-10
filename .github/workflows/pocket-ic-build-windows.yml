@@ -40,8 +40,8 @@ jobs:
         shell: wsl-run {0}
       - name: 'cargo test'
         run: |
-          $WORKDIR=(Get-Location).Path
-          $RUST_TEST_THREADS=2
-          $POCKET_IC_BIN="$WORKDIR\pocket-ic-server"
-          $TEST_WASM="$WORKDIR\test-canister.wasm"
+          $env:WORKDIR=(Get-Location).Path
+          $env:RUST_TEST_THREADS=2
+          $env:POCKET_IC_BIN="$env:WORKDIR\pocket-ic-server"
+          $env:TEST_WASM="$env:WORKDIR\test-canister.wasm"
           cargo test -p pocket-ic
