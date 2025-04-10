@@ -450,7 +450,7 @@ fn should_set_allowance_with_expected_allowance_and_expired_existing_allowance()
 
 #[test]
 #[should_panic(expected = "does not match in-memory allowance")]
-fn should_panic_if_expected_allowance_and_no_existing_allowance() {
+fn should_panic_if_expected_allowance_different_than_existing_allowance() {
     let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
     LedgerBuilder::new()
         .with_mint(&account_from_u64(ACCOUNT_ID_1), &Tokens::from(MINT_AMOUNT))
