@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eou pipefail
+set -x
 
 show_help() {
     cat <<EOF
@@ -66,7 +66,9 @@ else
     echo "Output directory is not empty. Moving files to temporary directory $TEMP_DIR ..."
     for target in "${TARGETS[@]}"; do
         cp -R $OUTPUT_DIR/$target/* $TEMP_DIR
-        rm -r $OUTPUT_DIR/$target/*
+        # AFL has issues with directory not being clean
+        rm -rf $OUTPUT_DIR/$target/
+        mkdir -p $OUTPUT_DIR/$target
     done
 fi
 
@@ -120,7 +122,7 @@ for target in "${TARGETS[@]}"; do
     for filename in "$OUTPUT_DIR/$target"/*; do
         if [[ -f "$filename" ]]; then
             hash=$(sha256sum "$filename" | awk '{print $1}')
-            mv "$filename" "$OUTPUT_DIR/$target/$hash"
+            mv -f "$filename" "$OUTPUT_DIR/$target/$hash"
         fi
     done
 done
