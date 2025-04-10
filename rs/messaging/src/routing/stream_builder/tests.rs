@@ -705,7 +705,7 @@ fn build_streams_with_best_effort_messages_impl(
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        // Local best-effort reques was routed.
+        // Local best-effort request was routed.
         assert!(
             !result_state
                 .streams()
@@ -718,7 +718,7 @@ fn build_streams_with_best_effort_messages_impl(
             remote_subnet_type,
         );
 
-        // Remote best-effort requests was routed.
+        // Remote best-effort request was routed.
         assert!(
             !result_state
                 .streams()
