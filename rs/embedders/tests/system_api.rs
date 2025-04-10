@@ -4,6 +4,10 @@ use ic_config::{
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_embedders::wasmtime_embedder::system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
+    NonReplicatedQueryKind, SystemApiImpl,
+};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
@@ -16,10 +20,6 @@ use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    SystemApiImpl,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
@@ -1144,7 +1144,7 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
-            ic_system_api::NonReplicatedQueryKind::Pure,
+            NonReplicatedQueryKind::Pure,
         ),
         &system_state,
         cycles_account_manager,
