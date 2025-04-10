@@ -172,6 +172,10 @@ impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUt
     }
 }
 
+// Note that both [ic_btc_interface::Network] and
+// [ic_cdk::api::management_canister::bitcoin::BitcoinNetwork] from ic_cdk
+// would serialize to lowercase names, but here we keep uppercase names for
+// backward compatibility with the state of already deployed minter canister.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum Network {
     Mainnet,
