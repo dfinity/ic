@@ -10,6 +10,7 @@ use on_wire::{FromWire, IntoWire};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::task::{spawn, JoinHandle};
 use tracing::{debug, trace, warn};
 use url::Url;
@@ -42,17 +43,40 @@ pub struct CanisterAccess {
     >,
 }
 
-fn make_agent(url: Url) -> Result<Agent, AgentError> {
+pub async fn make_agent(
+    url: Url,
+    timeout: Option<Duration>,
+    root_key: Option<Vec<u8>>,
+) -> Result<Agent, AgentError> {
     let is_exchanges_testnet = url.host_str() == Some("exchanges.testnet.dfinity.network");
-    Agent::builder()
+
+    let http_client = match timeout {
+        Some(timeout) => reqwest::Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("failed to build http client"),
+        None => reqwest::Client::new(),
+    };
+
+    let agent = Agent::builder()
         .with_identity(AnonymousIdentity)
         .with_url(url)
-        .with_http_client(reqwest::Client::new())
+        .with_http_client(http_client)
         .with_nonce_generator(TimestampBlob::default())
         // The testnet has an old replica version and the query
         // verification wouldn't work so we disable it
         .with_verify_query_signatures(!is_exchanges_testnet)
-        .build()
+        .build()?;
+
+    match root_key {
+        Some(root_key) => agent.set_root_key(root_key),
+        None => {
+            warn!("Fetching the root key from the replica because it was not set");
+            agent.fetch_root_key().await?
+        }
+    };
+
+    Ok(agent)
 }
 
 impl CanisterAccess {
@@ -64,15 +88,7 @@ impl CanisterAccess {
         canister_id: CanisterId,
         root_key: Option<Vec<u8>>,
     ) -> Result<Self, AgentError> {
-        let agent = make_agent(url)?;
-
-        match root_key {
-            Some(root_key) => agent.set_root_key(root_key),
-            None => {
-                warn!("Fetching the root key from the replica because it was not set");
-                agent.fetch_root_key().await?
-            }
-        };
+        let agent = make_agent(url, None, root_key).await?;
 
         Ok(Self {
             agent,

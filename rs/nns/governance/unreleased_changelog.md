@@ -8,17 +8,15 @@ on the process that this file is part of, see
 
 ## Added
 
+* Governance now gets node provider rewards from the Node Reward Canister in test builds.
+
 ## Changed
 
-* Disable Neuron's Funds for ongoing SNSs, as approved in
-  proposal [135970](https://dashboard.internetcomputer.org/proposal/135970).
+* The `_pb` methods now always panic.
 
 ## Deprecated
 
 ## Removed
-
-* The `topic_followee_index` in the heap is removed, along with the flag
-  `USE_STABLE_MEMORY_FOLLOWING_INDEX` that was set to true in the proposal 135063.
 
 ## Fixed
 
