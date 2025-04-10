@@ -2,10 +2,7 @@ name: 'PocketIC library build on Windows'
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  workflow_run:
-    workflows: ["CI Main"]
-    types:
-      - completed
+  pull_request:
 
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
@@ -21,10 +18,10 @@ jobs:
         uses: actions/checkout@v4
       - name: 'Setup WSLv2'
         uses: vedantmgoyal9/setup-wsl2@main
-      - name: 'Download PocketIC server'
-        uses: actions/download-artifact@v4
-        with:
-          name: pocket-ic-server
+      #- name: 'Download PocketIC server'
+      #  uses: actions/download-artifact@v4
+      #  with:
+      #    name: pocket-ic-server
       #- name: 'cargo clippy'
       #  run: |
       #    cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
@@ -34,6 +31,8 @@ jobs:
           cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
       - name: 'Shrink the test canister'
         run: |
+          curl -L https://download.dfinity.systems/ic/8db45d0ad972479dd99a80720dc98c2401dbb48a/binaries/x86_64-linux/pocket-ic.gz -o pocket-ic-server.gz
+          gzip -d pocket-ic-server.gz
           curl -L https://github.com/dfinity/ic-wasm/releases/download/0.9.3/ic-wasm-linux64 -o ic-wasm
           chmod +x ic-wasm
           ./ic-wasm -o test-canister.wasm target/wasm32-unknown-unknown/release/pocket-ic-test-canister.wasm shrink
