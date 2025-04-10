@@ -261,6 +261,7 @@ members = [
     "rs/registry/admin-derive",
     "rs/registry/canister",
     "rs/registry/canister/api",
+    "rs/registry/canister/chunkify",
     "rs/registry/canister/protobuf_generator",
     "rs/registry/client",
     "rs/registry/canister-client",
