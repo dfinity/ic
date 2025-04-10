@@ -85,10 +85,6 @@ impl NodeRegistration {
         let signer: Box<dyn Signer> = match node_config.clone().registration.node_operator_pem {
             Some(path) => match NodeProviderSigner::new(path.as_path()) {
                 Some(signer) => {
-                    warn!(
-                        log,
-                        "Node operator private key found and signer successfully created."
-                    );
                     UtilityCommand::notify_host(
                         "Node operator private key found and signer successfully created.",
                         1,
@@ -96,16 +92,11 @@ impl NodeRegistration {
                     Box::new(signer)
                 }
                 None => {
-                    warn!(log, "Node operator private key found but could not be successfully read. Falling back to HSM.");
                     UtilityCommand::notify_host("Node operator private key found but could not be successfully read. Falling back to HSM.", 1);
                     Box::new(Hsm)
                 }
             },
             None => {
-                warn!(
-                    log,
-                    "Node operator private key not found. Falling back to HSM."
-                );
                 UtilityCommand::notify_host(
                     "Node operator private key not found. Falling back to HSM.",
                     1,
@@ -1050,8 +1041,7 @@ mod tests {
                 .await;
 
             let logs = in_memory_logger.drain_logs();
-            // Should log one line from the NodeRegistration::new() call
-            LogEntriesAssert::assert_that(logs).has_len(1);
+            LogEntriesAssert::assert_that(logs).has_len(0);
         }
 
         #[tokio::test]
@@ -1078,8 +1068,7 @@ mod tests {
                 .await;
 
             let logs = in_memory_logger.drain_logs();
-            // Should log one line from the NodeRegistration::new() call
-            LogEntriesAssert::assert_that(logs).has_len(1);
+            LogEntriesAssert::assert_that(logs).has_len(0);
         }
 
         #[tokio::test]
@@ -1100,8 +1089,7 @@ mod tests {
                 .await;
 
             let logs = in_memory_logger.drain_logs();
-            // Should log one line from the NodeRegistration::new() call
-            LogEntriesAssert::assert_that(logs).has_len(1);
+            LogEntriesAssert::assert_that(logs).has_len(0);
         }
 
         #[tokio::test]
