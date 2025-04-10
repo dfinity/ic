@@ -1,7 +1,10 @@
-use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
+use crate::{
+    governance::{voting_power_snapshots::VotingPowerSnapshots, LOG_PREFIX},
+    pb::v1::{ArchivedMonthlyNodeProviderRewards, AuditEvent},
+    reward::distribution::RewardsDistributionStateMachine,
+    voting::VotingStateMachines,
+};
 
-use crate::reward::distribution::RewardsDistributionStateMachine;
-use crate::{pb::v1::ArchivedMonthlyNodeProviderRewards, voting::VotingStateMachines};
 use ic_cdk::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -30,6 +33,9 @@ const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
 const REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID: MemoryId = MemoryId::new(17);
 const MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(18);
 
+const VOTING_POWER_MAPS_MEMORY_ID: MemoryId = MemoryId::new(19);
+const VOTING_POWER_TOTALS_MEMORY_ID: MemoryId = MemoryId::new(20);
+
 pub mod neuron_indexes;
 pub mod neurons;
 
@@ -54,6 +60,15 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| {
             let memory = memory_manager.borrow().get(REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID);
             RewardsDistributionStateMachine::new(memory)
+        })
+    });
+
+    pub(crate) static VOTING_POWER_SNAPSHOTS: RefCell<VotingPowerSnapshots> = RefCell::new({
+        MEMORY_MANAGER.with_borrow(|memory_manager| {
+            VotingPowerSnapshots::new(
+                memory_manager.get(VOTING_POWER_MAPS_MEMORY_ID),
+                memory_manager.get(VOTING_POWER_TOTALS_MEMORY_ID),
+            )
         })
     });
 }
