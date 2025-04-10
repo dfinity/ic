@@ -79,17 +79,15 @@ runs:
       if: (success() || failure()) && inputs.execlog-artifact-name != ''
       run: |
         # todo: extract this
-        execlog_path='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.json'
-        if ! [ -e "$execlog_path" ]; then
+        execlog_json_in='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.json'
+        execlog_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.csv'
+        if ! [ -e "$execlog_json_in" ]; then
           exit 0
         fi
 
-        execlog_tmp=$(mktemp)
-
-        time jq -cMr <"$execlog_path" \
-            '. | .targetLabel as $targetLabel | select(.targetLabel | test(".*")) | .actualOutputs | map(. | {"path": .path, "hash": .digest.hash, "targetLabel": $targetLabel}) | .[] | .targetLabel+","+.path+","+.hash' > "$execlog_tmp"
-
-        mv "$execlog_tmp" "$execlog_path"
+        time jq -cMr <"$execlog_json_in" \
+          'select(.targetLabel | test("^//")) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
+          | sort >"$execlog_csv_out"
 
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlog-artifact-name != ''
@@ -98,7 +96,7 @@ runs:
         name: ${{ inputs.execlog-artifact-name }}
         if-no-files-found: ignore
         path: |
-          ${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.json
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.csv
 
     - name: Cleanup
       shell: bash
