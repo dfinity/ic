@@ -27,7 +27,6 @@ rust_canister(
     deps = [
         # Keep sorted.
         ":mock",
-        "//rs/bitcoin/ckbtc/minter",
         "@crate_index//:bech32",
         "@crate_index//:byteorder",
         "@crate_index//:candid",
@@ -40,11 +39,14 @@ rust_canister(
 
 rust_test(
     name = "mock_tests",
-    crate = ":mock",
+    crate = ":_wasm_bitcoin_canister_mock",
     data = ["bitcoin_mock.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/mock",
     },
+    deps = [
+        "@crate_index//:candid_parser",
+    ],
 )
 
 rust_ic_test(
