@@ -37,6 +37,7 @@ use ic_types::messages::{
 };
 use ic_types::time::CoarseTime;
 use ic_types::time::UNIX_EPOCH;
+use ic_types::xnet::StreamIndex;
 use ic_types::{CountBytes, Cycles, MemoryAllocation, Time};
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -92,6 +93,14 @@ fn response_to(canister_id: CanisterId) -> Response {
     ResponseBuilder::default()
         .respondent(CANISTER_ID)
         .originator(canister_id)
+        .build()
+}
+
+fn best_effort_response_to(canister_id: CanisterId) -> Response {
+    ResponseBuilder::default()
+        .respondent(CANISTER_ID)
+        .originator(canister_id)
+        .deadline(SOME_DEADLINE)
         .build()
 }
 
@@ -171,12 +180,42 @@ impl ReplicatedStateFixture {
             .push_output_response(response.into());
     }
 
-    fn push_to_streams(&mut self, msgs: Vec<RequestOrResponse>) {
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
+        self.state
+            .canister_state_mut(&CANISTER_ID)
+            .unwrap()
+            .output_into_iter()
+            .pop()
+    }
+
+    /// Push the message to a stream.
+    fn push_to_stream(&mut self, msgs: Vec<RequestOrResponse>) {
         let mut streams = self.state.take_streams();
         for msg in msgs.into_iter() {
             streams.entry(SUBNET_ID).or_default().push(msg);
         }
         self.state.put_streams(streams);
+    }
+
+    /// Discard the next `count` messages from the same stream as `push_to_stream` uses.
+    fn discard_from_stream(&mut self, count: u64) {
+        let mut streams = self.state.take_streams();
+        let stream = streams.entry(SUBNET_ID).or_default();
+        let old_begin = stream.messages_begin();
+        stream.discard_messages_before(StreamIndex::from(old_begin.get() + count), &vec![].into());
+        self.state.put_streams(streams);
+    }
+
+    fn stop_canister(&mut self) {
+        let canister = self.state.canister_state_mut(&CANISTER_ID).unwrap();
+        canister
+            .system_state
+            .begin_stopping(ic_types::messages::StopCanisterContext::Ingress {
+                sender: user_test_id(24),
+                message_id: [0; 32].into(),
+                call_id: None,
+            });
+        assert!(canister.system_state.try_stop_canister(|_| false).0);
     }
 
     fn memory_taken(&self) -> MemoryTaken {
@@ -947,7 +986,7 @@ fn split() {
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.
-    fixture.push_to_streams(vec![
+    fixture.push_to_stream(vec![
         request_to(CANISTER_1).into(),
         request_to(CANISTER_2).into(),
     ]);
@@ -1105,6 +1144,48 @@ fn compatibility_for_input_source() {
         InputSource::iter().map(|x| x as i32).collect::<Vec<i32>>(),
         [0, 1, 2]
     );
+}
+
+#[test]
+fn ready_for_migration() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Canister is running, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    fixture
+        .push_input(best_effort_request_from(OTHER_CANISTER_ID).into())
+        .unwrap();
+    fixture.pop_input().unwrap();
+    fixture.push_output_response(best_effort_response_to(OTHER_CANISTER_ID));
+    fixture.stop_canister();
+
+    // Output queue is not empty, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Empty output queue.
+    let response = fixture.pop_output().unwrap();
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put best-effort response into the stream, still ready for migration.
+    fixture.push_to_stream(vec![response]);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put a guaranteed response from a different canister into the stream, still ready for migration.
+    fixture.push_to_stream(vec![response_from(OTHER_CANISTER_ID).into()]);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put a guaranteed response from the canister into the stream, not ready for migration.
+    fixture.push_to_stream(vec![response_to(OTHER_CANISTER_ID).into()]);
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Remove some messages from the stream, but not the guaranteed response, still not ready for migration.
+    fixture.discard_from_stream(2);
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Remove the guaranteed response from the stream, ready for migration.
+    fixture.discard_from_stream(1);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
 }
 
 #[test_strategy::proptest]

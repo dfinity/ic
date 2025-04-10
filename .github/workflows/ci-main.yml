@@ -94,7 +94,7 @@ jobs:
     name: Bazel Test All
     needs: [config]
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -137,7 +137,20 @@ jobs:
           # Prepend tags with '-' and join them with commas for Bazel
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS=( "--test_tag_filters=$TEST_TAG_FILTERS" )
+          BAZEL_EXTRA_ARGS=(
+            "--test_tag_filters=$TEST_TAG_FILTERS"
+
+            # default all tests to fail ...
+            #   ... after three attempts for tests marked as flaky
+            #   ... after three attempts for all tests in //rs/tests
+            #   ... after the first attempt for other tests
+            #   see also:
+            #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+            --flaky_test_attempts=default
+            --flaky_test_attempts=//rs/tests/.*@3
+
+            --config=lint # enable lint checks
+            )
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
@@ -200,7 +213,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -221,7 +234,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -242,7 +255,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -273,7 +286,7 @@ jobs:
     needs: [config]
     name: Build IC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -288,10 +301,10 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Run Build IC
         id: build-ic
-        run: ./ci/scripts/run-build-ic.sh
+        uses: ./.github/actions/bazel
+        with:
+          run: ./ci/scripts/run-build-ic.sh
         env:
-          BAZEL_COMMAND: build --config=ci
-          BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
@@ -351,7 +364,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -386,7 +399,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
     timeout-minutes: 30
     steps:
       - name: Checkout

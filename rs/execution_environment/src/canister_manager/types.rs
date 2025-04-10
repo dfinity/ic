@@ -487,6 +487,10 @@ pub(crate) enum CanisterManagerError {
     InvalidUpgradeOptionError {
         message: String,
     },
+    InvalidSubslice {
+        offset: u64,
+        size: u64,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -662,6 +666,12 @@ impl AsErrorHelp for CanisterManagerError {
                     "Try resending the message after omitting or modifying the invalid options."
                         .to_string(),
                 doc_link: doc_ref("invalid-upgrade-option"),
+            },
+            CanisterManagerError::InvalidSubslice{ .. } => ErrorHelp::UserError {
+                suggestion:
+                    "Use the snapshot metadata API to learn the size of the wasm module / main memory / stable memory."
+                        .to_string(),
+                doc_link: "".to_string(),
             },
         }
     }
@@ -986,6 +996,12 @@ impl From<CanisterManagerError> for UserError {
                     )
                 )
             }
+            InvalidSubslice { offset, size } => {
+                Self::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Invalid subslice into wasm module / main memory / stable memory: offset: {}, size: {}", offset, size)
+                )
+            }
         }
     }
 }
@@ -995,6 +1011,9 @@ impl From<CanisterSnapshotError> for CanisterManagerError {
         match err {
             CanisterSnapshotError::EmptyExecutionState(canister_id) => {
                 CanisterManagerError::CanisterSnapshotExecutionStateNotFound { canister_id }
+            }
+            CanisterSnapshotError::InvalidSubslice { offset, size } => {
+                CanisterManagerError::InvalidSubslice { offset, size }
             }
         }
     }

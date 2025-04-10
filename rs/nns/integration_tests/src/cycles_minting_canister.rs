@@ -802,7 +802,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     let assert_canister_statuses_fixed = |test_phase| {
         assert_eq!(
             btreemap! {
-                btreemap! { "status".to_string() => "running".to_string() } => 11,
+                btreemap! { "status".to_string() => "running".to_string() } => 17,
                 btreemap! { "status".to_string() => "stopped".to_string() } => 0,
                 btreemap! { "status".to_string() => "stopping".to_string() } => 0,
             },
