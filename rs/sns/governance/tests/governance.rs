@@ -11,6 +11,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
+use ic_sns_governance::pb::v1::{ListProposals, ListProposalsResponse, Topic, TopicSelector};
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -1458,6 +1459,135 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
          native proposal actions in response {:?}",
         missing_actions
     );
+}
+
+#[test]
+fn list_proposals_filter_by_topic() {
+    // Prepare the world.
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    for proposal in [
+        ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            topic: Some(Topic::CriticalDappOperations as i32),
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 2 }),
+            topic: Some(Topic::TreasuryAssetManagement as i32),
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 3 }),
+            topic: None,
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 4 }),
+            topic: Some(Topic::SnsFrameworkManagement as i32),
+            ..ProposalData::default()
+        },
+    ] {
+        canister_fixture.directly_insert_proposal_data(proposal);
+    }
+
+    let test_cases = [
+        (
+            "List all proposals",
+            ListProposals {
+                include_topics: vec![],
+                ..Default::default()
+            },
+            vec![4, 3, 2, 1],
+        ),
+        (
+            "List proposals without topics",
+            ListProposals {
+                include_topics: vec![TopicSelector { topic: None }],
+                ..Default::default()
+            },
+            vec![3],
+        ),
+        (
+            "Select one topic",
+            ListProposals {
+                include_topics: vec![TopicSelector {
+                    topic: Some(Topic::TreasuryAssetManagement as i32),
+                }],
+                ..Default::default()
+            },
+            vec![2],
+        ),
+        (
+            "Select two topics",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 2],
+        ),
+        (
+            "Select three topics",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector {
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 2, 1],
+        ),
+        (
+            "Select three topics and proposals with no topic",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector { topic: None },
+                    TopicSelector {
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 3, 2, 1],
+        ),
+    ];
+
+    for (label, request, expected) in test_cases {
+        let ListProposalsResponse {
+            proposals,
+            include_ballots_by_caller: _,
+            include_topic_filtering: _,
+        } = canister_fixture
+            .governance
+            .list_proposals(&request, &PrincipalId::new_anonymous());
+
+        let observed = proposals
+            .iter()
+            .map(|proposal| proposal.id.unwrap().id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(observed, expected, "Test case: {}", label);
+    }
 }
 
 #[test]
