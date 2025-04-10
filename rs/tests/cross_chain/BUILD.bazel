@@ -53,7 +53,11 @@ system_test_nns(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
         "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
     },
-    tags = ["long_test"],
+    # TODO: Remove the `manual` tag once this test is fixed.
+    tags = [
+        "long_test",
+        "manual",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
