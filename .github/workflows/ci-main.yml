@@ -173,14 +173,6 @@ jobs:
         uses: ./.github/actions/bazel-upload-checksums/
         with:
           artifact-name: shasums-cache
-      - name: Compute PocketIC server path
-        id: pocket-ic-server-path
-        run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_OUTPUT
-      - name: Upload PocketIC
-        uses: actions/upload-artifact@v3
-        with:
-          name: pocket-ic-server
-          path: ${{ steps.pocket-ic-server-path.outputs.pocket_ic_server_path }}
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
