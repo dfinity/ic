@@ -102,7 +102,7 @@ runs:
           | awk "$prog" \
           | jq -cMr \
               'select(.targetLabel | test("^//")) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
-          | sort >"$execlog_csv_out")
+          | sort -t, -k2 >"$execlog_csv_out")
 
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlog-artifact-name != ''

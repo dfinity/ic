@@ -333,6 +333,8 @@ jobs:
 
       - name: Build Determinism Test
         run: |
+          set -euo pipefail
+
           n_lines_cache=$(cat shasums-cache/execution_log.csv | wc -l)
           n_lines_nocache=$(cat shasums-nocache/execution_log.csv | wc -l)
           echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
