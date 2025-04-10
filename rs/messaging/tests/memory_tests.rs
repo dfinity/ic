@@ -13,12 +13,67 @@ use random_traffic_test::Config as CanisterConfig;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 
-
 #[test]
 fn heartbeat_no_op_demo() {
-    
-}
+    use assert_matches::assert_matches;
+    use candid::Encode;
+    use ic_state_machine_tests::ErrorCode;
 
+    let subnets = SubnetPair::new(SubnetPairConfig {
+        local_canisters_count: 1,
+        local_max_instructions_per_round: 100_000_000,
+        remote_canisters_count: 1,
+        remote_max_instructions_per_round: 100_000_000,
+        ..SubnetPairConfig::default()
+    });
+    let local_canister = subnets.local_canister();
+    let remote_canister = subnets.remote_canister();
+
+    // The `local_canister` on `local_env` is set to make 10 calls per heartbeat to `remote_canister` on `remote_env`.
+    subnets.set_config(
+        local_canister,
+        CanisterConfig {
+            receivers: vec![remote_canister],
+            call_bytes_range: (MAX_PAYLOAD_BYTES, MAX_PAYLOAD_BYTES),
+            best_effort_call_percentage: 0,
+            calls_per_heartbeat: 10,
+            ..CanisterConfig::default()
+        },
+    );
+
+    // Tick a couple of times on `local_env` to trigger the heartbeat of `local_canister`.
+    for _ in 0..10 {
+        subnets.local_env.tick();
+    }
+
+    // There should be output for `local_canister`, but apparently the heartbeat didn't make any calls.
+    let has_output = subnets
+        .local_env
+        .get_latest_state()
+        .canister_states
+        .get(&local_canister)
+        .unwrap()
+        .has_output();
+    let snapshot = stream_snapshot(&subnets.local_env, &subnets.remote_env);
+    assert!(!has_output && snapshot.is_none());
+
+    // Nothing is recorded in the logs.
+    let log = subnets.local_env.canister_log(local_canister);
+    assert!(log.records().is_empty());
+
+    // Trigger `pulse()` manually (this is the same code the heartbeat executes as a direct
+    // function call).
+    let wasm_result = subnets.local_env.execute_ingress(
+        local_canister,
+        "pulse",
+        candid::Encode!(&10_u32).unwrap(),
+    );
+    // Ah, `pulse()` uses too many instructions!
+    assert_matches!(
+        wasm_result,
+        Err(user_error) if user_error.code() == ErrorCode::CanisterInstructionLimitExceeded
+    );
+}
 
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
 fn check_message_memory_limits_are_respected(
