@@ -780,6 +780,9 @@ mod tests {
 
     #[test]
     fn test_count_fitting_deltas_max_size() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1039,6 +1042,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_changelog_insert_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1077,6 +1083,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_apply_mutations_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1127,25 +1136,39 @@ mod tests {
         assert_eq!(deserialized, registry);
     }
 
+    // I think we can get rid of ReprVersion::Unspecified support? It's not
+    // doing much harm now; just a bit of detritus/dead code.
     #[test]
     fn test_from_serializable_form_version_unspecified_max_size_delta() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(0, ReprVersion::Unspecified)
     }
 
     #[test]
     fn test_from_serializable_form_version1_max_size_delta() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(0, ReprVersion::Version1)
     }
 
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version_unspecified_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(1, ReprVersion::Unspecified)
     }
 
     #[test]
     #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
     fn test_from_serializable_form_version1_delta_too_large() {
+        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
+        let _restore_on_drop = crate::storage::temporarily_disable_chunkifying_large_values();
+
         test_from_serializable_form_impl(1, ReprVersion::Version1)
     }
 
