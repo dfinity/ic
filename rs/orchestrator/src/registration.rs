@@ -1078,7 +1078,8 @@ mod tests {
                 .await;
 
             let logs = in_memory_logger.drain_logs();
-            LogEntriesAssert::assert_that(logs).has_len(0);
+            // Should log one line from the NodeRegistration::new() call
+            LogEntriesAssert::assert_that(logs).has_len(1);
         }
 
         #[tokio::test]
@@ -1099,7 +1100,8 @@ mod tests {
                 .await;
 
             let logs = in_memory_logger.drain_logs();
-            LogEntriesAssert::assert_that(logs).has_len(0);
+            // Should log one line from the NodeRegistration::new() call
+            LogEntriesAssert::assert_that(logs).has_len(1);
         }
 
         #[tokio::test]
