@@ -79,7 +79,6 @@ pub struct RwPolicy<'a, Owner> {
     lifetime_tag: PhantomData<&'a Owner>,
 }
 
-pub enum Unverified {}
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
     /// directory while reading/writing a checkpoint.
