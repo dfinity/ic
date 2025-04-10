@@ -1628,6 +1628,27 @@ pub mod sns {
                 })
         }
 
+        /// Returns the neuron ID of the first neuron that is distinct from `neuron_id` or `None`.
+        pub async fn find_another_neuron(
+            pocket_ic: &PocketIc,
+            canister_id: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+        ) -> Option<sns_pb::NeuronId> {
+            let sns_neurons = list_neurons(pocket_ic, canister_id).await.neurons;
+            sns_neurons
+                .into_iter()
+                .filter_map(|Neuron { id, .. }| {
+                    let this_neuron_id = id.unwrap();
+
+                    if this_neuron_id != neuron_id {
+                        return Some(this_neuron_id);
+                    }
+
+                    None
+                })
+                .next()
+        }
+
         /// This function is a wrapper around `GovernanceCanister::get_nervous_system_parameters`, kept here for convenience.
         pub async fn get_nervous_system_parameters(
             pocket_ic: &PocketIc,

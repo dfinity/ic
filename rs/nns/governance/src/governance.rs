@@ -10,6 +10,7 @@ use crate::{
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
+    is_disburse_maturity_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -66,10 +67,12 @@ use crate::{
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
+    use_node_provider_reward_canister,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
+use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -89,8 +92,8 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     pb::v1::{
@@ -102,6 +105,9 @@ use ic_nns_governance_api::{
     },
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
+};
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -118,6 +124,7 @@ use registry_canister::{
 };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{
     borrow::Cow,
@@ -130,12 +137,14 @@ use std::{
     string::ToString,
 };
 
+mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
+pub mod voting_power_snapshots;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;
@@ -3440,6 +3449,42 @@ impl Governance {
         Ok(child_nid)
     }
 
+    fn disburse_maturity(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        disburse_maturity: &manage_neuron::DisburseMaturity,
+    ) -> Result<u64, GovernanceError> {
+        if !is_disburse_maturity_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "DisburseMaturity is not yet supported.",
+            ));
+        }
+
+        self.check_heap_can_grow()?;
+
+        let now_seconds = self.env.now();
+
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now_seconds,
+            command: Some(InFlightCommand::SyncCommand(SyncCommand {})),
+        };
+
+        // Lock the neuron so that we're sure that we are not disbursing the maturity in the middle
+        // of another ongoing operation.
+        let _neuron_lock = self.lock_neuron_for_command(id.id, in_flight_command)?;
+
+        initiate_maturity_disbursement(
+            &mut self.neuron_store,
+            caller,
+            id,
+            disburse_maturity,
+            now_seconds,
+        )
+        .map_err(GovernanceError::from)
+    }
+
     /// Set the status of a proposal that is 'being executed' to
     /// 'executed' or 'failed' depending on the value of 'success'.
     ///
@@ -6366,10 +6411,9 @@ impl Governance {
             Some(Command::RefreshVotingPower(_)) => self
                 .refresh_voting_power(&id, caller)
                 .map(ManageNeuronResponse::refresh_voting_power_response),
-            Some(Command::DisburseMaturity(_)) => Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "Disbursing maturity is not implemented yet.",
-            )),
+            Some(Command::DisburseMaturity(disburse_maturity)) => self
+                .disburse_maturity(&id, caller, disburse_maturity)
+                .map(ManageNeuronResponse::disburse_maturity_response),
             None => panic!(),
         }
     }
@@ -7683,8 +7727,15 @@ impl Governance {
         let mut rewards = vec![];
 
         // Maps node providers to their rewards in XDR
-        let xdr_permyriad_rewards: NodeProvidersMonthlyXdrRewards =
-            self.get_node_providers_monthly_xdr_rewards().await?;
+        let (reg_rewards, maybe_version) = self.get_node_providers_monthly_xdr_rewards().await?;
+        let registry_version = maybe_version.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                "Registry version was not available in the response to \
+                    get_node_providers_monthly_xdr_rewards, which indicates a problem."
+                    .to_string(),
+            )
+        })?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
@@ -7704,9 +7755,7 @@ impl Governance {
         // `rewards`
         for np in &self.heap_data.node_providers {
             if let Some(np_id) = &np.id {
-                let np_id_str = np_id.to_string();
-                let xdr_permyriad_reward =
-                    *xdr_permyriad_rewards.rewards.get(&np_id_str).unwrap_or(&0);
+                let xdr_permyriad_reward = *reg_rewards.get(np_id).unwrap_or(&0);
 
                 if let Some(reward_node_provider) =
                     get_node_provider_reward(np, xdr_permyriad_reward, xdr_permyriad_per_icp)
@@ -7721,8 +7770,6 @@ impl Governance {
             xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
         };
 
-        let registry_version = xdr_permyriad_rewards.registry_version.unwrap();
-
         Ok(MonthlyNodeProviderRewards {
             timestamp: self.env.now(),
             rewards,
@@ -7736,8 +7783,83 @@ impl Governance {
 
     /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
     async fn get_node_providers_monthly_xdr_rewards(
-        &mut self,
-    ) -> Result<NodeProvidersMonthlyXdrRewards, GovernanceError> {
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
+        if use_node_provider_reward_canister() {
+            self.get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister()
+                .await
+        } else {
+            self.get_node_providers_monthly_xdr_rewards_from_registry()
+                .await
+        }
+    }
+
+    async fn get_node_providers_monthly_xdr_rewards_from_node_provider_reward_canister(
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
+        let response: Vec<u8> = self.env.call_canister_method(
+            NODE_REWARDS_CANISTER_ID,
+            "get_node_providers_monthly_xdr_rewards",
+            Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {registry_version: None }).unwrap(),
+        ).await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
+                        code, msg
+                    ),
+                )
+            })?;
+
+        let response =
+            Decode!(&response, GetNodeProvidersMonthlyXdrRewardsResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Cannot decode return type from get_node_providers_monthly_xdr_rewards \
+                        as GetNodeProvidersMonthlyXdrRewardsResponse'. Error: {}",
+                        err,
+                    ),
+                )
+            })?;
+
+        let GetNodeProvidersMonthlyXdrRewardsResponse { rewards, error } = response;
+
+        if let Some(err_msg) = error {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Error calling 'get_node_providers_monthly_xdr_rewards': {}",
+                    err_msg
+                ),
+            ));
+        }
+
+        if let Some(rewards) = rewards {
+            let ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+                rewards,
+                registry_version,
+            } = rewards;
+            let rewards = rewards
+                .into_iter()
+                .map(|(principal, amount)| (PrincipalId::from(principal), amount))
+                .collect();
+            return Ok((rewards, registry_version));
+        }
+
+        Err(GovernanceError::new_with_message(
+            ErrorType::Unspecified,
+            "get_node_providers_monthly_xdr_rewards returned empty response, \
+                which should be impossible.",
+        ))
+    }
+
+    /// A helper to get the node provider rewards from registry (instead of Node Provider Reward Canister)
+    /// This will be removed once the Node Provider Reward Canister is in use.
+    async fn get_node_providers_monthly_xdr_rewards_from_registry(
+        &self,
+    ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), GovernanceError> {
         let registry_response:
             Vec<u8> = self
             .env
@@ -7758,14 +7880,35 @@ impl Governance {
             })?;
 
         Decode!(&registry_response, Result<NodeProvidersMonthlyXdrRewards, String>)
-            .map_err(|err| GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
-                    err,
-                ),
-            ))?
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
+                        err,
+                    ),
+                )
+            })?
             .map_err(|msg| GovernanceError::new_with_message(ErrorType::External, msg))
+            .map(|response| {
+                let NodeProvidersMonthlyXdrRewards {
+                    rewards,
+                    registry_version,
+                } = response;
+
+                let rewards = rewards
+                    .into_iter()
+                    .map(|(principal_str, amount)| {
+                        (
+                            PrincipalId::from_str(&principal_str)
+                                .expect("Could not get principal from string"),
+                            amount,
+                        )
+                    })
+                    .collect();
+
+                (rewards, registry_version)
+            })
     }
 
     /// A helper for the CMC's get_average_icp_xdr_conversion_rate method
