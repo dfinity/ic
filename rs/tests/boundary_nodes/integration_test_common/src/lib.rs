@@ -2006,7 +2006,7 @@ pub fn cors_headers_test(env: TestEnv) {
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", &allowed_methods),
                 ("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie,X-Ic-Canister-Id"),
-                ("Access-Control-Max-Age", "600"),
+                ("Access-Control-Max-Age", "7200"),
             ] {
                 let hdr = res
                     .headers()
