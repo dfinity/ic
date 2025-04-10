@@ -375,6 +375,9 @@ fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     assert_eq!(current_time, t.0 as u128);
 }
 
+// The precision of SystemTime on Windows is not good enough for this test to pass:
+// https://doc.rust-lang.org/std/time/struct.SystemTime.html#platform-specific-behavior
+#[cfg(not(windows))]
 #[test]
 fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
