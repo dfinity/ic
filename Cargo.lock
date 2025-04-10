@@ -9977,7 +9977,7 @@ dependencies = [
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.9.0"
 dependencies = [
- "ic-canister-client-sender",
+ "ic-ed25519",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types",
@@ -11009,6 +11009,7 @@ dependencies = [
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
  "ic-nns-handler-root-interface",
+ "ic-node-rewards-canister-api",
  "ic-protobuf",
  "ic-sns-init",
  "ic-sns-root",
@@ -11019,6 +11020,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "icp-ledger",
+ "icrc-ledger-types",
  "itertools 0.12.1",
  "lazy_static",
  "local_key",
@@ -12442,7 +12444,6 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
- "ic-read-state-response-parser",
  "ic-rosetta-test-utils",
  "ic-types",
  "icp-ledger",

@@ -29,7 +29,6 @@ ic-management-canister-types = { workspace = true }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
-ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 lazy_static = { workspace = true }
