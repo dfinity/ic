@@ -11,6 +11,9 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
+use ic_sns_governance::pb::v1::manage_neuron::SetFollowing;
+use ic_sns_governance::pb::v1::neuron::{FolloweesForTopic, TopicFollowees};
+use ic_sns_governance::pb::v1::{Followee, Topic};
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -3363,37 +3366,220 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
 #[test]
 fn test_set_following() {
     // Boilerplate variables.
-    let my_sns_neuron_id = NeuronId { id: vec![1, 2, 3] };
-    let caller = PrincipalId::new_user_test_id(1000);
+    let my_principal = PrincipalId::new_user_test_id(1000);
+    let my_sns_neuron_id = neuron_id(my_principal, 0);
 
-    // Prepare the world.
-    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
-        .add_neuron(NeuronBuilder::new(
-            my_sns_neuron_id.clone(),
-            E8 * 1000,
-            NeuronPermission::new(&caller, vec![]),
-        ))
-        .add_neuron(NeuronBuilder::new(
-            id.clone(),
-            E8 * 1000,
-            NeuronPermission::new(&caller, vec![]),
-        ))
-        .create();
+    let another_principal = PrincipalId::new_user_test_id(1000);
+    let another_neuron_id = neuron_id(another_principal, 0);
+
+    let expected_followee = Followee {
+        neuron_id: Some(another_neuron_id.clone()),
+        alias: Some("Bob Dylan".to_string()),
+    };
+
+    let cleared_topic_following_for_all_non_critical_proposals = [
+            Topic::DaoCommunitySettings,
+            Topic::SnsFrameworkManagement,
+            Topic::DappCanisterManagement,
+            Topic::ApplicationBusinessLogic,
+            Topic::Governance,
+        ]
+        .iter()
+        .map(|topic| FolloweesForTopic {
+            followees: vec![],
+            topic: Some(*topic as i32),
+        })
+        .collect();
 
     let test_cases = [
         (
-            "Set following for the first time",
-            SetFollowing::default(),
-
-        )
+            "Trivial case.",
+            vec![],
+            vec![],
+            None,
+            btreemap! {},
+        ),
+        (
+            "Smoke test (does the test harness work as expected?)",
+            vec![
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![],
+            None,
+            btreemap! {
+                1 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+        ),
+        (
+            "Set following for the first time.",
+            vec![],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }
+                }
+            }),
+            btreemap! {},
+        ),
+        (
+            "Set following works incrementally.",
+            vec![],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    },
+                    Topic::TreasuryAssetManagement as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                }
+            }),
+            btreemap! {},
+        ),
+        (
+            "Topic following clears legacy following for that topic.",
+            vec![
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        // MOTION is in `Topic::Governance`.
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    },
+                }
+            }),
+            // Legacy following is cleared.
+            btreemap! {},
+        ),
+        (
+            "Topic following does not clear legacy following for other topics.",
+            vec![
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        // MOTION is in `Topic::Governance` (not `Topic::ApplicationBusinessLogic`).
+                        topic: Some(Topic::ApplicationBusinessLogic as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::ApplicationBusinessLogic as i32),
+                    },
+                }
+            }),
+            // Legacy following is preserved.
+            btreemap! {
+                1 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+        ),
+        (
+            "Following on all non-critical proposals in one command clears catch-all following.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals,
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {}
+            }),
+            // catch-all following is cleared.
+            btreemap! {},
+        ),
     ];
 
-    for (label, set_following, expected) in test_cases {
-        canister_fixture.governance.set_following(
-            &my_sns_neuron_id, &caller, set_following,
-        ).unwrap();
+    // Follow is the legacy command, set_following is the new command.
+    for (
+        label, follow_commands, set_following_commands, expected_topic_followees, expected_followees,
+    ) in test_cases {
 
-        let observed = canister_fixture.get_neuron(&my_sns_neuron_id);
-        assert_eq!(observed, expected);
+        // Prepare the world.
+        let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(NeuronBuilder::new(
+            my_sns_neuron_id.clone(),
+            E8 * 1000,
+            NeuronPermission::all(&my_principal),
+        ))
+        .create();
+
+        for follow in follow_commands {
+            canister_fixture
+                .governance
+                .follow(&my_sns_neuron_id, &my_principal, &follow)
+                .unwrap();
+        }
+
+        // Run code under test.
+        for set_following in set_following_commands {
+            canister_fixture
+                .governance
+                .set_following(&my_sns_neuron_id, &my_principal, &set_following)
+                .unwrap();
+        }
+
+        // Check the results.
+        let Neuron {
+            followees,
+            topic_followees,
+            ..
+        } = canister_fixture.get_neuron(&my_sns_neuron_id);
+
+        assert_eq!(topic_followees, expected_topic_followees, "unexpected topic_followees: {}", label);
+
+        assert_eq!(followees, expected_followees, "unexpected followees: {}", label);
     }
 }
