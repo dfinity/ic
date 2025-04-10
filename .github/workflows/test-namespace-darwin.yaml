@@ -1,12 +1,8 @@
 # Darwin tests on runners from https://namespace.so
 name: test-namespace
+
 on:
-  push:
-    branches:
-      - master
-      - 'dev-gh-*' # used by developers to trigger CI runs without having to open a PR
-  pull_request:
-  merge_group:
+  workflow_call:
 
 # Ensure there's only one instance of this workflow for any PR/branch/tag, and
 # cancel the previous one if necessary; except on master where we want to build
