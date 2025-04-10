@@ -1,19 +1,35 @@
 #!/usr/bin/env bash
 
-# AFL Corpus minimizer
-# !NOTE: This script is only meant to be used for fuzzers that utilize ICWasmModule as input.
-# The targets currently supported are
-# - //rs/embedders/fuzz:execute_with_wasmtime_afl
-# - //rs/embedders/fuzz:execute_with_wasm_executor_afl
-# - //rs/embedders/fuzz:differential_simd_execute_with_wasmtime_afl
+show_help() {
+    cat <<EOF
+AFL Corpus Minimizer
+
+This script is intended for use with fuzzers that accept ICWasmModule as input.
+It minimizes AFL fuzzing corpora across multiple targets.
+
+Supported targets:
+  //rs/embedders/fuzz:execute_with_wasmtime_afl
+  //rs/embedders/fuzz:execute_with_wasm_executor_afl
+  //rs/embedders/fuzz:differential_simd_execute_with_wasmtime_afl
+
+Usage:
+  $0 /path/to/input/dir /path/to/output/dir
+
+Arguments:
+  input_dir     Directory containing output from the latest fuzzing run
+  output_dir    Directory to write the minimized corpus to
+EOF
+    exit 0
+}
+
+# Show help if -h or --help is passed
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_help
+fi
 
 set -x
 
-# Usage
-# ./bin/afl_corpus_min.sh /input/dir /output/dir
-
-# Output directory of last fuzzing run
-# This will be our source of new corpus
+# Input directory containing corpus from the latest fuzzing run
 INPUT_DIR=$1
 
 if [[ -z "$INPUT_DIR" ]]; then
@@ -21,9 +37,8 @@ if [[ -z "$INPUT_DIR" ]]; then
     exit 1
 fi
 
-# Output directory of previous minimized corpus
-# This will be the source of old corpus and where the new minimized corpus
-# will be preserved
+# Output directory for storing the minimized corpus
+# It may contain previously minimized corpus files
 OUTPUT_DIR=$2
 
 if [[ -z "$OUTPUT_DIR" ]]; then
@@ -34,28 +49,28 @@ fi
 TEMP_DIR=$(mktemp -d)
 declare -a TARGETS=("execute_with_wasmtime_afl" "execute_with_wasm_executor_afl" "differential_simd_execute_with_wasmtime_afl")
 
-# Move new corpus from INPUT_DIR
-# It's fine to overshoot number of fuzzers here
+# Copy the new corpus from INPUT_DIR
+# It's fine if some fuzzer directories don't exist
 for i in $(seq 1 64); do
-    cp -R $INPUT_DIR/fuzzer$i/queue/* $TEMP_DIR
+    cp -R "$INPUT_DIR/fuzzer$i/queue/"* "$TEMP_DIR" 2>/dev/null || true
 done
 
-# Move exisitng corpus from OUTPUT_DIR
-# Running minimization will recreate the new files
+# Copy the existing minimized corpus from OUTPUT_DIR if available
+# Otherwise, create target-specific subdirectories to bootstrap
 if [ -z "$(ls $OUTPUT_DIR)" ]; then
-    echo "Output directory is empty. Bootstrapping"
+    echo "Output directory is empty. Bootstrapping..."
     for i in "${TARGETS[@]}"; do
         mkdir -p $OUTPUT_DIR/$i
     done
 else
-    echo "Output directory is not empty. Moving files to $TEMP_DIR"
+    echo "Output directory is not empty. Moving files to temporary directory $TEMP_DIR ..."
     for i in "${TARGETS[@]}"; do
         cp -R $OUTPUT_DIR/$i/* $TEMP_DIR
         rm -r $OUTPUT_DIR/$i/*
     done
 fi
 
-# To capture false crashes
+# ASan and LSan options to capture false positives and runtime errors
 ASAN_OPTIONS="abort_on_error=1:\
             alloc_dealloc_mismatch=0:\
             allocator_may_return_null=1:\
@@ -91,7 +106,7 @@ LSAN_OPTIONS="handle_abort=1:\
             symbolize=0:\
             use_sigaltstack=1"
 
-# Perform corpus minimization
+# Perform corpus minimization for each target
 WORKSPACE=$(bazel info workspace --ui_event_filters=-WARNING,-INFO 2>/dev/null)
 TARGET_PREFIX="//rs/embedders/fuzz"
 for i in "${TARGETS[@]}"; do
