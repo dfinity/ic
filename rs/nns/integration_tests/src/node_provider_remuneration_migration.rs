@@ -6,7 +6,6 @@ use ic_nns_test_utils::state_test_helpers::{
     registry_latest_version, setup_nns_canisters_with_features,
     state_machine_builder_for_nns_tests, update, update_with_sender_bytes,
 };
-use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -169,7 +168,7 @@ fn get_rewards_at_version_with_registry(
         )
         .map_err(|e| format!("{}", e))
     })?
-    .and_then(|response| {
+    .map(|response| {
         let NodeProvidersMonthlyXdrRewards {
             rewards,
             registry_version,
@@ -186,7 +185,7 @@ fn get_rewards_at_version_with_registry(
             })
             .collect();
 
-        Ok((rewards, registry_version))
+        (rewards, registry_version)
     })
 }
 
@@ -252,21 +251,32 @@ fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
     // Compare most recent 10, ensuring the errors are the same
     let latest_up_to_10 = (0..=latest_registry_version).rev().take(10);
 
-    for version in latest_up_to_10 {
-        let version = Some(version);
+    let compare = |version: Option<u64>| {
         let registry_result = get_rewards_at_version_with_registry(machine, version);
         let nr_result = get_rewards_at_version_with_node_rewards_canister(machine, version);
 
         if registry_result.is_err() {
             assert!(
                 nr_result.is_err(),
-                "Expected error because of registry: {:?}",
+                "Expected error at version: {version:?} because of registry response: {:?}",
                 registry_result
             );
         }
 
         assert_eq!(registry_result, nr_result, "Version: {:?}", version);
+    };
+
+    for version in latest_up_to_10 {
+        let version = Some(version);
+        compare(version);
     }
 
-    if latest_registry_version > 100 {}
+    if latest_registry_version > 100 {
+        // TODO DO NOT MERGE
+        // Next steps - create a jittery random number generator that
+        // samples the registry version and then calls both canisters
+        // and compares the results.
+
+        // ALSO TODO: ?? I forgot.... hope it wasn't important
+    }
 }
