@@ -1,7 +1,5 @@
 name: 'PocketIC library build on Windows'
 on:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
   workflow_run:
     workflows: ["CI Main"]  # Name of the workflow that triggers this one
     types:
