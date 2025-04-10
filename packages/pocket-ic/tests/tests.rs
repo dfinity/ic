@@ -23,7 +23,11 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{io::Read, time::SystemTime};
+use std::{
+    io::Read,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    time::SystemTime,
+};
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -2553,7 +2557,16 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
-        let client = Client::new();
+        let client = Client::builder()
+            .resolve(
+                &host,
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    pic.get_server_url().port().unwrap(),
+                ),
+            )
+            .build()
+            .unwrap();
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
         // and the error message "The request is not supported by the test canister.".
