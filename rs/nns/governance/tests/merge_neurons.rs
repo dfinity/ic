@@ -16,9 +16,8 @@ use ic_nns_governance::{
         ManageNeuron, NetworkEconomics,
     },
 };
-use ic_nns_governance_api::pb::v1::{
-    self as api,
-    manage_neuron_response::{Command as CommandResponse, MergeResponse},
+use ic_nns_governance_api::pb::v1::manage_neuron_response::{
+    Command as CommandResponse, MergeResponse,
 };
 use proptest::prelude::{proptest, TestCaseError};
 
@@ -152,14 +151,12 @@ fn do_test_merge_neurons(
                 source_neuron_info,
                 nns.governance
                     .get_neuron_info(&source_neuron_id, controller)
-                    .map(api::NeuronInfo::from)
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron_info,
                 nns.governance
                     .get_neuron_info(&target_neuron_id, controller)
-                    .map(api::NeuronInfo::from)
                     .unwrap()
             );
         }

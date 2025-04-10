@@ -269,7 +269,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
                 break;
             }
         }
-        Box::new(to_download.into_iter().map(ChunkId::from))
+        Box::new(to_download.into_iter())
     }
 
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
