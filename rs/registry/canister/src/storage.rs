@@ -24,7 +24,7 @@ const CHUNKS_MEMORY_ID: MemoryId = MemoryId::new(1);
 /// because if it were only a little bit larger, we are hardly enhancing our
 /// capabilities. At the same time, a higher limit is not needed (yet).
 /// Therefore, 5x the message size limit seems appropriate (for now).
-const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1 << 20);
+const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1024 * 1024);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 
