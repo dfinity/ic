@@ -5,14 +5,18 @@ use ic_nervous_system_timer_task::{
 };
 use prune_following::PruneFollowingTask;
 use seeding::SeedingTask;
+use snapshot_voting_power::SnapshotVotingPowerTask;
 use std::cell::RefCell;
 
-use crate::{canister_state::GOVERNANCE, is_prune_following_enabled};
+use crate::{
+    canister_state::GOVERNANCE, is_prune_following_enabled, storage::VOTING_POWER_SNAPSHOTS,
+};
 
 mod calculate_distributable_rewards;
 mod distribute_rewards;
 mod prune_following;
 mod seeding;
+mod snapshot_voting_power;
 
 thread_local! {
     static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
@@ -24,6 +28,7 @@ pub fn schedule_tasks() {
     if is_prune_following_enabled() {
         PruneFollowingTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     }
+    SnapshotVotingPowerTask::new(&GOVERNANCE, &VOTING_POWER_SNAPSHOTS).schedule(&METRICS_REGISTRY);
     run_distribute_rewards_periodic_task();
 }
 
