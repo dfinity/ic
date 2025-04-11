@@ -106,7 +106,13 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 const LOCALHOST: &str = "127.0.0.1";
 
 enum PocketIcStateKind {
+    /// A persistent state dir managed by the user.
     StateDir(PathBuf),
+    /// A fresh temporary directory used if the user does not provide
+    /// a persistent state directory managed by the user.
+    /// The temporary directory is deleted when `PocketIcState` is dropped
+    /// unless `PocketIcState` is turned into a persistent state
+    /// at the path given by `PocketIcState::into_path`.
     TempDir(TempDir),
 }
 
