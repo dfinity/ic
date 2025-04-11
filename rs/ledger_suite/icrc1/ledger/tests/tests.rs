@@ -10,6 +10,7 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
@@ -507,23 +508,31 @@ fn test_icrc21_standard() {
 
 #[test]
 fn test_archiving_lots_of_blocks_after_enabling_archiving() {
-    ic_ledger_suite_state_machine_tests::archiving::archiving_lots_of_blocks_after_enabling_archiving(
-        ledger_wasm(), encode_init_args
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_lots_of_blocks_after_enabling_archiving(
+        ledger_wasm(), encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
     );
 }
 
 #[test]
 fn test_archiving_in_chunks_returns_disjoint_block_range_locations() {
-    ic_ledger_suite_state_machine_tests::archiving::archiving_in_chunks_returns_disjoint_block_range_locations(
-        ledger_wasm(), encode_init_args
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_in_chunks_returns_disjoint_block_range_locations(
+        ledger_wasm(), encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
     );
 }
 
 #[test]
 fn test_get_blocks_returns_multiple_archive_callbacks() {
-    ic_ledger_suite_state_machine_tests::archiving::get_blocks_returns_multiple_archive_callbacks(
+    ic_ledger_suite_state_machine_tests::archiving::test_get_blocks_returns_multiple_archive_callbacks(
         ledger_wasm(),
         encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
     );
 }
 
