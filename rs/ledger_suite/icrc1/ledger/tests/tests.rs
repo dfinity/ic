@@ -116,11 +116,6 @@ fn ledger_mainnet_u64_wasm() -> Vec<u8> {
 }
 
 #[cfg(not(feature = "u256-tokens"))]
-fn ledger_mainnet_sns_wasm() -> Vec<u8> {
-    std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
-}
-
-#[cfg(not(feature = "u256-tokens"))]
 fn ledger_mainnet_v2_u64_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -1525,7 +1520,6 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
     check_icrc3_get_block_limit(vec![(0, 1), (0, 100)]);
 }
 
-#[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn test_icrc3_certificate_ledger_upgrade() {
     use ic_cbor::CertificateToCbor;
@@ -1549,7 +1543,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
     // Install the ledger with a version serving the non-compliant ICRC-3 certificate.
     let ledger_id = env
         .install_canister(
-            ledger_mainnet_sns_wasm(),
+            ledger_mainnet_wasm(),
             Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap(),
             None,
         )
@@ -1758,7 +1752,6 @@ fn test_icrc3_certificate_ledger_upgrade() {
 }
 
 /// Check whether the certified data at path ["canister", ledger_canister_id, "certified_data"] is equal to root_hash.
-#[cfg(not(feature = "u256-tokens"))]
 fn is_valid_root_hash(
     certificate: &ic_certification::Certificate,
     root_hash: &icrc_ledger_types::icrc::generic_value::Hash,
