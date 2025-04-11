@@ -9,7 +9,7 @@ use std::sync::{
 
 use anyhow::bail;
 use ic_sys::PAGE_SIZE;
-use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
+use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES};
 use libc::c_void;
 use libc::MAP_FAILED;
 use libc::{mmap, munmap};
@@ -177,7 +177,8 @@ impl MmapMemory {
         #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         unsafe {
             use nix::sys::mman::{madvise, MmapAdvise};
-            madvise(start, size_in_bytes, MmapAdvise::MADV_HUGEPAGE).unwrap_or_else(|err| {
+            let length = size_in_bytes.min(MAX_WASM64_MEMORY_IN_BYTES as usize);
+            madvise(start, length, MmapAdvise::MADV_HUGEPAGE).unwrap_or_else(|err| {
                 eprintln!("[EXC-BUG] Error in `madvise` addr:{start:?} len:{size_in_bytes}: {err}")
             });
         }
