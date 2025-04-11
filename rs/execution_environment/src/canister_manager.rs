@@ -67,6 +67,11 @@ pub(crate) mod types;
 /// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 
+struct ValidatedMemoryUsage {
+    memory_increase: NumBytes,
+    storage_reservation_cycles: Cycles,
+}
+
 /// The entity responsible for managing canisters (creation, installing, etc.)
 pub(crate) struct CanisterManager {
     hypervisor: Arc<Hypervisor>,
@@ -1240,7 +1245,7 @@ impl CanisterManager {
             &self.log,
         );
 
-        self.memory_usage_checks(
+        let validated_memory_usage = self.memory_usage_checks(
             subnet_size,
             canister,
             round_limits,
@@ -1248,14 +1253,7 @@ impl CanisterManager {
             memory_usage,
             resource_saturation,
         )?;
-        self.memory_usage_updates(
-            subnet_size,
-            canister,
-            round_limits,
-            new_memory_usage,
-            memory_usage,
-            resource_saturation,
-        );
+        self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += chunk_bytes;
@@ -1323,7 +1321,7 @@ impl CanisterManager {
         new_memory_usage: NumBytes,
         old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> Result<ValidatedMemoryUsage, CanisterManagerError> {
         let memory_increase = new_memory_usage.saturating_sub(&old_memory_usage);
         match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => {
@@ -1333,6 +1331,10 @@ impl CanisterManager {
                         memory_usage_needed: new_memory_usage,
                     });
                 }
+                Ok(ValidatedMemoryUsage {
+                    memory_increase: NumBytes::from(0),
+                    storage_reservation_cycles: Cycles::zero(),
+                })
             }
             MemoryAllocation::BestEffort => {
                 let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
@@ -1399,54 +1401,40 @@ impl CanisterManager {
                             }
                         }
                     })?;
-            }
-        };
 
-        Ok(())
+                Ok(ValidatedMemoryUsage {
+                    memory_increase,
+                    storage_reservation_cycles: reservation_cycles,
+                })
+            }
+        }
     }
 
-    // IMPORTANT! This function can only be called after successful call to `self.memory_usage_checks`
-    // with the same arguments!
+    // IMPORTANT! This function should only be called after a successful call to `self.memory_usage_checks`.
     //
     // Performs the following updates:
     // 1. Reserve cycles on canister
     // 2. Actually deduct memory from subnet
     fn memory_usage_updates(
         &self,
-        subnet_size: usize,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
-        new_memory_usage: NumBytes,
-        old_memory_usage: NumBytes,
-        resource_saturation: &ResourceSaturation,
+        validated_memory_usage: ValidatedMemoryUsage,
     ) {
-        let memory_increase = new_memory_usage.saturating_sub(&old_memory_usage);
-        match canister.memory_allocation() {
-            MemoryAllocation::Reserved(_) => (),
-            MemoryAllocation::BestEffort => {
-                // Calculate if any cycles will need to be reserved.
-                let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
-                    memory_increase,
-                    resource_saturation,
-                    subnet_size,
-                );
+        // Reserve needed cycles if the subnet is becoming saturated.
+        // It's safe to unwrap here because we already checked that cycles can be reserved
+        // in `self.memory_usage_checks`.
+        canister
+            .system_state
+            .reserve_cycles(validated_memory_usage.storage_reservation_cycles)
+            .unwrap();
 
-                // Reserve needed cycles if the subnet is becoming saturated.
-                // It's safe to unwrap here because we already checked that cycles can be reserved
-                // in `self.memory_usage_checks`.
-                canister
-                    .system_state
-                    .reserve_cycles(reservation_cycles)
-                    .unwrap();
-
-                // Actually deduct memory from the subnet.
-                // It's safe to unwrap here because we already checked the available memory before
-                // in `self.memory_usage_checks`.
-                round_limits.subnet_available_memory
-                            .try_decrement(memory_increase, NumBytes::from(0), NumBytes::from(0))
+        // Actually deduct memory from the subnet.
+        // It's safe to unwrap here because we already checked the available memory before
+        // in `self.memory_usage_checks`.
+        round_limits.subnet_available_memory
+                            .try_decrement(validated_memory_usage.memory_increase, NumBytes::from(0), NumBytes::from(0))
                             .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
-            }
-        };
     }
 
     /// Creates a new canister snapshot.
@@ -1545,7 +1533,7 @@ impl CanisterManager {
             .memory_usage()
             .saturating_add(&new_snapshot_size)
             .saturating_sub(&replace_snapshot_size);
-        if let Err(err) = self.memory_usage_checks(
+        let validated_memory_usage = match self.memory_usage_checks(
             subnet_size,
             canister,
             round_limits,
@@ -1553,8 +1541,11 @@ impl CanisterManager {
             old_memory_usage,
             resource_saturation,
         ) {
-            return (Err(err), NumInstructions::from(0));
-        }
+            Ok(validated_memory_usage) => validated_memory_usage,
+            Err(err) => {
+                return (Err(err), NumInstructions::from(0));
+            }
+        };
 
         // Charge for taking a snapshot of the canister.
         let instructions = self
@@ -1605,14 +1596,7 @@ impl CanisterManager {
             );
         }
 
-        self.memory_usage_updates(
-            subnet_size,
-            canister,
-            round_limits,
-            new_memory_usage,
-            old_memory_usage,
-            resource_saturation,
-        );
+        self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
@@ -1792,7 +1776,7 @@ impl CanisterManager {
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
 
-        if let Err(err) = self.memory_usage_checks(
+        let validated_memory_usage = match self.memory_usage_checks(
             subnet_size,
             canister,
             round_limits,
@@ -1800,8 +1784,11 @@ impl CanisterManager {
             old_memory_usage,
             resource_saturation,
         ) {
-            return (Err(err), instructions_used);
-        }
+            Ok(validated_memory_usage) => validated_memory_usage,
+            Err(err) => {
+                return (Err(err), instructions_used);
+            }
+        };
 
         // Charge for loading the snapshot of the canister.
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
@@ -1819,14 +1806,7 @@ impl CanisterManager {
             );
         };
 
-        self.memory_usage_updates(
-            subnet_size,
-            canister,
-            round_limits,
-            new_memory_usage,
-            old_memory_usage,
-            resource_saturation,
-        );
+        self.memory_usage_updates(canister, round_limits, validated_memory_usage);
 
         // Increment canister version.
         new_canister.system_state.canister_version += 1;
