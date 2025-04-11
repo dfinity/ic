@@ -6,6 +6,8 @@ inputs:
     required: true
     description: |
       The commands to run. Will be evaluated with bash.
+  execlog-artifact-name:
+    required: false
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
@@ -69,6 +71,47 @@ runs:
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+
+
+          # TODO: time this
+    - name: Clean up execlog
+      shell: bash
+      if: (success() || failure()) && inputs.execlog-artifact-name != ''
+      run: |
+        # todo: extract this
+        execlog_json_in='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.json'
+        execlog_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.csv'
+        if ! [ -e "$execlog_json_in" ]; then
+          exit 0
+        fi
+
+
+        prog='
+          BEGIN { arr = 0; dict = 0; }
+          arr == 1 && /  }],?/ { arr = 0; next }
+          arr == 1 { next }
+          dict == 1 && /  },?/ { dict = 0; next }
+          dict == 1 { next }
+          /  "commandArgs":.*/ { next }
+          /  "environmentVariables": \[\{/ { arr = 1; next; }
+          /  "inputs": \[\{/ { arr = 1; next; }
+          { print }
+          '
+
+        time (cat "$execlog_json_in" \
+          | awk "$prog" \
+          | jq -cMr \
+              'select(.targetLabel | test("^//")) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
+          | sort -t, -k2 >"$execlog_csv_out")
+
+    - name: Upload execution log
+      if: (success() || failure()) && inputs.execlog-artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.execlog-artifact-name }}
+        if-no-files-found: ignore
+        path: |
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.csv
 
     - name: Cleanup
       shell: bash

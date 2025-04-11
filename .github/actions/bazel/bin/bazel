@@ -58,6 +58,12 @@ fi
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)
     bazel_args+=(
+
+        # TODO:
+        #   use own dir if necessary
+        #   change name on every invoke
+        --execution_log_json_file="$BAZEL_ACTION_METRICS_OUT/execution_log.json"
+
         --verbose_failures=true
 
         # enables BES upload (see config)
