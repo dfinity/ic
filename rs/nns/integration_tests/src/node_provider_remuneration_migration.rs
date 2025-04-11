@@ -1,11 +1,15 @@
 use candid::{Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_test_utils::common::{build_registry_wasm, NnsInitPayloadsBuilder};
+use ic_nns_test_utils::common::{
+    build_node_rewards_wasm, build_registry_wasm, NnsInitPayloadsBuilder,
+};
 use ic_nns_test_utils::state_test_helpers::{
     registry_latest_version, setup_nns_canisters_with_features,
-    state_machine_builder_for_nns_tests, update, update_with_sender_bytes,
+    setup_nns_node_rewards_with_correct_canister_id, state_machine_builder_for_nns_tests, update,
+    update_with_sender_bytes,
 };
+use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -23,6 +27,24 @@ use prost::Message;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::collections::BTreeMap;
 use std::str::FromStr;
+
+#[test]
+fn test_registry_and_node_rewards_give_same_results_with_golden_state() {
+    let machine = new_state_machine_with_golden_nns_state_or_panic();
+    machine
+        .upgrade_canister(REGISTRY_CANISTER_ID, build_registry_wasm().bytes(), vec![])
+        .expect("Failed to upgrade registry");
+
+    machine
+        .upgrade_canister(
+            NODE_REWARDS_CANISTER_ID,
+            build_node_rewards_wasm().bytes(),
+            vec![],
+        )
+        .expect("Failed to upgrade node rewards");
+
+    do_test_registry_and_node_rewards_give_same_results(&machine);
+}
 
 #[test]
 fn test_registry_and_node_rewards_give_same_results_with_normal_state() {
@@ -232,17 +254,7 @@ fn get_rewards_at_version_with_node_rewards_canister(
     })
 }
 
-// #[test]
-// fn test_registry_and_node_rewards_give_same_results_with_golden_state() {
-//     let machine = new_state_machine_with_golden_nns_state_or_panic();
-//     do_test_registry_and_node_rewards_give_same_results(&machine);
-// }
-
 fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
-    machine
-        .upgrade_canister(REGISTRY_CANISTER_ID, build_registry_wasm().bytes(), vec![])
-        .expect("Failed to upgrade registry");
-
     let latest_registry_version =
         registry_latest_version(machine).expect("Could not fetch latest version");
 
@@ -272,6 +284,13 @@ fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
     }
 
     if latest_registry_version > 100 {
+        let reasonable = latest_registry_version / 100;
+
+        for version in (0..=reasonable).rev() {
+            let version = Some(version * 100);
+            compare(version);
+        }
+
         // TODO DO NOT MERGE
         // Next steps - create a jittery random number generator that
         // samples the registry version and then calls both canisters
