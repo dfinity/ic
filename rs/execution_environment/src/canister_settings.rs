@@ -1,5 +1,4 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
@@ -108,24 +107,9 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         };
 
         let freezing_threshold = match input.freezing_threshold {
-            Some(ft) => match ft.0.to_u64() {
-                Some(num) => {
-                    if num < MINIMUM_FREEZING_THRESHOLD {
-                        return Err(UpdateSettingsError::FreezingThresholdOutOfRange {
-                            provided: ft,
-                            minimum: candid::Nat::from(MINIMUM_FREEZING_THRESHOLD),
-                        });
-                    }
-                    Some(NumSeconds::from(num))
-                }
-                // Value cannot fit in a 64-bit integer.
-                None => {
-                    return Err(UpdateSettingsError::FreezingThresholdOutOfRange {
-                        provided: ft,
-                        minimum: candid::Nat::from(MINIMUM_FREEZING_THRESHOLD),
-                    });
-                }
-            },
+            Some(ft) => Some(NumSeconds::from(ft.0.to_u64().ok_or(
+                UpdateSettingsError::FreezingThresholdOutOfRange { provided: ft },
+            )?)),
             None => None,
         };
 
@@ -288,19 +272,10 @@ impl CanisterSettingsBuilder {
 pub enum UpdateSettingsError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),
-    FreezingThresholdOutOfRange {
-        provided: candid::Nat,
-        minimum: candid::Nat,
-    },
-    ReservedCyclesLimitOutOfRange {
-        provided: candid::Nat,
-    },
-    WasmMemoryLimitOutOfRange {
-        provided: candid::Nat,
-    },
-    WasmMemoryThresholdOutOfRange {
-        provided: candid::Nat,
-    },
+    FreezingThresholdOutOfRange { provided: candid::Nat },
+    ReservedCyclesLimitOutOfRange { provided: candid::Nat },
+    WasmMemoryLimitOutOfRange { provided: candid::Nat },
+    WasmMemoryThresholdOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -322,15 +297,13 @@ impl From<UpdateSettingsError> for UserError {
                     err.min, err.max, err.given
                 ),
             ),
-            UpdateSettingsError::FreezingThresholdOutOfRange { provided, minimum } => {
-                UserError::new(
-                    ErrorCode::CanisterContractViolation,
-                    format!(
-                        "Freezing threshold expected to be in the range of [{}..2^64-1], got {}",
-                        minimum, provided
-                    ),
-                )
-            }
+            UpdateSettingsError::FreezingThresholdOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "Freezing threshold expected to be in the range of [0..2^64-1], got {}",
+                    provided
+                ),
+            ),
             UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(

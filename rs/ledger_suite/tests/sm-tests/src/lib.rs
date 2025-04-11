@@ -5,10 +5,7 @@ use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    execution_environment::MINIMUM_FREEZING_THRESHOLD, subnet_config::SubnetConfig,
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
@@ -3173,7 +3170,7 @@ pub fn test_migration_resumes_from_frozen<T>(
     };
     let unfreeze = |env: &StateMachine, canister_id: CanisterId| {
         let args = CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(MINIMUM_FREEZING_THRESHOLD)
+            .with_freezing_threshold(0)
             .build();
         let result = env.update_settings(&canister_id, args);
         assert_matches!(result, Ok(_));
