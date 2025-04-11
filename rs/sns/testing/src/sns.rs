@@ -185,7 +185,7 @@ async fn get_current_participation<C: CallCanisters>(
 // Completes the swap by transferring the required amount of ICP from the "treasury" account
 // and participating in the swap for each participant using agents provided as arguments:
 // 1) agent - Agent that is used to provide IC network settings.
-// 2) use_ephemeral_icp_treasury - defines whether the identity of the 'agent' or 'TREASURY_PRINCIPAL_ID'.
+// 2) sponsor_participants_from_agent - defines whether the ICP account of the 'agent' or 'TREASURY_PRINCIPAL_ID'.
 //    is used to transfer ICP to the swap participants.
 // 2) swap_canister - SNS Swap canister ID.
 // 3) governance_canister - SNS Governance canister ID.
@@ -266,7 +266,7 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
         // since we need to gather the required number of participants, we skip the ones that already participated.
         let mut swap_participant_agent = swap_participants_iter.next().unwrap();
         while get_current_participation(swap_participant_agent, swap_canister).await != 0 {
-            swap_participant_agent = swap_participants_iter.next().unwrap();
+            swap_participant_agent = swap_participants_iter.next().expect("A single participation from all participants should be enough to complete the swap.");
         }
         let transfer_args = TransferArgs {
             to: AccountIdentifier::new(swap_participant_agent.caller().unwrap().into(), None)
@@ -392,7 +392,7 @@ pub async fn sns_proposal_upvote<
 
     match proposal_info
         .result
-        .ok_or("Expecting the proposal result to be set")?
+        .ok_or("Expecting some proposal info")?
     {
         ProposalResult::Proposal(proposal_data) => {
             if proposal_data.decided_timestamp_seconds > 0 {
@@ -528,7 +528,7 @@ pub async fn propose_sns_controlled_test_canister_upgrade<C: CallCanisters + Pro
 // 2) proposal_id - ID of the proposal that will be waited for.
 // 3) canister_id - ID of the canister that receives an upgrade.
 // 4) sns - SNS canisters.
-pub async fn wait_for_sns_controlled_canister_upgrade<
+pub async fn await_sns_controlled_canister_upgrade<
     C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
 >(
     agent: &C,
