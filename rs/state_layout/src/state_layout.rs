@@ -79,10 +79,6 @@ pub struct RwPolicy<'a, Owner> {
     lifetime_tag: PhantomData<&'a Owner>,
 }
 
-/// `Unfinished` stands for a checkpoint with pagemaps and pagemaps, but without protos.
-/// It's used for serializing protobufs and switching PageMaps and wasm binaries to the new underlying files.
-pub enum Unfinished {}
-
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
     /// directory while reading/writing a checkpoint.

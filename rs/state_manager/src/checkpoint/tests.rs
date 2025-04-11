@@ -1,5 +1,7 @@
 use super::*;
-use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
+use crate::{
+    flush_tip_channel, spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
+};
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::lsmt_config_default;
 use ic_logger::ReplicaLogger;
@@ -83,12 +85,7 @@ fn make_checkpoint_and_get_state_impl(
         )
     });
     *state = (*switched_state).clone();
-    #[allow(clippy::disallowed_methods)]
-    let (sender, recv) = unbounded();
-    tip_channel
-        .send(TipRequest::Wait { sender })
-        .expect("failed to send TipHandler Wait message");
-    recv.recv().expect("failed to wait for TipHandler thread");
+    flush_tip_channel(&tip_channel);
     load_checkpoint_and_validate_parallel(
         &cp_layout,
         state.metadata.own_subnet_type,
