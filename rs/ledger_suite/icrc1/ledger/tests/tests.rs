@@ -1705,18 +1705,16 @@ fn test_icrc3_certificate_ledger_upgrade() {
     // Compare the certified data of the new certificate with the digest of the old hash tree.
     // These should be different, since the new certified data uses the new labels, which are not
     // present in the old hash tree.
-    // However, due to the bug, the certified data corresponds to the old hash tree.
     assert!(
-        is_valid_root_hash(&new_certificate, &old_hash_tree.digest(), ledger_id),
-        "New certified data does not match old root hash after upgrade before transaction"
+        !is_valid_root_hash(&new_certificate, &old_hash_tree.digest(), ledger_id),
+        "New certified data matches old root hash after upgrade before transaction"
     );
     // Compare the certified data of the new certificate with the digest of the new hash tree.
     // These should be the same, since the new certified data, as well as the new hash tree, both
     // use the new labels.
-    // However, due to the bug, the certified data does not correspond to the new hash tree.
     assert!(
-        !is_valid_root_hash(&new_certificate, &new_hash_tree.digest(), ledger_id),
-        "New certified data matches new root hash after upgrade before transaction"
+        is_valid_root_hash(&new_certificate, &new_hash_tree.digest(), ledger_id),
+        "New certified data does not match new root hash after upgrade before transaction"
     );
 
     // Send a transaction, which will update the certified data.
