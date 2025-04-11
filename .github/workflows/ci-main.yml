@@ -348,9 +348,9 @@ jobs:
             exit 0
           fi
 
-          # this checks that all lines in the first argument (subset) are identical
-          # in the second argument (set)
-          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
+          # we have list of '<sha256> <filename>' records in both files
+          # we want to join records in both files by <filename> and compare <sha256>
+          difference=$(join -j 2 <(sort -k2 shasums-nocache/SHA256SUMS | uniq) <(sort -k2 shasums-cache/SHA256SUMS | uniq) | awk '$2 != $3')
           if [ -n "$difference" ]; then
             echo "Build Determinism Check Failed! Please contact IDX."
             echo "The following artifacts were different:"
