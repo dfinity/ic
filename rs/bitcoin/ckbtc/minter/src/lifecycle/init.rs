@@ -9,6 +9,9 @@ use serde::Serialize;
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
 pub const DEFAULT_CHECK_FEE: u64 = 1000;
 
+// Default expiration time for `get_utxo_cache` is 60 seconds.
+pub const DEFAULT_GET_UTXOS_CACHE_EXPIRATION: u64 = 60_000_000_000;
+
 #[derive(CandidType, serde::Deserialize)]
 pub enum MinterArg {
     Init(InitArgs),
@@ -63,6 +66,11 @@ pub struct InitArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[deprecated(note = "use btc_checker_principal instead")]
     pub kyt_principal: Option<CanisterId>,
+
+    /// The expiration time/duration for cached entries in the
+    /// get_utxos cache, in nanoseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub get_utxos_cache_expiration: Option<u64>,
 }
 
 pub fn init(args: InitArgs) {

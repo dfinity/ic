@@ -30,6 +30,7 @@ pub fn init_args() -> InitArgs {
         check_fee: None,
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration: None,
     }
 }
 
@@ -348,6 +349,7 @@ pub mod arbitrary {
                 kyt_fee: option::of(any::<u64>()),
                 btc_checker_principal: option::of(canister_id()),
                 kyt_principal: option::of(canister_id()),
+                get_utxos_cache_expiration: option::of(any::<u64>()),
             })
         }
 
@@ -361,6 +363,7 @@ pub mod arbitrary {
                 kyt_fee: option::of(any::<u64>()),
                 btc_checker_principal: option::of(canister_id()),
                 kyt_principal: option::of(canister_id()),
+                get_utxos_cache_expiration: option::of(any::<u64>()),
             })
         }
 
