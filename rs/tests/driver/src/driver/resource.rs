@@ -31,6 +31,9 @@ use url::Url;
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
+pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(32);
+pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
+
 /// A declaration of resources needed to instantiate a InternetComputer.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct ResourceRequest {
@@ -405,9 +408,9 @@ fn vm_spec_from_nested_node(
 ) -> VmSpec {
     VmSpec {
         name: node.name.clone(),
-        // Note that the nested GuestOS VM also uses 64 vCPUs so we match that in the host:
-        vcpus: NrOfVCPUs::new(64),
-        memory_kibibytes: AmountOfMemoryKiB::new(480 << 20),
+        // Note that the nested GuestOS VM uses half the vCPUs and memory of this host VM.
+        vcpus: HOSTOS_VCPUS_PER_VM,
+        memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
         boot_image: BootImage::GroupDefault,
         boot_image_minimal_size_gibibytes: default_vm_resources
             .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes),

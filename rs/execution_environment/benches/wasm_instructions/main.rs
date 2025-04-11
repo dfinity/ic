@@ -34,7 +34,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     // Benchmark function.
     common::run_benchmarks(
         c,
-        "wasm_instructions",
+        "execution_environment:wasm_instructions",
         &benchmarks,
         |_id: &str,
          exec_env: &ExecutionEnvironment,

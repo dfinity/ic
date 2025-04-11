@@ -1,7 +1,8 @@
 use super::*;
 use crate::stable_memory::{StorableRegistryKey, StorableRegistryValue};
+use crate::test_registry_data_stable_memory_impl;
 use futures::FutureExt;
-use ic_nervous_system_canisters::registry::{FakeRegistry, FakeRegistryResponses};
+use ic_nervous_system_canisters::registry::FakeRegistry;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
 use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
@@ -15,24 +16,11 @@ pub type VM = VirtualMemory<DefaultMemoryImpl>;
 thread_local! {
     static STATE: RefCell<StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>> = RefCell::new({
         let mgr = MemoryManager::init(DefaultMemoryImpl::default());
-            StableBTreeMap::init(mgr.get(MemoryId::new(0)))
+        StableBTreeMap::init(mgr.get(MemoryId::new(0)))
     });
 }
-struct DummyState;
 
-impl RegistryDataStableMemory for DummyState {
-    fn with_registry_map<R>(
-        f: impl FnOnce(&StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
-    ) -> R {
-        STATE.with_borrow(f)
-    }
-
-    fn with_registry_map_mut<R>(
-        f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, VM>) -> R,
-    ) -> R {
-        STATE.with_borrow_mut(f)
-    }
-}
+test_registry_data_stable_memory_impl!(DummyState, STATE);
 
 pub fn add_record_helper(key: &str, version: u64, value: Option<u64>) {
     STATE.with_borrow_mut(|map| {
@@ -77,19 +65,16 @@ fn v(v: u64) -> RegistryVersion {
     RegistryVersion::new(v)
 }
 
-fn client_for_tests(
-    latest_version: u64,
-    responses: FakeRegistryResponses,
-) -> StableCanisterRegistryClient<DummyState> {
-    StableCanisterRegistryClient::<DummyState>::new(Box::new(FakeRegistry::new(
-        RegistryVersion::new(latest_version),
-        responses,
-    )))
+fn client_for_tests() -> (StableCanisterRegistryClient<DummyState>, Arc<FakeRegistry>) {
+    let fake_registry = Arc::new(FakeRegistry::new());
+    let client = StableCanisterRegistryClient::<DummyState>::new(fake_registry.clone());
+
+    (client, fake_registry)
 }
 
 #[test]
 fn test_absent_after_delete() {
-    let client = client_for_tests(0, Default::default());
+    let (client, _) = client_for_tests();
     add_dummy_data();
 
     // Version before it was deleted, it should show up.
@@ -120,14 +105,14 @@ fn test_absent_after_delete() {
 
 #[test]
 fn empty_registry_should_report_zero_as_latest_version() {
-    let client = client_for_tests(0, Default::default());
+    let (client, _) = client_for_tests();
 
     assert_eq!(client.get_latest_version(), ZERO_REGISTRY_VERSION);
 }
 
 #[test]
 fn can_retrieve_entries_correctly() {
-    let client = client_for_tests(0, Default::default());
+    let (client, _) = client_for_tests();
 
     let set = |key: &str, ver: u64| add_record_helper(key, ver, Some(ver));
     let rem = |key: &str, ver: u64| add_record_helper(key, ver, None);
@@ -255,51 +240,13 @@ fn can_retrieve_entries_correctly() {
 
 #[test]
 fn test_sync_registry_stored() {
-    let mut responses = FakeRegistryResponses::new();
-    responses.insert(
-        0,
-        Ok(vec![
-            RegistryDelta {
-                key: "Foo".as_bytes().to_vec(),
-                values: vec![
-                    RegistryValue {
-                        value: vec![1],
-                        version: 1,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![2],
-                        version: 2,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![3],
-                        version: 3,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![4],
-                        version: 4,
-                        deletion_marker: false,
-                    },
-                    RegistryValue {
-                        value: vec![],
-                        version: 5,
-                        deletion_marker: true,
-                    },
-                ],
-            },
-            RegistryDelta {
-                key: "Bar".as_bytes().to_vec(),
-                values: vec![RegistryValue {
-                    value: vec![50],
-                    version: 5,
-                    deletion_marker: false,
-                }],
-            },
-        ]),
-    );
-    let client = client_for_tests(5, responses);
+    let (client, fake_registry) = client_for_tests();
+    fake_registry.set_value_at_version("Foo", 1, Some(vec![1]));
+    fake_registry.set_value_at_version("Foo", 2, Some(vec![2]));
+    fake_registry.set_value_at_version("Foo", 3, Some(vec![3]));
+    fake_registry.set_value_at_version("Foo", 4, Some(vec![4]));
+    fake_registry.set_value_at_version("Foo", 5, None);
+    fake_registry.set_value_at_version("Bar", 5, Some(vec![50]));
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
@@ -325,26 +272,14 @@ fn test_sync_registry_stored() {
 
 #[test]
 fn test_error_on_local_too_large() {
-    let mut responses = FakeRegistryResponses::new();
-    responses.insert(
-        0,
-        Ok(vec![RegistryDelta {
-            key: "Foo".as_bytes().to_vec(),
-            values: vec![
-                RegistryValue {
-                    value: vec![1],
-                    version: 1,
-                    deletion_marker: false,
-                },
-                RegistryValue {
-                    value: vec![2],
-                    version: 2,
-                    deletion_marker: false,
-                },
-            ],
-        }]),
-    );
-    let client = client_for_tests(1, responses);
+    let (client, fake_registry) = client_for_tests();
+    // These values will cause the current_local version to be greater than 1
+    fake_registry.set_value_at_version("Foo", 1, Some(vec![1]));
+    fake_registry.set_value_at_version("Foo", 2, Some(vec![2]));
+
+    // This gets called 2x, and we want to give 2 bad responses to it so we get the error.
+    fake_registry.add_fake_response_for_get_latest_version(Ok(1));
+    fake_registry.add_fake_response_for_get_latest_version(Ok(1));
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);
@@ -364,19 +299,8 @@ fn test_error_on_local_too_large() {
 
 #[test]
 fn test_caching_behavior_of_get_latest_version() {
-    let mut responses = FakeRegistryResponses::new();
-    responses.insert(
-        2, // The version it will make the request about
-        Ok(vec![RegistryDelta {
-            key: "Foo".as_bytes().to_vec(),
-            values: vec![RegistryValue {
-                value: vec![4],
-                version: 4,
-                deletion_marker: false,
-            }],
-        }]),
-    );
-    let client = client_for_tests(4, responses);
+    let (client, fake_registry) = client_for_tests();
+    fake_registry.set_value_at_version("Foo", 4, Some(vec![4]));
 
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, ZERO_REGISTRY_VERSION);

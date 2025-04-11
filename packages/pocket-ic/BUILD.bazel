@@ -36,6 +36,7 @@ MACRO_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
+    "//packages/ic-vetkd-utils",
     #TODO: try upgrading this to the latest bitcion crate
     "@crate_index//:bitcoin_0_28",
     "@crate_index//:candid_parser",

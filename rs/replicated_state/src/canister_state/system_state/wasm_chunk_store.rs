@@ -107,6 +107,18 @@ impl WasmChunkStore {
             })
     }
 
+    /// Returns the complete chunk as a single vector.
+    ///
+    /// Use `get_chunk_data` for paginated access.
+    pub fn get_chunk_complete(&self, chunk_hash: &WasmChunkHash) -> Option<Vec<u8>> {
+        self.get_chunk_data(chunk_hash).map(|pages| {
+            pages.fold(vec![], |mut bytes, page| {
+                bytes.extend_from_slice(page);
+                bytes
+            })
+        })
+    }
+
     /// Check all conditions for inserting this chunk are satisfied.  Invariant:
     /// If this returns [`Ok`], then [`Self::insert_chunk`] is guaranteed to
     /// succeed.

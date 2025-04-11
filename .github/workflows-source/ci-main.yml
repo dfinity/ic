@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:2c855bb374d797860852f24b3387cc59278236d92beb8eb3308d0d16df8d9821
+    image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -63,8 +63,73 @@ anchors:
       python-version: '3.12'
 
 jobs:
+  config:
+    name: Set Config
+    runs-on: ubuntu-latest
+    outputs:
+      release_build: ${{ steps.config.outputs.release_build }}
+      diff_only: ${{ steps.config.outputs.diff_only }}
+      skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
+    steps:
+      - name: Infer build config
+        id: config
+        run: |
+          set -euo pipefail
+
+          # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
+          # the full build to occur (including versioning)
+          protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+          for pattern in "${protected_branches[@]}"; do
+              if [[ "$BRANCH_NAME" =~ $pattern ]]; then
+                  is_protected_branch="true"
+                  break
+              fi
+          done
+
+          if [[ "${is_protected_branch:-}" == "true" ]]; then
+              # if we are on a "protected" branch or targeting an rc branch we
+              # upload all artifacts and run a release build (with versioning)
+              release_build="true"
+              diff_only="false"
+              skip_long_tests="false"
+          elif [[ '${{ github.event_name }}' == "merge_group" ]]; then
+              # on a merge group, we don't upload the artifacts (i.e. no release
+              # build) but we ensure all targets are built (no diff)
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="true"
+          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
+              # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
+              # branch
+              release_build="true"
+              diff_only="false"
+              skip_long_tests="false"
+          else
+              # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
+              release_build="false"
+              diff_only="true"
+              skip_long_tests="true"
+          fi
+
+          echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "release_build: $release_build"
+          echo "release_build=$release_build" >> "$GITHUB_OUTPUT"
+          echo "| \`release_build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "diff_only: $diff_only"
+          echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
+          echo "| \`diff_only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_long_tests: $skip_long_tests"
+          echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
+
   bazel-test-all:
     name: Bazel Test All
+    needs: [ config ]
     <<: *dind-large-setup
     runs-on:
       group: zh1
@@ -73,7 +138,6 @@ jobs:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
       CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
-      RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - <<: *checkout
       - name: Set BAZEL_EXTRA_ARGS
@@ -81,7 +145,7 @@ jobs:
         id: bazel-extra-args
         run: |
           set -xeuo pipefail
-          # Determine which tests to skip and append 'long_test' for pull requests, merge groups or push on dev-gh-*
+          # Determine which tests to skip
           EXCLUDED_TEST_TAGS=(
               system_test_hourly
               system_test_nightly
@@ -93,19 +157,30 @@ jobs:
               fi_tests_nightly
               nns_tests_nightly
           )
-          if [[ "$CI_EVENT_NAME" =~ ^(pull_request|merge_group)$ ]]; then
-              if [[ "$CI_EVENT_NAME" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-                  EXCLUDED_TEST_TAGS+=(long_test)
-              fi
-          elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$BRANCH_NAME" =~ ^dev-gh-.* ]]; then
-              EXCLUDED_TEST_TAGS+=(long_test)
+
+          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+            EXCLUDED_TEST_TAGS+=(long_test)
           fi
+
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
           echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
           # Prepend tags with '-' and join them with commas for Bazel
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS=( "--test_tag_filters=$TEST_TAG_FILTERS" )
+          BAZEL_EXTRA_ARGS=(
+            "--test_tag_filters=$TEST_TAG_FILTERS"
+
+            # default all tests to fail ...
+            #   ... after three attempts for tests marked as flaky
+            #   ... after three attempts for all tests in //rs/tests
+            #   ... after the first attempt for other tests
+            #   see also:
+            #     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+            --flaky_test_attempts=default
+            --flaky_test_attempts=//rs/tests/.*@3
+
+            --config=lint # enable lint checks
+            )
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               BAZEL_EXTRA_ARGS+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
@@ -118,6 +193,8 @@ jobs:
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
+          diff-only: ${{ needs.config.outputs.diff_only }}
+          release-build: ${{ needs.config.outputs.release_build }}
           BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
@@ -212,6 +289,7 @@ jobs:
           REPO_NAME: ${{ github.repository }}
 
   build-ic:
+    needs: [ config ]
     name: Build IC
     <<: *dind-large-setup
     # keep options from dind-large-setup but run on dind-small-setup
@@ -222,13 +300,14 @@ jobs:
       - <<: *checkout
       - name: Run Build IC
         id: build-ic
-        run: ./ci/scripts/run-build-ic.sh
+        uses: ./.github/actions/bazel
+        with:
+          run: ./ci/scripts/run-build-ic.sh
         env:
-          BAZEL_COMMAND: build --config=ci
-          BAZEL_TARGETS: //...
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+          RUN_ON_DIFF_ONLY: ${{ needs.config.outputs.diff_only }}
+          RELEASE_BUILD: ${{ needs.config.outputs.release_build }}
       - name: Upload SHA256SUMS (nocache)
         uses: ./.github/actions/bazel-upload-checksums/
         with:
