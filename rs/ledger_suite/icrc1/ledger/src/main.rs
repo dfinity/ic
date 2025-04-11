@@ -273,6 +273,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         );
     }
 
+    // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);

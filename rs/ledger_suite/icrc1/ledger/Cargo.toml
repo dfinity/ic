@@ -46,6 +46,7 @@ candid_parser = { workspace = true }
 cddl = "0.9.4"
 ciborium = { workspace = true }
 ic-agent = { workspace = true }
+ic-cbor = { workspace = true }
 ic-certification = { workspace = true }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
