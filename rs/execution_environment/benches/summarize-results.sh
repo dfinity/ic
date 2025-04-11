@@ -8,6 +8,9 @@ set -ue
 DEPENDENCIES="awk rg sed"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
 
+NOISE_THRESHOLD_PCT="2"
+TOP_N="10"
+
 printf "    %-12s := %s\n" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
     "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}" >&2
@@ -24,13 +27,20 @@ if [ ! -s "${BASELINE_FILE}" ]; then
     echo "    No baseline found in ${BASELINE_FILE}" >&2 && exit 1
 fi
 
-echo_diff() {
+echo_diff_ms_pct() {
     # The baseline file exists, but none of the benchmarks matched it.
     if [ "${1}" -gt "0" ]; then
-        diff=$(((${2} - ${1}) * 100 * 10 / ${1}))
-        awk "BEGIN { print (${diff})^2 <= (2 * 10)^2 ? 0 : ${diff} / 10 }"
+        awk "BEGIN {
+            diff_pct = (${2} - ${1}) * 100 / ${1}
+            diff_ms = (${2} - ${1}) / 1000 / 1000
+            if (diff_pct ^ 2 <= ${NOISE_THRESHOLD_PCT} ^ 2) {
+                printf \"0 0\n\"
+            } else {
+                printf \"%.1f %.1f\n\", diff_ms, diff_pct
+            };
+        }"
     else
-        echo "0"
+        echo "0 0"
     fi
 }
 
@@ -53,31 +63,46 @@ while read min_bench; do
     if [ -n "${new_result_ns}" -a -n "${baseline_result_ns}" ]; then
         total_baseline_ns=$((total_baseline_ns + baseline_result_ns))
         total_new_ns=$((total_new_ns + new_result_ns))
-        echo "$(echo_diff "${baseline_result_ns}" "${new_result_ns}") ${name}" >>"${TMP_FILE}"
+        diff_ms_pct=$(echo_diff_ms_pct "${baseline_result_ns}" "${new_result_ns}")
+        echo "${diff_ms_pct} ${name}" >>"${TMP_FILE}"
     fi
 done <"${MIN_FILE}"
 
 # Produce a summary.
 baseline_commit=$(git rev-list --abbrev-commit -1 HEAD "${BASELINE_FILE}")
 min_commit=$(git rev-list --abbrev-commit -1 HEAD)
-total_diff=$(echo_diff "${total_baseline_ns}" "${total_new_ns}")
+read total_diff_ms total_diff_pct < <(echo_diff_ms_pct "${total_baseline_ns}" "${total_new_ns}")
 printf "= ${baseline_commit}..${min_commit}: ${NAME} total time: $((total_new_ns / 1000 / 1000)) ms "
-case "${total_diff}" in
-    0) echo "(no change)" ;;
-    -*) echo "(improved by ${total_diff}%)" ;;
-    *) echo "(regressed by ${total_diff}%)" ;;
+case "${total_diff_pct}/${total_baseline_ns}" in
+    0/0) echo "(new)" ;;
+    0*) echo "(no change)" ;;
+    -*) echo "(improved by ${total_diff_ms} ms / ${total_diff_pct}%)" ;;
+    *) echo "(regressed by ${total_diff_ms} ms / ${total_diff_pct}%)" ;;
 esac
 
 # Produce top regressed/improved details.
-if [ "${total_diff}" != "0" ]; then
-    cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -5 | while read diff name; do
-        echo "  + ${name} time regressed by ${diff}%"
-    done
-    cat "${TMP_FILE}" | sort -n | rg '^-' | head -5 | while read diff name; do
-        echo "  - ${name} time improved by ${diff}%"
-    done
+if [ "${total_diff_pct}" != "0" ]; then
+    echo "  Top ${TOP_N} by time:"
+    cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -${TOP_N} \
+        | while read diff_ms diff_pct name; do
+            echo "  + ${name} time regressed by ${diff_ms} ms (${diff_pct}%)"
+        done
+    cat "${TMP_FILE}" | sort -n | rg '^-' | head -${TOP_N} \
+        | while read diff_ms diff_pct name; do
+            echo "  - ${name} time improved by ${diff_ms} ms (${diff_pct}%)"
+        done
+    echo "  Top ${TOP_N} by percentage:"
+    cat "${TMP_FILE}" | sort -rnk 2 | rg '^[1-9]' | head -${TOP_N} \
+        | while read diff_ms diff_pct name; do
+            echo "  + ${name} time regressed by ${diff_pct}% (${diff_ms} ms)"
+        done
+    cat "${TMP_FILE}" | sort -nk 2 | rg '^-' | head -${TOP_N} \
+        | while read diff_ms diff_pct name; do
+            echo "  - ${name} time improved by ${diff_pct}% (${diff_ms} ms)"
+        done
 fi
 rm -f "${TMP_FILE}"
 
-# Return an error if there are changes, so the calling script might retry or report an error.
-[ "${total_diff}" == "0" ]
+# Return an error if there are changes or the is no baseline (new benchmarks),
+# so the calling script might retry or report an error.
+[ "${total_diff_pct}" == "0" -a "${total_baseline_ns}" != "0" ]
