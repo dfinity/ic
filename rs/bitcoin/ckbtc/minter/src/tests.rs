@@ -1127,7 +1127,6 @@ fn serialize_nework_preserves_capitalization() {
         let mut buf = Vec::new();
         into_writer(&network, &mut buf).unwrap();
         let value: Value = from_reader(buf.as_ref() as &[u8]).unwrap();
-        println!("value = {:?}", value);
         let name = value.as_text().unwrap();
         let first_char = name.chars().next().unwrap();
         assert!(first_char.is_uppercase());
