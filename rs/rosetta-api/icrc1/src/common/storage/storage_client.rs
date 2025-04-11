@@ -2,16 +2,62 @@ use super::storage_operations;
 use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{bail, Result};
 use candid::Nat;
+use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
+use rosetta_core::metrics::RosettaMetrics;
 use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
 use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
 use tracing::warn;
 
+#[derive(Debug, Clone)]
+pub struct TokenInfo {
+    pub symbol: String,
+    pub decimals: u8,
+    pub ledger_id: CanisterId,
+    pub rosetta_metrics: RosettaMetrics,
+}
+
+// We use format "[symbol]-[canisterId[:5]]" so that it covers cases in which
+// we track tokens with the same symbols while keeping it short by only showing
+// the first 5 characters of the canister ID.
+fn display_name(symbol: String, ledger_id: CanisterId) -> String {
+    format!(
+        "{}-{}",
+        symbol,
+        ledger_id
+            .to_string()
+            .as_str()
+            .chars()
+            .take(5)
+            .collect::<String>()
+    )
+}
+
+impl TokenInfo {
+    pub fn new(symbol: String, decimals: u8, ledger_id: CanisterId) -> Self {
+        let canister_id_str = ledger_id.to_string();
+        Self {
+            symbol: symbol.clone(),
+            decimals,
+            ledger_id,
+            rosetta_metrics: RosettaMetrics::new(
+                display_name(symbol.clone(), ledger_id),
+                canister_id_str,
+            ),
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        display_name(self.symbol.clone(), self.ledger_id)
+    }
+}
+
 #[derive(Debug)]
 pub struct StorageClient {
     storage_connection: Mutex<Connection>,
+    token_info: Option<TokenInfo>,
 }
 
 impl StorageClient {
@@ -37,9 +83,26 @@ impl StorageClient {
         Self::new(connection)
     }
 
+    pub fn get_token_display_name(&self) -> String {
+        if let Some(token_info) = &self.token_info {
+            token_info.display_name()
+        } else {
+            "unkown".to_string()
+        }
+    }
+
+    pub fn get_metrics(&self) -> RosettaMetrics {
+        if let Some(token_info) = &self.token_info {
+            token_info.rosetta_metrics.clone()
+        } else {
+            RosettaMetrics::new("unkown".to_string(), "unkown".to_string())
+        }
+    }
+
     fn new(connection: rusqlite::Connection) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
+            token_info: None,
         };
         storage_client
             .storage_connection
@@ -48,6 +111,10 @@ impl StorageClient {
             .execute("PRAGMA foreign_keys = 1", [])?;
         storage_client.create_tables()?;
         Ok(storage_client)
+    }
+
+    pub fn initialize(&mut self, token_info: TokenInfo) {
+        self.token_info = Some(token_info);
     }
 
     pub fn does_blockchain_have_gaps(&self) -> anyhow::Result<bool> {
