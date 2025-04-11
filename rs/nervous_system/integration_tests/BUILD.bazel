@@ -199,6 +199,7 @@ rust_test_suite_with_extra_srcs(
             "tests/upgrade_sns_controlled_canister_with_large_wasm.rs",
             "tests/custom_upgrade_path.rs",
             "tests/sns_topics.rs",
+            "tests/set_following.rs",
         ],
     ),
     aliases = ALIASES,
@@ -332,6 +333,22 @@ rust_test(
     timeout = "long",
     srcs = [
         "tests/sns_topics.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "set_following",
+    timeout = "long",
+    srcs = [
+        "tests/set_following.rs",
     ],
     aliases = ALIASES,
     data = DEV_DATA,

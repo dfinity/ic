@@ -126,6 +126,9 @@ pub enum HypervisorError {
         backtrace: Option<CanisterBacktrace>,
     },
     /// Canister explicitly called `ic.trap`.
+    /// The contained backtrace may be `None` if the canister does not include
+    /// suitable debug information or if the caller does not have permission to
+    /// view the backtrace.
     CalledTrap {
         message: String,
         backtrace: Option<CanisterBacktrace>,

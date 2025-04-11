@@ -132,7 +132,6 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 
 #[update]
 async fn get_btc_address(args: GetBtcAddressArgs) -> String {
-    check_anonymous_caller();
     updates::get_btc_address::get_btc_address(args).await
 }
 
