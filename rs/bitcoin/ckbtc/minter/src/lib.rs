@@ -8,7 +8,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
+use ic_cdk::api::management_canister::bitcoin;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -112,7 +112,45 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-pub type GetUtxosRequest = ic_cdk::api::management_canister::bitcoin::GetUtxosRequest;
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct GetUtxosRequest {
+    pub timestamp: Timestamp,
+    pub request: bitcoin::GetUtxosRequest,
+}
+
+impl GetUtxosRequest {
+    pub fn new(
+        timestamp: Timestamp,
+        address: String,
+        network: Network,
+        filter: Option<bitcoin::UtxoFilter>,
+    ) -> Self {
+        Self {
+            timestamp,
+            request: bitcoin::GetUtxosRequest {
+                address,
+                network: network.into(),
+                filter,
+            },
+        }
+    }
+
+    pub fn with_filter(self, filter: bitcoin::UtxoFilter) -> Self {
+        Self {
+            timestamp: self.timestamp,
+            request: bitcoin::GetUtxosRequest {
+                filter: Some(filter),
+                ..self.request
+            },
+        }
+    }
+}
+
+impl From<GetUtxosRequest> for bitcoin::GetUtxosRequest {
+    fn from(request: GetUtxosRequest) -> Self {
+        request.request
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetUtxosResponse {
@@ -121,8 +159,8 @@ pub struct GetUtxosResponse {
     pub next_page: Option<Page>,
 }
 
-impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUtxosResponse {
-    fn from(response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse) -> Self {
+impl From<bitcoin::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: bitcoin::GetUtxosResponse) -> Self {
         Self {
             utxos: response
                 .utxos
@@ -155,12 +193,12 @@ pub enum Network {
     Regtest,
 }
 
-impl From<Network> for BitcoinNetwork {
+impl From<Network> for bitcoin::BitcoinNetwork {
     fn from(network: Network) -> Self {
         match network {
-            Network::Mainnet => BitcoinNetwork::Mainnet,
-            Network::Testnet => BitcoinNetwork::Testnet,
-            Network::Regtest => BitcoinNetwork::Regtest,
+            Network::Mainnet => bitcoin::BitcoinNetwork::Mainnet,
+            Network::Testnet => bitcoin::BitcoinNetwork::Testnet,
+            Network::Regtest => bitcoin::BitcoinNetwork::Regtest,
         }
     }
 }

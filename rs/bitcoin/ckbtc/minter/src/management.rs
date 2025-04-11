@@ -170,11 +170,12 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     // Record start time of method execution for metrics
     let start_time = runtime.time();
-    let request = GetUtxosRequest {
-        address: address.clone(),
-        network: network.into(),
-        filter: Some(UtxoFilter::MinConfirmations(min_confirmations)),
-    };
+    let request = GetUtxosRequest::new(
+        start_time.into(),
+        address.clone(),
+        network,
+        Some(UtxoFilter::MinConfirmations(min_confirmations)),
+    );
 
     let mut response = bitcoin_get_utxos(request.clone(), source, runtime).await?;
 
@@ -183,10 +184,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
-        let paged_request = GetUtxosRequest {
-            filter: Some(UtxoFilter::Page(page.to_vec())),
-            ..request.clone()
-        };
+        let paged_request = request.clone().with_filter(UtxoFilter::Page(page.to_vec()));
         response = bitcoin_get_utxos(paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
         num_pages += 1;
@@ -201,7 +199,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request)
+    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request.into())
         .await
         .map(|(response,)| response.into())
         .map_err(|err| CallError::from_cdk_error("bitcoin_get_utxos", err))
