@@ -2,7 +2,8 @@ use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance_api::pb::v1::{
     governance::Version,
-    manage_neuron, manage_neuron_response,
+    manage_neuron::{self, RegisterVote},
+    manage_neuron_response,
     topics::{ListTopicsRequest, ListTopicsResponse},
     AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, GetMetadataRequest,
     GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
@@ -153,6 +154,24 @@ impl GovernanceCanister {
             )),
         });
         self.manage_neuron(agent, neuron_id, request).await
+    }
+
+    pub async fn register_vote<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        proposal: ProposalId,
+        vote: i32,
+    ) -> Result<ManageNeuronResponse, C::Error> {
+        self.manage_neuron(
+            agent,
+            neuron_id,
+            manage_neuron::Command::RegisterVote(RegisterVote {
+                proposal: Some(proposal),
+                vote,
+            }),
+        )
+        .await
     }
 
     pub async fn get_proposal<C: CallCanisters>(
