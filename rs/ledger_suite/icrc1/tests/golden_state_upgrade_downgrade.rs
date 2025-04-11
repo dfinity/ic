@@ -21,11 +21,6 @@ use std::str::FromStr;
 
 mod common;
 
-/// The number of instructions that can be executed in a single canister upgrade.
-/// The limit (<https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits>)
-/// is actually 300B, but in the ledger implementation we use a value slightly lower than the old
-/// limit 200B.
-const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 199_950_000_000;
 const NUM_TRANSACTIONS_PER_TYPE: usize = 20;
 const MINT_MULTIPLIER: u64 = 10_000;
 const TRANSFER_MULTIPLIER: u64 = 1000;
