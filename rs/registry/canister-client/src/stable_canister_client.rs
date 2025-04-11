@@ -65,10 +65,6 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
         version: RegistryVersion,
         f: Box<dyn Fn(String, Option<Vec<u8>>) -> T>,
     ) -> Result<Vec<T>, RegistryClientError> {
-        if self.get_latest_version() < version {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
-
         let start_range = StorableRegistryKey::new(key_prefix.to_string(), Default::default());
 
         let mut effective_records = BTreeMap::new();
@@ -100,10 +96,6 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
         key: &str,
         version: RegistryVersion,
     ) -> RegistryClientVersionedResult<Vec<u8>> {
-        if self.get_latest_version() < version {
-            return Err(RegistryClientError::VersionNotAvailable { version });
-        }
-
         let start_range = StorableRegistryKey::new(key.to_string(), Default::default());
         let end_range = StorableRegistryKey::new(key.to_string(), version.get());
 
