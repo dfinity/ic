@@ -133,11 +133,14 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             list_nervous_system_functions_response
                 .functions
                 .iter()
-                .find(|function| function.id == function_id)
-                .as_ref()
-                .unwrap()
-                .into(),
-            &&nervous_system_function
+                .find_map(|function| if function.id == function_id {
+                    Some(function.clone())
+                } else {
+                    None
+                })
+                .map(NervousSystemFunction::from)
+                .unwrap(),
+            nervous_system_function,
         );
 
         let invalid_value = 5i64;
@@ -237,8 +240,9 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             list_nervous_system_functions_response
                 .reserved_ids
                 .first()
+                .copied()
                 .unwrap(),
-            &nervous_system_function.id,
+            nervous_system_function.id,
         );
 
         Ok(())

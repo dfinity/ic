@@ -559,18 +559,20 @@ impl SnsInitPayload {
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
         governance.swap_canister_id = Some(sns_canister_ids.swap);
-        governance.deployed_version = deployed_version;
+        governance.deployed_version = deployed_version.map(|deployed_version| deployed_version.into());
 
         let parameters = self.get_nervous_system_parameters();
-        governance.parameters = Some(parameters.clone());
+        governance.parameters = Some(parameters.clone().into());
 
-        governance.sns_metadata = Some(self.get_sns_metadata());
+        governance.sns_metadata = Some(self.get_sns_metadata().into());
 
-        governance.neurons = self.get_initial_neurons(&parameters)?;
+        let neurons = self.get_initial_neurons(&parameters)?;
+
+        governance.neurons = neurons.into_iter().map(|(id, neuron)| (id, neuron.into())).collect();
 
         governance.sns_initialization_parameters = self.stringify_without_logos()?;
 
-        Ok(governance)
+        Ok(governance.into())
     }
 
     /// Construct the params used to initialize a SNS Ledger canister.

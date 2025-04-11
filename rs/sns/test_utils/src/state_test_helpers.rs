@@ -19,7 +19,7 @@ use ic_nns_test_utils::{
     },
     state_test_helpers::set_controllers,
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     governance::Version,
     manage_neuron::{self, RegisterVote},
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
@@ -142,7 +142,7 @@ pub fn setup_sns_canisters(
         index_wasm_hash: index_sns_wasm.sha256_hash().to_vec(),
     };
 
-    governance.deployed_version = Some(deployed_version);
+    governance.deployed_version = Some(deployed_version.into());
 
     install_canister(
         root_canister_id,
