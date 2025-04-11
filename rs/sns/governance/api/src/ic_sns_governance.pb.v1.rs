@@ -1600,6 +1600,7 @@ pub mod governance {
         Hash,
         PartialOrd,
         Ord,
+        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum Mode {

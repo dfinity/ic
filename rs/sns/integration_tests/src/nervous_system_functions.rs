@@ -3,26 +3,31 @@ use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     nervous_system_function::{FunctionType, GenericNervousSystemFunction},
     proposal::Action,
+    topics::Topic,
     ExecuteGenericNervousSystemFunction, NervousSystemFunction, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType, Proposal, ProposalDecisionStatus, ProposalId,
-    Topic,
 };
+use ic_sns_governance_api_helpers::default_nervous_system_parameters;
 use ic_sns_test_utils::itest_helpers::{
     install_rust_canister_with_memory_allocation, local_test_on_sns_subnet, SnsCanisters,
     SnsTestsInitPayloadBuilder,
 };
+use strum::IntoEnumIterator;
 
 /// Assert the proposal is accepted and executed.
 async fn assert_proposal_executed(sns_canisters: &SnsCanisters<'_>, proposal_id: ProposalId) {
-    let proposal_data = sns_canisters.get_proposal(proposal_id).await;
+    let proposal_data = sns_canisters.get_proposal(proposal_id.into()).await;
     assert!(proposal_data.decided_timestamp_seconds > 0);
     assert!(proposal_data.executed_timestamp_seconds > 0);
     assert_eq!(proposal_data.failure_reason, None);
     assert_eq!(proposal_data.failed_timestamp_seconds, 0);
-    assert_eq!(proposal_data.status(), ProposalDecisionStatus::Executed);
+    assert_eq!(
+        proposal_data.status() as i32,
+        ProposalDecisionStatus::Executed as i32
+    );
 }
 
 /// Tests that you can add a NervousSystemFunction, that it can then validate and execute
@@ -41,14 +46,16 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             transaction_fee_e8s: Some(100_000),
             reject_cost_e8s: Some(0),
             neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
+                permissions: NeuronPermissionType::iter()
+                    .map(|permission| permission as i32)
+                    .collect(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..default_nervous_system_parameters()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.get_principal_id().0.into(), alloc)
-            .with_nervous_system_parameters(system_params.clone())
+            .with_nervous_system_parameters(system_params.clone().into())
             .build();
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -90,7 +97,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
                     // The fact that it's using the internal type means that the topic field must be encoded as an i32,
                     // but the API type must be encoded as a Topic. When this goes through candid decoding it just
                     // appears as none since it's the wrong type.
-                    topic: Some(i32::from(Topic::DaoCommunitySettings)),
+                    topic: Some(Topic::DaoCommunitySettings),
 
                     target_canister_id: Some(dapp_canister.canister_id().get()),
                     target_method_name: Some("test_dapp_method".to_string()),
@@ -109,11 +116,11 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         };
 
         let proposal_id = sns_canisters
-            .make_proposal(&user, &subaccount, proposal_payload)
+            .make_proposal(&user, &subaccount, proposal_payload.into())
             .await
             .unwrap();
 
-        assert_proposal_executed(&sns_canisters, proposal_id).await;
+        assert_proposal_executed(&sns_canisters, proposal_id.into()).await;
 
         let list_nervous_system_functions_response =
             sns_canisters.list_nervous_system_functions().await;
@@ -126,10 +133,14 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             list_nervous_system_functions_response
                 .functions
                 .iter()
-                .find(|function| function.id == function_id)
-                .as_ref()
+                .find_map(|function| if function.id == function_id {
+                    Some(function.clone())
+                } else {
+                    None
+                })
+                .map(NervousSystemFunction::from)
                 .unwrap(),
-            &&nervous_system_function
+            nervous_system_function,
         );
 
         let invalid_value = 5i64;
@@ -145,7 +156,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         };
 
         let result = sns_canisters
-            .make_proposal(&user, &subaccount, proposal_payload)
+            .make_proposal(&user, &subaccount, proposal_payload.into())
             .await;
 
         assert!(result.is_err());
@@ -169,11 +180,11 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         };
 
         let proposal_id = sns_canisters
-            .make_proposal(&user, &subaccount, proposal_payload)
+            .make_proposal(&user, &subaccount, proposal_payload.into())
             .await
             .unwrap();
 
-        assert_proposal_executed(&sns_canisters, proposal_id).await;
+        assert_proposal_executed(&sns_canisters, proposal_id.into()).await;
         let proposal_data = sns_canisters.get_proposal(proposal_id).await;
         assert!(proposal_data.executed_timestamp_seconds > 0);
         assert!(proposal_data.payload_text_rendering.is_some());
@@ -190,11 +201,11 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         };
 
         let proposal_id = sns_canisters
-            .make_proposal(&user, &subaccount, proposal_payload)
+            .make_proposal(&user, &subaccount, proposal_payload.into())
             .await
             .unwrap();
 
-        assert_proposal_executed(&sns_canisters, proposal_id).await;
+        assert_proposal_executed(&sns_canisters, proposal_id.into()).await;
 
         let proposal_payload = Proposal {
             title: "An invalid ExecuteNervousSystemFunction call".into(),
@@ -208,7 +219,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         };
 
         let result = sns_canisters
-            .make_proposal(&user, &subaccount, proposal_payload)
+            .make_proposal(&user, &subaccount, proposal_payload.into())
             .await;
 
         assert!(result.is_err());
@@ -229,8 +240,9 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             list_nervous_system_functions_response
                 .reserved_ids
                 .first()
+                .copied()
                 .unwrap(),
-            &nervous_system_function.id,
+            nervous_system_function.id,
         );
 
         Ok(())

@@ -13,6 +13,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
@@ -31,7 +32,7 @@ ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-test-utils = { path = "../../nns/test_utils/" }
-ic-sns-governance = { path = "../governance", features = ["test"] }
+ic-sns-governance-api = { path = "../governance/api" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }

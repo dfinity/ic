@@ -6,6 +6,10 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_nervous_system_agent::{
+    sns::governance::GovernanceCanister, state_machine_impl::StateMachineAgent,
+};
+use ic_sns_governance_api_helpers::default_nervous_system_parameters;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -14,11 +18,12 @@ use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_test_utils::state_test_helpers::{
-    create_canister, sns_claim_staked_neuron, sns_make_proposal, sns_stake_neuron,
-    sns_wait_for_proposal_execution, update,
+    create_canister, sns_claim_staked_neuron, sns_stake_neuron, sns_wait_for_proposal_execution,
+    update,
 };
+use strum::IntoEnumIterator;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
     NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
 };
@@ -39,6 +44,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::Duration;
+use futures_util::FutureExt;
 
 // The minimum WASM payload.
 lazy_static! {
@@ -58,14 +64,16 @@ fn setup_sns(
 
     let system_params = NervousSystemParameters {
         neuron_claimer_permissions: Some(NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
+            permissions: NeuronPermissionType::iter()
+                .map(|permission| permission as i32)
+                .collect(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..default_nervous_system_parameters()
     };
 
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
         .with_ledger_account(user.0.into(), alloc)
-        .with_nervous_system_parameters(system_params)
+        .with_nervous_system_parameters(system_params.into())
         .build();
 
     let canister_ids = setup_sns_canisters(state_machine, sns_init_payload);
@@ -115,7 +123,7 @@ fn setup_sns(
     assert_eq!(status.memory_allocation(), 2 << 30);
     assert_ne!(status.module_hash().unwrap(), new_dapp_wasm_hash.to_vec());
 
-    (canister_ids, dapp_canister_id, user, neuron_id)
+    (canister_ids, dapp_canister_id, user, neuron_id.into())
 }
 
 #[test]
@@ -142,14 +150,14 @@ fn test_upgrade_canister_proposal_is_successful() {
         )),
         ..Default::default()
     };
-    let proposal_id = sns_make_proposal(
-        &state_machine,
-        canister_ids.governance_canister_id,
-        user,
-        neuron_id,
-        proposal,
-    )
-    .unwrap();
+    let state_machine_agent = StateMachineAgent::new(&state_machine, user);
+    let sns_governance = GovernanceCanister {
+        canister_id: canister_ids.governance_canister_id.get(),
+    };
+    let proposal_id = sns_governance
+        .submit_proposal(&state_machine_agent, neuron_id, proposal)
+        .now_or_never()
+        .unwrap();
 
     sns_wait_for_proposal_execution(
         &state_machine,
@@ -192,9 +200,11 @@ fn test_upgrade_canister_proposal_reinstall() {
 
         let system_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
+                permissions: NeuronPermissionType::iter()
+                    .map(|permission| permission as i32)
+                    .collect(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..default_nervous_system_parameters()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -340,9 +350,11 @@ fn test_upgrade_canister_proposal_execution_fail() {
 
         let system_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
+                permissions: NeuronPermissionType::iter()
+                    .map(|permission| permission as i32)
+                    .collect(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..default_nervous_system_parameters()
         };
 
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -530,14 +542,14 @@ fn test_upgrade_canister_proposal_too_large() {
         )),
         ..Default::default()
     };
-    let error = sns_make_proposal(
-        &state_machine,
-        canister_ids.governance_canister_id,
-        user,
-        neuron_id,
-        proposal,
-    )
-    .unwrap_err();
+    let state_machine_agent = StateMachineAgent::new(&state_machine, user);
+    let sns_governance = GovernanceCanister {
+        canister_id: canister_ids.governance_canister_id.get(),
+    };
+    let error = sns_governance
+        .submit_proposal(&state_machine_agent, neuron_id, proposal)
+        .now_or_never()
+        .unwrap_err();
     assert!(error.error_message.contains("the maximum canister WASM and argument size for UpgradeSnsControlledCanister is 2000000 bytes."));
 }
 
@@ -602,17 +614,21 @@ fn test_upgrade_after_state_shrink() {
 
         let system_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
+                permissions: NeuronPermissionType::iter()
+                    .map(|permission| permission as i32)
+                    .collect(),
             }),
             neuron_grantable_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
+                permissions: NeuronPermissionType::iter()
+                    .map(|permission| permission as i32)
+                    .collect(),
             }),
-            ..NervousSystemParameters::with_default_values()
+            ..default_nervous_system_parameters()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(neuron_claimer.sender.get_principal_id().0.into(), alloc)
-            .with_nervous_system_parameters(system_params)
+            .with_nervous_system_parameters(system_params.into())
             .build();
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -657,7 +673,7 @@ fn test_upgrade_after_state_shrink() {
             .make_proposal(
                 &neuron_claimer.sender,
                 &neuron_claimer.subaccount,
-                proposal.clone(),
+                proposal.clone().into(),
             )
             .await
             .unwrap();
@@ -680,7 +696,7 @@ fn test_upgrade_after_state_shrink() {
         // Submit the same upgrade proposal to trigger the second "write and read" of
         // stable memory for the governance canister.
         sns_canisters
-            .make_proposal(&neuron_claimer.sender, &neuron_claimer.subaccount, proposal)
+            .make_proposal(&neuron_claimer.sender, &neuron_claimer.subaccount, proposal.into())
             .await
             .unwrap();
 
@@ -699,7 +715,7 @@ fn test_upgrade_after_state_shrink() {
 fn test_install_canisters_in_any_order() {
     state_machine_test_on_sns_subnet(|runtime| async move {
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_nervous_system_parameters(NervousSystemParameters::with_default_values())
+            .with_nervous_system_parameters(default_nervous_system_parameters().into())
             .build();
 
         // Initialize the SNS canisters but do not install any canister code

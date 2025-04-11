@@ -21,9 +21,7 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
-use ic_sns_governance::{
-    governance::TimeWarp,
-    init::GovernanceCanisterInitPayloadBuilder,
+use ic_sns_governance_api::{
     pb::v1::{
         self as sns_governance_pb, get_neuron_response, get_proposal_response,
         manage_neuron::{
@@ -37,6 +35,7 @@ use ic_sns_governance::{
             AddNeuronPermissionsResponse, Command as CommandResponse,
             RemoveNeuronPermissionsResponse,
         },
+        governance_error::ErrorType,
         proposal::Action,
         Account as AccountProto, GetMaturityModulationRequest, GetMaturityModulationResponse,
         GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance,
@@ -120,6 +119,16 @@ pub struct SnsTestsInitPayloadBuilder {
     pub root: SnsRootCanister,
     pub swap: SwapInit,
     pub index_ng: Option<IndexArg>,
+}
+
+pub fn neuron_id_subaccount_or_err(neuron_id: &NeuronId) -> Result<Subaccount, GovernanceError> {
+    let subaccount =
+        Subaccount::try_from(neuron_id.id.as_slice()).map_err(|err| GovernanceError {
+            error_type: i32::from(ErrorType::InvalidNeuronId),
+            error_message: format!("Could not convert NeuronId to Subaccount {}", err),
+        })?;
+
+    Ok(subaccount)
 }
 
 /// Caveat emptor: Even though sns-wasm creates SNS governance in
@@ -220,7 +229,7 @@ impl SnsTestsInitPayloadBuilder {
     pub fn with_initial_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
         let mut neuron_map = btreemap! {};
         for neuron in neurons {
-            neuron_map.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
+            neuron_map.insert(hex::encode(&neuron.id.as_ref().unwrap().id), neuron);
         }
         self.governance.with_neurons(neuron_map);
         self
@@ -933,8 +942,7 @@ impl SnsCanisters<'_> {
             ..Default::default()
         };
 
-        let subaccount = neuron_id
-            .subaccount()
+        let subaccount = neuron_id_subaccount_or_err(neuron_id)
             .expect("Error creating the subaccount");
 
         // Submit a motion proposal. It should then be executed because the
@@ -1246,7 +1254,7 @@ impl SnsCanisters<'_> {
             })),
         };
         let proposal_id = self
-            .make_proposal(neuron_holder, &neuron_id.subaccount().unwrap(), proposal)
+            .make_proposal(neuron_holder, &neuron_id_subaccount_or_err(neuron_id).unwrap(), proposal)
             .await
             .unwrap();
 

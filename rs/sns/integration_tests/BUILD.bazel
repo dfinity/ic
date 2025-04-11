@@ -17,6 +17,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/agent:test_agent",
     "//rs/nns/cmc",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
@@ -25,7 +26,8 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/sns/governance:governance",
+    "//rs/sns/governance/api",
+    "//rs/sns/governance/api_helpers",
     "//rs/sns/root",
     "//rs/sns/swap",
     "//rs/state_machine_tests",
@@ -35,6 +37,7 @@ BASE_DEPENDENCIES = [
     "//rs/types/types",
     "//rs/universal_canister/lib",
     "@crate_index//:candid",
+    "@crate_index//:futures-util",
     "@crate_index//:maplit",
     "@crate_index//:pretty-bytes",
     "@crate_index//:proptest",
@@ -42,6 +45,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_yaml",
+    "@crate_index//:strum",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

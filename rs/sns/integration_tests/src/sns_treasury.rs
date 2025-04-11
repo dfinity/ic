@@ -1,7 +1,12 @@
 use candid::{Decode, Encode, Principal};
 use cycles_minting_canister::DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS;
+use futures_util::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::CheckedSub, Tokens};
+use ic_nervous_system_agent::{
+    sns::governance::{GovernanceCanister, SubmittedProposal},
+    state_machine_impl::StateMachineAgent,
+};
 use ic_nervous_system_common::{
     ledger::compute_distribution_subaccount, ExplosiveTokens, DEFAULT_TRANSFER_FEE, E8,
     ONE_DAY_SECONDS,
@@ -16,21 +21,17 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
         self, icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_get_proposal,
-        sns_make_proposal, sns_stake_neuron, sns_wait_for_proposal_executed_or_failed,
+        sns_stake_neuron, sns_wait_for_proposal_executed_or_failed,
         sns_wait_for_proposal_execution,
     },
 };
-use ic_sns_governance::{
-    governance::TREASURY_SUBACCOUNT_NONCE,
-    pb::v1::{
-        governance_error::ErrorType as SnsErrorType, proposal::Action,
-        transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
-        MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-        TransferSnsTreasuryFunds, Vote,
-    },
-    types::E8S_PER_TOKEN,
+use ic_sns_governance_api::pb::v1::{
+    governance_error::ErrorType as SnsErrorType, manage_neuron_response, proposal::Action,
+    transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
+    MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId, NeuronPermissionList,
+    NeuronPermissionType, Proposal, ProposalData, TransferSnsTreasuryFunds, Vote,
 };
+use ic_sns_governance_api_helpers::default_nervous_system_parameters;
 use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
@@ -47,6 +48,13 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use std::time::{Duration, SystemTime};
+use strum::IntoEnumIterator;
+
+/// The static MEMO used when calculating the SNS Treasury subaccount.
+pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
+
+/// The number of e8s per governance token;
+pub const E8S_PER_TOKEN: u64 = 100_000_000;
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
     AccountIdentifier::new(
@@ -161,9 +169,11 @@ fn new_treasury_scenario(
 
     let system_params = NervousSystemParameters {
         neuron_claimer_permissions: Some(NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
+            permissions: NeuronPermissionType::iter()
+                .map(|permission| permission as i32)
+                .collect(),
         }),
-        ..NervousSystemParameters::with_default_values()
+        ..default_nervous_system_parameters()
     };
 
     let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -174,7 +184,7 @@ fn new_treasury_scenario(
             COUNTERWEIGHT.default_account(),
             Tokens::new(30_000, 0).unwrap(),
         )
-        .with_nervous_system_parameters(system_params)
+        .with_nervous_system_parameters(system_params.into())
         .build();
     sns_init_payload.swap = SwapInit {
         fallback_controller_principal_ids: vec![
@@ -281,7 +291,7 @@ fn new_treasury_scenario(
         Some(100_000_000),
     );
 
-    (whale_neuron_id, sns_test_canister_ids)
+    (whale_neuron_id.into(), sns_test_canister_ids)
 }
 
 #[test]
@@ -342,55 +352,71 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     // Steps 2: Run the code under test.
 
     // Whale proposes to have the ICP in the treasury sent to him.
-    let transfer_icp_proposal_id = sns_make_proposal(
-        &state_machine,
-        governance_canister_id,
-        *WHALE,
-        whale_neuron_id.clone(),
-        Proposal {
-            title: "Transfer treasury NNS".to_string(),
-            summary: "Transfer treasury to user".to_string(),
-            url: "".to_string(),
-            action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
-                from_treasury: TransferFrom::IcpTreasury.into(),
-                amount_e8s: 10000 * E8S_PER_TOKEN - NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
-                memo: None,
-                to_principal: Some(*WHALE),
-                to_subaccount: None,
-            })),
-        },
-    )
-    .unwrap();
+    let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+    let sns_governance = GovernanceCanister {
+        canister_id: governance_canister_id.get(),
+    };
+    let response = sns_governance
+        .submit_proposal(
+            &state_machine_agent,
+            whale_neuron_id.clone(),
+            Proposal {
+                title: "Transfer treasury NNS".to_string(),
+                summary: "Transfer treasury to user".to_string(),
+                url: "".to_string(),
+                action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::IcpTreasury as i32,
+                    amount_e8s: 10000 * E8S_PER_TOKEN - NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
+                    memo: None,
+                    to_principal: Some(*WHALE),
+                    to_subaccount: None,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let transfer_icp_proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
+
     sns_wait_for_proposal_execution(
         &state_machine,
         governance_canister_id,
-        transfer_icp_proposal_id,
+        transfer_icp_proposal_id.into(),
     );
 
     // Whale proposes to have the SNS tokens in the treasury sent to him.
-    let transfer_token_proposal_id = sns_make_proposal(
-        &state_machine,
-        governance_canister_id,
-        *WHALE,
-        whale_neuron_id.clone(),
-        Proposal {
-            title: "Transfer treasury SNS".to_string(),
-            summary: "Transfer treasury to user".to_string(),
-            url: "".to_string(),
-            action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
-                from_treasury: TransferFrom::SnsTokenTreasury.into(),
-                amount_e8s: 10000 * E8S_PER_TOKEN - DEFAULT_TRANSFER_FEE.get_e8s(),
-                memo: None,
-                to_principal: Some(*WHALE),
-                to_subaccount: None,
-            })),
-        },
-    )
-    .unwrap();
+    let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+    let sns_governance = GovernanceCanister {
+        canister_id: governance_canister_id.get(),
+    };
+    let response = sns_governance
+        .submit_proposal(
+            &state_machine_agent,
+            whale_neuron_id.clone(),
+            Proposal {
+                title: "Transfer treasury SNS".to_string(),
+                summary: "Transfer treasury to user".to_string(),
+                url: "".to_string(),
+                action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::SnsTokenTreasury as i32,
+                    amount_e8s: 10000 * E8S_PER_TOKEN - DEFAULT_TRANSFER_FEE.get_e8s(),
+                    memo: None,
+                    to_principal: Some(*WHALE),
+                    to_subaccount: None,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let transfer_token_proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
+
     sns_wait_for_proposal_execution(
         &state_machine,
         governance_canister_id,
-        transfer_token_proposal_id,
+        transfer_token_proposal_id.into(),
     );
 
     // Step 3: Inspect results.
@@ -440,11 +466,11 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
         let proposal = sns_get_proposal(
             &state_machine,
             governance_canister_id,
-            transfer_icp_proposal_id,
+            transfer_icp_proposal_id.into(),
         )
         .unwrap();
         assert_eq!(
-            select_interesting_fields(&proposal),
+            select_interesting_fields(&proposal.clone().into()),
             ProposalData {
                 minimum_yes_proportion_of_total: Some(
                     // 20%
@@ -469,32 +495,44 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
         // Assert that the bar to pass other proposal types is lower.
 
         // First, we have to make such a proposal. Here, we call the proposal "benign".
-        let benign_proposal_id = sns_make_proposal(
-            &state_machine,
-            governance_canister_id,
-            *WHALE,
-            whale_neuron_id,
-            Proposal {
-                title: "Transfer treasury SNS".to_string(),
-                summary: "Transfer treasury to user".to_string(),
-                url: "".to_string(),
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Nothing to see here.".to_string(),
-                })),
-            },
-        )
-        .unwrap();
+        let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+        let sns_governance = GovernanceCanister {
+            canister_id: governance_canister_id.get(),
+        };
+        let response: ic_sns_governance_api::pb::v1::ManageNeuronResponse = sns_governance
+            .submit_proposal(
+                &state_machine_agent,
+                whale_neuron_id,
+                Proposal {
+                    title: "Transfer treasury SNS".to_string(),
+                    summary: "Transfer treasury to user".to_string(),
+                    url: "".to_string(),
+                    action: Some(Action::Motion(Motion {
+                        motion_text: "Nothing to see here.".to_string(),
+                    })),
+                },
+            )
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+
+        let benign_proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
+
         sns_wait_for_proposal_execution(
             &state_machine,
             governance_canister_id,
-            transfer_token_proposal_id,
+            transfer_token_proposal_id.into(),
         );
 
         // Now, we inspect the benign proposal.
-        let proposal =
-            sns_get_proposal(&state_machine, governance_canister_id, benign_proposal_id).unwrap();
+        let proposal = sns_get_proposal(
+            &state_machine,
+            governance_canister_id,
+            benign_proposal_id.into(),
+        )
+        .unwrap();
         assert_eq!(
-            select_interesting_fields(&proposal),
+            select_interesting_fields(&proposal.clone().into()),
             ProposalData {
                 minimum_yes_proportion_of_total: Some(
                     // 3%
@@ -578,50 +616,66 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     // Steps 2: Run the code under test.
 
     // Whale proposes to give himself NNS treasury for dapp
-    let take_icp_result_make_proposal_result = sns_make_proposal(
-        &state_machine,
-        governance_canister_id,
-        *WHALE,
-        whale_neuron_id.clone(),
-        Proposal {
-            title: "Transfer treasury NNS".to_string(),
-            summary: "Transfer treasury to user".to_string(),
-            url: "".to_string(),
-            action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
-                from_treasury: TransferFrom::IcpTreasury.into(),
-                amount_e8s: 10000 * E8S_PER_TOKEN - NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
-                memo: None,
-                to_principal: Some(*WHALE),
-                to_subaccount: None,
-            })),
-        },
-    );
+    let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+    let sns_governance = GovernanceCanister {
+        canister_id: governance_canister_id.get(),
+    };
+    let take_icp_result_make_proposal_result = sns_governance
+        .submit_proposal(
+            &state_machine_agent,
+            whale_neuron_id.clone(),
+            Proposal {
+                title: "Transfer treasury NNS".to_string(),
+                summary: "Transfer treasury to user".to_string(),
+                url: "".to_string(),
+                action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::IcpTreasury as i32,
+                    amount_e8s: 10000 * E8S_PER_TOKEN - NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
+                    memo: None,
+                    to_principal: Some(*WHALE),
+                    to_subaccount: None,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap()
+        .command
+        .unwrap();
 
     // Whale proposes to give himself SNS token treasury
-    let take_sns_tokens_make_proposal_result = sns_make_proposal(
-        &state_machine,
-        governance_canister_id,
-        *WHALE,
-        whale_neuron_id,
-        Proposal {
-            title: "Transfer treasury SNS".to_string(),
-            summary: "Transfer treasury to user".to_string(),
-            url: "".to_string(),
-            action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
-                from_treasury: TransferFrom::SnsTokenTreasury.into(),
-                amount_e8s: 10000 * E8S_PER_TOKEN - DEFAULT_TRANSFER_FEE.get_e8s(),
-                memo: None,
-                to_principal: Some(*WHALE),
-                to_subaccount: None,
-            })),
-        },
-    );
+    let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+    let sns_governance = GovernanceCanister {
+        canister_id: governance_canister_id.get(),
+    };
+    let take_sns_tokens_make_proposal_result = sns_governance
+        .submit_proposal(
+            &state_machine_agent,
+            whale_neuron_id,
+            Proposal {
+                title: "Transfer treasury SNS".to_string(),
+                summary: "Transfer treasury to user".to_string(),
+                url: "".to_string(),
+                action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::SnsTokenTreasury as i32,
+                    amount_e8s: 10000 * E8S_PER_TOKEN - DEFAULT_TRANSFER_FEE.get_e8s(),
+                    memo: None,
+                    to_principal: Some(*WHALE),
+                    to_subaccount: None,
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap()
+        .command
+        .unwrap();
 
     // Step 3: Inspect results.
 
     // Step 3.1: Both proposals were rejected.
     match &take_icp_result_make_proposal_result {
-        Err(err) => {
+        manage_neuron_response::Command::Error(err) => {
             let SnsGovernanceError {
                 error_type,
                 error_message,
@@ -641,7 +695,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
         ),
     }
     match &take_sns_tokens_make_proposal_result {
-        Err(err) => {
+        manage_neuron_response::Command::Error(err) => {
             let SnsGovernanceError {
                 error_type,
                 error_message,
@@ -759,27 +813,34 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     );
 
     // Steps 2: Run the code under test.
+    let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+    let sns_governance = GovernanceCanister {
+        canister_id: governance_canister_id.get(),
+    };
 
     let make_transfer_sns_treasury_funds_proposal = |index| {
-        sns_make_proposal(
-            &state_machine,
-            governance_canister_id,
-            *WHALE,
-            whale_neuron_id.clone(),
-            Proposal {
-                title: format!("{}: Give whale 20% of the ICP in the treasury", index),
-                summary: "".to_string(),
-                url: "".to_string(),
-                action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
-                    from_treasury: TransferFrom::IcpTreasury as i32,
-                    amount_e8s: 2_000 * E8, // 20% of the treasury
-                    to_principal: Some(*WHALE),
-                    to_subaccount: None,
-                    memo: None,
-                })),
-            },
-        )
-        .unwrap()
+        let response = sns_governance
+            .submit_proposal(
+                &state_machine_agent,
+                whale_neuron_id.clone(),
+                Proposal {
+                    title: format!("{}: Give whale 20% of the ICP in the treasury", index),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
+                        from_treasury: TransferFrom::IcpTreasury as i32,
+                        amount_e8s: 2_000 * E8, // 20% of the treasury
+                        to_principal: Some(*WHALE),
+                        to_subaccount: None,
+                        memo: None,
+                    })),
+                },
+            )
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+
+        SubmittedProposal::try_from(response).unwrap().proposal_id
     };
 
     let first_proposal_id = make_transfer_sns_treasury_funds_proposal(1);
@@ -791,10 +852,14 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
         governance_canister_id,
         *COUNTERWEIGHT,
         counterweight_neuron_id.clone(),
-        second_proposal_id,
-        Vote::Yes,
+        second_proposal_id.into(),
+        Vote::Yes.into(),
     );
-    sns_wait_for_proposal_execution(&state_machine, governance_canister_id, second_proposal_id);
+    sns_wait_for_proposal_execution(
+        &state_machine,
+        governance_canister_id,
+        second_proposal_id.into(),
+    );
 
     // Make the first proposal pass.
     sns_cast_vote(
@@ -802,20 +867,25 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
         governance_canister_id,
         *COUNTERWEIGHT,
         counterweight_neuron_id,
-        first_proposal_id,
-        Vote::Yes,
+        first_proposal_id.into(),
+        Vote::Yes.into(),
     );
     sns_wait_for_proposal_executed_or_failed(
         &state_machine,
         governance_canister_id,
-        first_proposal_id,
+        first_proposal_id.into(),
     );
 
     // Step 3: Inspect results.
 
     // Step 3.1: Inspect failure reason to make sure it didn't fail for some other reason.
-    let proposal =
-        sns_get_proposal(&state_machine, governance_canister_id, first_proposal_id).unwrap();
+    let proposal = sns_get_proposal(
+        &state_machine,
+        governance_canister_id,
+        first_proposal_id.into(),
+    )
+    .unwrap();
+    let proposal = ProposalData::from(proposal);
     assert_ne!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
 
     let failure_reason = proposal.failure_reason.unwrap();
@@ -907,6 +977,10 @@ fn sns_can_mint_funds_via_proposals() {
     // Step 2: Run the code under test.
 
     // User proposes to mint himself SNS tokens
+    let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+    let sns_governance = GovernanceCanister {
+        canister_id: governance_canister_id.get(),
+    };
     let proposal = Proposal {
         title: "First Mint".to_string(),
         summary: "".to_string(),
@@ -918,15 +992,23 @@ fn sns_can_mint_funds_via_proposals() {
             memo: None,
         })),
     };
-    let first_proposal_id = sns_make_proposal(
+    let response = sns_governance
+        .submit_proposal(
+            &state_machine_agent,
+            whale_neuron_id.clone(),
+            proposal.clone(),
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    let first_proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
+
+    sns_wait_for_proposal_execution(
         &state_machine,
         governance_canister_id,
-        *WHALE,
-        whale_neuron_id.clone(),
-        proposal.clone(),
-    )
-    .unwrap();
-    sns_wait_for_proposal_execution(&state_machine, governance_canister_id, first_proposal_id);
+        first_proposal_id.into(),
+    );
 
     // Step 3: Inspect the result(s).
 
@@ -942,16 +1024,20 @@ fn sns_can_mint_funds_via_proposals() {
     assert_eq!(balance, Tokens::new(2_222, 0).unwrap());
 
     // Whale tries again, but this time, it doesn't work, because of minting limits.
-    let doomed_make_proposal_result = sns_make_proposal(
-        &state_machine,
-        governance_canister_id,
-        *WHALE,
-        whale_neuron_id,
-        Proposal {
-            title: "Second Mint".to_string(),
-            ..proposal
-        },
-    );
+    let state_machine_agent = StateMachineAgent::new(&state_machine, *WHALE);
+    let sns_governance = GovernanceCanister {
+        canister_id: governance_canister_id.get(),
+    };
+    let doomed_make_proposal_result = sns_governance
+        .submit_proposal(
+            &state_machine_agent,
+            whale_neuron_id,
+            Proposal {
+                title: "Second Mint".to_string(),
+                ..proposal
+            },
+        )
+        .now_or_never();
 
     /* TODO(NNS1-2982): Uncomment.
     let err = doomed_make_proposal_result.unwrap_err();

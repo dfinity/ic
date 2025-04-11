@@ -6,14 +6,16 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
     TEST_USER5_KEYPAIR,
 };
-use ic_sns_governance::pb::v1::{
+use ic_sns_governance_api::pb::v1::{
     proposal::Action, Motion, NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
     Proposal,
 };
+use ic_sns_governance_api_helpers::default_nervous_system_parameters;
 use ic_sns_test_utils::{
     itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder},
     now_seconds,
 };
+use strum::IntoEnumIterator;
 
 /// Tests that Governance can be initialized with `NervousSystemParameters` and that any
 /// unspecified fields are populated by defaults.
@@ -23,11 +25,11 @@ fn test_init_with_sys_params() {
         let system_params = NervousSystemParameters {
             transaction_fee_e8s: Some(100_000),
             reject_cost_e8s: Some(0),
-            ..NervousSystemParameters::with_default_values()
+            ..default_nervous_system_parameters()
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_nervous_system_parameters(system_params.clone())
+            .with_nervous_system_parameters(system_params.clone().into())
             .build();
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -71,11 +73,13 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
 
             let system_params = NervousSystemParameters {
                 neuron_claimer_permissions: Some(NeuronPermissionList {
-                    permissions: NeuronPermissionType::all(),
+                    permissions: NeuronPermissionType::iter()
+                        .map(|permission| permission as i32)
+                        .collect(),
                 }),
                 initial_voting_period_seconds: Some(initial_initial_voting_period_seconds),
                 wait_for_quiet_deadline_increase_seconds: Some(ONE_DAY_SECONDS / 8),
-                ..NervousSystemParameters::with_default_values()
+                ..default_nervous_system_parameters()
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
@@ -84,13 +88,13 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 .with_ledger_account(user_3.get_principal_id().0.into(), user_3_tokens)
                 .with_ledger_account(user_4.get_principal_id().0.into(), user_4_tokens)
                 .with_ledger_account(user_5.get_principal_id().0.into(), user_5_tokens)
-                .with_nervous_system_parameters(system_params.clone())
+                .with_nervous_system_parameters(system_params.clone().into())
                 .build();
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await; // slow
 
             // Create neurons.
-            let transaction_fee_e8s = system_params.transaction_fee_e8s();
+            let transaction_fee_e8s = system_params.transaction_fee_e8s.unwrap();
             let stake_amount =
                 Tokens::from_e8s(user_1_tokens.get_e8s() - transaction_fee_e8s).get_tokens();
             let user_1_neuron_id = sns_canisters
@@ -148,18 +152,15 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
             let user_5_subaccount = user_5_neuron_id.subaccount().unwrap();
 
             // Make a proposal.
+            let proposal = Proposal {
+                title: "We'll let a couple users vote, then wait to see when the proposal closes on its own".into(),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Make the Internet Computer AMAZING!".into(),
+                })),
+                ..Default::default()
+            };
             let proposal_id = sns_canisters
-                .make_proposal(
-                    &user_1,
-                    &user_1_subaccount,
-                    Proposal {
-                        title: "We'll let a couple users vote, then wait to see when the proposal closes on its own".into(),
-                        action: Some(Action::Motion(Motion {
-                            motion_text: "Make the Internet Computer AMAZING!".into(),
-                        })),
-                        ..Default::default()
-                    },
-                )
+                .make_proposal(&user_1, &user_1_subaccount, proposal.into())
                 .await
                 .unwrap();
 
@@ -195,15 +196,12 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
 
             // Let's reduce the voting period in the sns parameters.
             // We're testing that this does not affect the existing proposal.
+            let parameters = NervousSystemParameters {
+                initial_voting_period_seconds: Some(ONE_DAY_SECONDS),
+                ..system_params
+            };
             sns_canisters
-                .manage_nervous_system_parameters(
-                    &user_1,
-                    &user_1_subaccount,
-                    NervousSystemParameters {
-                        initial_voting_period_seconds: Some(ONE_DAY_SECONDS),
-                        ..system_params
-                    },
-                )
+                .manage_nervous_system_parameters(&user_1, &user_1_subaccount, parameters.into())
                 .await
                 .expect("Expected updating NervousSystemParameters to succeed");
 
