@@ -7,7 +7,7 @@ use config::{deserialize_config, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH};
 use config_types::{Ipv6Config, SetupOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
-use network::generate_network_config_new_config;
+use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
 
@@ -60,7 +60,7 @@ pub fn main() -> Result<()> {
             );
             eprintln!("Using generated mac {}", generated_mac);
 
-            generate_network_config_new_config(
+            generate_network_config(
                 &setupos_config.network_settings,
                 &generated_mac,
                 Path::new(&output_directory),

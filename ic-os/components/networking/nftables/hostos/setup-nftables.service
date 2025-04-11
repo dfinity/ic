@@ -1,5 +1,7 @@
 [Unit]
 Description=Generate Firewall Configuration
+After=update-config.service
+Wants=update-config.service
 # We must also wait for storage permission fixup to have finished.
 After=setup-permissions.service
 Wants=setup-permissions.service
@@ -8,7 +10,7 @@ Wants=nftables.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/setup-nftables.sh -n /boot/config/config.ini -i /opt/ic/share/nftables.template -o /run/ic-node/nftables-ruleset/nftables.conf
+ExecStart=/opt/ic/bin/setup-nftables.sh -i /opt/ic/share/nftables.template -o /run/ic-node/nftables-ruleset/nftables.conf
 
 [Install]
 WantedBy=multi-user.target
