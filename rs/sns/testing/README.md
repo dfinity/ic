@@ -33,7 +33,11 @@ To run the scenario on the local PocketIC instance:
    ```
 2) Bootstrap the NNS on the launched PocketIC instance:
    ```
-   bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing --deciding-nns-neuron-id 1
+   bazel run //rs/sns/testing:sns-testing-init -- \
+       --server-url "http://127.0.0.1:8888" \
+       --state-dir "$PWD/sns-testing" \
+       --dev-identity sns-testing \
+       --deciding-nns-neuron-id 1
    ```
 3) Build and deploy `test` canister:
    ```
@@ -62,17 +66,21 @@ remove `$PWD/sns-testing` and `$PWD/.dfx` directories before doing the steps men
 
 2) Bootstrap the NNS on the launched PocketIC instance:
    ```
-   bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" --state-dir "$PWD/sns-testing" --dev-identity sns-testing --deciding-nns-neuron-id 1
+   bazel run //rs/sns/testing:sns-testing-init -- \
+       --server-url "http://127.0.0.1:8888" \
+       --state-dir "$PWD/sns-testing" \
+       --dev-identity sns-testing \
+       --deciding-nns-neuron-id 1
    ```
 
 Once these steps are completed, the PocketIC will expose the IC network HTTP endpoint on "http://127.0.0.1:8080".
 `sns-testing` identity will be added as a hotkey to the NNS neuron with the majority voting power, so all NNS proposals made
-by `sns-testing` will be automatically accepted.
+by `sns-testing` will be automatically adopted.
 
 Additionally, `nns-init` will output the ID of the NNS neuron that should be used to create NNS proposals.
 ```
 ...
-Use the following Neuron ID for further testing: 1
+Use the following NNS neuron ID for further testing: 1
 ```
 
 ### Create the new SNS
@@ -81,7 +89,7 @@ Now you can create a new SNS via NNS proposal.
 
 The suggested way to do this is to use `dfx sns propose` command. For more information please refer to the [documentation](https://internetcomputer.org/docs/building-apps/governing-apps/launching/launch-steps-1proposal#3-submit-nns-proposal-to-create-sns).
 
-Make sure to use `sns-testing` identity when creating the proposal.
+Make sure to use `sns-testing` identity when creating the proposal, so that it gets instantly adopted.
 
 <details>
 <summary>Sample SNS proposal creation workflow</summary>
@@ -89,14 +97,24 @@ Make sure to use `sns-testing` identity when creating the proposal.
 
 The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-controlled canister and will base on the [init YAML file from SNS CLI](../cli/test_sns_init_v2.yaml).
 
-**Make sure to use `start_time: null` in the swap parameters to ensure that the swap starts right away after the NNS proposal is executed.**
+**While using a custom sns_init.yaml file, make sure to set `start_time: null` in the swap parameters to ensure that the swap starts right away after the NNS proposal is executed.**
 
 1) Build and deploy `test` canister:
    ```
    bazel build //rs/sns/testing:sns_testing_canister
    # 'r7inp-6aaaa-aaaaa-aaabq-cai' is the NNS Root canister
-   dfx canister --network http://127.0.0.1:8080 --identity sns-testing create test --controller r7inp-6aaaa-aaaaa-aaabq-cai --controller sns-testing --no-wallet
-   dfx canister --network http://127.0.0.1:8080 --identity sns-testing install test --wasm "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz"
+   dfx canister \
+       --network http://127.0.0.1:8080 \
+       --identity sns-testing \
+       create test \
+       --controller $NNS_ROOT \
+       --controller sns-testing \
+       --no-wallet
+   dfx canister \
+        --network http://127.0.0.1:8080 \
+        --identity sns-testing \
+        install test \
+        --wasm "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz"
    ```
 
 2) Adjust init YAML file (you will need [`yq`](https://github.com/mikefarah/yq) to be installed to do this):
@@ -125,7 +143,11 @@ Once the NNS proposal to create the new SNS is adopted and executed, the SNS swa
 Use `bazel run //rs/sns/testing:cli -- run swap-complete` to generate swap participations and complete the swap:
 ```
 SNS_NAME="$(yq -r .name <Path to SNS YAML>)"
-bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 swap-complete --sns-name "$SNS_NAME" --follow-principal-neurons "$(dfx identity get-principal --identity sns-testing)"
+bazel run //rs/sns/testing:sns-testing -- \
+    --network http://127.0.0.1:8080 \
+    swap-complete \
+    --sns-name "$SNS_NAME" \
+    --follow-principal-neurons "$(dfx identity get-principal --identity sns-testing)"
 ```
 
 This command will generate required number of participations with the sufficient amount of direct participants to complete the swap.

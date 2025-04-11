@@ -225,7 +225,7 @@ This command exposes the newly created network on 'http://127.0.0.1:8080'",
     version
 )]
 pub struct NnsInitArgs {
-    /// The URL of the 'pocket-ic-server' instance.
+    /// The URL of an existing 'pocket-ic-server' instance where the NNS will be installed.
     #[arg(long)]
     pub server_url: Url,
     /// The path to the state PocketIC instance state directory.

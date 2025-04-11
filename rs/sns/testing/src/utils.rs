@@ -36,7 +36,7 @@ pub const ALL_SNS_TESTING_CANISTER_IDS: [&CanisterId; 9] = [
 ];
 
 /// The default NNS neuron ID used during NNS bootstrap and NNS proposal submission.
-pub const NNS_NEURON_ID: NeuronId = NeuronId { id: 1 };
+pub const DEFAULT_POWERFUL_NNS_NEURON_ID: NeuronId = NeuronId { id: 1 };
 
 // Predefined secret keys used in sns-testing
 lazy_static! {
