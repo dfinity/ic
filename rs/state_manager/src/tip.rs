@@ -888,18 +888,8 @@ fn serialize_canister_to_tip(
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
-            execution_state.wasm_memory.page_map.persist_delta(
-                &canister_layout.vmemory_0(),
-                tip.height(),
-                lsmt_config,
-                metrics,
-            )?;
-            execution_state.stable_memory.page_map.persist_delta(
-                &canister_layout.stable_memory(),
-                tip.height(),
-                lsmt_config,
-                metrics,
-            )?;
+            assert!(execution_state.wasm_memory.page_map.page_delta_is_empty());
+            assert!(execution_state.stable_memory.page_map.page_delta_is_empty());
 
             Some(ExecutionStateBits {
                 exported_globals: execution_state.exported_globals.clone(),
@@ -920,16 +910,11 @@ fn serialize_canister_to_tip(
         }
     };
 
-    canister_state
+    assert!(canister_state
         .system_state
         .wasm_chunk_store
         .page_map()
-        .persist_delta(
-            &canister_layout.wasm_chunk_store(),
-            tip.height(),
-            lsmt_config,
-            metrics,
-        )?;
+        .page_delta_is_empty());
 
     canister_layout.canister().serialize(
         CanisterStateBits {
