@@ -350,7 +350,7 @@ jobs:
 
           # this checks that all lines in the first argument (subset) are identical
           # in the second argument (set)
-          difference=$(comm -23 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
+          difference=$(comm -12 <(sort shasums-nocache/SHA256SUMS | uniq) <(sort shasums-cache/SHA256SUMS | uniq))
           if [ -n "$difference" ]; then
             echo "Build Determinism Check Failed! Please contact IDX."
             echo "The following artifacts were different:"
