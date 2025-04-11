@@ -407,6 +407,7 @@ pub async fn install_minter(
         btc_checker_principal: Some(btc_checker_canister_id),
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration: None,
     };
 
     let minter_arg = MinterArg::Init(args);

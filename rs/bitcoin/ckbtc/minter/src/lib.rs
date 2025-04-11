@@ -8,7 +8,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
+use ic_cdk::api::management_canister::bitcoin;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -112,7 +112,49 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-pub type GetUtxosRequest = ic_cdk::api::management_canister::bitcoin::GetUtxosRequest;
+pub type GetUtxosRequest = bitcoin::GetUtxosRequest;
+
+/*
+impl GetUtxosRequest {
+    pub fn as_inner(&self) -> &bitcoin::GetUtxosRequest {
+        self.0.as_inner()
+    }
+
+    pub fn into_inner(self) -> bitcoin::GetUtxosRequest {
+        self.0.into_inner()
+    }
+
+    pub fn new<T: Into<Timestamp>>(
+        timestamp: T,
+        address: String,
+        network: Network,
+        filter: Option<bitcoin::UtxoFilter>,
+    ) -> Self {
+        Self(Timestamped::new_with(
+            timestamp,
+            bitcoin::GetUtxosRequest {
+                address,
+                network: network.into(),
+                filter,
+            },
+        ))
+    }
+
+    pub fn with_new_timestamp_and_filter<T: Into<Timestamp>>(
+        &self,
+        timestamp: T,
+        filter: bitcoin::UtxoFilter,
+    ) -> Self {
+        Self(Timestamped::new_with(
+            timestamp,
+            bitcoin::GetUtxosRequest {
+                filter: Some(filter),
+                ..self.0.as_inner().clone()
+            },
+        ))
+    }
+}
+*/
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetUtxosResponse {
@@ -121,8 +163,8 @@ pub struct GetUtxosResponse {
     pub next_page: Option<Page>,
 }
 
-impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUtxosResponse {
-    fn from(response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse) -> Self {
+impl From<bitcoin::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: bitcoin::GetUtxosResponse) -> Self {
         Self {
             utxos: response
                 .utxos
@@ -155,12 +197,12 @@ pub enum Network {
     Regtest,
 }
 
-impl From<Network> for BitcoinNetwork {
+impl From<Network> for bitcoin::BitcoinNetwork {
     fn from(network: Network) -> Self {
         match network {
-            Network::Mainnet => BitcoinNetwork::Mainnet,
-            Network::Testnet => BitcoinNetwork::Testnet,
-            Network::Regtest => BitcoinNetwork::Regtest,
+            Network::Mainnet => bitcoin::BitcoinNetwork::Mainnet,
+            Network::Testnet => bitcoin::BitcoinNetwork::Testnet,
+            Network::Regtest => bitcoin::BitcoinNetwork::Regtest,
         }
     }
 }
@@ -1297,7 +1339,19 @@ impl CanisterRuntime for IcCanisterRuntime {
 }
 
 /// Time in nanoseconds since the epoch (1970-01-01).
-#[derive(Eq, Clone, Copy, PartialEq, Debug, Default, Serialize, CandidType, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Default,
+    Serialize,
+    CandidType,
+    serde::Deserialize,
+)]
 pub struct Timestamp(u64);
 
 impl Timestamp {
@@ -1340,3 +1394,96 @@ impl From<u64> for Timestamp {
         Self(timestamp)
     }
 }
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
+struct Timestamped<Inner> {
+    timestamp: Timestamp,
+    inner: Option<Inner>,
+}
+
+impl<Inner> Timestamped<Inner> {
+    fn new<T: Into<Timestamp>>(timestamp: T, inner: Inner) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            inner: Some(inner),
+        }
+    }
+}
+
+/// A cache that expires older entries upon insertion.
+///
+/// More specifically, entries are inserted with a timestamp, and
+/// then all existing entries with a timestamp less than `t - expiration` are removed before
+/// the new entry is inserted.
+///
+/// On the other hand, lookups are not affected by expiration because they are ready only.
+/// If an old entry is found, it is returned regardless of its timestamp.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct CacheWithExpiration<Key, Value> {
+    expiration: Duration,
+    keys: BTreeMap<Key, Timestamp>,
+    values: BTreeMap<Timestamped<Key>, Value>,
+}
+
+impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
+    pub fn new(expiration: Duration) -> Self {
+        Self {
+            expiration,
+            keys: Default::default(),
+            values: Default::default(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        let len = self.keys.len();
+        assert_eq!(len, self.values.len());
+        len
+    }
+
+    pub fn update_expiration(&mut self, expiration: Duration) {
+        self.expiration = expiration;
+    }
+
+    pub fn prune<T: Into<Timestamp>>(&mut self, now: T) {
+        let timestamp = now.into();
+        if let Some(expire_cutoff) = timestamp.checked_sub(self.expiration) {
+            let pivot = Timestamped {
+                timestamp: expire_cutoff,
+                inner: None,
+            };
+            let mut expired = self.values.split_off(&pivot);
+            std::mem::swap(&mut self.values, &mut expired);
+            expired.keys().for_each(|key| {
+                self.keys.remove(key.inner.as_ref().unwrap());
+            });
+        }
+    }
+    pub fn insert<T: Into<Timestamp>>(&mut self, key: Key, value: Value, now: T) {
+        let timestamp = now.into();
+        if let Some(old_timestamp) = self.keys.insert(key.clone(), timestamp) {
+            self.values
+                .remove(&Timestamped::new(old_timestamp, key.clone()));
+        }
+        self.values.insert(Timestamped::new(timestamp, key), value);
+    }
+
+    pub fn get<T: Into<Timestamp>>(&self, key: &Key, now: T) -> Option<&Value> {
+        let now = now.into();
+        let timestamp = *self.keys.get(key)?;
+        if let Some(expire_cutoff) = now.checked_sub(self.expiration) {
+            if timestamp < expire_cutoff {
+                return None;
+            }
+        }
+        self.values.get(&Timestamped {
+            timestamp,
+            inner: Some(key.clone()),
+        })
+    }
+}
+
+pub type GetUtxosCache = CacheWithExpiration<bitcoin::GetUtxosRequest, GetUtxosResponse>;

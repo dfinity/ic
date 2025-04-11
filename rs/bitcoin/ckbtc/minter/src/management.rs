@@ -156,6 +156,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     runtime: &R,
 ) -> Result<GetUtxosResponse, CallError> {
     async fn bitcoin_get_utxos<R: CanisterRuntime>(
+        now: u64,
         req: GetUtxosRequest,
         source: CallSource,
         runtime: &R,
@@ -165,7 +166,17 @@ pub async fn get_utxos<R: CanisterRuntime>(
             CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
         }
         .with(|cell| cell.set(cell.get() + 1));
-        runtime.bitcoin_get_utxos(req).await
+        if let Some(res) = crate::state::read_state(|s| s.get_utxos_cache.get(&req, now).cloned()) {
+            // TODO: add metrics to count cache hit
+            Ok(res)
+        } else {
+            runtime.bitcoin_get_utxos(req.clone()).await.inspect(|res| {
+                crate::state::mutate_state(|s| {
+                    s.get_utxos_cache.prune(now);
+                    s.get_utxos_cache.insert(req, res.clone(), now)
+                })
+            })
+        }
     }
 
     // Record start time of method execution for metrics
@@ -176,7 +187,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
         filter: Some(UtxoFilter::MinConfirmations(min_confirmations)),
     };
 
-    let mut response = bitcoin_get_utxos(request.clone(), source, runtime).await?;
+    let mut response = bitcoin_get_utxos(start_time, request.clone(), source, runtime).await?;
 
     let mut utxos = std::mem::take(&mut response.utxos);
     let mut num_pages: usize = 1;
@@ -187,7 +198,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
             filter: Some(UtxoFilter::Page(page.to_vec())),
             ..request.clone()
         };
-        response = bitcoin_get_utxos(paged_request, source, runtime).await?;
+        response = bitcoin_get_utxos(runtime.time(), paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
         num_pages += 1;
     }

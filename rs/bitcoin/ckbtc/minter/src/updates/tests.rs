@@ -414,6 +414,7 @@ mod update_balance {
         }
 
         async fn get_utxos_with_latency(
+            now: &mut Timestamp,
             latency: Duration,
             account_utxos: Vec<Utxo>,
             num_pages: usize,
@@ -430,7 +431,8 @@ mod update_balance {
                 account_utxos,
                 num_pages,
             );
-            mock_increasing_time(&mut runtime, NOW, latency);
+            *now = now.saturating_add(latency);
+            mock_increasing_time(&mut runtime, *now, latency);
             Ok(get_utxos(
                 btc_network,
                 &address,
@@ -442,10 +444,12 @@ mod update_balance {
             .utxos)
         }
 
+        let mut now = NOW;
         // get_utxos calls with 1 page
         let get_utxos_latencies_ms = [0, 100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
         for millis in &get_utxos_latencies_ms {
             let result = get_utxos_with_latency(
+                &mut now,
                 Duration::from_millis(*millis),
                 vec![utxo()],
                 1,
@@ -457,7 +461,8 @@ mod update_balance {
 
         // get_utxos calls with 3 pages
         let result = get_utxos_with_latency(
-            Duration::from_millis(3_500),
+            &mut now,
+            Duration::from_millis(1_200),
             vec![utxo()],
             3,
             CallSource::Minter,
@@ -495,7 +500,7 @@ mod update_balance {
                 (f64::INFINITY, 0.)
             ]
         );
-        assert_eq!(histogram.sum(), 3_500);
+        assert_eq!(histogram.sum(), 3_600);
     }
 
     fn get_utxos_latency_histogram(
@@ -659,11 +664,10 @@ mod update_balance {
         start: Timestamp,
         interval: Duration,
     ) {
-        let increment = move |time: Timestamp| time.saturating_add(interval);
         let mut current_time = start;
         runtime.expect_time().returning(move || {
             let previous_time = current_time;
-            current_time = increment(current_time);
+            current_time = current_time.saturating_add(interval);
             previous_time.as_nanos_since_unix_epoch()
         });
     }
