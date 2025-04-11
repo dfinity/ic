@@ -34,9 +34,7 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
-    execution_environment::{
-        HypervisorResult, IngressFilterService, IngressHistoryReader, QueryExecutionService,
-    },
+    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
