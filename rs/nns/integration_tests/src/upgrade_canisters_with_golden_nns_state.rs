@@ -61,8 +61,10 @@ impl NnsCanisterUpgrade {
                 }))
             )
             .unwrap()
-        } else {
+        } else if nns_canister_name == "ledger" {
             Encode!(&()).unwrap()
+        } else {
+            vec![]
         };
 
         let nns_canister_name = nns_canister_name.to_string();
