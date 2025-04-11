@@ -1117,7 +1117,7 @@ fn test_build_account_to_utxos_table_pagination() {
 }
 
 #[test]
-fn serialize_nework_preserves_capitalization() {
+fn serialize_network_preserves_capitalization() {
     use ciborium::{de::from_reader, ser::into_writer, Value};
     use Network::*;
     // We use CBOR serialization for events storage. The test below
