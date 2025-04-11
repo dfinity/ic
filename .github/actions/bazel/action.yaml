@@ -84,7 +84,7 @@ runs:
           -exec cat {} \; > "$execlog_json_in"
 
         execlog_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
-        if ! [ -e "$execlog_json_in" ]; then
+        if ! [ -s "$execlog_json_in" ]; then
           echo "no execlog found"
           exit 0
         fi
