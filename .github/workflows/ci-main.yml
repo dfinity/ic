@@ -334,8 +334,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          n_lines_cache=$(cat shasums-cache/execution_log.csv | wc -l)
-          n_lines_nocache=$(cat shasums-nocache/execution_log.csv | wc -l)
+          n_lines_cache=$(cat shasums-cache/execlogs.csv | wc -l)
+          n_lines_nocache=$(cat shasums-nocache/execlogs.csv | wc -l)
           echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
 
           # running tests may not pull all targets locally. If that's the case,
@@ -346,11 +346,13 @@ jobs:
           fi
 
           # sort the files by the field we join on (artifact path), see below
-          sort -t, -k2 <shasums-cache/execution_log.csv >"$sponge"
-          cp "$sponge" shasums-cache/execution_log.csv
+          sponge=$(mktemp)
 
-          sort -t, -k2 <shasums-nocache/execution_log.csv >"$sponge"
-          cp "$sponge" shasums-nocache/execution_log.csv
+          sort -t, -k2 <shasums-cache/execlogs.csv >"$sponge"
+          cp "$sponge" shasums-cache/execlogs.csv
+
+          sort -t, -k2 <shasums-nocache/execlogs.csv >"$sponge"
+          cp "$sponge" shasums-nocache/execlogs.csv
 
           rm "$sponge"
 
@@ -361,8 +363,8 @@ jobs:
           # encountered.
           join \
             -t, -o 0,1.2,1.3,2.3 -12 -22 \
-            shasums-cache/execution_log.csv \
-            shasums-nocache/execution_log.csv \
+            shasums-cache/execlogs.csv \
+            shasums-nocache/execlogs.csv \
             | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
   cargo-clippy-linux:
     name: Cargo Clippy Linux
