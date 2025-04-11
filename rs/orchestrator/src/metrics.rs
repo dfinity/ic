@@ -17,7 +17,7 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_cup_deserialization_failed: IntCounter,
     pub(crate) critical_error_state_removal_failed: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
-    pub(crate) critical_error_task_panicked: IntCounterVec,
+    pub(crate) critical_error_task_failed: IntCounterVec,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
@@ -93,10 +93,11 @@ impl OrchestratorMetrics {
                 "orchestrator_fstrim_duration_milliseconds",
                 "The duration of the last fstrim call, in milliseconds",
             ),
-            critical_error_task_panicked: metrics_registry.int_counter_vec(
-                "orchestrator_tasks_panicked_total",
-                "Number of times a task panicked, grouped by the task name",
-                &["task_name"],
+            critical_error_task_failed: metrics_registry.int_counter_vec(
+                "orchestrator_tasks_failed_total",
+                "Number of times a task failed, \
+                grouped by the task name and the reason of the failure",
+                &["task_name", "reason"],
             ),
         }
     }

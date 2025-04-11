@@ -139,6 +139,12 @@ impl Orchestrator {
             UtilityCommand::notify_host(&message, 1);
         });
 
+        let slog_logger = logger.inner_logger.root.clone();
+        let (metrics, _metrics_runtime) =
+            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
+        let metrics = Arc::new(metrics);
+        let mut task_tracker = TaskTracker::new(metrics.clone(), logger.clone());
+
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
             Some(node_id),
@@ -147,11 +153,22 @@ impl Orchestrator {
 
         let (nns_urls, nns_pub_key) =
             registry_replicator.parse_registry_access_info_from_config(&config);
-        if let Err(err) = registry_replicator
+
+        match registry_replicator
             .start_polling(nns_urls, nns_pub_key)
             .await
         {
-            warn!(logger, "{}", err);
+            Ok(future) => task_tracker.spawn("registry_replicator", future),
+            Err(err) => {
+                metrics
+                    .critical_error_task_failed
+                    .with_label_values(&["registry_replicator", "failed_to_start"])
+                    .inc();
+                error!(
+                    logger,
+                    "Failed to start the registry replicator task: {err}"
+                )
+            }
         }
 
         // Filesystem API to local registry copy
@@ -180,11 +197,6 @@ impl Orchestrator {
         })
         .await
         .unwrap();
-
-        let slog_logger = logger.inner_logger.root.clone();
-        let (metrics, _metrics_runtime) =
-            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
-        let metrics = Arc::new(metrics);
 
         metrics
             .orchestrator_info
@@ -315,8 +327,6 @@ impl Orchestrator {
             cup_provider,
             logger.clone(),
         ));
-
-        let task_tracker = TaskTracker::new(metrics, logger.clone());
 
         Ok(Self {
             logger,
@@ -642,8 +652,8 @@ impl TaskTracker {
                     if err.is_panic() {
                         error!(self.logger, "Task `{task_name}` panicked: {err}");
                         self.metrics
-                            .critical_error_task_panicked
-                            .with_label_values(&[&task_name])
+                            .critical_error_task_failed
+                            .with_label_values(&[&task_name, "panic"])
                             .inc();
                     } else {
                         info!(self.logger, "Task `{task_name}` was cancelled");
@@ -678,8 +688,8 @@ mod tests {
 
         assert_eq!(
             metrics
-                .critical_error_task_panicked
-                .get_metric_with_label_values(&["panicky"])
+                .critical_error_task_failed
+                .get_metric_with_label_values(&["panicky", "panic"])
                 .unwrap()
                 .get(),
             1
@@ -696,8 +706,8 @@ mod tests {
 
         assert_eq!(
             metrics
-                .critical_error_task_panicked
-                .get_metric_with_label_values(&["graceful"])
+                .critical_error_task_failed
+                .get_metric_with_label_values(&["graceful", "panic"])
                 .unwrap()
                 .get(),
             0

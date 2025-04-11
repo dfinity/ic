@@ -1,4 +1,6 @@
-use ic_cdk::{init, post_upgrade, pre_upgrade, query, spawn};
+#[cfg(any(feature = "test", test))]
+use ic_cdk::query;
+use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
@@ -68,7 +70,7 @@ fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
     CANISTER.with(|canister| canister.borrow().get_registry_value(key))
 }
 
-#[query]
+#[update]
 async fn get_node_providers_monthly_xdr_rewards(
     request: GetNodeProvidersMonthlyXdrRewardsRequest,
 ) -> GetNodeProvidersMonthlyXdrRewardsResponse {
