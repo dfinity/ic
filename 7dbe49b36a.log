@@ -1,0 +1,47 @@
+REPEAT       := 9
+==> Summarizing Embedders Heap results:
+    MIN_FILE     := EMBEDDERS_HEAP.min
+    BASELINE_DIR := ./rs/execution_environment/benches/baseline
+= 084e832e61..084e832e61: Embedders Heap total time: 1428 ms (regressed by 720.8 ms / 101.8%)
+  Top 10 by time:
+  + embedders:heap/query/wasm32_query_write_fwd_1gb_step_2mb_new_allocation time regressed by 131.1 ms (1666.3%)
+  + embedders:heap/query/wasm64_query_write_fwd_1gb_step_2mb_new_allocation time regressed by 130.9 ms (1665.8%)
+  + embedders:heap/query/wasm32_query_write_bwd_1gb_step_2mb_new_allocation time regressed by 130.6 ms (1725.5%)
+  + embedders:heap/query/wasm64_query_write_bwd_1gb_step_2mb_new_allocation time regressed by 129.6 ms (1684.4%)
+  + embedders:heap/query/wasm32_query_write_bwd_1gb_step_5mb_new_allocation time regressed by 54.5 ms (1738.0%)
+  + embedders:heap/query/wasm32_query_write_fwd_1gb_step_5mb_new_allocation time regressed by 54.2 ms (1708.6%)
+  + embedders:heap/query/wasm64_query_write_fwd_1gb_step_5mb_new_allocation time regressed by 53.9 ms (1712.7%)
+  + embedders:heap/query/wasm64_query_write_bwd_1gb_step_5mb_new_allocation time regressed by 53.8 ms (1735.2%)
+  + embedders:heap/update/wasm32_update_write_bwd_1gb_step_2mb_checkpoint time regressed by 1.5 ms (8.0%)
+  - embedders:heap/query/wasm32_query_write_bwd_1gb_step_2mb_checkpoint time improved by -3.5 ms (-39.9%)
+  - embedders:heap/query/wasm64_query_write_bwd_1gb_step_2mb_checkpoint time improved by -3.4 ms (-38.7%)
+  - embedders:heap/query/wasm64_query_read_bwd_1gb_step_2mb_checkpoint time improved by -3.2 ms (-28.6%)
+  - embedders:heap/query/wasm32_query_read_bwd_1gb_step_2mb_checkpoint time improved by -3.0 ms (-27.4%)
+  - embedders:heap/query/wasm32_query_read_bwd_1gb_step_2mb_new_allocation time improved by -2.6 ms (-39.9%)
+  - embedders:heap/query/wasm64_query_read_bwd_1gb_step_2mb_new_allocation time improved by -2.6 ms (-40.3%)
+  - embedders:heap/update/wasm64_update_read_bwd_1gb_step_2mb_checkpoint time improved by -2.4 ms (-27.4%)
+  - embedders:heap/update/wasm32_update_read_bwd_1gb_step_2mb_checkpoint time improved by -2.4 ms (-28.1%)
+  - embedders:heap/update/wasm64_update_read_bwd_1gb_step_2mb_new_allocation time improved by -2.2 ms (-35.9%)
+  - embedders:heap/update/wasm32_update_read_bwd_1gb_step_2mb_new_allocation time improved by -2.1 ms (-34.5%)
+  Top 10 by percentage:
+  + embedders:heap/query/wasm32_query_write_bwd_1gb_step_5mb_new_allocation time regressed by 1738.0% (54.5 ms)
+  + embedders:heap/query/wasm64_query_write_bwd_1gb_step_5mb_new_allocation time regressed by 1735.2% (53.8 ms)
+  + embedders:heap/query/wasm32_query_write_bwd_1gb_step_2mb_new_allocation time regressed by 1725.5% (130.6 ms)
+  + embedders:heap/query/wasm64_query_write_fwd_1gb_step_5mb_new_allocation time regressed by 1712.7% (53.9 ms)
+  + embedders:heap/query/wasm32_query_write_fwd_1gb_step_5mb_new_allocation time regressed by 1708.6% (54.2 ms)
+  + embedders:heap/query/wasm64_query_write_bwd_1gb_step_2mb_new_allocation time regressed by 1684.4% (129.6 ms)
+  + embedders:heap/query/wasm32_query_write_fwd_1gb_step_2mb_new_allocation time regressed by 1666.3% (131.1 ms)
+  + embedders:heap/query/wasm64_query_write_fwd_1gb_step_2mb_new_allocation time regressed by 1665.8% (130.9 ms)
+  + embedders:heap/update/wasm32_update_write_bwd_1gb_step_2mb_checkpoint time regressed by 8.0% (1.5 ms)
+  - embedders:heap/query/wasm64_query_read_bwd_1gb_step_2mb_new_allocation time improved by -40.3% (-2.6 ms)
+  - embedders:heap/query/wasm32_query_read_bwd_1gb_step_2mb_new_allocation time improved by -39.9% (-2.6 ms)
+  - embedders:heap/query/wasm32_query_write_bwd_1gb_step_2mb_checkpoint time improved by -39.9% (-3.5 ms)
+  - embedders:heap/query/wasm64_query_write_bwd_1gb_step_2mb_checkpoint time improved by -38.7% (-3.4 ms)
+  - embedders:heap/update/wasm64_update_read_bwd_1gb_step_2mb_new_allocation time improved by -35.9% (-2.2 ms)
+  - embedders:heap/update/wasm32_update_read_bwd_1gb_step_2mb_new_allocation time improved by -34.5% (-2.1 ms)
+  - embedders:heap/query/wasm64_query_read_bwd_1gb_step_2mb_checkpoint time improved by -28.6% (-3.2 ms)
+  - embedders:heap/update/wasm32_update_read_bwd_1gb_step_2mb_checkpoint time improved by -28.1% (-2.4 ms)
+  - embedders:heap/update/wasm64_update_read_bwd_1gb_step_2mb_checkpoint time improved by -27.4% (-2.4 ms)
+  - embedders:heap/query/wasm32_query_read_bwd_1gb_step_2mb_checkpoint time improved by -27.4% (-3.0 ms)
+0.74user 0.74system 0:01.41elapsed 105%CPU (0avgtext+0avgdata 6152maxresident)k
+0inputs+24outputs (0major+136595minor)pagefaults 0swaps
