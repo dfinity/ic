@@ -1,9 +1,6 @@
 use candid::{CandidType, Decode, Encode, Nat};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cbor::CertificateToCbor;
-use ic_certification::hash_tree::{HashTreeNode, SubtreeLookupResult};
-use ic_certification::{Certificate, HashTree, LookupResult};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_ledger::{
     ChangeFeeCollector, FeatureFlags, InitArgs, InitArgsBuilder as LedgerInitArgsBuilder,
@@ -17,14 +14,14 @@ use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    get_all_ledger_and_archive_blocks, send_approval, send_transfer, send_transfer_from,
-    AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES,
-    FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
-    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
+    get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
-use icrc_ledger_types::icrc::generic_value::{Hash, Value};
+use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::Allowance;
@@ -33,7 +30,6 @@ use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromErro
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult, QueryArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
     ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
-    ICRC3DataCertificate,
 };
 use num_traits::ToPrimitive;
 use std::collections::BTreeMap;
@@ -119,6 +115,7 @@ fn ledger_mainnet_u64_wasm() -> Vec<u8> {
         .unwrap()
 }
 
+#[cfg(not(feature = "u256-tokens"))]
 fn ledger_mainnet_sns_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -1528,8 +1525,15 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
     check_icrc3_get_block_limit(vec![(0, 1), (0, 100)]);
 }
 
+#[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn test_icrc3_certificate_ledger_upgrade() {
+    use ic_cbor::CertificateToCbor;
+    use ic_certification::hash_tree::{HashTreeNode, SubtreeLookupResult};
+    use ic_certification::{Certificate, HashTree};
+    use ic_ledger_suite_state_machine_tests::send_transfer;
+    use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+
     const NUM_BLOCKS: u64 = 10;
 
     let env = StateMachine::new();
@@ -1756,11 +1760,14 @@ fn test_icrc3_certificate_ledger_upgrade() {
 }
 
 /// Check whether the certified data at path ["canister", ledger_canister_id, "certified_data"] is equal to root_hash.
+#[cfg(not(feature = "u256-tokens"))]
 fn is_valid_root_hash(
-    certificate: &Certificate,
-    root_hash: &Hash,
+    certificate: &ic_certification::Certificate,
+    root_hash: &icrc_ledger_types::icrc::generic_value::Hash,
     ledger_canister_id: CanisterId,
 ) -> bool {
+    use ic_certification::LookupResult;
+
     let certified_data_path: [ic_certification::hash_tree::Label<Vec<u8>>; 3] = [
         "canister".into(),
         ledger_canister_id.get().0.as_slice().into(),
