@@ -1115,3 +1115,21 @@ fn test_build_account_to_utxos_table_pagination() {
         assert!(!no_utxo_page.contains(&format!("{}", utxo.outpoint.txid)));
     }
 }
+
+#[test]
+fn serialize_nework_preserves_capitalization() {
+    use ciborium::{de::from_reader, ser::into_writer, Value};
+    use Network::*;
+    // We use CBOR serialization for events storage. The test below
+    // checks if the serialization/deserialization of Network preserves
+    // capitalization.
+    for network in [Mainnet, Testnet, Regtest] {
+        let mut buf = Vec::new();
+        into_writer(&network, &mut buf).unwrap();
+        let value: Value = from_reader(buf.as_ref() as &[u8]).unwrap();
+        println!("value = {:?}", value);
+        let name = value.as_text().unwrap();
+        let first_char = name.chars().next().unwrap();
+        assert!(first_char.is_uppercase());
+    }
+}
