@@ -5580,30 +5580,14 @@ impl Governance {
             // vote, with a voting power determined at the
             // time of the proposal (i.e., now).
             _ => {
-                let (ballots, total_deciding_power, potential_voting_power) =
-                    self.neuron_store.create_ballots_for_standard_proposal(
+                let voting_power_snapshot = self
+                    .neuron_store
+                    .compute_voting_power_snapshot_for_standard_proposal(
                         self.voting_power_economics(),
                         now_seconds,
-                    );
+                    )?;
 
-                if total_deciding_power >= (u64::MAX as u128) {
-                    // The way the neurons are configured, the total voting
-                    // power on this proposal would overflow a u64!
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::PreconditionFailed,
-                        "Voting power overflow.",
-                    ));
-                }
-                if potential_voting_power >= (u64::MAX as u128) {
-                    // The way the neurons are configured, the potential voting
-                    // power on this proposal would overflow a u64!
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::PreconditionFailed,
-                        "Potential voting power overflow.",
-                    ));
-                }
-
-                (ballots, potential_voting_power as u64)
+                voting_power_snapshot.create_ballots_and_total_potential_voting_power()
             }
         };
 

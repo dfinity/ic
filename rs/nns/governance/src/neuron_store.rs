@@ -32,6 +32,7 @@ use std::{
 
 pub mod metrics;
 pub mod voting_power;
+
 use crate::governance::RandomnessGenerator;
 use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;
@@ -67,6 +68,8 @@ pub enum NeuronStoreError {
     InvalidOperation {
         reason: String,
     },
+    TotalPotentialVotingPowerOverflow,
+    TotalDecidingVotingPowerOverflow,
 }
 
 impl NeuronStoreError {
@@ -174,6 +177,12 @@ impl Display for NeuronStoreError {
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {}", reason)
             }
+            NeuronStoreError::TotalPotentialVotingPowerOverflow => {
+                write!(f, "Total potential voting power overflow")
+            }
+            NeuronStoreError::TotalDecidingVotingPowerOverflow => {
+                write!(f, "Total deciding voting power overflow")
+            }
         }
     }
 }
@@ -192,6 +201,8 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
+            NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
+            NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -831,55 +842,6 @@ impl NeuronStore {
             },
             NeuronSections::NONE,
         )
-    }
-
-    pub fn create_ballots_for_standard_proposal(
-        &self,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-    ) -> (
-        HashMap<u64, Ballot>,
-        u128, /*deciding_voting_power*/
-        u128, /*potential_voting_power*/
-    ) {
-        let mut ballots = HashMap::<u64, Ballot>::new();
-        let mut deciding_voting_power: u128 = 0;
-        let mut potential_voting_power: u128 = 0;
-
-        let min_dissolve_delay_seconds = voting_power_economics
-            .neuron_minimum_dissolve_delay_to_vote_seconds
-            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS);
-
-        let mut process_neuron = |neuron: &Neuron| {
-            if neuron.is_inactive(now_seconds)
-                || neuron.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_seconds
-            {
-                return;
-            }
-
-            let voting_power = neuron.deciding_voting_power(voting_power_economics, now_seconds);
-            deciding_voting_power += voting_power as u128;
-            potential_voting_power += neuron.potential_voting_power(now_seconds) as u128;
-            ballots.insert(
-                neuron.id().id,
-                Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
-                },
-            );
-        };
-
-        // Active neurons iterator already makes distinctions between stable and heap neurons.
-        self.with_active_neurons_iter_sections(
-            |iter| {
-                for neuron in iter {
-                    process_neuron(neuron.as_ref());
-                }
-            },
-            NeuronSections::NONE,
-        );
-
-        (ballots, deciding_voting_power, potential_voting_power)
     }
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
