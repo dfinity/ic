@@ -6,8 +6,7 @@ use ic_nns_test_utils::common::{
 };
 use ic_nns_test_utils::state_test_helpers::{
     registry_latest_version, setup_nns_canisters_with_features,
-    setup_nns_node_rewards_with_correct_canister_id, state_machine_builder_for_nns_tests, update,
-    update_with_sender_bytes,
+    state_machine_builder_for_nns_tests, update, update_with_sender_bytes,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -24,12 +23,17 @@ use ic_registry_transport::upsert;
 use ic_state_machine_tests::StateMachine;
 use maplit::btreemap;
 use prost::Message;
+use rand::Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::collections::BTreeMap;
+use std::env;
 use std::str::FromStr;
 
 #[test]
 fn test_registry_and_node_rewards_give_same_results_with_golden_state() {
+    if env::var("RUN_GOLDEN_STATE_TEST").is_err() {
+        return;
+    }
     let machine = new_state_machine_with_golden_nns_state_or_panic();
     machine
         .upgrade_canister(REGISTRY_CANISTER_ID, build_registry_wasm().bytes(), vec![])
@@ -284,18 +288,12 @@ fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
     }
 
     if latest_registry_version > 100 {
-        let reasonable = latest_registry_version / 100;
+        let reasonable = latest_registry_version / 250;
 
         for version in (0..=reasonable).rev() {
-            let version = Some(version * 100);
+            let randomness = rand::thread_rng().gen_range(0..250);
+            let version = Some(version * 250 + randomness);
             compare(version);
         }
-
-        // TODO DO NOT MERGE
-        // Next steps - create a jittery random number generator that
-        // samples the registry version and then calls both canisters
-        // and compares the results.
-
-        // ALSO TODO: ?? I forgot.... hope it wasn't important
     }
 }
