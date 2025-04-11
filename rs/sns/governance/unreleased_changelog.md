@@ -94,6 +94,8 @@ If `include_topic` is not mentioned or `null`, then proposals are listed regardl
 
 ## Deprecated
 
+* Custom proposals that were not yet assigned to a topic are no longer allowed to be submitted.
+
 ## Removed
 
 ## Fixed
