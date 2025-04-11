@@ -79,8 +79,11 @@ runs:
       shell: bash
       if: (success() || failure()) && inputs.execlog-artifact-name != ''
       run: |
-        execlog_json_in='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.json'
-        execlog_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.csv'
+        execlog_json_in='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.json'
+        find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.json' \
+          -exec cat {} \; > "$execlog_json_in"
+
+        execlog_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
         if ! [ -e "$execlog_json_in" ]; then
           echo "no execlog found"
           exit 0
@@ -117,7 +120,7 @@ runs:
         name: ${{ inputs.execlog-artifact-name }}
         if-no-files-found: ignore
         path: |
-          ${{ steps.metrics-tmpdir.outputs.dir }}/execution_log.csv
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv
 
     - name: Cleanup
       shell: bash
