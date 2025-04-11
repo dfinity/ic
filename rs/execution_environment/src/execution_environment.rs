@@ -1674,20 +1674,20 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
                 #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| {
-                    match self.config.canister_snapshot_download {
-                        FlagStatus::Disabled => Ok((vec![], None)),
-                        FlagStatus::Enabled => {
-                            let canister_id = args.get_canister_id();
-                            // TODO: [EXC-2018] do we need to account for copying the bytes -> costs and round_limits?
-                            self.read_snapshot_data(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                            )
-                            .map(|res| (res, Some(canister_id)))
-                        }
+                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| match self
+                    .config
+                    .canister_snapshot_download
+                {
+                    FlagStatus::Disabled => Ok((vec![], None)),
+                    FlagStatus::Enabled => {
+                        let canister_id = args.get_canister_id();
+                        self.read_snapshot_data(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                        )
+                        .map(|res| (res, Some(canister_id)))
                     }
                 });
                 ExecuteSubnetMessageResult::Finished {
