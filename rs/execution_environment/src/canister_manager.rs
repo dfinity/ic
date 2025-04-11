@@ -2044,10 +2044,11 @@ impl CanisterManager {
     pub(crate) fn read_snapshot_data(
         &self,
         sender: PrincipalId,
-        canister: &CanisterState,
+        canister: &mut CanisterState,
         snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
         state: &ReplicatedState,
+        subnet_size: usize,
     ) -> Result<ReadCanisterSnapshotDataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2064,6 +2065,21 @@ impl CanisterManager {
                 snapshot_id,
             });
         }
+        // Charge for the baseline plus the requested amount of bytes or fail.
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            canister,
+            self.config.canister_snapshot_data_baseline_instructions,
+            subnet_size,
+            // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module
+            // since the number of instructions charged depends on constant set fee
+            // and Wasm64 does not bring any additional overhead for this operation.
+            // The only overhead is during execution time.
+            WasmExecutionMode::Wasm32,
+        ) {
+            return Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err));
+        };
+
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
                 if size > MAX_SLICE_SIZE_BYTES {

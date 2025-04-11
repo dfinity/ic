@@ -313,6 +313,7 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
+        SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
     )

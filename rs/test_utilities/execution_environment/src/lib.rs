@@ -1754,6 +1754,7 @@ pub struct ExecutionTestBuilder {
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
     canister_snapshot_baseline_instructions: NumInstructions,
+    canister_snapshot_data_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cycles_account_manager_config: Option<CyclesAccountManagerConfig>,
@@ -1799,6 +1800,8 @@ impl Default for ExecutionTestBuilder {
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
+            canister_snapshot_data_baseline_instructions: scheduler_config
+                .canister_snapshot_data_baseline_instructions,
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cycles_account_manager_config: None,
@@ -2416,6 +2419,7 @@ impl ExecutionTestBuilder {
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
             self.canister_snapshot_baseline_instructions,
+            self.canister_snapshot_data_baseline_instructions,
         );
         let (query_stats_collector, _) =
             ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
