@@ -2561,6 +2561,7 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
+        // Windows doesn't automatically resolve localhost subdomains.
         #[cfg(windows)]
         let client = Client::builder()
             .resolve(
