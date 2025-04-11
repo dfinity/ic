@@ -8,7 +8,7 @@ use ic_btc_checker::{
     BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
     UpgradeArg as CheckerUpgradeArg,
 };
-use ic_btc_interface::{Network, Txid};
+use ic_btc_interface::Txid;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
@@ -23,7 +23,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
+    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE,
+    MIN_RESUBMISSION_DELAY,
 };
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
@@ -49,7 +50,7 @@ const SENDER_ID: PrincipalId = PrincipalId::new_user_test_id(1);
 #[allow(deprecated)]
 fn default_init_args() -> CkbtcMinterInitArgs {
     CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: Network::Regtest,
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 2000,
         ledger_id: CanisterId::from(0),
@@ -656,11 +657,15 @@ fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
 }
 
 fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
+    use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
     let cid = bitcoin_canister_id(btc_network);
     env.create_canister_with_cycles(Some(cid.into()), Cycles::new(0), None);
-
-    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&btc_network).unwrap())
-        .unwrap();
+    env.install_existing_canister(
+        cid,
+        bitcoin_mock_wasm(),
+        Encode!(&BitcoinNetwork::from(btc_network)).unwrap(),
+    )
+    .unwrap();
 }
 
 struct CkBtcSetup {
@@ -711,7 +716,7 @@ impl CkBtcSetup {
             minter_id,
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-                btc_network: btc_network.into(),
+                btc_network,
                 retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,

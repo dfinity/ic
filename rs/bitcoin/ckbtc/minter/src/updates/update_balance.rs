@@ -2,9 +2,10 @@ use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
 use crate::state::{mutate_state, read_state, SuspendedReason, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
+use crate::GetUtxosResponse;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
+use ic_btc_interface::{GetUtxosError, OutPoint, Utxo};
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -243,7 +244,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     let token_name = match btc_network {
-        ic_management_canister_types_private::BitcoinNetwork::Mainnet => "ckBTC",
+        crate::Network::Mainnet => "ckBTC",
         _ => "ckTESTBTC",
     };
 

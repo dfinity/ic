@@ -20,10 +20,9 @@ use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
-use crate::{address::BitcoinAddress, ECDSAPublicKey, Timestamp};
+use crate::{address::BitcoinAddress, ECDSAPublicKey, Network, Timestamp};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
-pub use ic_btc_interface::Network;
 use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_canister_log::log;
 use ic_utils_ensure::ensure_eq;
@@ -435,7 +434,7 @@ impl CkBtcMinterState {
             kyt_fee,
         }: InitArgs,
     ) {
-        self.btc_network = btc_network.into();
+        self.btc_network = btc_network;
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
@@ -1460,7 +1459,7 @@ impl From<InitArgs> for CkBtcMinterState {
     #[allow(deprecated)]
     fn from(args: InitArgs) -> Self {
         Self {
-            btc_network: args.btc_network.into(),
+            btc_network: args.btc_network,
             ecdsa_key_name: args.ecdsa_key_name,
             ecdsa_public_key: None,
             min_confirmations: args

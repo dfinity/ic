@@ -1,9 +1,9 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_btc_interface::Network;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::Mode;
+use ic_ckbtc_minter::Network;
 use ic_test_utilities_load_wasm::load_wasm;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 
@@ -45,7 +45,7 @@ impl Setup {
         env.add_cycles(minter_id, 100_000_000_000_000);
 
         let init_args = Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-            btc_network: btc_network.into(),
+            btc_network,
             retrieve_btc_min_amount: 100_000,
             ledger_id: CanisterId::try_from(PrincipalId::from(ledger_id)).unwrap(),
             max_time_in_queue_nanos: 100,
@@ -82,7 +82,7 @@ fn minter_wasm() -> Vec<u8> {
 #[allow(deprecated)]
 fn default_init_args() -> CkbtcMinterInitArgs {
     CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: Network::Regtest,
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 2000,
         ledger_id: CanisterId::from(0),

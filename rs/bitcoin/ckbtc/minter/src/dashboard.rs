@@ -1,7 +1,8 @@
 use crate::address;
 use crate::state;
 use crate::tx::DisplayAmount;
-use ic_btc_interface::{Network, Txid};
+use crate::Network;
+use ic_btc_interface::Txid;
 use icrc_ledger_types::icrc1::account::Account;
 use state::CkBtcMinterState;
 use std::io::Write;

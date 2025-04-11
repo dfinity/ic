@@ -396,7 +396,7 @@ pub async fn install_minter(
     info!(&logger, "Installing minter ...");
     #[allow(deprecated)]
     let args = CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: ic_ckbtc_minter::Network::Regtest,
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
