@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry, mutations::node_management::common::get_key_family_iter};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -10,7 +10,6 @@ use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use serde::{Deserialize, Serialize};
 
 use ic_protobuf::registry::node::v1::NodeRecord;
-use prost::Message;
 
 impl Registry {
     /// Remove node operators
@@ -54,16 +53,10 @@ impl Registry {
             return;
         }
 
-        for (key, values) in self.store.iter() {
-            if key.starts_with(NODE_RECORD_KEY_PREFIX.as_bytes()) {
-                if let Some(value) = values.back().map(|v| v.value.clone()) {
-                    if let Ok(node_record) = NodeRecord::decode(value.as_slice()) {
-                        node_operators.retain(|node_operator| {
-                            node_operator.to_vec() != node_record.node_operator_id
-                        })
-                    }
-                }
-            }
+        for (_id, node_record) in get_key_family_iter::<NodeRecord>(self, NODE_RECORD_KEY_PREFIX) {
+            node_operators.retain(|node_operator| {
+                node_operator.to_vec() != node_record.node_operator_id
+            })
         }
     }
 }

@@ -41,6 +41,29 @@ thread_local! {
     });
 }
 
+pub(crate) trait CompositeMutation {
+    fn into_high_capacity(self) -> HighCapacityRegistryAtomicMutateRequest;
+}
+
+impl CompositeMutation for HighCapacityRegistryAtomicMutateRequest {
+    /// Ofc, this implementation is trivial!
+    fn into_high_capacity(self) -> HighCapacityRegistryAtomicMutateRequest {
+        self
+    }
+}
+
+impl CompositeMutation for RegistryAtomicMutateRequest {
+    /// Unlike for HighCapacity, this impl is highly non-trivial. In particular,
+    /// it might end up adding data to CHUNKS.
+    fn into_high_capacity(self) -> HighCapacityRegistryAtomicMutateRequest {
+        if is_chunkifying_large_values_enabled() {
+            return maybe_chunkify(self);
+        }
+
+        HighCapacityRegistryAtomicMutateRequest::from(self)
+    }
+}
+
 pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
     UPGRADES_MEMORY.with(|um| {
         let upgrades_memory = &um.borrow();
@@ -53,29 +76,6 @@ pub(crate) fn with_chunks<R>(f: impl FnOnce(&Chunks<VM>) -> R) -> R {
         let chunks = chunks.borrow();
         f(&chunks)
     })
-}
-
-/// Encodes the argument.
-///
-/// If the input is too large, this "chunkifies" it. That is, instead of
-/// inlining value, it is replaced with a LargeValueChunkKeys, which points to
-/// pieces of the original value, and each piece can be fetched via the
-/// `get_chunk` canister method.
-///
-/// Possible panic reasons include: input is hyper too large. See
-/// MAX_CHUNKABLE_ATOMIC_MUTATION_LEN.
-pub(crate) fn maybe_chunkify_and_encode(original_mutation: RegistryAtomicMutateRequest) -> Vec<u8> {
-    if !is_chunkifying_large_values_enabled() {
-        return original_mutation.encode_to_vec();
-    }
-    // In release builds, code bellow this line is not active. Instead, only the
-    // old behavior (implemented above) takes place.
-
-    let upgraded_mutation = maybe_chunkify(original_mutation);
-
-    // TODO(Nikola.Milosavljevic@dfinity.org): Populate timestamp_seconds field.
-
-    upgraded_mutation.encode_to_vec()
 }
 
 fn maybe_chunkify(
