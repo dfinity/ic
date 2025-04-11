@@ -2069,7 +2069,9 @@ impl CanisterManager {
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
-            self.config.canister_snapshot_data_baseline_instructions,
+            self.config
+                .canister_snapshot_data_baseline_instructions
+                .saturating_add(size),
             subnet_size,
             // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee
