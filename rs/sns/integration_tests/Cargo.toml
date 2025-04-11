@@ -56,7 +56,6 @@ assert_matches = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
