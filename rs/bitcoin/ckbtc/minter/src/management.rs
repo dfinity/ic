@@ -201,7 +201,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request.into())
+    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request)
         .await
         .map(|(response,)| response.into())
         .map_err(|err| CallError::from_cdk_error("bitcoin_get_utxos", err))
