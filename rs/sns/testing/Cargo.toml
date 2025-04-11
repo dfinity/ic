@@ -7,8 +7,12 @@ documentation.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "sns"
-path = "src/main.rs"
+name = "sns-testing-init"
+path = "src/bin/init.rs"
+
+[[bin]]
+name = "sns-testing"
+path = "src/bin/main.rs"
 
 
 [[bin]]
@@ -25,6 +29,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 clap = { workspace = true }
 dfx-core ={ workspace = true }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
@@ -53,6 +58,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+rust_decimal = "1.36.0"
 slog ={ workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
