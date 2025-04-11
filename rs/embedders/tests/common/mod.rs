@@ -5,6 +5,10 @@ use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasmtime_embedder::system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
+    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
+};
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::IC_00;
@@ -14,10 +18,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallOrigin, Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, SubnetTopology,
     SystemState,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
 };
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{
