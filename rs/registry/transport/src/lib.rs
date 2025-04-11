@@ -1,6 +1,8 @@
 // Include the prost-build generated registry protos.
 pub mod pb;
 
+mod high_capacity;
+
 use std::{fmt, str};
 
 use crate::pb::v1::{
