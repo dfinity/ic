@@ -1365,44 +1365,6 @@ pub enum HeapGrowthPotential {
     LimitedAvailability,
 }
 
-/// A single ongoing update for a single neuron.
-/// Releases the lock when destroyed.
-struct LedgerUpdateLock {
-    nid: u64,
-    gov: *mut Governance,
-    // Retain this lock even on drop.
-    retain: bool,
-}
-
-impl Drop for LedgerUpdateLock {
-    fn drop(&mut self) {
-        if self.retain {
-            return;
-        }
-        // In the case of a panic, the state of the ledger account representing the neuron's stake
-        // may be inconsistent with the internal state of governance.  In that case,
-        // we want to prevent further operations with that neuron until the issue can be
-        // investigated and resolved, which will require code changes.
-        if ic_cdk::api::call::is_recovering_from_trap() {
-            return;
-        }
-        // It's always ok to dereference the governance when a LedgerUpdateLock
-        // goes out of scope. Indeed, in the scope of any Governance method,
-        // &self always remains alive. The 'mut' is not an issue, because
-        // 'unlock_neuron' will verify that the lock exists.
-        //
-        // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
-        let gov: &mut Governance = unsafe { &mut *self.gov };
-        gov.unlock_neuron(self.nid);
-    }
-}
-
-impl LedgerUpdateLock {
-    fn retain(&mut self) {
-        self.retain = true;
-    }
-}
-
 struct NeuronRateLimits {
     /// The number of neurons that can be created.
     available_allowances: u64,
@@ -1866,74 +1828,6 @@ impl Governance {
         f: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         Ok(self.neuron_store.with_neuron_mut(neuron_id, f)?)
-    }
-
-    /// Locks a given neuron for a specific, signaling there is an ongoing
-    /// ledger update.
-    ///
-    /// This stores the in-flight operation in the proto so that, if anything
-    /// goes wrong we can:
-    ///
-    /// 1 - Know what was happening.
-    /// 2 - Reconcile the state post-upgrade, if necessary.
-    ///
-    /// No concurrent updates to this neuron's state are possible
-    /// until the lock is released.
-    ///
-    /// ***** IMPORTANT *****
-    /// The return value MUST be allocated to a variable with a name that is NOT
-    /// "_" !
-    ///
-    /// The LedgerUpdateLock must remain alive for the entire duration of the
-    /// ledger call. Quoting
-    /// https://doc.rust-lang.org/book/ch18-03-pattern-syntax.html#ignoring-an-unused-variable-by-starting-its-name-with-_
-    ///
-    /// > Note that there is a subtle difference between using only _ and using
-    /// > a name that starts with an underscore. The syntax _x still binds
-    /// > the value to the variable, whereas _ doesn’t bind at all.
-    ///
-    /// What this means is that the expression
-    /// ```text
-    /// let _ = lock_neuron_for_command(...);
-    /// ```
-    /// is useless, because the
-    /// LedgerUpdateLock is a temporary object. It is constructed (and the lock
-    /// is acquired), the immediately dropped (and the lock is released).
-    ///
-    /// However, the expression
-    /// ```text
-    /// let _my_lock = lock_neuron_for_command(...);
-    /// ```
-    /// will retain the lock for the entire scope.
-    fn lock_neuron_for_command(
-        &mut self,
-        id: u64,
-        command: NeuronInFlightCommand,
-    ) -> Result<LedgerUpdateLock, GovernanceError> {
-        if self.heap_data.in_flight_commands.contains_key(&id) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::LedgerUpdateOngoing,
-                "Neuron has an ongoing ledger update.",
-            ));
-        }
-
-        self.heap_data.in_flight_commands.insert(id, command);
-
-        Ok(LedgerUpdateLock {
-            nid: id,
-            gov: self,
-            retain: false,
-        })
-    }
-
-    /// Unlocks a given neuron.
-    fn unlock_neuron(&mut self, id: u64) {
-        if self.heap_data.in_flight_commands.remove(&id).is_none() {
-            println!(
-                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                id
-            );
-        }
     }
 
     /// Updates a neuron in the list of neurons.

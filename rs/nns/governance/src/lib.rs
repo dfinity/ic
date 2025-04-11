@@ -167,6 +167,7 @@ mod maturity_disbursement_index;
 mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
+mod neuron_lock;
 mod neuron_store;
 pub mod neurons_fund;
 mod node_provider_rewards;
