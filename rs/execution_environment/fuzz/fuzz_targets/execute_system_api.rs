@@ -12,11 +12,17 @@ thread_local! {
     static ENV_64: RefCell<(ExecutionTest, CanisterId)> = RefCell::new(setup_env(true));
 }
 
-const HELLO_WORLD_WAT: &str = r#"
-(module
-    (func $hi)
-    (export "canister_query hi" (func $hi))
-)"#;
+// r#"
+// (module
+//     (func $hi)
+//     (export "canister_query hi" (func $hi))
+// )"#;
+const HELLO_WORLD_WAT: [u8; 61] = [
+    0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03, 0x02,
+    0x01, 0x00, 0x07, 0x15, 0x01, 0x11, 0x63, 0x61, 0x6E, 0x69, 0x73, 0x74, 0x65, 0x72, 0x5F, 0x71,
+    0x75, 0x65, 0x72, 0x79, 0x20, 0x68, 0x69, 0x00, 0x00, 0x0A, 0x04, 0x01, 0x02, 0x00, 0x0B, 0x00,
+    0x0C, 0x04, 0x6E, 0x61, 0x6D, 0x65, 0x01, 0x05, 0x01, 0x00, 0x02, 0x68, 0x69,
+];
 
 // To run the fuzzer,
 // bazel run --config=sandbox_fuzzing //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call
@@ -82,8 +88,7 @@ fn setup_env(memory64_enabled: bool) -> (ExecutionTest, CanisterId) {
         )
         .unwrap();
 
-    let wasm = wat::parse_str(HELLO_WORLD_WAT).unwrap();
-    env.install_canister(canister_id, wasm)
+    env.install_canister(canister_id, HELLO_WORLD_WAT.to_vec())
         .expect("Failed to install valid wasm");
     (env, canister_id)
 }

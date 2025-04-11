@@ -55,7 +55,6 @@ SYSTEM_API_FUZZ_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:libfuzzer-sys",
-    "@crate_index//:wat",
 ]
 
 rust_fuzz_test_binary(
