@@ -57,7 +57,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<(Arc<ReplicatedState>, CheckpointLayout<ReadOnly>), CheckpointError> {
+) -> Result<(Arc<ReplicatedState>, CheckpointLayout<ReadOnly>), Box<dyn std::error::Error + Send>> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration

@@ -66,12 +66,6 @@ pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
 pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
 
-pub trait ReadProtos: ReadPolicy {}
-pub trait WriteProtos: WritePolicy {}
-
-pub trait ReadPageMaps: ReadPolicy {}
-pub trait WritePageMaps: WritePolicy {}
-
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
 pub enum ReadOnly {}
@@ -1589,17 +1583,16 @@ fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, La
     Ok(heights)
 }
 
-struct CheckpointLayoutImpl<Permissions: AccessPolicy> {
+struct CheckpointLayoutImpl {
     root: PathBuf,
     height: Height,
     // The StateLayout is used to make sure we never remove the CheckpointLayout when still in use.
     // Is not None for CheckpointLayout pointing to "real" checkpoints, that is checkpoints in
     // StateLayout's root/checkpoints/..., that are tracked by StateLayout
     state_layout: Option<StateLayout>,
-    permissions_tag: PhantomData<Permissions>,
 }
 
-impl<Permissions: AccessPolicy> Drop for CheckpointLayoutImpl<Permissions> {
+impl Drop for CheckpointLayoutImpl {
     fn drop(&mut self) {
         if let Some(state_layout) = &self.state_layout {
             state_layout.remove_checkpoint_ref(self.height)
@@ -1607,24 +1600,21 @@ impl<Permissions: AccessPolicy> Drop for CheckpointLayoutImpl<Permissions> {
     }
 }
 
-pub struct CheckpointLayout<Permissions: AccessPolicy>(Arc<CheckpointLayoutImpl<Permissions>>);
+pub struct CheckpointLayout<Permissions: AccessPolicy>(
+    Arc<CheckpointLayoutImpl>,
+    PhantomData<Permissions>,
+);
 
 impl<Permissions: AccessPolicy> Clone for CheckpointLayout<Permissions> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        CheckpointLayout(self.0.clone(), PhantomData)
     }
 }
 
 impl<Permissions: ReadPolicy> CheckpointLayout<Permissions> {
     /// Clone CheckpointLayout removing all access but ReadOnly.
-    /// Takes more time than regular clone due to the clone of StateLayout.
     pub fn as_readonly(&self) -> CheckpointLayout<ReadOnly> {
-        CheckpointLayout(Arc::new(CheckpointLayoutImpl::<ReadOnly> {
-            root: self.0.root.clone(),
-            height: self.0.height,
-            state_layout: self.0.state_layout.clone(),
-            permissions_tag: PhantomData,
-        }))
+        CheckpointLayout(Arc::clone(&self.0), PhantomData)
     }
 }
 
@@ -1646,22 +1636,26 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         state_layout: StateLayout,
     ) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
-        Ok(Self(Arc::new(CheckpointLayoutImpl::<Permissions> {
-            root,
-            height,
-            state_layout: Some(state_layout),
-            permissions_tag: PhantomData,
-        })))
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: Some(state_layout),
+            }),
+            PhantomData,
+        ))
     }
 
     pub fn new_untracked(root: PathBuf, height: Height) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
-        Ok(Self(Arc::new(CheckpointLayoutImpl::<Permissions> {
-            root,
-            height,
-            state_layout: None,
-            permissions_tag: PhantomData,
-        })))
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: None,
+            }),
+            PhantomData,
+        ))
     }
 
     pub fn system_metadata(&self) -> ProtoFileWith<pb_metadata::SystemMetadata, Permissions> {
