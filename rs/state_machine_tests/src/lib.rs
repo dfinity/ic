@@ -3262,7 +3262,7 @@ impl StateMachine {
         let sender = state
             .canister_state(&args.get_canister_id())
             .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+            .unwrap();
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
