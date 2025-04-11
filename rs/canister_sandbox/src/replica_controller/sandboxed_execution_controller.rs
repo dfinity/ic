@@ -2530,9 +2530,9 @@ mod tests {
             sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
         add_controller_backends(&mut controller, 0, active, 0, 0);
 
-        // Trigger the monitoring and wait for the monitoring results.
-        let _ = controller.stop_monitoring_thread.send(false);
-        for _ in 0..10_000 {
+        for _ in 0..1_000 {
+            // Trigger the monitoring and wait for the monitoring results.
+            controller.stop_monitoring_thread.send(false).unwrap();
             let stats = get_sandbox_process_stats(&controller.backends);
             if stats[0].2.rss != DEFAULT_SANDBOX_PROCESS_RSS {
                 break;
@@ -2573,12 +2573,14 @@ mod tests {
 
         add_controller_backends(&mut controller, 0, active, evicted, 0);
 
-        // Trigger the monitoring twice and wait for the monitoring results.
-        let _ = controller.stop_monitoring_thread.send(false);
-        let _ = controller.stop_monitoring_thread.send(false);
-        for _ in 0..10_000 {
+        for _ in 0..1_000 {
+            // Trigger the monitoring and wait for the monitoring results.
+            controller.stop_monitoring_thread.send(false).unwrap();
             let m = &controller.metrics;
-            if m.sandboxed_execution_subprocess_anon_rss.get_sample_count() > 1 {
+            if m.sandboxed_execution_subprocess_active_last_used
+                .get_sample_count()
+                > 0
+            {
                 break;
             }
             thread::sleep(Duration::from_millis(10));
