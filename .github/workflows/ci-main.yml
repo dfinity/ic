@@ -226,7 +226,7 @@ jobs:
         run: |
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
-  pocket-ic-on-windows:
+  pocketic-on-windows:
     name: PocketIC tests on Windows
     needs: [bazel-test-all]
     # Run on protected branches, but only on public repo

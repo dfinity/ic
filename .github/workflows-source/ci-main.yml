@@ -51,8 +51,6 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
-  windows-setup: &windows-setup
-    runs-on: windows-2022
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -63,6 +61,14 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
+  pocketic-windows-trigger: &pocketic-windows-trigger
+    # Run on protected branches, but only on public repo
+    # Allow running if CI_ALL_BAZEL_TARGETS label is used
+    if: |
+      (github.ref_protected && github.repository == 'dfinity/ic') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS'))
+  windows-setup: &windows-setup
+    runs-on: windows-2022
 
 jobs:
   config:
@@ -209,19 +215,11 @@ jobs:
 
       - name: Compute PocketIC server path
         id: pocket-ic-server-path
-        # Run on protected branches, but only on public repo
-        # Allow running if CI_ALL_BAZEL_TARGETS label is used
-        if: |
-          (github.ref_protected && github.repository == 'dfinity/ic') ||
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS'))
+        <<: *pocketic-windows-trigger
         run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_OUTPUT
       - name: Upload PocketIC server
         uses: actions/upload-artifact@v4
-        # Run on protected branches, but only on public repo
-        # Allow running if CI_ALL_BAZEL_TARGETS label is used
-        if: |
-          (github.ref_protected && github.repository == 'dfinity/ic') ||
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS'))
+        <<: *pocketic-windows-trigger
         with:
           name: pocket-ic-server
           path: ${{ steps.pocket-ic-server-path.outputs.pocket_ic_server_path }}
@@ -260,14 +258,10 @@ jobs:
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
 
-  pocket-ic-on-windows:
+  pocketic-on-windows:
     name: PocketIC tests on Windows
     needs: [bazel-test-all]
-    # Run on protected branches, but only on public repo
-    # Allow running if CI_ALL_BAZEL_TARGETS label is used
-    if: |
-      (github.ref_protected && github.repository == 'dfinity/ic') ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS'))
+    <<: *pocketic-windows-trigger
     <<: *windows-setup
     steps:
       - <<: *checkout
