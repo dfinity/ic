@@ -1145,6 +1145,17 @@ impl Neuron {
         self.maturity_disbursements_in_progress
             .push(maturity_disbursement);
     }
+
+    /// Pops the first maturity disbursement in progress.
+    #[cfg(test)]
+    pub fn pop_maturity_disbursement_in_progress(&mut self) -> Option<MaturityDisbursement> {
+        if self.maturity_disbursements_in_progress.is_empty() {
+            None
+        } else {
+            // This is safe because we know that the vector is not empty.
+            Some(self.maturity_disbursements_in_progress.remove(0))
+        }
+    }
 }
 
 impl From<Neuron> for NeuronProto {
