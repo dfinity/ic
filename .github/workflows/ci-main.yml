@@ -357,12 +357,13 @@ jobs:
           rm "$sponge"
 
           # join the CSVs (separator ',') and compare the hashes. This creates a table with the following columns:
-          # the join field (0, the artifact name specified as the 2nd argument of both file 1 & 2 by -12 and -22)
-          # the target label (1.2), and the hashes for both files (1.3 & 2.3).
+          #   //rs/foo,bazel-out/path/to-artifact,deadbeef,deafb33f
+          # target label (1.1), artifact path (1.2), and hashes (1.3 & 2.3). The join is done
+          # on the artifact path, second field on input one (-1) and input two (-2) :'-12 -22'
           # The output is then compared with awk, printing mismatches, and keeping track of how many mismatches we
           # encountered.
           join \
-            -t, -o 0,1.2,1.3,2.3 -12 -22 \
+            -t, -o 1.1,1.2,1.3,2.3 -12 -22 \
             shasums-cache/execlogs.csv \
             shasums-nocache/execlogs.csv \
             | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
