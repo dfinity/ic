@@ -1,22 +1,80 @@
-use ic_cdk::{init, post_upgrade, pre_upgrade, query};
-use node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
+#[cfg(any(feature = "test", test))]
+use ic_cdk::query;
+use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
+use ic_nervous_system_canisters::registry::RegistryCanister;
+use ic_node_rewards_canister::canister::NodeRewardsCanister;
+use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
+use ic_registry_canister_client::CanisterRegistryClient;
+use ic_registry_canister_client::StableCanisterRegistryClient;
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::time::Duration;
 
-fn main() {
-    println!("Hello, world!");
+fn main() {}
+
+thread_local! {
+    static REGISTRY_STORE: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
+        let store = StableCanisterRegistryClient::<RegistryStoreStableMemoryBorrower>::new(
+            Arc::new(RegistryCanister::new()));
+        Arc::new(store)
+    };
+    static CANISTER: RefCell<NodeRewardsCanister> = {
+        RefCell::new(NodeRewardsCanister::new(REGISTRY_STORE.with(|store| {
+            store.clone()
+        })))
+    };
 }
 
 #[init]
-fn canister_init(_args: InitArgs) {}
+fn canister_init() {
+    schedule_timers();
+}
 
 #[pre_upgrade]
 fn pre_upgrade() {}
 
 #[post_upgrade]
-fn post_upgrade(_args: Option<UpgradeArgs>) {}
+fn post_upgrade() {
+    schedule_timers();
+}
 
+fn schedule_timers() {
+    schedule_registry_sync();
+}
+
+// The frquency of regular registry syncs.  This is set to 1 hour to avoid
+// making too many requests.  Before meaningful calculations are made, however, the
+// registry data should be updated.
+const REGISTRY_SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
+
+fn schedule_registry_sync() {
+    ic_cdk_timers::set_timer_interval(REGISTRY_SYNC_INTERVAL_SECONDS, move || {
+        spawn(async move {
+            let store = REGISTRY_STORE.with(|s| s.clone());
+            // panicking here is okay because we are using an interval instead of a timer that
+            // has to reschedule itself.
+            store
+                .sync_registry_stored()
+                .await
+                .expect("Could not sync registry store!");
+        });
+    });
+}
+
+#[cfg(any(feature = "test", test))]
 #[query(hidden = true)]
-fn hello() -> String {
-    "Hello, world!".to_string()
+fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
+    CANISTER.with(|canister| canister.borrow().get_registry_value(key))
+}
+
+#[update]
+async fn get_node_providers_monthly_xdr_rewards(
+    request: GetNodeProvidersMonthlyXdrRewardsRequest,
+) -> GetNodeProvidersMonthlyXdrRewardsResponse {
+    NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request).await
 }
 
 #[cfg(test)]

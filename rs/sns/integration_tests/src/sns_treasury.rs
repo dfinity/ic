@@ -13,7 +13,10 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
@@ -128,7 +131,7 @@ fn new_treasury_scenario(
         .unwrap();
     state_machine.set_time(start_time);
 
-    let first_sns_canister_id = 11;
+    let first_sns_canister_id = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 1;
     let governance = CanisterId::from(first_sns_canister_id + 1);
 
     let sns_treasury_account_nns = Account {

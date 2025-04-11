@@ -10,6 +10,11 @@ type GetUtxosResponse = record {
   tip_block_hash : vec nat8;
   utxos : vec Utxo;
 };
+type Network = variant {
+  mainnet;
+  regtest;
+  testnet;
+};
 type NetworkInRequest = variant {
   Mainnet;
   mainnet;
@@ -22,7 +27,7 @@ type OutPoint = record { txid : vec nat8; vout : nat32 };
 type PushUtxoToAddress = record { utxo : Utxo; address : text };
 type SendTransactionRequest = record {
   transaction : vec nat8;
-  network : NetworkInRequest;
+  network : Network;
 };
 type Utxo = record { height : nat32; value : nat64; outpoint : OutPoint };
 type UtxosFilterInRequest = variant {
@@ -31,7 +36,7 @@ type UtxosFilterInRequest = variant {
   min_confirmations : nat32;
   MinConfirmations : nat32;
 };
-service : (network: NetworkInRequest) -> {
+service : (network: Network) -> {
   bitcoin_get_current_fee_percentiles : (GetCurrentFeePercentilesRequest) -> (
       vec nat64,
     );

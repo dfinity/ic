@@ -17,6 +17,7 @@ use crate::Memory;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     BoundedAllowedViewers, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     CanisterLogRecord, LogVisibilityV2,

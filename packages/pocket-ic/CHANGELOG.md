@@ -7,12 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIc::auto_progress_enabled` to determine whether the automatic progress was enabled for the PocketIC instance.
+- The struct `PocketIcState` encapsulating the state of a PocketIC instance persisted in a temporary directory (`PocketIcState::new`)
+  or in a directory on disk (`PocketIcState::new_from_path`).
+  A temporary directory is managed by `PocketIcState` (i.e., it is deleted automatically when `PocketIcState` is dropped)
+  unless consumed into a `PathBuf` using `PocketIcState::into_path`.
+  The directory on disk used in `PocketIcState::new_from_path` is persisted after `PocketIcState` is dropped.
+- The function `PocketIcBuilder::with_read_only_state` to specify a state from which the PocketIC instance is initialized.
+  The provided state is not modified (i.e., it is read-only).
+- The function `PocketIcBuilder::with_state` to specify a state from which the PocketIC instance is initialized
+  and in which changes to the PocketIC instance are persisted.
+  This state must be empty if `PocketIcBuilder::with_read_only_state` is used.
+- The function `PocketIc::drop_and_take_state` to drop a PocketIC instance and get its final state if the instance was created
+  using `PocketIcBuilder::with_state` or `PocketIcBuilder::with_state_dir`.
+
 ### Removed
 - The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.
+- The subnet ID from the functions `SubnetSpec::with_state_dir`, `PocketIcBuilder::with_nns_state`, and `PocketIcBuilder::with_subnet_state`;
+  the subnet ID from the type `SubnetStateConfig`; and the functions `SubnetSpec::get_subnet_id` and `SubnetStateConfig::get_subnet_id`.
 
 ### Changed
-
 - The functions `PocketIcBuilder::with_nns_subnet`, `PocketIcBuilder::with_sns_subnet`, `PocketIcBuilder::with_ii_subnet`, `PocketIcBuilder::with_fiduciary_subnet`, and `PocketIcBuilder::with_bitcoin_subnet` do not add a new empty subnet if a subnet of the corresponding kind has already been specified (e.g., with state loaded from a given state directory).
+- The function `PocketIc::make_live_with_params` takes an optional IP address to which the HTTP gateway should bind.
 
 
 

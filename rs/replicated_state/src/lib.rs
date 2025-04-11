@@ -73,8 +73,8 @@ pub use canister_state::{
         memory_usage_of_request, CallContext, CallContextAction, CallContextManager, CallOrigin,
         CanisterMetrics, CanisterStatus, ExecutionTask, SystemState,
     },
-    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, Global,
-    NumWasmPages, SchedulerState,
+    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
+    SchedulerState,
 };
 pub use metadata_state::{
     IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,

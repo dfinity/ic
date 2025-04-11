@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use candid::Principal;
 use colored::{ColoredString, Colorize};
 use ic_nervous_system_agent::{
@@ -14,6 +12,7 @@ use ic_nns_governance_api::pb::v1::{
 use ic_sns_swap::pb::v1::sns_neuron_recipe::Investor;
 use rgb::RGB8;
 use rust_decimal::{prelude::FromPrimitive, Decimal};
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -157,8 +156,8 @@ pub async fn validate_sns_swap<C: CallCanisters>(
         .unwrap()
         .into_iter()
         .filter_map(|recipe| {
-            if let Some(Investor::CommunityFund(ref investment)) = recipe.investor {
-                let controller = investment.try_get_controller().unwrap();
+            if let Some(Investor::CommunityFund(investment)) = recipe.investor {
+                let controller = investment.controller.unwrap();
                 let amount_sns_e8s = recipe.sns.unwrap().amount_e8s;
                 Some((controller, amount_sns_e8s))
             } else {

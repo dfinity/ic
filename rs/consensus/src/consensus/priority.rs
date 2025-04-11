@@ -1,6 +1,8 @@
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::ConsensusPool;
-use ic_interfaces::p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*};
+use ic_interfaces::{
+    consensus_pool::ConsensusPool,
+    p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*},
+};
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
 /// Return a bouncer function that matches the given consensus pool.

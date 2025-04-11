@@ -325,7 +325,7 @@ fn canister_info(
             CanisterId::ic_00(),
             "canister_info",
             call_args().other_side(Encode!(&CanisterIdRecord::from(target)).unwrap()),
-            0_u128.into(),
+            0_u128,
         )
         .build();
 
@@ -801,7 +801,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     let assert_canister_statuses_fixed = |test_phase| {
         assert_eq!(
             btreemap! {
-                btreemap! { "status".to_string() => "running".to_string() } => 11,
+                btreemap! { "status".to_string() => "running".to_string() } => 17,
                 btreemap! { "status".to_string() => "stopped".to_string() } => 0,
                 btreemap! { "status".to_string() => "stopping".to_string() } => 0,
             },
@@ -1146,7 +1146,7 @@ fn cmc_create_canister_with_cycles(
             CYCLES_MINTING_CANISTER_ID,
             "create_canister",
             call_args().other_side(create_args),
-            cycles.into(),
+            cycles,
         )
         .build();
 

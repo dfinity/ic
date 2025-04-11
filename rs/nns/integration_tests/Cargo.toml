@@ -45,6 +45,7 @@ ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-limits = { path = "../../limits" }
+ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
@@ -118,4 +119,5 @@ xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }
+ic-registry-canister-api = { path = "../../registry/canister/api" }
 pretty_assertions = { workspace = true }

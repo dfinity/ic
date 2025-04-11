@@ -149,7 +149,7 @@ mod tests {
             request: RequestBuilder::new().build(),
             args,
             pseudo_random_id: [id as u8; 32],
-            derivation_path: vec![],
+            derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
             matched_pre_signature: matched_pre_signature.map(|(id, h)| (PreSigId(id), h)),
             nonce: None,

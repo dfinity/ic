@@ -105,13 +105,6 @@ fn test_all_topics() {
                 ProposalCriticality::Normal,
             )),
         ),
-        (
-            pb::proposal::Action::SetTopicsForCustomProposals(Default::default()),
-            Ok((
-                Some(pb::Topic::SnsFrameworkManagement),
-                ProposalCriticality::Normal,
-            )),
-        ),
         // DappCanisterManagement
         (
             pb::proposal::Action::UpgradeSnsControlledCanister(Default::default()),
@@ -173,6 +166,13 @@ fn test_all_topics() {
         ),
         (
             pb::proposal::Action::RemoveGenericNervousSystemFunction(Default::default()),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
+        ),
+        (
+            pb::proposal::Action::SetTopicsForCustomProposals(Default::default()),
             Ok((
                 Some(pb::Topic::CriticalDappOperations),
                 ProposalCriticality::Critical,

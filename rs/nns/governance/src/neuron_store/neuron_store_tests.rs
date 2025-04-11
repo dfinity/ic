@@ -284,9 +284,8 @@ fn test_neuron_store_new_then_restore() {
     );
 
     // Step 3: take its state and restore from it.
-    let (heap_neurons, heap_topic_followee_index) = neuron_store.take();
-    let restored_neuron_store =
-        NeuronStore::new_restored((heap_neurons, heap_topic_followee_index));
+    let heap_neurons = neuron_store.take();
+    let restored_neuron_store = NeuronStore::new_restored(heap_neurons);
 
     // Step 4: verify again the neurons and followee index are in the restored neuron store.
     for neuron in neurons.values() {

@@ -8,7 +8,7 @@
 //! 2. We add a test that uses:
 //!
 //!    a. the binary from the commit that matches the latest mainnet versions, as
-//!    defined in mainnet-subnet-revisions.json, (the binary is downloaded from S3)
+//!    defined in mainnet-icos-revisions.json, (the binary is downloaded from S3)
 //!
 //!    b. the binary from the current commit
 //!

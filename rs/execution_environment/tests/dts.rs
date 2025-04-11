@@ -325,13 +325,7 @@ const NORMAL_INGRESS_COST: u128 = 1_224_000;
 const MAX_EXECUTION_COST: u128 = 6_000_000;
 
 fn actual_execution_cost() -> Cycles {
-    match EmbeddersConfig::new()
-        .feature_flags
-        .wasm_native_stable_memory
-    {
-        FlagStatus::Enabled => Cycles::new(5_985_224),
-        FlagStatus::Disabled => Cycles::new(5_685_230),
-    }
+    Cycles::new(5_985_224)
 }
 
 #[test]
@@ -380,6 +374,10 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         .encode(),
     )
     .unwrap();
+
+    // Trigger a checkpoint so that the full execution cost is
+    // applied to the subsequent call to `install_code`.
+    env.checkpointed_tick();
 
     let install_code_ingress_id = env.send_ingress(
         PrincipalId::new_anonymous(),
@@ -1029,7 +1027,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .on_reply(wasm().reply_data(&[43]));
 
         let subnet_message = wasm()
-            .call_with_cycles(IC_00, method, args, 100_000_000_000_u128.into())
+            .call_with_cycles(IC_00, method, args, 100_000_000_000_u128)
             .build();
 
         let subnet_message_id =
@@ -1221,14 +1219,17 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 (method, call_args().other_side(args))
             }),
             Method::ReadCanisterSnapshotMetadata => test_supported(|aborted_canister_id| {
-                let args =
-                    ReadCanisterSnapshotMetadataArgs::new(aborted_canister_id, vec![]).encode();
+                let args = ReadCanisterSnapshotMetadataArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                )
+                .encode();
                 (method, call_args().other_side(args))
             }),
             Method::ReadCanisterSnapshotData => test_supported(|aborted_canister_id| {
                 let args = ReadCanisterSnapshotDataArgs::new(
                     aborted_canister_id,
-                    vec![],
+                    (aborted_canister_id, 0).into(),
                     CanisterSnapshotDataKind::WasmModule { size: 0, offset: 0 },
                 )
                 .encode();
@@ -1308,7 +1309,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
                 .other_side(args)
                 .on_reject(wasm().reject_message().reject())
                 .on_reply(wasm().reply_data(&[43])),
-            1_u128.into(),
+            1_u128,
         )
         .build();
 
@@ -3033,4 +3034,195 @@ fn yield_for_dirty_pages_copy_works_for_many_canisters() {
 
     // Only the first message per scheduler core must be completed after two rounds.
     assert_eq!(num_completed(), scheduler_cores);
+}
+
+#[test]
+fn heavy_install_code_prevents_another_install_code_to_start_in_the_same_round() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two install code messages to the same canister.
+    for _ in 0..2 {
+        let canister_init = wasm()
+            // The instruction limit for subnet messages is 7 billion / 16 = ~438M
+            .instruction_counter_is_at_least(2_438_000_000)
+            .build();
+        payload = payload.ingress(
+            PrincipalId::new_anonymous(),
+            CanisterId::ic_00(),
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Reinstall,
+                canister_id,
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                canister_init,
+                None,
+                None,
+            )
+            .encode(),
+        );
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+const WRITE_MORE_THAN_1G_ON_INIT_WAT: &str = r#"
+(module
+    (func (export "canister_init")
+        (local $i i32)
+        (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+        (loop $loop
+            (i32.store (local.get $i) (i32.const 1))
+            (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+        )
+    )
+    (memory 16385) ;; 1GiB + 65536
+)"#;
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn yield_for_dirty_pages_copy_works_for_install_code() {
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_ON_INIT_WAT).unwrap();
+    let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    // Send two install code messages to the same canister.
+    for _ in 0..2 {
+        payload = payload.ingress(
+            PrincipalId::new_anonymous(),
+            CanisterId::ic_00(),
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Reinstall,
+                canister_id,
+                wasm.clone(),
+                vec![],
+                None,
+                None,
+            )
+            .encode(),
+        );
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    // Neither of messages should be completed after the first round.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Processing)
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[0])),
+        Some(IngressState::Completed(_))
+    );
+    assert_matches!(
+        ingress_state(env.ingress_status(&message_ids[1])),
+        Some(IngressState::Received)
+    );
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
+    let scheduler_cores = 4;
+    let num_canisters = scheduler_cores;
+    let num_messages = 2;
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(WRITE_MORE_THAN_1G_ON_INIT_WAT).unwrap();
+    let mut canister_ids = vec![];
+    let mut payload = ic_state_machine_tests::PayloadBuilder::new().with_nonce(0);
+    for _ in 0..num_canisters {
+        let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+        canister_ids.push(canister_id);
+
+        for _ in 0..num_messages {
+            payload = payload.ingress(
+                PrincipalId::new_anonymous(),
+                CanisterId::ic_00(),
+                Method::InstallCode,
+                InstallCodeArgs::new(
+                    CanisterInstallMode::Reinstall,
+                    canister_id,
+                    wasm.clone(),
+                    vec![],
+                    None,
+                    None,
+                )
+                .encode(),
+            );
+        }
+    }
+    let message_ids = payload.ingress_ids();
+    env.execute_payload(payload);
+
+    let num_completed = || {
+        message_ids
+            .iter()
+            .filter_map(|id| match ingress_state(env.ingress_status(id)) {
+                Some(IngressState::Completed(_)) => Some(()),
+                Some(IngressState::Received) | Some(IngressState::Processing) => None,
+                _ => panic!("Unexpected ingress state"),
+            })
+            .count()
+    };
+
+    // Neither of messages should be completed after the first round.
+    assert_eq!(num_completed(), 0);
+
+    env.tick();
+
+    // Only the first message must be completed after two rounds.
+    assert_eq!(num_completed(), 1);
+
+    env.tick();
+
+    // Only the first message must be completed after three rounds.
+    assert_eq!(num_completed(), 1);
+
+    env.tick();
+
+    // Two heavy install code messages must be completed in four rounds.
+    assert_eq!(num_completed(), 2);
 }

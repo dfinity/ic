@@ -11,6 +11,7 @@ permanent_whitelist = [
     "//rs/consensus:__subpackages__",
     "//rs/crypto:__subpackages__",
     "//rs/cycles_account_manager:__subpackages__",
+    "//rs/embedders:__subpackages__",
     "//rs/execution_environment:__subpackages__",
     "//rs/https_outcalls:__subpackages__",
     "//rs/ingress_manager:__subpackages__",

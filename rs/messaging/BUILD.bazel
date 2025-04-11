@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_ic_test_suite")
+load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -77,9 +77,13 @@ rust_test(
     ],
 )
 
-rust_ic_test_suite(
+rust_ic_test_suite_with_extra_srcs(
     name = "messaging_integration",
-    srcs = glob(["tests/**/*.rs"]),
+    srcs = [
+        "tests/call_tree_tests.rs",
+        "tests/memory_tests.rs",
+        "tests/queue_tests.rs",
+    ],
     data = [
         "//rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister",
         "//rs/rust_canisters/random_traffic_test:random-traffic-test-canister",
@@ -90,6 +94,9 @@ rust_ic_test_suite(
         "RANDOM_TRAFFIC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/random_traffic_test:random-traffic-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
+    extra_srcs = [
+        "tests/common/mod.rs",
+    ],
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:test-strategy",

@@ -70,7 +70,7 @@ REPOS_TO_SCAN = [
             Project(
                 name="hardware-wallet-cli",
                 path="hardware-wallet-cli",
-                owner=Team.GIX_TEAM,
+                owner=Team.IDENTITY_TEAM,
             )
         ],
         DEFAULT_NODE_VERSION,

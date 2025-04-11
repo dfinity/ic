@@ -36,9 +36,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height,
 };
-use std::cell::RefCell;
-use std::sync::Arc;
-use std::time::Instant;
+use std::{cell::RefCell, sync::Arc, time::Instant};
 
 pub struct Finalizer {
     pub(crate) replica_config: ReplicaConfig,

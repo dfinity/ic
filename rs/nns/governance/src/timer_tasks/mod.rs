@@ -1,13 +1,17 @@
+use calculate_distributable_rewards::CalculateDistributableRewardsTask;
 use ic_metrics_encoder::MetricsEncoder;
-use ic_nervous_system_timer_task::{RecurringAsyncTask, TimerTaskMetricsRegistry};
+use ic_nervous_system_timer_task::{
+    RecurringAsyncTask, RecurringSyncTask, TimerTaskMetricsRegistry,
+};
+use prune_following::PruneFollowingTask;
 use seeding::SeedingTask;
 use std::cell::RefCell;
 
-use crate::canister_state::GOVERNANCE;
-use crate::timer_tasks::calculate_distributable_rewards::CalculateDistributableRewardsTask;
+use crate::{canister_state::GOVERNANCE, is_prune_following_enabled};
 
 mod calculate_distributable_rewards;
 mod distribute_rewards;
+mod prune_following;
 mod seeding;
 
 thread_local! {
@@ -17,6 +21,9 @@ thread_local! {
 pub fn schedule_tasks() {
     SeedingTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     CalculateDistributableRewardsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    if is_prune_following_enabled() {
+        PruneFollowingTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    }
     run_distribute_rewards_periodic_task();
 }
 

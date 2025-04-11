@@ -18,8 +18,6 @@ use std::array::TryFromSliceError;
 use std::ops::Neg;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-mod ro;
-
 #[cfg(feature = "js")]
 use wasm_bindgen::prelude::*;
 
@@ -29,6 +27,34 @@ lazy_static::lazy_static! {
 
 const G1AFFINE_BYTES: usize = 48; // Size of compressed form
 const G2AFFINE_BYTES: usize = 96; // Size of compressed form
+
+/// Derive a symmetric key using HKDF-SHA256
+pub fn derive_symmetric_key(input: &[u8], domain_sep: &str, len: usize) -> Vec<u8> {
+    let hk = hkdf::Hkdf::<sha2::Sha256>::new(None, input);
+    let mut okm = vec![0u8; len];
+    hk.expand(domain_sep.as_bytes(), &mut okm)
+        .expect("Unsupported output length for HKDF");
+    okm
+}
+
+fn hash_to_scalar(input: &[u8], domain_sep: &str) -> ic_bls12_381::Scalar {
+    use ic_bls12_381::hash_to_curve::HashToField;
+
+    let mut s = [ic_bls12_381::Scalar::zero()];
+    <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
+        input,
+        domain_sep.as_bytes(),
+        &mut s,
+    );
+    s[0]
+}
+
+fn prefix_with_len(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len() + 8);
+    out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+    out.extend_from_slice(bytes);
+    out
+}
 
 #[cfg_attr(feature = "js", wasm_bindgen)]
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
@@ -56,55 +82,39 @@ impl TransportSecretKey {
         public_key.to_affine().to_compressed().to_vec()
     }
 
-    /// Decrypts and verifies an encrypted key
-    ///
-    /// Returns the encoding of an elliptic curve point in BLS12-381 G1 group
-    ///
-    /// This is primarily useful for IBE; for symmetric key encryption use
-    /// decrypt_and_hash
-    pub fn decrypt(
-        &self,
-        encrypted_key_bytes: &[u8],
-        derived_public_key_bytes: &[u8],
-        input: &[u8],
-    ) -> Result<Vec<u8>, String> {
-        let encrypted_key = EncryptedKey::deserialize(encrypted_key_bytes)?;
-        let derived_public_key = DerivedPublicKey::deserialize(derived_public_key_bytes)
-            .map_err(|e| format!("failed to deserialize public key: {:?}", e))?;
-        Ok(encrypted_key
-            .decrypt_and_verify(self, derived_public_key, input)?
-            .to_compressed()
-            .to_vec())
+    /// Serialize this transport secret key to a bytestring
+    pub fn serialize(&self) -> Vec<u8> {
+        self.secret_key.to_bytes().to_vec()
     }
 
-    /// Decrypts and verifies an encrypted key, and hashes it to a symmetric key
-    ///
-    /// The output length can be arbitrary and is specified by the caller
-    ///
-    /// The `symmetric_key_associated_data` field should include information about
-    /// the protocol and cipher that this key will be used for.
-    pub fn decrypt_and_hash(
-        &self,
-        encrypted_key_bytes: &[u8],
-        derived_public_key_bytes: &[u8],
-        input: &[u8],
-        symmetric_key_bytes: usize,
-        symmetric_key_associated_data: &[u8],
-    ) -> Result<Vec<u8>, String> {
-        let key = self.decrypt(encrypted_key_bytes, derived_public_key_bytes, input)?;
+    /// Serialize this transport secret key to a bytestring
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() != 32 {
+            return Err(format!(
+                "TransportSecretKey must be exactly 32 bytes not {}",
+                bytes.len()
+            ));
+        }
 
-        let mut ro = ro::RandomOracle::new(&format!(
-            "ic-crypto-vetkd-bls12-381-create-secret-key-{}-bytes",
-            symmetric_key_bytes
-        ));
-        ro.update_bin(symmetric_key_associated_data);
-        ro.update_bin(&key);
-        let hash = ro.finalize_to_vec(symmetric_key_bytes);
+        let bytes: [u8; 32] = bytes.try_into().expect("Length already checked");
 
-        Ok(hash)
+        if let Some(s) = Scalar::from_bytes(&bytes).into_option() {
+            Ok(Self { secret_key: s })
+        } else {
+            Err("Invalid TransportSecretKey bytes".to_string())
+        }
     }
 }
 
+/// Return true iff the argument is a valid encoding of a transport public key
+pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
+    match bytes.try_into() {
+        Ok(bytes) => option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some(),
+        Err(_) => false,
+    }
+}
+
+#[cfg_attr(feature = "js", wasm_bindgen)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
 pub struct DerivedPublicKey {
@@ -145,49 +155,159 @@ impl DerivedPublicKey {
             .ok_or(DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
         Ok(Self { point: dpk })
     }
+
+    /// Perform second-stage derivation of a public key
+    ///
+    /// To create the derived public key in VetKD, a two step derivation is performed. The first step
+    /// creates a key that is specific to the canister that is making VetKD requests to the
+    /// management canister, sometimes called canister master key. The second step incorporates the
+    /// "derivation context" value provided to the `vetkd_public_key` management canister interface.
+    ///
+    /// If `vetkd_public_key` is invoked with an empty derivation context, it simply returns the
+    /// canister master key. Then the second derivation step can be done offline, using this
+    /// function. This is useful if you wish to derive multiple keys without having to interact with
+    /// the IC each time.
+    pub fn derive_sub_key(&self, context: &[u8]) -> Self {
+        if context.is_empty() {
+            return self.clone();
+        }
+
+        let dst = "ic-vetkd-bls12-381-g2-context";
+
+        let offset = hash_to_scalar(&prefix_with_len(context), dst);
+
+        let derived_key = G2Affine::from(self.point + G2Affine::generator() * offset);
+        Self { point: derived_key }
+    }
+
+    /// Return the byte encoding of this derived public key
+    pub fn serialize(&self) -> Vec<u8> {
+        self.point.to_compressed().to_vec()
+    }
+}
+
+/// A verifiably encrypted threshold key derived by the VetKD protocol
+///
+/// A VetKey is a valid BLS signature created for an input specified
+/// by the user
+///
+#[cfg_attr(feature = "js", wasm_bindgen)]
+#[derive(Clone)]
+pub struct VetKey {
+    pt: G1Affine,
+    pt_bytes: [u8; 48],
+}
+
+impl VetKey {
+    fn new(pt: G1Affine) -> Self {
+        Self {
+            pt,
+            pt_bytes: pt.to_compressed(),
+        }
+    }
+
+    /**
+     * Return the VetKey bytes, aka the BLS signature
+     *
+     * Use the raw bytes only if your design makes use of the fact that VetKeys
+     * are BLS signatures (eg for random beacon or threshold BLS signature
+     * generation). If you are using VetKD for key distribution, instead use
+     * derive_symmetric_key
+     */
+    pub fn signature_bytes(&self) -> &[u8; 48] {
+        &self.pt_bytes
+    }
+
+    /**
+     * Derive a symmetric key of the requested length from the VetKey
+     *
+     * The `domain_sep` parameter should be a string unique to your application and
+     * also your usage of the resulting key. For example say your application
+     * "my-app" is deriving two keys, one for usage "foo" and the other for
+     * "bar". You might use as domain separators "my-app-foo" and "my-app-bar".
+     */
+    pub fn derive_symmetric_key(&self, domain_sep: &str, output_len: usize) -> Vec<u8> {
+        derive_symmetric_key(&self.pt_bytes, domain_sep, output_len)
+    }
+
+    /**
+     * Deserialize a VetKey from the byte encoding
+     *
+     * Typically this would have been created using [`VetKey::signature_bytes`]
+     */
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, String> {
+        let bytes48: [u8; 48] = bytes.try_into().map_err(|_e: TryFromSliceError| {
+            format!("Vetkey is unexpected length {}", bytes.len())
+        })?;
+
+        if let Some(pt) = option_from_ctoption(G1Affine::from_compressed(&bytes48)) {
+            Ok(Self {
+                pt,
+                pt_bytes: bytes48,
+            })
+        } else {
+            Err("Invalid VetKey".to_string())
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
 /// Error indicating that deserializing an encrypted key failed
-enum EncryptedKeyDeserializationError {
+pub enum EncryptedVetKeyDeserializationError {
     /// Error indicating one or more of the points was invalid
-    InvalidEncryptedKey,
+    InvalidEncryptedVetKey,
 }
 
+/// An encrypted VetKey
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// An encrypted key
-struct EncryptedKey {
+pub struct EncryptedVetKey {
     c1: G1Affine,
     c2: G2Affine,
     c3: G1Affine,
 }
 
-impl EncryptedKey {
+impl EncryptedVetKey {
     /// The length of the serialized encoding of this type
     const BYTES: usize = 2 * G1AFFINE_BYTES + G2AFFINE_BYTES;
 
-    /// Decrypts and verifies an encrypted key
-    fn decrypt_and_verify(
+    /// Decrypts and verifies the VetKey
+    pub fn decrypt_and_verify(
         &self,
         tsk: &TransportSecretKey,
-        derived_public_key: DerivedPublicKey,
+        derived_public_key: &DerivedPublicKey,
         input: &[u8],
-    ) -> Result<G1Affine, String> {
+    ) -> Result<VetKey, String> {
+        // Check that c1 and c2 have the same discrete logarithm
+
+        let c2_prep = G2Prepared::from(self.c2);
+
+        let c1_c2 = gt_multipairing(&[
+            (&self.c1, &G2PREPARED_NEG_G),
+            (&G1Affine::generator(), &c2_prep),
+        ]);
+
+        if !bool::from(c1_c2.is_identity()) {
+            return Err("invalid encrypted key: c1 inconsistent with c2".to_string());
+        }
+
+        // Recover the purported VetKey
         let k = G1Affine::from(G1Projective::from(&self.c3) - self.c1 * tsk.secret_key);
 
+        // Check that the VetKey is a valid BLS signature
         let msg = augmented_hash_to_g1(&derived_public_key.point, input);
-        let dpk_prep = G2Prepared::from(G2Affine::from(derived_public_key));
+        let dpk_prep = G2Prepared::from(derived_public_key.point);
+
         use pairing::group::Group;
         let is_valid = gt_multipairing(&[(&k, &G2PREPARED_NEG_G), (&msg, &dpk_prep)]).is_identity();
         if bool::from(is_valid) {
-            Ok(k)
+            Ok(VetKey::new(k))
         } else {
             Err("invalid encrypted key: verification failed".to_string())
         }
     }
 
     /// Deserializes an encrypted key from a byte vector
-    fn deserialize(bytes: &[u8]) -> Result<EncryptedKey, String> {
+    pub fn deserialize(bytes: &[u8]) -> Result<EncryptedVetKey, String> {
         let ek_bytes: &[u8; Self::BYTES] = bytes.try_into().map_err(|_e: TryFromSliceError| {
             format!("key not {} bytes but {}", Self::BYTES, bytes.len())
         })?;
@@ -195,21 +315,21 @@ impl EncryptedKey {
     }
 
     /// Deserializes an encrypted key from a byte array
-    fn deserialize_array(
+    pub fn deserialize_array(
         val: &[u8; Self::BYTES],
-    ) -> Result<Self, EncryptedKeyDeserializationError> {
+    ) -> Result<Self, EncryptedVetKeyDeserializationError> {
         let c2_start = G1AFFINE_BYTES;
         let c3_start = G1AFFINE_BYTES + G2AFFINE_BYTES;
 
         let c1_bytes: &[u8; G1AFFINE_BYTES] = &val[..c2_start]
             .try_into()
-            .map_err(|_e| EncryptedKeyDeserializationError::InvalidEncryptedKey)?;
+            .map_err(|_e| EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey)?;
         let c2_bytes: &[u8; G2AFFINE_BYTES] = &val[c2_start..c3_start]
             .try_into()
-            .map_err(|_e| EncryptedKeyDeserializationError::InvalidEncryptedKey)?;
+            .map_err(|_e| EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey)?;
         let c3_bytes: &[u8; G1AFFINE_BYTES] = &val[c3_start..]
             .try_into()
-            .map_err(|_e| EncryptedKeyDeserializationError::InvalidEncryptedKey)?;
+            .map_err(|_e| EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey)?;
 
         let c1 = option_from_ctoption(G1Affine::from_compressed(c1_bytes));
         let c2 = option_from_ctoption(G2Affine::from_compressed(c2_bytes));
@@ -217,28 +337,51 @@ impl EncryptedKey {
 
         match (c1, c2, c3) {
             (Some(c1), Some(c2), Some(c3)) => Ok(Self { c1, c2, c3 }),
-            (_, _, _) => Err(EncryptedKeyDeserializationError::InvalidEncryptedKey),
+            (_, _, _) => Err(EncryptedVetKeyDeserializationError::InvalidEncryptedVetKey),
         }
     }
 }
 
 const IBE_SEED_BYTES: usize = 32;
 
+const IBE_HEADER_BYTES: usize = 8;
+const IBE_HEADER: [u8; IBE_HEADER_BYTES] = [b'I', b'C', b' ', b'I', b'B', b'E', 0x00, 0x01];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// An IBE (identity based encryption) ciphertext
 #[cfg_attr(feature = "js", wasm_bindgen)]
 pub struct IBECiphertext {
+    header: Vec<u8>,
     c1: G2Affine,
     c2: [u8; IBE_SEED_BYTES],
     c3: Vec<u8>,
+}
+
+enum IBEDomainSep {
+    HashToMask,
+    MaskSeed,
+    MaskMsg(usize),
+}
+
+impl IBEDomainSep {
+    #[allow(clippy::inherent_to_string)]
+    fn to_string(&self) -> String {
+        match self {
+            Self::HashToMask => "ic-vetkd-bls12-381-ibe-hash-to-mask".to_owned(),
+            Self::MaskSeed => "ic-vetkd-bls12-381-ibe-mask-seed".to_owned(),
+            Self::MaskMsg(len) => format!("ic-vetkd-bls12-381-ibe-mask-msg-{}", len),
+        }
+    }
 }
 
 #[cfg_attr(feature = "js", wasm_bindgen)]
 impl IBECiphertext {
     /// Serialize this IBE ciphertext
     pub fn serialize(&self) -> Vec<u8> {
-        let mut output = Vec::with_capacity(G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
+        let mut output =
+            Vec::with_capacity(self.header.len() + G2AFFINE_BYTES + IBE_SEED_BYTES + self.c3.len());
 
+        output.extend_from_slice(&self.header);
         output.extend_from_slice(&self.c1.to_compressed());
         output.extend_from_slice(&self.c2);
         output.extend_from_slice(&self.c3);
@@ -250,32 +393,42 @@ impl IBECiphertext {
     ///
     /// Returns Err if the encoding is not valid
     pub fn deserialize(bytes: &[u8]) -> Result<IBECiphertext, String> {
-        if bytes.len() < G2AFFINE_BYTES + IBE_SEED_BYTES {
+        if bytes.len() < IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES {
             return Err("IBECiphertext too short to be valid".to_string());
         }
 
-        let c1 = deserialize_g2(&bytes[0..G2AFFINE_BYTES])?;
+        let header = bytes[0..IBE_HEADER_BYTES].to_vec();
+        let c1 = deserialize_g2(&bytes[IBE_HEADER_BYTES..(IBE_HEADER_BYTES + G2AFFINE_BYTES)])?;
 
         let mut c2 = [0u8; IBE_SEED_BYTES];
-        c2.copy_from_slice(&bytes[G2AFFINE_BYTES..(G2AFFINE_BYTES + IBE_SEED_BYTES)]);
+        c2.copy_from_slice(
+            &bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES
+                ..(IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES)],
+        );
 
-        let c3 = bytes[G2AFFINE_BYTES + IBE_SEED_BYTES..].to_vec();
+        let c3 = bytes[IBE_HEADER_BYTES + G2AFFINE_BYTES + IBE_SEED_BYTES..].to_vec();
 
-        Ok(Self { c1, c2, c3 })
+        if header != IBE_HEADER {
+            return Err("IBECiphertext has unknown header".to_string());
+        }
+
+        Ok(Self { header, c1, c2, c3 })
     }
 
-    fn hash_to_mask(seed: &[u8; IBE_SEED_BYTES], msg: &[u8]) -> Scalar {
-        let mut ro = ro::RandomOracle::new("ic-crypto-vetkd-bls12-381-ibe-hash-to-mask");
-        ro.update_bin(seed);
-        ro.update_bin(msg);
-        ro.finalize_to_scalar()
+    fn hash_to_mask(header: &[u8], seed: &[u8; IBE_SEED_BYTES], msg: &[u8]) -> Scalar {
+        let domain_sep = IBEDomainSep::HashToMask;
+        let mut ro_input = Vec::with_capacity(seed.len() + msg.len());
+        ro_input.extend_from_slice(header);
+        ro_input.extend_from_slice(seed);
+        ro_input.extend_from_slice(msg);
+
+        hash_to_scalar(&ro_input, &domain_sep.to_string())
     }
 
     fn mask_seed(seed: &[u8; IBE_SEED_BYTES], t: &Gt) -> [u8; IBE_SEED_BYTES] {
-        let mut ro = ro::RandomOracle::new("ic-crypto-vetkd-bls12-381-ibe-mask-seed");
-        ro.update_bin(&t.to_bytes());
+        let domain_sep = IBEDomainSep::MaskSeed;
+        let mask = derive_symmetric_key(&t.to_bytes(), &domain_sep.to_string(), IBE_SEED_BYTES);
 
-        let mask = ro.finalize_to_array::<IBE_SEED_BYTES>();
         let mut masked_seed = [0u8; IBE_SEED_BYTES];
         for i in 0..IBE_SEED_BYTES {
             masked_seed[i] = mask[i] ^ seed[i];
@@ -284,10 +437,26 @@ impl IBECiphertext {
     }
 
     fn mask_msg(msg: &[u8], seed: &[u8; IBE_SEED_BYTES]) -> Vec<u8> {
-        let mut ro = ro::RandomOracle::new("ic-crypto-vetkd-bls12-381-ibe-mask-msg");
-        ro.update_bin(seed);
+        fn derive_ibe_ctext_mask(seed: &[u8], msg_len: usize) -> Vec<u8> {
+            use sha3::{
+                digest::{ExtendableOutputReset, Update, XofReader},
+                Shake256,
+            };
 
-        let mut mask = ro.finalize_to_vec(msg.len());
+            let mut shake = Shake256::default();
+            shake.update(seed);
+
+            let mut xof = shake.finalize_xof_reset();
+            let mut mask = vec![0u8; msg_len];
+            xof.read(&mut mask);
+            mask
+        }
+
+        let domain_sep = IBEDomainSep::MaskMsg(msg.len());
+
+        let shake_seed = derive_symmetric_key(seed, &domain_sep.to_string(), 32);
+
+        let mut mask = derive_ibe_ctext_mask(&shake_seed, msg.len());
 
         for i in 0..msg.len() {
             mask[i] ^= msg[i];
@@ -304,46 +473,45 @@ impl IBECiphertext {
     /// generated with a cryptographically secure random number generator. Do
     /// not reuse the seed for encrypting another message or any other purpose.
     pub fn encrypt(
-        derived_public_key_bytes: &[u8],
-        input: &[u8],
+        dpk: &DerivedPublicKey,
+        context: &[u8],
         msg: &[u8],
         seed: &[u8],
     ) -> Result<IBECiphertext, String> {
-        let dpk = DerivedPublicKey::deserialize(derived_public_key_bytes)
-            .map_err(|e| format!("failed to deserialize public key: {:?}", e))?;
-
         let seed: &[u8; IBE_SEED_BYTES] = seed
             .try_into()
             .map_err(|_e| format!("Provided seed must be {} bytes long ", IBE_SEED_BYTES))?;
 
-        let t = Self::hash_to_mask(seed, msg);
-        let pt = augmented_hash_to_g1(&dpk.point, input);
+        let header = IBE_HEADER.to_vec();
+
+        let t = Self::hash_to_mask(&header, seed, msg);
+
+        let pt = augmented_hash_to_g1(&dpk.point, context);
+
         let tsig = ic_bls12_381::pairing(&pt, &dpk.point) * t;
 
         let c1 = G2Affine::from(G2Affine::generator() * t);
         let c2 = Self::mask_seed(seed, &tsig);
         let c3 = Self::mask_msg(msg, seed);
 
-        Ok(Self { c1, c2, c3 })
+        Ok(Self { header, c1, c2, c3 })
     }
 
     /// Decrypt an IBE ciphertext
     ///
-    /// For proper operation k_bytes should be the result of calling
-    /// TransportSecretKey::decrypt where the same `derived_public_key_bytes`
-    /// and `input` were used when creating the ciphertext (with
-    /// IBECiphertext::encrypt).
+    /// The VetKey provided must be the VetKey produced by a request to the IC
+    /// for a given `input`,`context` pair where both `input` and `context` match
+    /// the value used during encryption.
     ///
     /// Returns the plaintext, or Err if decryption failed
-    pub fn decrypt(&self, k_bytes: &[u8]) -> Result<Vec<u8>, String> {
-        let k = deserialize_g1(k_bytes)?;
-        let t = ic_bls12_381::pairing(&k, &self.c1);
+    pub fn decrypt(&self, vetkey: &VetKey) -> Result<Vec<u8>, String> {
+        let t = ic_bls12_381::pairing(&vetkey.pt, &self.c1);
 
         let seed = Self::mask_seed(&self.c2, &t);
 
         let msg = Self::mask_msg(&self.c3, &seed);
 
-        let t = Self::hash_to_mask(&seed, &msg);
+        let t = Self::hash_to_mask(&self.header, &seed, &msg);
 
         let g_t = G2Affine::from(G2Affine::generator() * t);
 
@@ -378,19 +546,6 @@ fn option_from_ctoption<T>(ctoption: subtle::CtOption<T>) -> Option<T> {
         Some(ctoption.unwrap())
     } else {
         None
-    }
-}
-
-fn deserialize_g1(bytes: &[u8]) -> Result<G1Affine, String> {
-    let bytes: &[u8; G1AFFINE_BYTES] = bytes
-        .try_into()
-        .map_err(|_| "Invalid length for G1".to_string())?;
-
-    let pt = G1Affine::from_compressed(bytes);
-    if bool::from(pt.is_some()) {
-        Ok(pt.unwrap())
-    } else {
-        Err("Invalid G1 elliptic curve point".to_string())
     }
 }
 

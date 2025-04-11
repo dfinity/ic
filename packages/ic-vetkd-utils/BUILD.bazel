@@ -3,6 +3,7 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 COMMON_DEPS = [
     # Keep sorted.
+    "@crate_index//:hkdf",
     "@crate_index//:ic_bls12_381",
     "@crate_index//:lazy_static",
     "@crate_index//:pairing",

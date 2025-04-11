@@ -170,6 +170,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "actix-web": crate.spec(
                 version = "^4.9.0",
             ),
+            "actix-web-prom": crate.spec(
+                version = "0.9.0",
+            ),
             "addr": crate.spec(
                 version = "^0.15.6",
                 default_features = False,
@@ -420,7 +423,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.4",
             ),
             "crossbeam-channel": crate.spec(
-                version = "^0.5.13",
+                version = "^0.5.15",
             ),
             "csv": crate.spec(
                 version = "^1.1",
@@ -838,7 +841,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.13.0",
             ),
             "mockito": crate.spec(
-                version = "^1.2.0",
+                version = "^1.6.1",
             ),
             "moka": crate.spec(
                 version = "^0.12.8",
@@ -887,14 +890,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "opentelemetry": crate.spec(
                 version = "^0.27.0",
-                features = [
-                    "metrics",
-                    "trace",
-                ],
-            ),
-            "opentelemetry_0_20_0": crate.spec(
-                package = "opentelemetry",
-                version = "^0.20.0",
                 features = [
                     "metrics",
                     "trace",

@@ -225,14 +225,6 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_sns_wasm_allowed_principals(
-        &mut self,
-        allowed_principals: Vec<PrincipalId>,
-    ) -> &mut Self {
-        self.sns_wasms.with_allowed_principals(allowed_principals);
-        self
-    }
-
     pub fn with_exchange_rate_canister(
         &mut self,
         exchange_rate_canister_id: CanisterId,
@@ -454,6 +446,11 @@ pub fn build_mainnet_index_wasm() -> Wasm {
 /// Build Wasm for NNS Node Rewards canister
 pub fn build_node_rewards_wasm() -> Wasm {
     let features = [];
+    Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
+}
+
+pub fn build_node_rewards_test_wasm() -> Wasm {
+    let features = ["test"];
     Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
 }
 

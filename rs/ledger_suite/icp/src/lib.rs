@@ -4,7 +4,6 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_canister_core::blockchain::BlockData;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
     approvals::{AllowanceTable, HeapAllowancesData},
@@ -22,7 +21,6 @@ use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt;
-use std::ops::Range;
 use std::time::Duration;
 use std::{borrow::Cow, collections::BTreeMap};
 use strum_macros::IntoStaticStr;
@@ -1136,57 +1134,28 @@ pub struct IterBlocksRes(pub Vec<EncodedBlock>);
 pub struct BlockArg(pub BlockIndex);
 pub struct BlockRes(pub Option<Result<EncodedBlock, CanisterId>>);
 
-fn get_block_indices(
-    blocks_len: usize,
-    range_from_offset: BlockIndex,
-    range_from: BlockIndex,
-    length: usize,
-) -> Result<Range<usize>, String> {
-    // Inclusive end of the range of *requested* blocks
-    let requested_range_to = range_from as usize + length - 1;
-    // Inclusive end of the range of *available* blocks
-    let range_to = range_from_offset as usize + blocks_len - 1;
-    // Example: If the Node stores 10 blocks beginning at BlockIndex 100, i.e.
-    // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
-    // > 109 is an error
-    if range_from < range_from_offset || requested_range_to > range_to {
-        return Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-            range_from, requested_range_to, range_from_offset, range_to));
-    }
-    // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
-    // is 100 and the Block with BlockIndex 100 is at index 0
-    let offset = (range_from - range_from_offset) as usize;
-    Ok(offset..offset + length)
-}
-
-// A helper function for archive_node/get_blocks endpoint
+// A helper function for archive_node/get_blocks endpoints
 pub fn get_blocks(
     blocks: &[EncodedBlock],
     range_from_offset: BlockIndex,
     range_from: BlockIndex,
     length: usize,
 ) -> GetBlocksRes {
-    match get_block_indices(blocks.len(), range_from_offset, range_from, length) {
-        Ok(range) => GetBlocksRes(Ok(blocks[range].to_vec())),
-        Err(e) => GetBlocksRes(Err(e)),
+    // Inclusive end of the range of *requested* blocks
+    let requested_range_to = range_from as usize + length - 1;
+    // Inclusive end of the range of *available* blocks
+    let range_to = range_from_offset as usize + blocks.len() - 1;
+    // Example: If the Node stores 10 blocks beginning at BlockIndex 100, i.e.
+    // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
+    // > 109 is an error
+    if range_from < range_from_offset || requested_range_to > range_to {
+        return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+            range_from, requested_range_to, range_from_offset, range_to)));
     }
-}
-
-// A helper function for ledger/get_blocks endpoint
-pub fn get_blocks_ledger<BD: BlockData>(
-    blocks: &BD,
-    range_from_offset: BlockIndex,
-    range_from: BlockIndex,
-    length: usize,
-) -> GetBlocksRes {
-    match get_block_indices(blocks.len() as usize, range_from_offset, range_from, length) {
-        Ok(range) => {
-            let start = range.start as u64;
-            let end = range.end as u64;
-            GetBlocksRes(Ok(blocks.get_blocks(start..end)))
-        }
-        Err(e) => GetBlocksRes(Err(e)),
-    }
+    // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
+    // is 100 and the Block with BlockIndex 100 is at index 0
+    let offset = (range_from - range_from_offset) as usize;
+    GetBlocksRes(Ok(blocks[offset..offset + length].to_vec()))
 }
 
 // A helper function for archive_node/iter_blocks endpoint

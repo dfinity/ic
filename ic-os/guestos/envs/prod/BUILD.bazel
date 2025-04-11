@@ -9,6 +9,11 @@ load("//publish:defs.bzl", "checksum_rule")
 icos_build(
     name = "prod",
     image_deps_func = image_deps,
+    max_file_sizes = {
+        "disk-img.tar.zst": 450 * 1000 * 1000,  # 419 MB on 2025-03-21
+        "update-img.tar.zst": 450 * 1000 * 1000,  # 416 MB on 2025-03-21
+        "update-img-test.tar.zst": 450 * 1000 * 1000,  # 416 MB on 2025-03-21
+    },
     upload_prefix = "guest-os",
     visibility = [
         "//rs:ic-os-pkg",

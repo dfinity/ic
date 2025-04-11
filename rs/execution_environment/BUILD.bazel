@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
+    "//packages/ic-vetkd-utils",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/prng",
@@ -29,7 +30,6 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_layout",
     "//rs/sys",
-    "//rs/system_api",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -37,7 +37,6 @@ DEPENDENCIES = [
     "//rs/utils",
     "//rs/utils/lru_cache",
     "//rs/utils/thread",
-    "//rs/wasm_transform",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
@@ -58,12 +57,14 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tracing",
+    "@crate_index//:wasmparser",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/test_utils/vetkd",
     "//rs/interfaces/state_manager/mocks",
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
@@ -84,7 +85,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:regex",
     "@crate_index//:rstest",
-    "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]
 
@@ -140,12 +140,14 @@ rust_ic_test_suite(
     compile_data = glob(["tests/test-data/**"]),
     data = DATA + [
         "//rs/rust_canisters/backtrace_canister:backtrace-canister",
+        "//rs/rust_canisters/backtrace_canister:backtrace-canister-without-names",
         "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
         "//testnet/prebuilt-canisters:image-classification",
     ],
     env = dict(ENV.items() + [
         ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
+        ("BACKTRACE_CANISTER_WITHOUT_NAMES_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister-without-names)"),
         ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
         ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
         ("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH", "$(rootpath //testnet/prebuilt-canisters:image-classification)"),
@@ -171,6 +173,7 @@ BENCH_DEPENDENCIES = [
     "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
+    "//rs/embedders",
     "//rs/interfaces",
     "//rs/limits",
     "//rs/monitoring/logger",
@@ -179,7 +182,6 @@ BENCH_DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/rust_canisters/canister_test",
-    "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/state",

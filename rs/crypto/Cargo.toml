@@ -138,3 +138,7 @@ harness = false
 [[bench]]
 name = "tschnorr"
 harness = false
+
+[[bench]]
+name = "vetkd"
+harness = false

@@ -271,10 +271,6 @@ pub fn test_subnet(
     } else {
         None
     };
-    let ic_ref_test_path = get_dependency_path("rs/tests/research/ic-hs/bin/ic-ref-test")
-        .into_os_string()
-        .into_string()
-        .unwrap();
     let mut all_excluded_tests = excluded_tests;
     all_excluded_tests.append(&mut EXCLUDED.to_vec());
     with_endpoint(
@@ -284,7 +280,6 @@ pub fn test_subnet(
         use_bn,
         httpbin_proto,
         httpbin,
-        ic_ref_test_path,
         log,
         all_excluded_tests,
         included_tests,
@@ -326,7 +321,7 @@ fn subnet_config(subnet: &SubnetSnapshot) -> String {
 pub fn run_ic_ref_test(
     httpbin_proto: Option<String>,
     httpbin: Option<String>,
-    ic_ref_test_path: String,
+    ic_ref_test_path: PathBuf,
     ic_test_data_path: PathBuf,
     endpoint: String,
     test_subnet_config: String,
@@ -372,7 +367,6 @@ pub fn with_endpoint(
     use_bn: bool,
     httpbin_proto: Option<String>,
     httpbin: Option<String>,
-    ic_ref_test_path: String,
     log: Logger,
     excluded_tests: Vec<&str>,
     included_tests: Vec<&str>,
@@ -396,11 +390,16 @@ pub fn with_endpoint(
     let peer_subnet_config = subnet_config(&peer_subnet);
     info!(log, "test-subnet-config: {}", test_subnet_config);
     info!(log, "peer-subnet-config: {}", peer_subnet_config);
+
+    let ic_ref_test_path =
+        get_dependency_path(std::env::var("IC_REF_TEST_BIN").expect("Missing ic-ref-test"));
+    let ic_test_data_path = get_dependency_path("rs/tests/research/ic-hs/test-data");
+
     run_ic_ref_test(
         httpbin_proto,
         httpbin,
         ic_ref_test_path,
-        get_dependency_path("rs/tests/research/ic-hs/test-data"),
+        ic_test_data_path,
         endpoint,
         test_subnet_config,
         peer_subnet_config,

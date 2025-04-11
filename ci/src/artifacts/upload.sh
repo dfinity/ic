@@ -53,7 +53,7 @@ echo "done uploading to AWS" >&2
 # Upload to Cloudflare's R2 (S3)
 # using profile 'cf' to look up the right creds in ~/.aws/credentials
 echo "uploading $f to Cloudflare" >&2
-echo AWS_PROFILE=cf "$RCLONE" -v \
+AWS_PROFILE=cf "$RCLONE" -v \
     "${rclone_common_flags[@]}" \
     --s3-provider=Cloudflare \
     --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \

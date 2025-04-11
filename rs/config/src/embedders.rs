@@ -46,8 +46,10 @@ const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
 
 /// Sandbox process eviction ensures that the number of sandbox processes is
-/// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 7_000;
+/// always below this threshold. Idle sandboxes should be using at most ~5MiB
+/// resident memory with the on-disk compilation cache, so 10,000 sandboxes
+/// shouldn't be more than 50 GiB.
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 10_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
@@ -148,7 +150,6 @@ pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
-    pub wasm_native_stable_memory: FlagStatus,
     /// Indicates whether the support for 64 bit main memory is enabled
     pub wasm64: FlagStatus,
     /// Rollout stage of the best-effort responses feature.
@@ -162,9 +163,8 @@ impl Default for FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
-            wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: BestEffortResponsesFeature::ApplicationSubnetsOnly,
+            best_effort_responses: BestEffortResponsesFeature::Enabled,
             canister_backtrace: FlagStatus::Enabled,
         }
     }
