@@ -13,8 +13,7 @@ use ic_embedders::wasm_executor::{
     PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{
-    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, StoredCompilation,
-    WasmExecutionInput,
+    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, InstanceStats};
 use ic_interfaces_state_manager::StateReader;
@@ -97,6 +96,7 @@ const EMBEDDER_CACHE_HIT_COMPILATION_ERROR: &str = "embedder_cache_hit_compilati
 const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
 const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_compilation_error";
 const CACHE_MISS: &str = "cache_miss";
+const CACHE_MISS_FALLBACK_FILE: &str = "cache_miss_fallback_file";
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -1049,6 +1049,11 @@ impl WasmExecutor for SandboxedExecutionController {
             match compilation_cache.get(&wasm_binary.binary) {
                 None => {
                     self.metrics.inc_cache_lookup(CACHE_MISS);
+                    // TODO(MR-651): This metric tracks the number of times execution reads wasm from disk.
+                    // Remove this once we roll out the lazy loading of wasm files.
+                    if wasm_binary.binary.file().is_some() {
+                        self.metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
+                    }
                     let _compilation_timer = self
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_compile_duration
@@ -1082,56 +1087,29 @@ impl WasmExecutor for SandboxedExecutionController {
                             let serialized_module =
                                 compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
 
-                            let sandbox_result = match &serialized_module {
-                                StoredCompilation::Disk(serialized_module) => {
-                                    sandbox_process.history.record(format!(
-                                        "CreateExecutionStateViaFile(wasm_id={}, \
+                            sandbox_process.history.record(format!(
+                                "CreateExecutionStateViaFile(wasm_id={}, \
                                         next_wasm_memory_id={})",
-                                        wasm_id, next_wasm_memory_id
-                                    ));
-                                    sandbox_process
-                                        .sandbox_service
-                                        .create_execution_state_via_file(
-                                            protocol::sbxsvc::CreateExecutionStateViaFileRequest {
-                                                wasm_id,
-                                                bytes: serialized_module.bytes.as_raw_fd(),
-                                                initial_state_data: serialized_module
-                                                    .initial_state_data
-                                                    .as_raw_fd(),
-                                                wasm_page_map: wasm_page_map.serialize(),
-                                                next_wasm_memory_id,
-                                                canister_id,
-                                                stable_memory_page_map: stable_memory_page_map
-                                                    .serialize(),
-                                            },
-                                        )
-                                        .sync()
-                                        .unwrap()
-                                        .0?
-                                }
-                                StoredCompilation::Memory(serialized_module) => {
-                                    sandbox_process.history.record(format!(
-                                        "CreateExecutionStateSerialized(wasm_id={}, \
-                                        next_wasm_memory_id={})",
-                                        wasm_id, next_wasm_memory_id
-                                    ));
-                                    sandbox_process
-                                        .sandbox_service
-                                        .create_execution_state_serialized(
-                                            protocol::sbxsvc::CreateExecutionStateSerializedRequest {
-                                                wasm_id,
-                                                serialized_module: Arc::clone(serialized_module),
-                                                wasm_page_map: wasm_page_map.serialize(),
-                                                next_wasm_memory_id,
-                                                canister_id,
-                                                stable_memory_page_map: stable_memory_page_map.serialize(),
-                                            },
-                                        )
-                                        .sync()
-                                        .unwrap()
-                                        .0?
-                                }
-                            };
+                                wasm_id, next_wasm_memory_id
+                            ));
+                            let sandbox_result = sandbox_process
+                                .sandbox_service
+                                .create_execution_state_via_file(
+                                    protocol::sbxsvc::CreateExecutionStateViaFileRequest {
+                                        wasm_id,
+                                        bytes: serialized_module.bytes.as_raw_fd(),
+                                        initial_state_data: serialized_module
+                                            .initial_state_data
+                                            .as_raw_fd(),
+                                        wasm_page_map: wasm_page_map.serialize(),
+                                        next_wasm_memory_id,
+                                        canister_id,
+                                        stable_memory_page_map: stable_memory_page_map.serialize(),
+                                    },
+                                )
+                                .sync()
+                                .unwrap()
+                                .0?;
                             self.metrics
                                 .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
                                 .observe(sandbox_result.total_sandbox_time.as_secs_f64());
@@ -1158,55 +1136,29 @@ impl WasmExecutor for SandboxedExecutionController {
                         .metrics
                         .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
                         .start_timer();
-                    let sandbox_result = match &serialized_module {
-                        StoredCompilation::Memory(serialized_module) => {
-                            sandbox_process.history.record(format!(
-                                "CreateExecutionStateSerialized(wasm_id={}, \
+                    sandbox_process.history.record(format!(
+                        "CreateExecutionStateViaFile(wasm_id={}, \
                                 next_wasm_memory_id={})",
-                                wasm_id, next_wasm_memory_id
-                            ));
-                            sandbox_process
-                                .sandbox_service
-                                .create_execution_state_serialized(
-                                    protocol::sbxsvc::CreateExecutionStateSerializedRequest {
-                                        wasm_id,
-                                        serialized_module: Arc::clone(serialized_module),
-                                        wasm_page_map: wasm_page_map.serialize(),
-                                        next_wasm_memory_id,
-                                        canister_id,
-                                        stable_memory_page_map: stable_memory_page_map.serialize(),
-                                    },
-                                )
-                                .sync()
-                                .unwrap()
-                                .0?
-                        }
-                        StoredCompilation::Disk(serialized_module) => {
-                            sandbox_process.history.record(format!(
-                                "CreateExecutionStateViaFile(wasm_id={}, \
-                                next_wasm_memory_id={})",
-                                wasm_id, next_wasm_memory_id
-                            ));
-                            sandbox_process
-                                .sandbox_service
-                                .create_execution_state_via_file(
-                                    protocol::sbxsvc::CreateExecutionStateViaFileRequest {
-                                        wasm_id,
-                                        bytes: serialized_module.bytes.as_raw_fd(),
-                                        initial_state_data: serialized_module
-                                            .initial_state_data
-                                            .as_raw_fd(),
-                                        wasm_page_map: wasm_page_map.serialize(),
-                                        next_wasm_memory_id,
-                                        canister_id,
-                                        stable_memory_page_map: stable_memory_page_map.serialize(),
-                                    },
-                                )
-                                .sync()
-                                .unwrap()
-                                .0?
-                        }
-                    };
+                        wasm_id, next_wasm_memory_id
+                    ));
+                    let sandbox_result = sandbox_process
+                        .sandbox_service
+                        .create_execution_state_via_file(
+                            protocol::sbxsvc::CreateExecutionStateViaFileRequest {
+                                wasm_id,
+                                bytes: serialized_module.bytes.as_raw_fd(),
+                                initial_state_data: serialized_module
+                                    .initial_state_data
+                                    .as_raw_fd(),
+                                wasm_page_map: wasm_page_map.serialize(),
+                                next_wasm_memory_id,
+                                canister_id,
+                                stable_memory_page_map: stable_memory_page_map.serialize(),
+                            },
+                        )
+                        .sync()
+                        .unwrap()
+                        .0?;
                     self.metrics
                         .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
                         .observe(sandbox_result.total_sandbox_time.as_secs_f64());
@@ -1225,7 +1177,7 @@ impl WasmExecutor for SandboxedExecutionController {
             .metrics
             .sandboxed_execution_replica_create_exe_state_finish_duration
             .start_timer();
-        observe_metrics(&self.metrics, &serialized_module.imports_details());
+        observe_metrics(&self.metrics, &serialized_module.imports_details);
 
         cache_opened_wasm(
             &mut wasm_binary.embedder_cache.lock().unwrap(),
@@ -1258,23 +1210,23 @@ impl WasmExecutor for SandboxedExecutionController {
             ic_replicated_state::NumWasmPages::from(0),
         );
 
-        let (exports, metadata) = serialized_module.exports_and_metadata();
+        let initial_state_data = serialized_module.initial_state_data();
         let execution_state = ExecutionState {
             canister_root,
             wasm_binary,
-            exports: ExportedFunctions::new(exports),
+            exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory,
             stable_memory,
             exported_globals,
-            metadata,
+            metadata: initial_state_data.wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64()),
+            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64),
         };
 
         Ok((
             execution_state,
-            serialized_module.compilation_cost(),
+            serialized_module.compilation_cost,
             compilation_result,
         ))
     }
@@ -1879,6 +1831,11 @@ fn open_wasm(
     let compilation = match compilation_cache.get(&wasm_binary.binary) {
         None => {
             metrics.inc_cache_lookup(CACHE_MISS);
+            // TODO(MR-651): This metric tracks the number of times execution reads wasm from disk.
+            // Remove this once we roll out the lazy loading of wasm files.
+            if wasm_binary.binary.file().is_some() {
+                metrics.inc_cache_lookup(CACHE_MISS_FALLBACK_FILE);
+            }
             let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
                 HypervisorError::WasmEngineError(ic_wasm_types::WasmEngineError::Unexpected(
                     "Couldn't find compiler binary".to_string(),
@@ -1923,39 +1880,23 @@ fn open_wasm(
             Err(err)
         }
         Ok((serialized_module, compilation_result)) => {
-            observe_metrics(metrics, &serialized_module.imports_details());
-            match serialized_module {
-                StoredCompilation::Memory(serialized_module) => {
-                    sandbox_process
-                        .history
-                        .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
-                    sandbox_process
-                        .sandbox_service
-                        .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
-                            wasm_id,
-                            serialized_module: Arc::clone(&serialized_module.bytes),
-                        })
-                        .on_completion(|_| ())
-                }
-                StoredCompilation::Disk(serialized_module) => {
-                    sandbox_process
-                        .history
-                        .record(format!("OpenWasmViaFile(wasm_id={})", wasm_id));
-                    // The IPC message may be sent later on a background thread
-                    // and it's possible this entry has been dropped from the
-                    // cache in the mean time. In order to keep the file
-                    // descriptors alive, we clone the entry and defer dropping
-                    // of the clone until the response has arrived.
-                    let copy = Arc::clone(&serialized_module);
-                    sandbox_process
-                        .sandbox_service
-                        .open_wasm_via_file(protocol::sbxsvc::OpenWasmViaFileRequest {
-                            wasm_id,
-                            serialized_module: serialized_module.bytes.as_raw_fd(),
-                        })
-                        .on_completion(move |_| drop(copy))
-                }
-            }
+            observe_metrics(metrics, &serialized_module.imports_details);
+            sandbox_process
+                .history
+                .record(format!("OpenWasmViaFile(wasm_id={})", wasm_id));
+            // The IPC message may be sent later on a background thread
+            // and it's possible this entry has been dropped from the
+            // cache in the mean time. In order to keep the file
+            // descriptors alive, we clone the entry and defer dropping
+            // of the clone until the response has arrived.
+            let copy = Arc::clone(&serialized_module);
+            sandbox_process
+                .sandbox_service
+                .open_wasm_via_file(protocol::sbxsvc::OpenWasmViaFileRequest {
+                    wasm_id,
+                    serialized_module: serialized_module.bytes.as_raw_fd(),
+                })
+                .on_completion(move |_| drop(copy));
             cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
             Ok((wasm_id, compilation_result))
         }
@@ -2589,9 +2530,9 @@ mod tests {
             sandboxed_execution_controller_dir_and_path(active, spawn_monitor_thread);
         add_controller_backends(&mut controller, 0, active, 0, 0);
 
-        // Trigger the monitoring and wait for the monitoring results.
-        let _ = controller.stop_monitoring_thread.send(false);
-        for _ in 0..10_000 {
+        for _ in 0..1_000 {
+            // Trigger the monitoring and wait for the monitoring results.
+            controller.stop_monitoring_thread.send(false).unwrap();
             let stats = get_sandbox_process_stats(&controller.backends);
             if stats[0].2.rss != DEFAULT_SANDBOX_PROCESS_RSS {
                 break;
@@ -2632,12 +2573,14 @@ mod tests {
 
         add_controller_backends(&mut controller, 0, active, evicted, 0);
 
-        // Trigger the monitoring twice and wait for the monitoring results.
-        let _ = controller.stop_monitoring_thread.send(false);
-        let _ = controller.stop_monitoring_thread.send(false);
-        for _ in 0..10_000 {
+        for _ in 0..1_000 {
+            // Trigger the monitoring and wait for the monitoring results.
+            controller.stop_monitoring_thread.send(false).unwrap();
             let m = &controller.metrics;
-            if m.sandboxed_execution_subprocess_anon_rss.get_sample_count() > 1 {
+            if m.sandboxed_execution_subprocess_active_last_used
+                .get_sample_count()
+                > 0
+            {
                 break;
             }
             thread::sleep(Duration::from_millis(10));

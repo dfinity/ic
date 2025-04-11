@@ -19,8 +19,8 @@ use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
-use crate::compilation_cache::StoredCompilation;
 use crate::wasmtime_embedder::CanisterMemoryType;
+use crate::OnDiskSerializedModule;
 use crate::{
     wasm_utils::{compile, decoding::decode_wasm, Segments, WasmImportsDetails},
     wasmtime_embedder::WasmtimeInstance,
@@ -218,7 +218,7 @@ impl WasmExecutor for WasmExecutorImpl {
         };
 
         if let Some(serialized_module) = serialized_module {
-            self.observe_metrics(&serialized_module.imports_details());
+            self.observe_metrics(&serialized_module.imports_details);
         }
 
         let wasm_reserved_pages = get_wasm_reserved_pages(execution_state);
@@ -297,14 +297,14 @@ impl WasmExecutor for WasmExecutorImpl {
         else {
             panic!("Newly created WasmBinary must be compiled or deserialized.")
         };
-        self.observe_metrics(&serialized_module.imports_details());
-        let (exported_functions, wasm_metadata) = serialized_module.exports_and_metadata();
+        self.observe_metrics(&serialized_module.imports_details);
+        let initial_state_data = serialized_module.initial_state_data();
 
         let mut wasm_page_map = PageMap::new(Arc::clone(&self.fd_factory));
         let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
 
         let (globals, _wasm_page_delta, wasm_memory_size) = get_initial_globals_and_memory(
-            &serialized_module.data_segments(),
+            &initial_state_data.data_segments,
             &embedder_cache,
             &self.wasm_embedder,
             &mut wasm_page_map,
@@ -316,22 +316,22 @@ impl WasmExecutor for WasmExecutorImpl {
         let execution_state = ExecutionState {
             canister_root,
             wasm_binary,
-            exports: ExportedFunctions::new(exported_functions),
+            exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory: Memory::new(wasm_page_map, wasm_memory_size),
             stable_memory: Memory::new(
                 stable_memory_page_map,
                 ic_replicated_state::NumWasmPages::from(0),
             ),
             exported_globals: globals,
-            metadata: wasm_metadata,
+            metadata: initial_state_data.wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64()),
+            wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64),
         };
 
         Ok((
             execution_state,
-            serialized_module.compilation_cost(),
+            serialized_module.compilation_cost,
             compilation_result,
         ))
     }
@@ -341,7 +341,7 @@ impl WasmExecutor for WasmExecutorImpl {
 struct CacheLookup {
     pub cache: EmbedderCache,
     /// This field will be `None` if the `EmbedderCache` was present (so no module deserialization was required).
-    pub serialized_module: Option<StoredCompilation>,
+    pub serialized_module: Option<Arc<OnDiskSerializedModule>>,
     /// This field will be `None` if the `SerializedModule` was present in the `CompilationCache` (so no compilation was required).
     pub compilation_result: Option<CompilationResult>,
 }
@@ -396,7 +396,7 @@ impl WasmExecutorImpl {
             })
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
-                Some(Ok(StoredCompilation::Disk(on_disk_serialized_module))) => {
+                Some(Ok(on_disk_serialized_module)) => {
                     // This path is only used when sandboxing is disabled.
                     // Otherwise the fd is implicitly duplicated when passed to
                     // the sandbox process over the unix socket.
@@ -411,24 +411,7 @@ impl WasmExecutorImpl {
                     match instance_pre {
                         Ok(_) => Ok(CacheLookup {
                             cache,
-                            serialized_module: Some(StoredCompilation::Disk(
-                                on_disk_serialized_module,
-                            )),
-                            compilation_result: None,
-                        }),
-                        Err(err) => Err(err),
-                    }
-                }
-                Some(Ok(StoredCompilation::Memory(serialized_module))) => {
-                    let instance_pre = self
-                        .wasm_embedder
-                        .deserialize_module_and_pre_instantiate(&serialized_module.bytes);
-                    let cache = EmbedderCache::new(instance_pre.clone());
-                    *guard = Some(cache.clone());
-                    match instance_pre {
-                        Ok(_) => Ok(CacheLookup {
-                            cache,
-                            serialized_module: Some(StoredCompilation::Memory(serialized_module)),
+                            serialized_module: Some(on_disk_serialized_module),
                             compilation_result: None,
                         }),
                         Err(err) => Err(err),

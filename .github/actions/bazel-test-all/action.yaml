@@ -1,6 +1,15 @@
 name: 'Bazel-Test-All'
 description: 'Run Bazel Test'
 inputs:
+  diff-only:
+    required: false
+    default: false
+  release-build:
+    required: false
+    default: true
+  execlog-artifact-name:
+    required: false
+    description: "When provided, the execlog will be uploaded as an artifact with the specified name."
   BAZEL_COMMAND:
     required: true
     default: 'test'
@@ -56,60 +65,63 @@ runs:
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          execlog-artifact-name: ${{ inputs.execlog-artifact-name }}
           run: |
+            set -euo pipefail
 
-            # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
-            release_build="false"
-            diff_only="false"
+            diff_only='${{ inputs.diff-only }}'
+            release_build='${{ inputs.release-build }}'
 
-            # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
-            # the full build to occur (including versioning)
-            protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
-            for pattern in "${protected_branches[@]}"; do
-                if [[ "$BRANCH_NAME" =~ $pattern ]]; then
-                    IS_PROTECTED_BRANCH="true"
-                    break
-                fi
+            bazel_args=( )
+
+            if [[ $release_build == "true" ]]; then
+              bazel_args+=( --config=release )
+            fi
+
+            BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
+
+            bazel_targets=( )
+            for tgt in $BAZEL_TARGETS; do
+              bazel_targets+=( "$tgt" )
             done
 
-            if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]]; then
-                # if we are on a "protected" branch or targeting an rc branch we
-                # upload all artifacts and run a release build (with versioning)
-                release_build="true"
-                diff_only="false"
-            elif [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
-                # on a merge group, we don't upload the artifacts (i.e. no release
-                # build) but we ensure all targets are built (no diff)
-                release_build="false"
-                diff_only="false"
-            elif [[ "${RUN_ON_DIFF_ONLY:-}" == "false" ]]; then
-                # if "RUN_ON_DIFF_ONLY" is false, assume it means
-                # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
-                # branch
-                release_build="true"
-                diff_only="false"
-            fi
-
-            # Some environment variables needed by diff.sh
-            export BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
-            export BAZEL_COMMAND='${{ inputs.BAZEL_COMMAND }}'
 
             if [[ $diff_only == "true" ]]; then
-                # get bazel targets that changed within the MR
-                BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-            fi
+                target_pattern_file=$(mktemp)
+                trap "rm $target_pattern_file" INT TERM EXIT
 
-            # if bazel targets is empty we don't need to run any tests
-            if [ -z "${BAZEL_TARGETS:-}" ]; then
-                echo "No bazel targets to build"
-                exit 0
+                merge_base_sha='${{ github.event.pull_request.base.sha }}'
+                branch_head_sha='${{ github.event.pull_request.head.sha }}'
+
+                # we can't use HEAD as a fallback for branch_head_sha because that is
+                # the merge commit which contains the changes of the current HEAD of master
+                # XXX: the logic was ported from a legacy script though ranges like `HEAD..`
+                # may not make much sense
+                commit_range="${merge_base_sha:-HEAD}..${branch_head_sha:-}"
+                # get bazel targets that changed in the commit range and take the union with
+                # the targets that are expected to be built.
+                comm -12 \
+                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
+                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+
+                # if bazel targets is empty we don't need to run any tests
+                if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+                  echo "No bazel targets to build"
+                  exit 0
+                fi
+
+                # If there are targets to build, pass them as a file to avoid bash & the OS
+                # complaining about the argument list being too long.
+                bazel_args+=( --target_pattern_file="$target_pattern_file" )
+            else
+                bazel_args+=( "${bazel_targets[@]}" )
             fi
 
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
             if [[ $release_build == "true" ]]; then
-              bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS --config=release
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
             else
-              bazel ${{ inputs.BAZEL_COMMAND }} $BAZEL_TARGETS
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
             fi

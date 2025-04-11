@@ -1092,7 +1092,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
 
     common::run_benchmarks(
         c,
-        "update",
+        "execution_environment:update",
         &benchmarks,
         |id: &str,
          exec_env: &ExecutionEnvironment,
@@ -1152,5 +1152,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, execute_update_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_update_bench
+}
 criterion_main!(benchmarks);

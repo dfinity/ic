@@ -83,7 +83,6 @@ function afl_env() {
         AFL_CMPLOG_ONLY_NEW=1 \
         AFL_DEBUG_CHILD=1 \
         AFL_DISABLE_TRIM=1 \
-        AFL_DRIVER_DONT_DEFER=1 \
         AFL_EXPAND_HAVOC_NOW=1 \
         AFL_FAST_CAL=1 \
         AFL_FORKSRV_INIT_TMOUT=1000 \

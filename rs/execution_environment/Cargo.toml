@@ -39,7 +39,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-utils-thread = { path = "../utils/thread" }
-ic-wasm-transform = { path = "../wasm_transform" }
+ic-vetkd-utils = { path = "../../packages/ic-vetkd-utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
@@ -60,12 +60,14 @@ threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
+wasmparser = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
+ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
@@ -85,7 +87,6 @@ proptest = { workspace = true }
 regex = { workspace = true }
 rstest = { workspace = true }
 test-strategy = "0.3.1"
-wasmparser = { workspace = true }
 wat = { workspace = true }
 
 [build-dependencies]
