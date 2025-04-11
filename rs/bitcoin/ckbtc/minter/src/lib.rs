@@ -112,22 +112,24 @@ pub struct ECDSAPublicKey {
     pub chain_code: Vec<u8>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct GetUtxosRequest {
+pub type GetUtxosRequest = Timestamped<bitcoin::GetUtxosRequest>;
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
+pub struct Timestamped<Inner> {
     pub timestamp: Timestamp,
-    pub request: bitcoin::GetUtxosRequest,
+    inner: Inner,
 }
 
 impl GetUtxosRequest {
-    pub fn new(
-        timestamp: Timestamp,
+    pub fn new<T: Into<Timestamp>>(
+        timestamp: T,
         address: String,
         network: Network,
         filter: Option<bitcoin::UtxoFilter>,
     ) -> Self {
         Self {
-            timestamp,
-            request: bitcoin::GetUtxosRequest {
+            timestamp: timestamp.into(),
+            inner: bitcoin::GetUtxosRequest {
                 address,
                 network: network.into(),
                 filter,
@@ -135,20 +137,27 @@ impl GetUtxosRequest {
         }
     }
 
-    pub fn with_filter(self, filter: bitcoin::UtxoFilter) -> Self {
+    pub fn with_new_timestamp_and_filter<T: Into<Timestamp>>(
+        &self,
+        timestamp: T,
+        filter: bitcoin::UtxoFilter,
+    ) -> Self {
         Self {
-            timestamp: self.timestamp,
-            request: bitcoin::GetUtxosRequest {
+            timestamp: timestamp.into(),
+            inner: bitcoin::GetUtxosRequest {
                 filter: Some(filter),
-                ..self.request
+                ..self.inner.clone()
             },
         }
     }
 }
 
-impl From<GetUtxosRequest> for bitcoin::GetUtxosRequest {
-    fn from(request: GetUtxosRequest) -> Self {
-        request.request
+impl<Inner> Timestamped<Inner> {
+    pub fn into_inner(self) -> Inner {
+        self.inner
+    }
+    pub fn as_inner(&self) -> &Inner {
+        &self.inner
     }
 }
 
@@ -1335,7 +1344,19 @@ impl CanisterRuntime for IcCanisterRuntime {
 }
 
 /// Time in nanoseconds since the epoch (1970-01-01).
-#[derive(Eq, Clone, Copy, PartialEq, Debug, Default, Serialize, CandidType, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Default,
+    Serialize,
+    CandidType,
+    serde::Deserialize,
+)]
 pub struct Timestamp(u64);
 
 impl Timestamp {
@@ -1378,3 +1399,62 @@ impl From<u64> for Timestamp {
         Self(timestamp)
     }
 }
+
+/// A cache that expires old entries based on their timestamps and expiration setting.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct CacheWithExpiration<Key, Value> {
+    expiration: u64, // Nanoseconds
+    keys: BTreeMap<Key, Timestamp>,
+    values: BTreeMap<Timestamped<Key>, Value>,
+}
+
+impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
+    pub fn new(expiration: u64) -> Self {
+        Self {
+            expiration,
+            keys: Default::default(),
+            values: Default::default(),
+        }
+    }
+
+    pub fn update_expiration(&mut self, expiration: u64) {
+        self.expiration = expiration;
+    }
+
+    pub fn get(&mut self, key: &Timestamped<Key>) -> Option<Value> {
+        self.prune_expired(key);
+        self.get_without_pruning(key)
+    }
+
+    pub fn insert(&mut self, key: Timestamped<Key>, value: Value) {
+        self.prune_expired(&key);
+        self.insert_without_pruning(key, value)
+    }
+
+    fn get_without_pruning(&self, key: &Timestamped<Key>) -> Option<Value> {
+        let timestamp = *self.keys.get(key.as_inner())?;
+        self.values
+            .get(&Timestamped {
+                timestamp,
+                inner: key.as_inner().clone(),
+            })
+            .cloned()
+    }
+
+    pub fn insert_without_pruning(&mut self, key: Timestamped<Key>, value: Value) {
+        self.keys.insert(key.as_inner().clone(), key.timestamp);
+        self.values.insert(key, value);
+    }
+
+    fn prune_expired(&mut self, request: &Timestamped<Key>) -> usize {
+        let mut expired = self.values.split_off(request);
+        std::mem::swap(&mut self.values, &mut expired);
+        let num_expired = expired.len();
+        expired.keys().for_each(|key| {
+            self.keys.remove(key.as_inner());
+        });
+        num_expired
+    }
+}
+
+pub type GetUtxosCache = CacheWithExpiration<bitcoin::GetUtxosRequest, GetUtxosResponse>;

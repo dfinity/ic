@@ -41,6 +41,7 @@ fn default_init_args() -> InitArgs {
         btc_checker_principal: None,
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration: None,
     }
 }
 

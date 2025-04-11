@@ -165,13 +165,21 @@ pub async fn get_utxos<R: CanisterRuntime>(
             CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
         }
         .with(|cell| cell.set(cell.get() + 1));
-        runtime.bitcoin_get_utxos(req).await
+        if let Some(res) = crate::state::mutate_state(|s| s.get_utxos_cache.get(&req)) {
+            // TODO: add metrics to count cache hit
+            Ok(res)
+        } else {
+            runtime.bitcoin_get_utxos(req.clone()).await.map(|res| {
+                crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone()));
+                res
+            })
+        }
     }
 
     // Record start time of method execution for metrics
     let start_time = runtime.time();
     let request = GetUtxosRequest::new(
-        start_time.into(),
+        start_time,
         address.clone(),
         network,
         Some(UtxoFilter::MinConfirmations(min_confirmations)),
@@ -184,7 +192,8 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
-        let paged_request = request.clone().with_filter(UtxoFilter::Page(page.to_vec()));
+        let paged_request =
+            request.with_new_timestamp_and_filter(runtime.time(), UtxoFilter::Page(page.to_vec()));
         response = bitcoin_get_utxos(paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
         num_pages += 1;
@@ -199,7 +208,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request.into())
+    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request.into_inner())
         .await
         .map(|(response,)| response.into())
         .map_err(|err| CallError::from_cdk_error("bitcoin_get_utxos", err))
