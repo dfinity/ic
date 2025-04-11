@@ -266,6 +266,9 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
 ) -> impl Iterator<Item = (String, T)> + 'a {
+    use crate::storage::with_chunks; // DO NOT MERGE
+    use ic_registry_canister_chunkify::decode_high_capacity_registry_value; // DO NOT MERGE
+
     let prefix_bytes = prefix.as_bytes();
     let start = prefix_bytes.to_vec();
 
@@ -275,16 +278,20 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
         .take_while(|(k, _)| k.starts_with(prefix_bytes))
         .map(|(k, v)| (k, v.back().unwrap()))
         // ...skipping any that have been deleted...
-        .filter(|(_, v)| !v.deletion_marker)
-        // ...and repack them into a tuple of (ID, value).
-        .map(|(k, v)| {
+        .filter_map(|(k, value)| {
+            let value = with_chunks(|chunks| {
+                decode_high_capacity_registry_value::<T, _>(value, chunks)
+            });
+            let Some(value) = value else {
+                return None;
+            };
+
             let id = k
                 .strip_prefix(prefix_bytes)
                 .and_then(|v| std::str::from_utf8(v).ok())
                 .unwrap()
                 .to_string();
-            let value = T::decode(v.value.as_slice()).unwrap();
 
-            (id, value)
+            Some((id, value))
         })
 }

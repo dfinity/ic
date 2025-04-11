@@ -3,21 +3,21 @@ use crate::{
     pb::v1::{
         registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
     },
-    storage::maybe_chunkify_and_encode,
+    storage::CompositeMutation,
 };
 use ic_certified_map::RbTree;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     pb::v1::{
         registry_mutation::Type, RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation,
-        RegistryValue,
+        RegistryValue, HighCapacityRegistryValue, HighCapacityRegistryAtomicMutateRequest,
+        high_capacity_registry_value, HighCapacityRegistryMutation, high_capacity_registry_mutation,
     },
     Error,
 };
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
 use std::{
-    cmp::max,
     collections::{BTreeMap, VecDeque},
     fmt,
 };
@@ -32,11 +32,6 @@ use dfn_core::println;
 pub const MAX_REGISTRY_DELTAS_SIZE: usize =
     2 * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize / 3;
 
-/// The type for the registry map.
-///
-/// The Deque part is mostly future proofing for when we have garbage collection
-/// so that we're able to call pop_front().
-pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
 pub type Version = u64;
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub struct EncodedVersion([u8; std::mem::size_of::<Version>()]);
@@ -85,7 +80,10 @@ pub struct Registry {
     /// Registry contents represented as a versioned key/value store, where
     /// value versions are stored in a deque in ascending order (latest version
     /// is stored at the back of the deque).
-    pub(crate) store: RegistryMap,
+    pub(crate) store: BTreeMap<
+        Vec<u8>,
+        VecDeque<HighCapacityRegistryValue>,
+    >,
 
     /// All the mutations applied to the registry.
     ///
@@ -128,6 +126,12 @@ impl Registry {
                     .skip_while(|value| value.version > max_version)
                     .take_while(|value| value.version > version)
                     .cloned()
+                    // TODO(NNS1-3701): Change the return value type above to
+                    // HighCapacityRegistryDelta, and get rid of this map.
+                    .map(|delta: HighCapacityRegistryValue| {
+                        RegistryValue::try_from(delta)
+                            .expect("Unable to convert from HighCapacity to RegistryDelta.")
+                    })
                     .collect(),
             })
             // Drop empty deltas.
@@ -138,7 +142,7 @@ impl Registry {
     /// Returns the highest version of value such that it is lower than or equal
     /// to 'version', or None if it does not exist or if the most recent update
     /// whose version is less than or equal to 'version' is a deletion marker.
-    pub fn get(&self, key: &[u8], version: Version) -> Option<&RegistryValue> {
+    pub fn get(&self, key: &[u8], version: Version) -> Option<RegistryValue> {
         let value = self
             .store
             .get(key)?
@@ -146,9 +150,15 @@ impl Registry {
             .rev()
             // Get the first one versioned at or below `version`.
             .find(|value| value.version <= version)?;
+
+        // TODO(NNS1-3683): Change the return type above to
+        // HighCapacityRegistryValue (and get rid of this).
+        let value = RegistryValue::try_from(value.clone()).unwrap();
+
         if value.deletion_marker {
             return None;
         }
+
         Some(value)
     }
 
@@ -191,8 +201,11 @@ impl Registry {
     /// field equal true, and value being completely bogus. Thus,
     /// when calling 'get_last' you must check the 'deleted' marker,
     /// otherwise you might deal with garbage.
-    fn get_last(&self, key: &[u8]) -> Option<&RegistryValue> {
-        self.store.get(key).and_then(VecDeque::back)
+    fn get_last(&self, key: &[u8]) -> Option<RegistryValue> {
+        self.store
+            .get(key)
+            .and_then(VecDeque::back)
+            .map(|registry_value| RegistryValue::try_from(registry_value.clone()).unwrap())
     }
 
     /// Increments the latest version of the registry.
@@ -207,45 +220,61 @@ impl Registry {
 
     fn apply_mutations_as_version(
         &mut self,
-        mut mutations: Vec<RegistryMutation>,
+        mut composite_mutation: HighCapacityRegistryAtomicMutateRequest,
         version: Version,
     ) {
         // We sort entries by key to eliminate the difference between changelog
         // produced by the new version of the registry canister starting from v1
         // and the changelog recovered from the stable representation of the
         // original version that didn't support certification.
-        mutations.sort_by(|l, r| l.key.cmp(&r.key));
-        for m in mutations.iter_mut() {
-            // We normalize all the INSERT/UPDATE/UPSERT operations to be just
-            // UPSERTs. This serves 2 purposes:
-            //
-            // 1. This significantly simplifies reconstruction of the changelog
-            //    when we deserialize the registry from the original stable
-            //    representation.
-            //
-            // 2. This will play nicely with garbage collection: if an old
-            //    INSERT entry is removed, the newly connected clients won't
-            //    fail because of an UPDATE in the first survived entry with the
-            //    same key.
+        composite_mutation.mutations.sort_by(|l, r| l.key.cmp(&r.key));
+
+        // We normalize all the INSERT/UPDATE/UPSERT operations to be just
+        // UPSERTs. This serves 2 purposes:
+        //
+        // 1. This significantly simplifies reconstruction of the changelog
+        //    during post-upgrade, when restoring from stable memory.
+        //
+        // 2. This will play nicely with garbage collection: if an old
+        //    INSERT entry is removed, the newly connected clients won't
+        //    fail because of an UPDATE in the first survived entry with the
+        //    same key.
+        for m in composite_mutation.mutations.iter_mut() {
             m.mutation_type = match Type::try_from(m.mutation_type).unwrap() {
                 Type::Insert | Type::Update | Type::Upsert => Type::Upsert,
                 Type::Delete => Type::Delete,
             } as i32;
         }
 
-        for mutation in &mutations {
-            (*self.store.entry(mutation.key.clone()).or_default()).push_back(RegistryValue {
+        // Populate self.store (which is secondary to self.changelog).
+        let timestamp_seconds = composite_mutation.timestamp_seconds;
+        for prime_mutation in &composite_mutation.mutations {
+            let HighCapacityRegistryMutation {
+                key,
+                mutation_type,
+                content,
+            } = prime_mutation.clone();
+
+            let content = high_capacity_registry_value::Content::try_from((mutation_type, content));
+            let content = Some(
+                // One of the reasons this might panic is covered earlier.
+                // Namely, if mutation_type is not a valid Type code.
+                //
+                // However if prime_mutation is invalid in another way, this can
+                // still panic. In particular, if the mutation_type is Delete,
+                // but there is Some content.
+                content.unwrap()
+            );
+
+            (*self.store.entry(key).or_default()).push_back(HighCapacityRegistryValue {
                 version,
-                value: mutation.value.clone(),
-                deletion_marker: mutation.mutation_type == Type::Delete as i32,
+                content,
+                timestamp_seconds,
             });
         }
 
-        let request = RegistryAtomicMutateRequest {
-            mutations,
-            preconditions: vec![],
-        };
-        self.changelog_insert(version, request);
+        // Populate self.changelog (this is our primary data).
+        self.changelog_insert(version, composite_mutation);
     }
 
     /// Applies the given mutations, without any check corresponding
@@ -261,7 +290,11 @@ impl Registry {
             return;
         }
         self.increment_version();
-        self.apply_mutations_as_version(mutations, self.version);
+        let mutation = RegistryAtomicMutateRequest {
+            mutations,
+            preconditions: vec![],
+        };
+        self.apply_mutations_as_version(CompositeMutation::into_high_capacity(mutation), self.version);
     }
 
     /// Verifies the implicit precondition corresponding to the mutation_type
@@ -327,50 +360,15 @@ impl Registry {
         self.check_global_state_invariants(mutations.as_slice());
     }
 
-    /// Serializes the registry contents using the specified version of stable
-    /// representation.
-    fn serializable_form_at(&self, repr_version: ReprVersion) -> RegistryStableStorage {
-        match repr_version {
-            ReprVersion::Version1 => RegistryStableStorage {
-                version: repr_version as i32,
-                deltas: vec![],
-                changelog: self
-                    .changelog
-                    .iter()
-                    .map(|(encoded_version, bytes)| ChangelogEntry {
-                        version: encoded_version.as_version(),
-                        encoded_mutation: bytes.clone(),
-                    })
-                    .collect(),
-            },
-            ReprVersion::Unspecified => RegistryStableStorage {
-                version: repr_version as i32,
-                deltas: self
-                    .store
-                    .iter()
-                    .map(|(key, values)| RegistryDelta {
-                        key: key.clone(),
-                        values: values.iter().cloned().collect(),
-                    })
-                    .collect(),
-                changelog: vec![],
-            },
-        }
-    }
-
-    pub fn serializable_form(&self) -> RegistryStableStorage {
-        self.serializable_form_at(ReprVersion::Version1)
-    }
-
     pub fn changelog(&self) -> &RbTree<EncodedVersion, Vec<u8>> {
         &self.changelog
     }
 
     /// Inserts a changelog entry at the given version, while enforcing the
     /// [`MAX_REGISTRY_DELTAS_SIZE`] limit.
-    fn changelog_insert(&mut self, version: u64, req: RegistryAtomicMutateRequest) {
+    fn changelog_insert(&mut self, version: u64, req: HighCapacityRegistryAtomicMutateRequest) {
         let version = EncodedVersion::from(version);
-        let bytes = maybe_chunkify_and_encode(req);
+        let bytes = req.encode_to_vec();
 
         // Once chunking is enabled, you would need a really degenerate
         // composite/atomic mutation to reach this panic, but it is still
@@ -386,6 +384,24 @@ impl Registry {
         }
 
         self.changelog.insert(version, bytes);
+    }
+
+    pub fn serializable_form(&self) -> RegistryStableStorage {
+        RegistryStableStorage {
+            version: ReprVersion::Version1 as i32,
+            changelog: self
+                .changelog
+                .iter()
+                .map(|(encoded_version, bytes)| ChangelogEntry {
+                    version: encoded_version.as_version(),
+                    encoded_mutation: bytes.clone(),
+                })
+                .collect(),
+
+            // This is part of a legacy format (from before mid 2021), and can
+            // safely be ignored from now on.
+            deltas: vec![],
+        }
     }
 
     /// Sets the content of the registry from its serialized representation.
@@ -423,66 +439,42 @@ impl Registry {
                     // the invariants that are present in the
                     // client side.
                     for i in current_version + 1..entry.version {
-                        let mutations = vec![RegistryMutation {
+                        let prime_mutation = HighCapacityRegistryMutation {
                             mutation_type: Type::Upsert as i32,
-                            key: "_".into(),
-                            value: "".into(),
-                        }];
-                        self.apply_mutations_as_version(mutations, i);
+                            key: b"_".to_vec(),
+                            content: Some(high_capacity_registry_mutation::Content::Value(vec![])),
+                        };
+
+                        let composite_mutation = HighCapacityRegistryAtomicMutateRequest {
+                            mutations: vec![prime_mutation],
+                            preconditions: vec![],
+                            timestamp_seconds: 0,
+                        };
+
+                        self.apply_mutations_as_version(composite_mutation, i);
                         self.version = i;
                     }
                     // End code to fix ICSUP-2589
 
-                    // TODO(NNS1-3645): Switch to HighCapacity.
-                    let req = RegistryAtomicMutateRequest::decode(&entry.encoded_mutation[..])
+                    let mutation =
+                        HighCapacityRegistryAtomicMutateRequest::decode(&entry.encoded_mutation[..])
                         .unwrap_or_else(|err| {
                             panic!("Failed to decode mutation@{}: {}", entry.version, err)
                         });
-                    self.apply_mutations_as_version(req.mutations, entry.version);
+                    self.apply_mutations_as_version(mutation, entry.version);
                     self.version = entry.version;
                     current_version = self.version;
                 }
             }
+
             ReprVersion::Unspecified => {
-                let mut mutations_by_version = BTreeMap::<Version, Vec<RegistryMutation>>::new();
-                for delta in stable_repr.deltas.into_iter() {
-                    self.version = max(
-                        self.version,
-                        delta
-                            .values
-                            .last()
-                            .map(|registry_value| registry_value.version)
-                            .unwrap_or(0),
-                    );
-
-                    for v in delta.values.iter() {
-                        mutations_by_version
-                            .entry(v.version)
-                            .or_default()
-                            .push(RegistryMutation {
-                                mutation_type: if v.deletion_marker {
-                                    Type::Delete
-                                } else {
-                                    Type::Upsert
-                                } as i32,
-                                key: delta.key.clone(),
-                                value: v.value.clone(),
-                            })
-                    }
-
-                    self.store.insert(delta.key, VecDeque::from(delta.values));
-                }
-                // We iterated over keys in ascending order, so the mutations
-                // must also be sorted by key, resulting in canonical encoding.
-                for (v, mutations) in mutations_by_version.into_iter() {
-                    self.changelog_insert(
-                        v,
-                        RegistryAtomicMutateRequest {
-                            mutations,
-                            preconditions: vec![],
-                        },
-                    );
-                }
+                panic!(
+                    "Restoring from the legacy representation is no longer supported. \
+                     If this is needed again for whatever reason, use git history to \
+                     add this feature/ability back to the canister. It was removed to \
+                     reduce cruft (i.e. the usual reason), and because it really looked \
+                     like it could not possibly be needed in practice anymore."
+                );
             }
         }
     }
@@ -502,27 +494,18 @@ mod tests {
     /// This should bring back the registry in a state indistinguishable
     /// from the one before calling this method.
     fn serialize_then_deserialize(registry: Registry) {
-        let mut serialized_v0 = Vec::new();
+        let mut serialized = Vec::new();
         registry
-            .serializable_form_at(ReprVersion::Unspecified)
-            .encode(&mut serialized_v0)
-            .expect("Error encoding registry");
-        let mut serialized_v1 = Vec::new();
-        registry
-            .serializable_form_at(ReprVersion::Version1)
-            .encode(&mut serialized_v1)
+            .serializable_form()
+            .encode(&mut serialized)
             .expect("Error encoding registry");
 
-        let restore_from_v0 = RegistryStableStorage::decode(serialized_v0.as_slice())
-            .expect("Error decoding registry");
         let mut restored = Registry::new();
-        restored.from_serializable_form(restore_from_v0);
-        assert_eq!(restored, registry);
+        restored.from_serializable_form(
+            RegistryStableStorage::decode(serialized.as_slice())
+                .expect("Error decoding registry")
+        );
 
-        let restore_from_v1 = RegistryStableStorage::decode(serialized_v1.as_slice())
-            .expect("Error decoding registry");
-        let mut restored = Registry::new();
-        restored.from_serializable_form(restore_from_v1);
         assert_eq!(restored, registry);
     }
 
@@ -993,7 +976,7 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::from_entropy();
         let registry = initialize_random_registry(3, 1000, 13.0, 150);
 
-        let mut serializable_form = registry.serializable_form_at(ReprVersion::Version1);
+        let mut serializable_form = registry.serializable_form();
         // Remove half of the entries, but retain the first and the last entry.
         let initial_len = registry.changelog().iter().count();
         serializable_form
@@ -1103,7 +1086,7 @@ mod tests {
     /// a single mutation / mutate request that is zero or more bytes above
     /// `MAX_REGISTRY_DELTAS_SIZE`. Then serializes it using the given version
     /// and tests deserialization.
-    fn test_from_serializable_form_impl(bytes_above_max_size: usize, repr_version: ReprVersion) {
+    fn test_from_serializable_form_impl(bytes_above_max_size: usize) {
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
@@ -1128,7 +1111,7 @@ mod tests {
         registry.version = version;
 
         // Serialize.
-        let stable_repr = registry.serializable_form_at(repr_version);
+        let stable_repr = registry.serializable_form();
 
         // Deserialize.
         let mut deserialized = Registry::new();
@@ -1137,31 +1120,12 @@ mod tests {
         assert_eq!(deserialized, registry);
     }
 
-    // I think we can get rid of ReprVersion::Unspecified support? It's not
-    // doing much harm now; just a bit of detritus/dead code.
-    #[test]
-    fn test_from_serializable_form_version_unspecified_max_size_delta() {
-        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
-
-        test_from_serializable_form_impl(0, ReprVersion::Unspecified)
-    }
-
     #[test]
     fn test_from_serializable_form_version1_max_size_delta() {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
         let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
-        test_from_serializable_form_impl(0, ReprVersion::Version1)
-    }
-
-    #[test]
-    #[should_panic(expected = "[Registry] Transaction rejected because delta would be too large")]
-    fn test_from_serializable_form_version_unspecified_delta_too_large() {
-        // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
-        let _restore_on_drop = temporarily_disable_chunkifying_large_values();
-
-        test_from_serializable_form_impl(1, ReprVersion::Unspecified)
+        test_from_serializable_form_impl(0)
     }
 
     #[test]
@@ -1170,7 +1134,7 @@ mod tests {
         // TODO(NNS1-3746): Make a version of this test where chunking is enabled.
         let _restore_on_drop = temporarily_disable_chunkifying_large_values();
 
-        test_from_serializable_form_impl(1, ReprVersion::Version1)
+        test_from_serializable_form_impl(1)
     }
 
     #[allow(unused_must_use)] // Required because insertion errors are ignored.
