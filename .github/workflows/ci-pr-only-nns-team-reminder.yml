@@ -1,10 +1,10 @@
 name: Governance Unreleased Changelog Reminder
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - review_requested
-      
+
 permissions:
   pull-requests: write
 
