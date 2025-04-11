@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
+    "//packages/ic-vetkd-utils",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/prng",
@@ -310,7 +311,7 @@ rust_ic_bench(
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
         "@crate_index//:candid",
-        "@crate_index//:serde",
         "@crate_index//:rand",
+        "@crate_index//:serde",
     ] + BENCH_DEPENDENCIES,
 )

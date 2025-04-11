@@ -132,7 +132,7 @@ use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 # foundry container used in test
 oci.pull(
     name = "foundry",
-    image = "ghcr.io/foundry-rs/foundry@sha256:d2d6a8064db8659ab4d835bd36ee4ba19a781cbe62a9729a261d7cedf3774cdd",
+    image = "ghcr.io/foundry-rs/foundry@sha256:d12a373ec950de170d5461014ef9320ba0fb6e0db6f87835999d0fcf3820370e",  # v1.0.0
     platforms = [
         "linux/amd64",
     ],

@@ -22,9 +22,7 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_utils_canister_threshold_sig::{
-    derive_threshold_public_key, derive_vetkd_public_key, is_valid_transport_public_key,
-};
+use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
     ResourceSaturation,
@@ -73,7 +71,6 @@ use ic_types::{
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
-        vetkd::VetKdDerivationContext,
         ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -2949,16 +2946,25 @@ impl ExecutionEnvironment {
         caller: PrincipalId,
         context: Vec<u8>,
     ) -> Result<Vec<u8>, UserError> {
-        derive_vetkd_public_key(
-            subnet_public_key,
-            &VetKdDerivationContext { caller, context },
-        )
-        .map_err(|err| {
-            UserError::new(
+        if subnet_public_key.algorithm_id != ic_types::crypto::AlgorithmId::VetKD {
+            return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!("failed to retrieve VetKD public key: {}", err),
-            )
-        })
+                "Provided subnet master key is not for VetKD".to_string(),
+            ));
+        }
+
+        let dpk = ic_vetkd_utils::DerivedPublicKey::deserialize(&subnet_public_key.public_key)
+            .map_err(|err| {
+                UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("Invalid VetKD subnet key: {:?}", err),
+                )
+            })?;
+
+        Ok(dpk
+            .derive_sub_key(caller.as_slice())
+            .derive_sub_key(&context)
+            .serialize())
     }
 
     fn vetkd_derive_key(
@@ -2991,7 +2997,7 @@ impl ExecutionEnvironment {
                 ),
             ));
         };
-        if !is_valid_transport_public_key(&args.transport_public_key) {
+        if !ic_vetkd_utils::is_valid_transport_public_key_encoding(&args.transport_public_key) {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The provided transport public key is invalid.",
