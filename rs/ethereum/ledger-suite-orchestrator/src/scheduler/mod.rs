@@ -932,6 +932,7 @@ fn icrc1_ledger_init_arg(
         ),
         max_memo_length: Some(MAX_MEMO_LENGTH),
         feature_flags: Some(ICRC2_FEATURE),
+        index_principal: None,
     }
 }
 

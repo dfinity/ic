@@ -1533,6 +1533,7 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args() {
             max_memo_length: None,
             feature_flags: None,
             change_archive_options: None,
+            index_principal: None,
         }
     );
 }
@@ -1559,6 +1560,7 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
             max_memo_length: None,
             feature_flags: None,
             change_archive_options: None,
+            index_principal: None,
         }
     );
 }
