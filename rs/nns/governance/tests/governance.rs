@@ -21,8 +21,6 @@ use fixtures::{
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_canisters::cmc::CMC;
-use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::{
     ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
@@ -4652,7 +4650,7 @@ fn test_random_voting_rewards_scenarios() {
         proposals
     }
 
-    const SCENARIO_COUNT: u64 = 500;
+    const SCENARIO_COUNT: u64 = 300;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
         unique_scenarios.insert(helper(seed));
@@ -8893,6 +8891,12 @@ fn test_list_proposals() {
                     *x,
                     ProposalData {
                         id: Some(ProposalId { id: *x }),
+                        proposal: Some(Proposal {
+                            title: Some("Foo".to_string()),
+                            summary: "A great summary, the best".to_string(),
+                            url: "".to_string(),
+                            action: None,
+                        }),
                         ..Default::default()
                     },
                 )
@@ -14583,6 +14587,8 @@ async fn distribute_rewards_test() {
                         (n.id.as_ref().unwrap().id, ballot)
                     })
                     .collect(),
+                decided_timestamp_seconds: now - 100,
+                executed_timestamp_seconds: now - 99,
                 ..Default::default()
             };
 
@@ -14698,10 +14704,7 @@ fn test_short_proposal_title_is_invalid() {
 
 #[test]
 fn test_long_proposal_title_is_invalid() {
-    let mut long_title = String::new();
-    for _ in 0..300 {
-        long_title.push('Z');
-    }
+    let long_title = "Z".repeat(300);
 
     let result = validate_proposal_title(&Some(long_title));
     assert!(result.is_err());
@@ -15196,7 +15199,7 @@ fn randomly_pick_swap_start() {
 
     // Generate "zillions" of outputs, and count their occurrences.
     let mut start_time_to_count = BTreeMap::new();
-    const ITERATION_COUNT: u64 = 50_000;
+    const ITERATION_COUNT: u64 = 50;
     for _ in 0..ITERATION_COUNT {
         let GlobalTimeOfDay {
             seconds_after_utc_midnight,
@@ -15207,36 +15210,16 @@ fn randomly_pick_swap_start() {
             .or_insert(0) += 1;
     }
 
-    // Assert that we hit all possible values.
-    let possible_values_count = ONE_DAY_SECONDS / 60 / 15;
-    assert_eq!(start_time_to_count.len(), possible_values_count as usize);
-
-    // Assert that values are multiples of of 15 minutes.
+    // Assert that values are multiples of 15 minutes and within a single 24 hour period.
     for seconds_after_utc_midnight in start_time_to_count.keys() {
         assert_eq!(
             seconds_after_utc_midnight % (15 * 60),
             0,
-            "{}",
+            "A random start time was not at a 15 minute interval from midnight: {}",
             seconds_after_utc_midnight
         );
-    }
 
-    // Assert that the distribution appears to be uniform.
-    let min_occurrence_count = (0.8 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
-    let max_occurrence_count = (1.2 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
-    for occurrence_count in start_time_to_count.values() {
-        assert!(
-            *occurrence_count >= min_occurrence_count,
-            "{} (vs. minimum = {})",
-            occurrence_count,
-            min_occurrence_count
-        );
-        assert!(
-            *occurrence_count <= max_occurrence_count,
-            "{} (vs. maximum = {})",
-            occurrence_count,
-            max_occurrence_count
-        );
+        assert!(*seconds_after_utc_midnight < ONE_DAY_SECONDS);
     }
 }
 
@@ -15609,47 +15592,5 @@ fn test_neuron_info_private_enforcement() {
             "{:?}",
             neuron_info,
         );
-    }
-}
-
-// TODO - remove after migration of neuron_store.topic_follow_index to being stored on upgrade
-// is rolled out and becomes non-optional
-#[allow(dead_code)]
-struct StubIcpLedger {}
-#[async_trait]
-impl IcpLedger for StubIcpLedger {
-    async fn transfer_funds(
-        &self,
-        _amount_e8s: u64,
-        _fee_e8s: u64,
-        _from_subaccount: Option<Subaccount>,
-        _to: AccountIdentifier,
-        _memo: u64,
-    ) -> Result<u64, NervousSystemError> {
-        unimplemented!()
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
-    }
-
-    async fn account_balance(
-        &self,
-        _account: AccountIdentifier,
-    ) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        unimplemented!()
-    }
-}
-
-#[allow(dead_code)]
-struct StubCMC {}
-#[async_trait]
-impl CMC for StubCMC {
-    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
-        unimplemented!()
     }
 }

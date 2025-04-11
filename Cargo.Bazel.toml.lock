@@ -219,6 +219,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-web-prom"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+dependencies = [
+ "actix-web",
+ "futures-core",
+ "log",
+ "pin-project-lite",
+ "prometheus",
+ "regex",
+ "strfmt",
+]
+
+[[package]]
 name = "addr"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2777,9 +2792,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.13"
+version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -3332,6 +3347,7 @@ version = "0.0.1"
 dependencies = [
  "actix-rt",
  "actix-web",
+ "actix-web-prom",
  "addr",
  "aide",
  "anyhow",
@@ -8223,9 +8239,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.70"
+version = "0.10.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
+checksum = "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if 1.0.0",
@@ -8264,9 +8280,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.105"
+version = "0.9.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
+checksum = "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
 dependencies = [
  "cc",
  "libc",
@@ -11794,6 +11810,12 @@ name = "str_stack"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9091b6114800a5f2141aee1d1b9d6ca3592ac062dc5decb3764ec5895a47b4eb"
+
+[[package]]
+name = "strfmt"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a8348af2d9fc3258c8733b8d9d8db2e56f54b2363a4b5b81585c7875ed65e65"
 
 [[package]]
 name = "string_cache"

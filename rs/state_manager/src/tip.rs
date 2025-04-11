@@ -364,6 +364,21 @@ pub(crate) fn spawn_tip_thread(
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest");
+                            if let Some(manifest_delta) = &manifest_delta {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} incrementally from checkpoint @{}",
+                                    checkpoint_layout.height(),
+                                    manifest_delta.base_height
+                                );
+                            } else {
+                                info!(
+                                    log,
+                                    "Computing manifest for checkpoint @{} from scratch",
+                                    checkpoint_layout.height()
+                                );
+                            }
+
                             tip_state.latest_checkpoint_state.has_manifest = true;
                             handle_compute_manifest_request(
                                 &mut thread_pool,
@@ -1013,6 +1028,11 @@ fn serialize_snapshot_to_tip(
             wasm_memory_size: canister_snapshot.wasm_memory().size,
             total_size: canister_snapshot.size(),
             exported_globals: canister_snapshot.exported_globals().clone(),
+            source: canister_snapshot.source(),
+            global_timer: canister_snapshot.execution_snapshot().global_timer,
+            on_low_wasm_memory_hook_status: canister_snapshot
+                .execution_snapshot()
+                .on_low_wasm_memory_hook_status,
         }
         .into(),
     )?;

@@ -1,6 +1,8 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types_private::{Global, LogVisibilityV2};
+use ic_management_canister_types_private::{
+    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
+};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -23,8 +25,8 @@ use ic_replicated_state::{
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, Height,
+    LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
@@ -208,6 +210,12 @@ pub struct CanisterSnapshotBits {
     pub total_size: NumBytes,
     /// State of the exported Wasm globals.
     pub exported_globals: Vec<Global>,
+    /// Whether this snapshot comes from a canister or from a user upload.
+    pub source: SnapshotSource,
+    /// The state of the global timer.
+    pub global_timer: Option<CanisterTimer>,
+    /// The state of the low memory hook.
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 #[derive(Clone)]
@@ -2828,6 +2836,13 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
                 .iter()
                 .map(|global| global.into())
                 .collect(),
+            global_timer: item
+                .global_timer
+                .map(pb_canister_snapshot_bits::CanisterTimer::from),
+            on_low_wasm_memory_hook_status: item
+                .on_low_wasm_memory_hook_status
+                .map(|x| pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(&x).into()),
+            source: pb_canister_snapshot_bits::SnapshotSource::from(item.source).into(),
         }
     }
 }
@@ -2857,7 +2872,18 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         for global in item.exported_globals.into_iter() {
             exported_globals.push(global.try_into()?);
         }
+        let global_timer = item.global_timer.map(CanisterTimer::from);
 
+        let on_low_wasm_memory_hook_status = item
+            .on_low_wasm_memory_hook_status
+            .map(pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from)
+            .and_then(Result::ok)
+            .map(OnLowWasmMemoryHookStatus::try_from)
+            .and_then(Result::ok);
+
+        let source =
+            pb_canister_snapshot_bits::SnapshotSource::try_from(item.source).unwrap_or_default();
+        let source = SnapshotSource::try_from(source).unwrap_or_default();
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
@@ -2874,6 +2900,9 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             wasm_memory_size: NumWasmPages::from(item.wasm_memory_size as usize),
             total_size: NumBytes::from(item.total_size),
             exported_globals,
+            global_timer,
+            on_low_wasm_memory_hook_status,
+            source,
         })
     }
 }

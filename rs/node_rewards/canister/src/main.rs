@@ -1,8 +1,12 @@
-use ic_cdk::{init, post_upgrade, pre_upgrade, query, spawn};
+#[cfg(any(feature = "test", test))]
+use ic_cdk::query;
+use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::RegistryStoreStableMemoryBorrower;
-use ic_node_rewards_canister_api::lifecycle_args::{InitArgs, UpgradeArgs};
+use ic_node_rewards_canister_api::monthly_rewards::{
+    GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
 use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_canister_client::StableCanisterRegistryClient;
 use std::cell::RefCell;
@@ -14,7 +18,7 @@ fn main() {}
 thread_local! {
     static REGISTRY_STORE: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
         let store = StableCanisterRegistryClient::<RegistryStoreStableMemoryBorrower>::new(
-            Box::new(RegistryCanister::new()));
+            Arc::new(RegistryCanister::new()));
         Arc::new(store)
     };
     static CANISTER: RefCell<NodeRewardsCanister> = {
@@ -25,7 +29,7 @@ thread_local! {
 }
 
 #[init]
-fn canister_init(_args: InitArgs) {
+fn canister_init() {
     schedule_timers();
 }
 
@@ -33,7 +37,7 @@ fn canister_init(_args: InitArgs) {
 fn pre_upgrade() {}
 
 #[post_upgrade]
-fn post_upgrade(_args: Option<UpgradeArgs>) {
+fn post_upgrade() {
     schedule_timers();
 }
 
@@ -64,6 +68,13 @@ fn schedule_registry_sync() {
 #[query(hidden = true)]
 fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
     CANISTER.with(|canister| canister.borrow().get_registry_value(key))
+}
+
+#[update]
+async fn get_node_providers_monthly_xdr_rewards(
+    request: GetNodeProvidersMonthlyXdrRewardsRequest,
+) -> GetNodeProvidersMonthlyXdrRewardsResponse {
+    NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(&CANISTER, request).await
 }
 
 #[cfg(test)]

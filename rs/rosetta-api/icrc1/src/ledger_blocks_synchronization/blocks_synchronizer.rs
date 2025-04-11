@@ -1,8 +1,6 @@
 #![allow(clippy::disallowed_types)]
+use crate::common::storage::storage_client::StorageClient;
 use crate::common::storage::types::RosettaBlock;
-use crate::common::{
-    storage::storage_client::StorageClient, utils::utils::create_progress_bar_if_needed,
-};
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat};
 use icrc_ledger_agent::Icrc1Agent;
@@ -10,9 +8,12 @@ use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
+use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
+
+// Interval for reporting progress of the synchronization process for each token.
+const PROGRESS_REPORT_INTERVAL: Duration = Duration::from_secs(5);
 
 // The Range of indices to be synchronized.
 // Contains the hashes of the top and end of the index range, which is used to ensure the fetched block interval is valid.
@@ -36,6 +37,45 @@ impl SyncRange {
             trailing_parent_hash,
         }
     }
+}
+
+// Defines the configuration for the recurrency mode.
+#[derive(Clone, Debug)]
+pub struct RecurrencyConfig {
+    // The minimum time to wait before the next synchronization.
+    pub min_recurrency_wait: Duration,
+    // The maximum time to wait before the next synchronization.
+    pub max_recurrency_wait: Duration,
+    // The backoff factor to increase the wait time after each failure.
+    pub backoff_factor: u32,
+}
+
+pub enum RecurrencyMode {
+    // Syncs only once
+    OneShot,
+
+    // Syncs recurrently with the given configuration
+    Recurrent(RecurrencyConfig),
+}
+
+async fn verify_and_fix_gaps(
+    agent: Arc<Icrc1Agent>,
+    storage_client: Arc<StorageClient>,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+) -> anyhow::Result<()> {
+    let sync_ranges = derive_synchronization_gaps(storage_client.clone())?;
+
+    for sync_range in sync_ranges {
+        sync_blocks_interval(
+            agent.clone(),
+            storage_client.clone(),
+            1000,
+            archive_canister_ids.clone(),
+            sync_range,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 /// This function will check whether there is a gap in the database.
@@ -95,42 +135,58 @@ fn derive_synchronization_gaps(
     Ok(sync_ranges)
 }
 
-/// This function will check for any gaps in the database and between the database and the icrc ledger
-/// After this function is successfully executed all blocks between [0,Ledger_Tip] will be stored in the database.
 pub async fn start_synching_blocks(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+    recurrency_mode: RecurrencyMode,
+    heartbeat: Box<dyn Fn() + Send + Sync>,
 ) -> anyhow::Result<()> {
-    // Determine whether there are any synchronization gaps in the database that need to be filled.
-    let sync_gaps = derive_synchronization_gaps(storage_client.clone())?;
-
-    // Close all of the synchronization gaps.
-    for gap in sync_gaps {
-        sync_blocks_interval(
+    let mut current_failure_streak = 0u32;
+    loop {
+        heartbeat();
+        // Verify and fix gaps in the database.
+        verify_and_fix_gaps(
+            agent.clone(),
+            storage_client.clone(),
+            archive_canister_ids.clone(),
+        )
+        .await?;
+        if let Err(e) = sync_from_the_tip(
             agent.clone(),
             storage_client.clone(),
             maximum_blocks_per_request,
             archive_canister_ids.clone(),
-            gap,
         )
-        .await?;
+        .await
+        {
+            error!("Error while syncing blocks: {}", e);
+            current_failure_streak += 1;
+        } else {
+            current_failure_streak = 0;
+        }
+
+        // Update the account balances. When queried for its status, the ledger will return the
+        // highest block index for which the account balances have been processed.
+        if let Err(e) = storage_client.update_account_balances() {
+            error!("Error while updating account balances: {}", e);
+            current_failure_streak += 1;
+        } else {
+            current_failure_streak = 0;
+        }
+
+        match recurrency_mode {
+            RecurrencyMode::OneShot => break,
+            RecurrencyMode::Recurrent(ref config) => {
+                let mut wait_time = config
+                    .min_recurrency_wait
+                    .saturating_mul(config.backoff_factor.saturating_pow(current_failure_streak));
+                wait_time = cmp::min(wait_time, config.max_recurrency_wait);
+                tokio::time::sleep(wait_time).await;
+            }
+        }
     }
-
-    // After all the gaps have been filled continue with a synchronization from the top of the blockchain.
-    sync_from_the_tip(
-        agent,
-        storage_client.clone(),
-        maximum_blocks_per_request,
-        archive_canister_ids.clone(),
-    )
-    .await?;
-
-    // Update the account balances. When queried for its status, the ledger will return the
-    // highest block index for which the account balances have been processed.
-    storage_client.update_account_balances()?;
-
     Ok(())
 }
 
@@ -187,6 +243,52 @@ pub async fn sync_from_the_tip(
     Ok(())
 }
 
+pub struct ProgressReport {
+    start: u64,
+    end: u64,
+    remaining_end: u64,
+    last_update: std::time::Instant,
+    start_time: std::time::Instant,
+}
+
+impl ProgressReport {
+    pub fn new(start: u64, end: u64) -> Self {
+        Self {
+            start,
+            end,
+            remaining_end: end,
+            start_time: std::time::Instant::now(),
+            last_update: std::time::Instant::now(),
+        }
+    }
+
+    // Reminder: blocks are added from the end of the range to the start.
+    pub fn update(&mut self, added_blocks: u64) {
+        self.remaining_end = self.remaining_end.saturating_sub(added_blocks);
+        let now = std::time::Instant::now();
+        if now.duration_since(self.last_update) > PROGRESS_REPORT_INTERVAL {
+            let time_spent = now.duration_since(self.start_time).as_secs_f64();
+            let current_rate = self.end.saturating_sub(self.remaining_end) as f64 / time_spent;
+            let remaining_count = self.remaining_end.saturating_sub(self.start) as f64 + 1.0;
+            let expected_remaining_time = remaining_count / current_rate;
+            self.last_update = now;
+            let progress = (self.end as f64 - remaining_count) / self.end as f64;
+            info!(
+                "Progress: {:.2}% (fetching {} of {}), ETA: {:.1}min ({:.1} blocks/s)",
+                progress * 100.0,
+                remaining_count,
+                self.end,
+                expected_remaining_time / 60.0,
+                current_rate
+            );
+        }
+    }
+
+    pub fn finish(&self) {
+        info!("Fully synched to block height: {}", self.end);
+    }
+}
+
 /// Syncs a specific blocks interval, validates it and stores it in storage.
 /// Expects the blocks interval to exist on the ledger.
 async fn sync_blocks_interval(
@@ -197,7 +299,7 @@ async fn sync_blocks_interval(
     sync_range: SyncRange,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
-    let pb = create_progress_bar_if_needed(
+    let mut pr = ProgressReport::new(
         *sync_range.index_range.start(),
         *sync_range.index_range.end(),
     );
@@ -251,12 +353,10 @@ async fn sync_blocks_interval(
 
         leading_block_hash.clone_from(&fetched_blocks[0].get_parent_hash());
         let number_of_blocks_fetched = fetched_blocks.len();
-        if let Some(ref pb) = pb {
-            pb.inc(number_of_blocks_fetched as u64);
-        }
 
         // Store the fetched blocks in the database.
         storage_client.store_blocks(fetched_blocks.clone())?;
+        pr.update(number_of_blocks_fetched as u64);
 
         // If the interval of the last iteration started at the target height, then all blocks above and including the target height have been synched.
         if *next_index_interval.start() == *sync_range.index_range.start() {
@@ -287,13 +387,7 @@ async fn sync_blocks_interval(
         );
         next_index_interval = RangeInclusive::new(interval_start, interval_end);
     }
-    if let Some(pb) = pb {
-        pb.finish_with_message("Done");
-    }
-    info!(
-        "Synced Up to block height: {}",
-        *sync_range.index_range.end()
-    );
+    pr.finish();
     Ok(())
 }
 

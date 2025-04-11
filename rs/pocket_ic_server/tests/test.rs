@@ -765,11 +765,12 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
         .build();
 
     // Check the registry version.
-    // The registry version should be 2 as we have two subnets on the PocketIC instance
-    // and every subnet creation bumps the registry version.
+    // The registry version should be 5 as we have two subnets on the PocketIC instance,
+    // every subnet creation bumps the registry version twice, and initial registry records
+    // are added at a separate registry version.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 2.into());
+    assert_eq!(registry_data_provider.latest_version(), 5.into());
 
     // There is one application subnet in the initial topology.
     let initial_topology = pic.topology();
@@ -790,11 +791,11 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     deploy_counter_canister_to_id(&pic, spec_canister_id, 3);
 
     // Check the registry version.
-    // The registry version should be 3 as we have three subnets on the PocketIC instance now
-    // and every subnet creation bumps the registry version.
+    // The registry version should be 7 as a new subnet has been created and
+    // every subnet creation bumps the registry version twice.
     let registry_proto_path = state_dir_path_buf.join("registry.proto");
     let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 3.into());
+    assert_eq!(registry_data_provider.latest_version(), 7.into());
 
     // There are two application subnets in the final topology.
     let final_topology = pic.topology();
@@ -888,10 +889,16 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Start a new PocketIC server.
     let (new_server_url, child) = start_server_helper(None, None, false, false);
 
-    // Create a PocketIC instance mounting the state created so far.
+    // Create a temporary state directory persisted throughout the rest of the test.
+    let write_state_dir = TempDir::new().unwrap();
+    let write_state_dir_path_buf = write_state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance mounting the (read-only) state created so far
+    // and persisting the state in a separate (write) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_state_dir(state_dir_path_buf.clone())
+        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .with_state_dir(write_state_dir_path_buf.clone())
         .build();
 
     // Check that the topology has been properly restored.
@@ -903,6 +910,83 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     check_counter(&pic, nns_canister_id, 3);
     check_counter(&pic, app_canister_id, 2);
     check_counter(&pic, spec_canister_id, 4);
+
+    // Bump the counters on all subnets.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the (read-only) state.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .build();
+
+    // Check that the canister states have not changed
+    // after mounting read-only state and making state changes.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
+
+    // Bump the counters on all subnets.
+    pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the (read-only) state.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state_dir(state_dir_path_buf.clone())
+        .build();
+
+    // Check that the canister states have not changed
+    // after mounting read-only state and making state changes.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
+
+    send_signal_to_pic(pic, child, shutdown_signal);
+
+    // Start a new PocketIC server.
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
+
+    // Create a PocketIC instance mounting the persisted state created so far.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(new_server_url)
+        .with_read_only_state_dir(write_state_dir_path_buf.clone())
+        .build();
+
+    // Check that the canister states have been changed in the persisted state
+    // when initializing that state from a read-only state.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
+    check_counter(&pic, spec_canister_id, 5);
 
     send_signal_to_pic(pic, child, shutdown_signal);
 }

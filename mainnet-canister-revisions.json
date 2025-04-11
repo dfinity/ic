@@ -1,7 +1,7 @@
 {
   "archive": {
-    "rev": "2fe8aefafcb2fbee6fdb2785374d5de715560269",
-    "sha256": "4c3b1fc147551ffd2ff79495f0c4050bb286dcf198d124ac28d99cff9e51b2b5"
+    "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
+    "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
   "ck_btc_archive": {
     "rev": "c741e349451edf0c9792149ad439bb32a0161371",
@@ -68,36 +68,28 @@
     "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
   },
   "governance": {
-    "rev": "cbebf5d2d74bb97b616a8204df43d2ddfc3560aa",
-    "sha256": "2ba2ba54cd5b68808c1415b42aec05dc67a822a07cbacfcb30871fc663327999"
+    "rev": "910ed6f13390e590b6b9f45ab21ea25182b76553",
+    "sha256": "733adbcbfc5c6218ad30b646dd0ac0075780b1cc0a933249326b8362d749974c"
   },
   "index": {
-    "rev": "2fe8aefafcb2fbee6fdb2785374d5de715560269",
-    "sha256": "49aaa674ef050749da4f8f3a844467a2a189b23ee3c3734440424993b6f036fe"
+    "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
+    "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "ledger": {
-    "rev": "2fe8aefafcb2fbee6fdb2785374d5de715560269",
-    "sha256": "05e9ea814f7bd6adde3e69cd2d14f89d387241400ac129bfbf35c1d6cf2ce769"
-  },
-  "ledger_v1": {
-    "rev": "6dcfafb491092704d374317d9a72a7ad2475d7c9",
-    "sha256": "4fe38a91a3130e9d8b39e3413ae3b3f46c40d3fbd507df1b6092f962d970a7ea"
-  },
-  "ledger_v2": {
-    "rev": "dac2f36f96d7549d82fa8e3c714979255ce57afd",
-    "sha256": "50c05fd687883fe788c0bb91996de358d8f856ba56088c6ff47767ea853001d7"
-  },
-  "ledger_v3": {
-    "rev": "7c6309cb5bec7ab28ed657ac7672af08a59fc1ba",
-    "sha256": "a9ed1cb9dda555e0fc1038825eb7b3a6b366f17aa4b88575184c7537e864e551"
+    "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
+    "sha256": "d6129209b5178a1daf5b66f6a907bd3ddcde48dd14acd35e49791bfdfe6273d0"
   },
   "lifeline": {
     "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
+  "node-rewards": {
+    "rev": "3a3cf55373bfe5843fac9fff6657127ae11b5dd8",
+    "sha256": "8637e0182ffc1255563e295efee28f2163f9be21bbd27f3e65bfc3c1f470d3ca"
+  },
   "registry": {
-    "rev": "c5dee3a11b79da7b5c433574f38605d75c9feaf5",
-    "sha256": "a0f4a36d46816619ef042d8de1a893c105a33c0c493106f5f9d04602ed9afbcf"
+    "rev": "3afec59ddf883e80a4987fa9129d62ad156548a2",
+    "sha256": "3d44ad8ac30be5861f8b650300383836051a50980e3475dff7fc0953bc9e192c"
   },
   "root": {
     "rev": "34a638d9f593542f3da89494966c3759667aaf88",

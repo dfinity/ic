@@ -177,14 +177,12 @@ impl Setup {
         );
     }
 
-    fn upgrade_archive_canisters(
-        &self,
-        upgrade_to_version: UpgradeToVersion,
-        should_succeed: bool,
-    ) {
-        let archive_wasm_bytes = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_archive_wasm().bytes(),
-            UpgradeToVersion::Latest => build_ledger_archive_wasm().bytes(),
+    fn upgrade_archive_canisters(&self, upgrade_to_version: UpgradeToVersion) {
+        let (archive_wasm_bytes, upgrade_arg) = match upgrade_to_version {
+            UpgradeToVersion::MainNet => (build_mainnet_ledger_archive_wasm().bytes(), vec![]),
+            UpgradeToVersion::Latest => {
+                (build_ledger_archive_wasm().bytes(), Encode!(&()).unwrap())
+            }
         };
         let mainnet_archive_module_hash = mainnet_archive_canister_sha256sum();
         let ledger_archives = archives(&self.pocket_ic);
@@ -192,30 +190,19 @@ impl Setup {
             .iter()
             .map(|archive| candid::Principal::from(archive.canister_id))
         {
-            match self.pocket_ic.upgrade_canister(
-                archive_canister_id,
-                archive_wasm_bytes.clone(),
-                vec![],
-                None,
-            ) {
-                Ok(_) => {
-                    if !should_succeed {
-                        panic!("Upgrade should fail!");
-                    }
-                }
-                Err(e) => {
-                    if should_succeed {
-                        panic!("Upgrade should succeed!");
-                    } else {
-                        assert!(e.reject_message.contains("Decoding stable memory failed"));
-                    }
-                }
-            };
+            self.pocket_ic
+                .upgrade_canister(
+                    archive_canister_id,
+                    archive_wasm_bytes.clone(),
+                    upgrade_arg.clone(),
+                    None,
+                )
+                .expect("failed to upgrade the archive canister");
 
             self.assert_canister_module_hash(
                 archive_canister_id,
                 &mainnet_archive_module_hash,
-                upgrade_to_version == UpgradeToVersion::MainNet && should_succeed,
+                upgrade_to_version == UpgradeToVersion::MainNet,
             );
         }
     }
@@ -457,13 +444,13 @@ fn should_upgrade_and_downgrade_canister_suite() {
 
     setup.upgrade_index_canister(UpgradeToVersion::Latest);
     setup.upgrade_ledger_canister(UpgradeToVersion::Latest, true);
-    setup.upgrade_archive_canisters(UpgradeToVersion::Latest, true);
+    setup.upgrade_archive_canisters(UpgradeToVersion::Latest);
 
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
-    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, false);
-    setup.upgrade_archive_canisters(UpgradeToVersion::MainNet, false);
+    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
+    setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
     setup.assert_index_ledger_parity(true);
 }

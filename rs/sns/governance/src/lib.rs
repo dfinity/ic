@@ -3,6 +3,8 @@ use std::convert::TryInto;
 
 mod cached_upgrade_steps;
 pub mod canister_control;
+pub(crate) mod follower_index;
+pub mod following;
 pub mod governance;
 pub mod init;
 pub mod logs;

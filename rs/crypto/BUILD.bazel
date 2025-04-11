@@ -266,3 +266,13 @@ rust_bench(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
+
+rust_bench(
+    name = "vetkd_bench",
+    testonly = True,
+    srcs = ["benches/vetkd.rs"],
+    aliases = ALIASES,
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

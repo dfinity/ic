@@ -150,7 +150,6 @@ pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
-    pub wasm_native_stable_memory: FlagStatus,
     /// Indicates whether the support for 64 bit main memory is enabled
     pub wasm64: FlagStatus,
     /// Rollout stage of the best-effort responses feature.
@@ -164,9 +163,8 @@ impl Default for FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
-            wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: BestEffortResponsesFeature::ApplicationSubnetsOnly,
+            best_effort_responses: BestEffortResponsesFeature::Enabled,
             canister_backtrace: FlagStatus::Enabled,
         }
     }

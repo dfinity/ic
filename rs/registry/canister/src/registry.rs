@@ -1,11 +1,11 @@
 use crate::{
     common::LOG_PREFIX,
     pb::v1::{
-        registry_stable_storage::Version as ReprVersion, ChangelogEntry, Chunk, GetChunkRequest,
-        RegistryStableStorage,
+        registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
     },
 };
 use ic_certified_map::RbTree;
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     pb::v1::{
         registry_mutation::Type, RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation,
@@ -368,7 +368,7 @@ impl Registry {
     /// [`MAX_REGISTRY_DELTAS_SIZE`] limit.
     fn changelog_insert(&mut self, version: u64, req: &RegistryAtomicMutateRequest) {
         let version = EncodedVersion::from(version);
-        let bytes = pb_encode(req);
+        let bytes = req.encode_to_vec();
 
         let delta_size = version.as_ref().len() + bytes.len();
         if delta_size > MAX_REGISTRY_DELTAS_SIZE {
@@ -478,12 +478,6 @@ impl Registry {
             }
         }
     }
-}
-
-fn pb_encode(msg: &impl prost::Message) -> Vec<u8> {
-    let mut buf = vec![];
-    msg.encode(&mut buf).unwrap();
-    buf
 }
 
 #[cfg(test)]
@@ -1106,7 +1100,7 @@ mod tests {
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
             .changelog
-            .insert(EncodedVersion::from(version), pb_encode(&req));
+            .insert(EncodedVersion::from(version), req.encode_to_vec());
 
         (*registry.store.entry(mutation.key).or_default()).push_back(RegistryValue {
             version,
@@ -1235,7 +1229,7 @@ Average length of the values: {} (desired: {})",
             };
 
             let version = EncodedVersion::from(version);
-            let bytes = pb_encode(&req);
+            let bytes = req.encode_to_vec();
 
             version.as_ref().len() + bytes.len()
         }

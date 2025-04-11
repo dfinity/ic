@@ -12,7 +12,7 @@ use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    make_key_ids_for_all_idkg_schemes, ChainSignatureRequest,
+    make_key_ids_for_all_schemes, ChainSignatureRequest,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -46,7 +46,7 @@ fn setup(env: TestEnv) {
         .add_nodes(SUBNET_SIZE)
         .with_dkg_interval_length(Height::from(DKG_INTERVAL))
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: make_key_ids_for_all_idkg_schemes()
+            key_configs: make_key_ids_for_all_schemes()
                 .into_iter()
                 .map(|key_id| KeyConfig {
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
@@ -73,7 +73,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let branch_version = bless_branch_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let key_ids = make_key_ids_for_all_idkg_schemes();
+    let key_ids = make_key_ids_for_all_schemes();
     get_chain_key_canister_and_public_key(
         &env,
         &nns_node,

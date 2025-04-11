@@ -25,7 +25,6 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }

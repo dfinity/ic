@@ -18,7 +18,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/sys",
-    "//rs/system_api",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",

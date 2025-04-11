@@ -29,12 +29,14 @@ use rosetta_core::response_types::SearchTransactionsResponse;
 use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
 use strum::IntoEnumIterator;
 
-pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
+pub fn network_list(ledger_ids: &[Principal]) -> NetworkListResponse {
     NetworkListResponse {
-        network_identifiers: vec![NetworkIdentifier::new(
-            DEFAULT_BLOCKCHAIN.to_owned(),
-            ledger_id.to_string(),
-        )],
+        network_identifiers: ledger_ids
+            .iter()
+            .map(|ledger_id| {
+                NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), ledger_id.to_string())
+            })
+            .collect(),
     }
 }
 
@@ -266,10 +268,16 @@ pub fn search_transactions(
 
     let rosetta_block_with_highest_block_index = storage_client
         .get_block_with_highest_block_idx()
-        .map_err(|e| Error::unable_to_find_block(&e))?
-        .ok_or_else(|| {
-            Error::unable_to_find_block(&"There exist no blocks in the database".to_owned())
-        })?;
+        .map_err(|e| Error::unable_to_find_block(&e))?;
+
+    let Some(rosetta_block_with_highest_block_index) = rosetta_block_with_highest_block_index
+    else {
+        return Ok(SearchTransactionsResponse {
+            total_count: 0,
+            transactions: vec![],
+            next_offset: None,
+        });
+    };
 
     let max_block: u64 = request
         .max_block

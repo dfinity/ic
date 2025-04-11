@@ -7,8 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 async-trait = { workspace = true }
+candid = { workspace = true }
 futures = "0.3.31"
+ic-cdk = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
@@ -17,10 +20,7 @@ ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nns-constants = { path = "../../nns/constants" }
 itertools = { workspace = true }
 ic-nns-common = { path = "../../nns/common" }
-anyhow = { workspace = true }
-ic-cdk = { workspace = true }
-candid = { workspace = true }
-
+prost = { workspace = true }
 
 [dev-dependencies]
 ic-registry-keys = { path = "../keys" }

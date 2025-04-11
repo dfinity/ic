@@ -11,10 +11,7 @@
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
-/bin/afl_test.sh          @dfinity/product-security
-/bin/afl_wrapper.sh       @dfinity/product-security
-/bin/build-all-fuzzers.sh @dfinity/product-security
-/bin/fuzzing_coverage.sh  @dfinity/product-security
+/bin/fuzzing/             @dfinity/product-security
 
 # [Bazel]
 .bazelrc                           @dfinity/idx
@@ -80,6 +77,7 @@ go_deps.bzl               @dfinity/idx
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
+/ci/tools/repro-check                                                    @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
 /.mergify.yaml                                                           @dfinity/idx
@@ -91,7 +89,6 @@ go_deps.bzl               @dfinity/idx
 /testnet/env/                                              @dfinity/platform-operations
 /testnet/release/                                          @dfinity/dre
 /testnet/tools/nns-tools/                                  @dfinity/nns-team
-/mainnet-icos-revisions.json                               @dfinity/consensus @dfinity/dre
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
@@ -230,7 +227,6 @@ go_deps.bzl               @dfinity/idx
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
 /rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/execution
-/rs/system_api/                                         @dfinity/execution
 /rs/test_utilities/                                     @dfinity/ic-interface-owners
 /rs/test_utilities/artifact_pool/                       @dfinity/consensus
 /rs/test_utilities/consensus/                           @dfinity/consensus
@@ -300,4 +296,5 @@ go_deps.bzl               @dfinity/idx
 Cargo.toml
 .gitignore
 stackage_snapshot.json
-mainnet-canister-revisions.json # this file is auto-approved by mergify, therefore we remove condeowners
+mainnet-canister-revisions.json # this file is auto-approved by github actions, therefore we remove codeowners
+mainnet-icos-revisions.json     # same as above

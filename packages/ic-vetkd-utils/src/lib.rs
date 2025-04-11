@@ -106,6 +106,14 @@ impl TransportSecretKey {
     }
 }
 
+/// Return true iff the argument is a valid encoding of a transport public key
+pub fn is_valid_transport_public_key_encoding(bytes: &[u8]) -> bool {
+    match bytes.try_into() {
+        Ok(bytes) => option_from_ctoption(G1Affine::from_compressed(&bytes)).is_some(),
+        Err(_) => false,
+    }
+}
+
 #[cfg_attr(feature = "js", wasm_bindgen)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
@@ -267,7 +275,7 @@ impl EncryptedVetKey {
         &self,
         tsk: &TransportSecretKey,
         derived_public_key: &DerivedPublicKey,
-        context: &[u8],
+        input: &[u8],
     ) -> Result<VetKey, String> {
         // Check that c1 and c2 have the same discrete logarithm
 
@@ -286,7 +294,7 @@ impl EncryptedVetKey {
         let k = G1Affine::from(G1Projective::from(&self.c3) - self.c1 * tsk.secret_key);
 
         // Check that the VetKey is a valid BLS signature
-        let msg = augmented_hash_to_g1(&derived_public_key.point, context);
+        let msg = augmented_hash_to_g1(&derived_public_key.point, input);
         let dpk_prep = G2Prepared::from(derived_public_key.point);
 
         use pairing::group::Group;

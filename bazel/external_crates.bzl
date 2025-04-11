@@ -170,6 +170,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "actix-web": crate.spec(
                 version = "^4.9.0",
             ),
+            "actix-web-prom": crate.spec(
+                version = "0.9.0",
+            ),
             "addr": crate.spec(
                 version = "^0.15.6",
                 default_features = False,
@@ -420,7 +423,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.4",
             ),
             "crossbeam-channel": crate.spec(
-                version = "^0.5.13",
+                version = "^0.5.15",
             ),
             "csv": crate.spec(
                 version = "^1.1",

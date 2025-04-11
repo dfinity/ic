@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.0] - 2025-04-04
+### Added
+- Support for multiple tokens within a single instance.
+
+## Fixed
+- Removed unnecessary recurrent block table scans to identify gaps -> sharp drop in I/O operations.
+
+
 ## [1.1.2] - 2024-11-21
 ### Fixed
 - Support for icrc3 certificates
