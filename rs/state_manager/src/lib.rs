@@ -17,7 +17,7 @@ use crate::{
         chunkable::cache::StateSyncCache,
         types::{FileGroupChunks, Manifest, MetaManifest},
     },
-    tip::{flush_tip_channel, spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
+    tip::{flush_tip_channel, spawn_tip_thread, PageMapToFlush, TipRequest},
 };
 use crossbeam_channel::Sender;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
@@ -2259,7 +2259,7 @@ impl StateManagerImpl {
             let canisters = std::mem::take(&mut state.canister_states);
             state.canister_states = canisters.into_iter().collect();
         }
-        let (state, cp_layout, has_downgrade) = checkpoint::make_unvalidated_checkpoint(
+        let (state, cp_layout) = checkpoint::make_unvalidated_checkpoint(
             state,
             height,
             &self.tip_channel,
@@ -2286,7 +2286,7 @@ impl StateManagerImpl {
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
-        let manifest_delta = if is_nns || has_downgrade == HasDowngrade::Yes {
+        let manifest_delta = if is_nns {
             None
         } else {
             let _timer = self

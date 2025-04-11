@@ -403,7 +403,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     flush_canister_snapshots_and_page_maps(&mut state, HEIGHT, &tip_channel);
 
     let mut thread_pool = thread_pool();
-    let (state, cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
+    let (state, cp_layout) = make_unvalidated_checkpoint(
         state,
         HEIGHT,
         &tip_channel,

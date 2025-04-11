@@ -69,7 +69,7 @@ fn make_checkpoint_and_get_state_impl(
     tip_channel: &Sender<TipRequest>,
     log: &ReplicaLogger,
 ) -> ReplicatedState {
-    let (switched_state, cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
+    let (switched_state, cp_layout) = make_unvalidated_checkpoint(
         state.clone(),
         height,
         tip_channel,

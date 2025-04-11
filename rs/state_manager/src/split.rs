@@ -204,7 +204,7 @@ fn write_checkpoint(
     // We need to flush to handle the deletion of canister snapshots.
     flush_canister_snapshots_and_page_maps(&mut state, new_height, &tip_channel);
 
-    let (_state, cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
+    let (_state, cp_layout) = make_unvalidated_checkpoint(
         state,
         new_height,
         &tip_channel,

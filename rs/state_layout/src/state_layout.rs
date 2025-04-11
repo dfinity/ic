@@ -66,6 +66,12 @@ pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
 pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
 
+pub trait ReadProtos: ReadPolicy {}
+pub trait WriteProtos: WritePolicy {}
+
+pub trait ReadPageMaps: ReadPolicy {}
+pub trait WritePageMaps: WritePolicy {}
+
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
 pub enum ReadOnly {}
@@ -78,6 +84,10 @@ pub enum WriteOnly {}
 pub struct RwPolicy<'a, Owner> {
     lifetime_tag: PhantomData<&'a Owner>,
 }
+
+/// `Unfinished` stands for a checkpoint with pagemaps and pagemaps, but without protos.
+/// It's used for serializing protobufs and switching PageMaps and wasm binaries to the new underlying files.
+pub enum Unfinished {}
 
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
@@ -720,18 +730,18 @@ impl StateLayout {
     /// the scratchpad is properly marked as unverified before transitioning it into a checkpoint.
     pub fn promote_scratchpad_to_unverified_checkpoint<T>(
         &self,
-        scratchpad_layout: CheckpointLayout<RwPolicy<'_, T>>,
+        scratchpad_layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
         scratchpad_layout.create_unverified_checkpoint_marker()?;
         self.scratchpad_to_checkpoint(scratchpad_layout, height)
     }
 
     fn scratchpad_to_checkpoint<T>(
         &self,
-        layout: CheckpointLayout<RwPolicy<'_, T>>,
+        layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
         // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
         debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
@@ -755,7 +765,7 @@ impl StateLayout {
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        self.checkpoint_in_verification(height)
+        self.checkpoint(height)
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
@@ -778,7 +788,10 @@ impl StateLayout {
 
     /// Returns the layout of the checkpoint with the given height.
     /// If the checkpoint is not found, an error is returned.
-    fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    fn checkpoint<T>(&self, height: Height) -> Result<CheckpointLayout<T>, LayoutError>
+    where
+        T: AccessPolicy,
+    {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -1602,6 +1615,19 @@ impl<Permissions: AccessPolicy> Clone for CheckpointLayout<Permissions> {
     }
 }
 
+impl<Permissions: ReadPolicy> CheckpointLayout<Permissions> {
+    /// Clone CheckpointLayout removing all access but ReadOnly.
+    /// Takes more time than regular clone due to the clone of StateLayout.
+    pub fn as_readonly(&self) -> CheckpointLayout<ReadOnly> {
+        CheckpointLayout(Arc::new(CheckpointLayoutImpl::<ReadOnly> {
+            root: self.0.root.clone(),
+            height: self.0.height,
+            state_layout: self.0.state_layout.clone(),
+            permissions_tag: PhantomData,
+        }))
+    }
+}
+
 impl<Permissions: AccessPolicy> std::fmt::Debug for CheckpointLayout<Permissions> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -1784,32 +1810,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         }
         Ok(())
     }
-}
 
-impl<P> CheckpointLayout<P>
-where
-    P: WritePolicy,
-{
-    /// Creates the unverified checkpoint marker.
-    /// If the marker already exists, this function does nothing and returns `Ok(())`.
-    ///
-    /// Only the checkpoint layout with write policy can create the unverified checkpoint marker,
-    /// e.g. state sync scratchpad and tip.
-    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
-        let marker = self.unverified_checkpoint_marker();
-        if marker.exists() {
-            return Ok(());
-        }
-        open_for_write(&marker)?;
-        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
-            path: self.0.root.clone(),
-            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
-            io_err: err,
-        })
-    }
-}
-
-impl CheckpointLayout<ReadOnly> {
     /// Removes the unverified checkpoint marker.
     /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     ///
@@ -1853,6 +1854,29 @@ impl CheckpointLayout<ReadOnly> {
     ) -> Result<(), LayoutError> {
         self.mark_files_readonly_and_sync(thread_pool)?;
         self.remove_unverified_checkpoint_marker()
+    }
+}
+
+impl<P> CheckpointLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Creates the unverified checkpoint marker.
+    /// If the marker already exists, this function does nothing and returns `Ok(())`.
+    ///
+    /// Only the checkpoint layout with write policy can create the unverified checkpoint marker,
+    /// e.g. state sync scratchpad and tip.
+    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if marker.exists() {
+            return Ok(());
+        }
+        open_for_write(&marker)?;
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
     }
 }
 

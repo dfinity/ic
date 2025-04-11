@@ -364,7 +364,7 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
                 .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, h)
                 .unwrap();
             cp.finalize_and_remove_unverified_marker(None).unwrap();
-            cp
+            cp.as_readonly()
         };
 
         let mut checkpoints = vec![];

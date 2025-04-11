@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapToFlush, TipRequest,
+    CheckpointError, CheckpointMetrics, PageMapToFlush, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
     CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -57,14 +57,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<
-    (
-        Arc<ReplicatedState>,
-        CheckpointLayout<ReadOnly>,
-        HasDowngrade,
-    ),
-    CheckpointError,
-> {
+) -> Result<(Arc<ReplicatedState>, CheckpointLayout<ReadOnly>), CheckpointError> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration

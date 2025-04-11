@@ -77,16 +77,8 @@ pub(crate) enum TipRequest {
         height: Height,
         state: ReplicatedState,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        sender: Sender<
-            Result<
-                (
-                    Arc<ReplicatedState>,
-                    CheckpointLayout<ReadOnly>,
-                    HasDowngrade,
-                ),
-                LayoutError,
-            >,
-        >,
+        #[allow(clippy::type_complexity)]
+        sender: Sender<Result<(Arc<ReplicatedState>, CheckpointLayout<ReadOnly>), LayoutError>>,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
     /// State: tip_folder_state.has_filtered_canisters = true
@@ -138,12 +130,6 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum HasDowngrade {
-    Yes,
-    No,
-}
-
 pub(crate) fn flush_tip_channel(tip_channel: &Sender<TipRequest>) {
     #[allow(clippy::disallowed_methods)]
     let (sender, recv) = unbounded();
@@ -167,7 +153,6 @@ pub(crate) fn spawn_tip_thread(
     let mut tip_state = TipState::default();
     // Height(0) doesn't need manifest
     tip_state.latest_checkpoint_state.has_manifest = true;
-    let mut tip_downgrade = HasDowngrade::No;
     let tip_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("TipThread".to_string())
@@ -189,6 +174,7 @@ pub(crate) fn spawn_tip_thread(
                                     )
                                 });
                         }
+
                         TipRequest::TipToCheckpoint {
                             height,
                             state,
@@ -196,7 +182,6 @@ pub(crate) fn spawn_tip_thread(
                             sender,
                         } => {
                             debug_assert!(tip_state.latest_checkpoint_state.has_manifest);
-                            //debug_assert_eq!(tip_state.tip_folder_state.has_protos, Some(height));
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.latest_checkpoint_state = tip_state.tip_folder_state;
@@ -213,63 +198,15 @@ pub(crate) fn spawn_tip_thread(
                                     fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
                                 });
                             }
-                            let state_and_layout = {
-                                let _timer =
-                                    request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
-                                let result = tip_to_checkpoint(
-				    &log,
-                                    &mut tip_handler,
-                                    &state_layout,
-                                    height,
-                                    state,
-                                    &fd_factory,
-                                );
-                                match result {
-                                    Err(err) => {
-                                        sender
-                                            .send(Err(err))
-                                            .expect("Failed to send TipToCheckpoint response");
-                                        None
-                                    }
-                                    Ok(result) => {
-                                        sender
-                                            .send(Ok(result.clone()))
-                                            .expect("Failed to send TipToCheckpoint response");
-                                        Some((result.0, result.1))
-                                    }
-                                }
-                            };
-                            if let Some((state, checkpoint_layout)) = state_and_layout {
-                                fn rw_cp(
-                                    _t: &mut TipHandler,
-                                    path: PathBuf,
-                                    height: Height,
-                                ) -> CheckpointLayout<RwPolicy<TipHandler>>
-                                {
-                                    CheckpointLayout::new_untracked(path, height).unwrap()
-                                }
-                                serialize_to_tip(
-                                    &state,
-                                    &rw_cp(
-                                        &mut tip_handler,
-                                        checkpoint_layout.raw_path().to_path_buf(),
-                                        checkpoint_layout.height(),
-                                    ),
-                                    &mut thread_pool,
-                                    &metrics.storage_metrics,
-                                    &lsmt_config,
-                                )
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to serialize to tip @{}: {}",
-                                        checkpoint_layout.height(),
-                                        err
-                                    );
-                                });
-                                tip_state.tip_folder_state.has_protos =
-                                    Some(checkpoint_layout.height());
-                            }
+                            tip_to_checkpoint(
+				&log,
+				&mut tip_handler,
+				&state_layout,
+			        	height,
+				state,
+				&fd_factory,
+			    );
+                            tip_state.tip_folder_state.has_protos = Some(height);
                         }
 
                         TipRequest::FlushPageMapDelta {
@@ -353,15 +290,6 @@ pub(crate) fn spawn_tip_thread(
                             tip_state.tip_folder_state = Default::default();
                             tip_state.tip_folder_state.page_maps_height =
                                 tip_state.latest_checkpoint_state.page_maps_height;
-                            if tip_downgrade != HasDowngrade::No {
-                                info!(
-                                    log,
-                                    "tip_downgrade changes from {:?} to {:?}",
-                                    tip_downgrade,
-                                    HasDowngrade::No,
-                                );
-                                tip_downgrade = HasDowngrade::No;
-                            }
                             let height = checkpoint_layout.height();
                             tip_handler
                                 .reset_tip_to(
@@ -477,41 +405,62 @@ fn tip_to_checkpoint(
     log: &ReplicaLogger,
     tip_handler: &mut TipHandler,
     state_layout: &StateLayout,
+    metrics: &StateManagerMetrics,
+    lsmt_config: &LsmtConfig,
     height: Height,
     mut state: ReplicatedState,
+    sender: &Sender<Result<(Arc<ReplicatedState>, CheckpointLayout<ReadOnly>), LayoutError>>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<
-    (
-        Arc<ReplicatedState>,
-        CheckpointLayout<ReadOnly>,
-        HasDowngrade,
-    ),
-    LayoutError,
-> {
-    let tip = tip_handler.tip(height)?;
-    let (cp, has_downgrade) =
-        match state_layout.promote_scratchpad_to_unverified_checkpoint(tip, height) {
-            Ok(cp) => (cp, HasDowngrade::No),
+    thread_pool: &mut scoped_threadpool::Pool,
+) {
+    let tip = tip_handler.tip(height).unwrap();
 
-            Err(LayoutError::AlreadyExists(_)) => {
-                warn!(
-                    log,
-                    "Failed to create checkpoint @{} because it already exists, \
+    match state_layout.promote_scratchpad_to_unverified_checkpoint(tip, height) {
+        Ok(cp_rw) => {
+            let cp_ro = cp_rw.as_readonly();
+            switch_to_checkpoint(&mut state, &cp_ro, fd_factory)
+                .expect("Failed to switch to checkpoint");
+            let state = Arc::new(state);
+            sender
+                .send(Ok((Arc::clone(&state), cp_ro)))
+                .expect("Failed to send TipToCheckpoint result");
+            serialize_to_tip(
+                &state,
+                &cp_rw,
+                thread_pool,
+                &metrics.storage_metrics,
+                lsmt_config,
+            )
+            .unwrap_or_else(|err| {
+                fatal!(log, "Failed to serialize protos to cp @{}: {}", height, err);
+            });
+        }
+
+        Err(LayoutError::AlreadyExists(_)) => {
+            warn!(
+                log,
+                "Failed to create checkpoint @{} because it already exists, \
                      re-loading the checkpoint from disk",
-                    height
-                );
+                height
+            );
 
-                let cp_layout = state_layout
-                    .checkpoint_in_verification(height)
-                    .unwrap_or_else(|err| {
-                        fatal!(log, "Failed to open checkpoint layout #{}: {}", height, err);
-                    });
-                (cp_layout, HasDowngrade::Yes)
-            }
-            Err(err) => return Err(err),
-        };
-    switch_to_checkpoint(&mut state, &cp, fd_factory).expect("Failed to switch to checkpoint");
-    Ok((Arc::new(state), cp, has_downgrade))
+            let checkpoint_layout = state_layout
+                .checkpoint_in_verification(height)
+                .unwrap_or_else(|err| {
+                    fatal!(log, "Failed to open checkpoint layout #{}: {}", height, err);
+                });
+            switch_to_checkpoint(&mut state, &checkpoint_layout, fd_factory)
+                .expect("Failed to switch to checkpoint");
+            sender
+                .send(Ok((Arc::new(state), checkpoint_layout)))
+                .expect("Failed to send TipToCheckpoint result");
+        }
+        Err(err) => {
+            sender
+                .send(Err(err))
+                .expect("Failed to send TipToCheckpoint result");
+        }
+    }
 }
 
 /// Switches `tip` to the most recent checkpoint file provided by `layout`.
