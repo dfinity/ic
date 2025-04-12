@@ -200,11 +200,6 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-    // TODO(NNS1-3601): Delete these (assuming all goes well, ofc) in mid March.
-    // There is already a draft PR for this.
-    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
-    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(true) };
-
     static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
@@ -224,38 +219,6 @@ thread_local! {
     // begun. (This occurs in one of the prune_some_following functions.)
     static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
         const { Cell::new(0) };
-}
-
-pub fn is_voting_power_adjustment_enabled() -> bool {
-    IS_VOTING_POWER_ADJUSTMENT_ENABLED.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_voting_power_adjustment() -> Temporary {
-    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_voting_power_adjustment() -> Temporary {
-    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, false)
-}
-
-pub fn is_prune_following_enabled() -> bool {
-    IS_PRUNE_FOLLOWING_ENABLED.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_prune_following() -> Temporary {
-    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_prune_following() -> Temporary {
-    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, false)
 }
 
 pub fn allow_active_neurons_in_stable_memory() -> bool {
