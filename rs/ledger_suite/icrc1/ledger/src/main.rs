@@ -271,10 +271,10 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         migrate_next_part(
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
+    } else {
+        // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+        ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
     }
-
-    // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
@@ -351,6 +351,8 @@ fn migrate_next_part(instruction_limit: u64) {
             });
         } else {
             log_message(format!("Migration completed! {msg}").as_str());
+            // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+            ic_cdk::api::set_certified_data(&ledger.root_hash());
         }
     });
 }
