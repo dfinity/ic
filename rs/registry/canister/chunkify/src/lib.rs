@@ -12,9 +12,13 @@ use ic_stable_structures::Memory;
 /// is < 32, because that is the length of a SHA-256 hash with which we would
 /// replace the inlined value itself! Even if this were a bit larger than that,
 /// it would be wasteful, because we would be forcing clients to perform a
-/// follow up `get_chunk` canister method call to get the original value. 25x or
-/// so seems like a pretty reasonable threshold.
-const MIN_CHUNKABLE_VALUE_LEN: usize = 800;
+/// follow up `get_chunk` canister method call to get the original value. At the
+/// same time, this should also be "significantly less than the 1.3 MiB Registry
+/// changelog limit (see MAX_REGISTRY_DELTAS_SIZE); otherwise, it won't be
+/// possible to support atomic ("composite") mutations containing many
+/// non-atommic ("prime") mutations. This seems to be a happy medium between
+/// 1.3e6 and 32.
+const MIN_CHUNKABLE_VALUE_LEN: usize = 10_000;
 
 pub fn chunkify_composite_mutation<M: Memory>(
     original_mutation: RegistryAtomicMutateRequest,
