@@ -1708,6 +1708,8 @@ async fn test_get_default_effective_canister_id_nonblocking() {
 
     let subnet_id = pic.get_subnet(canister_id).await.unwrap();
     assert!(pic.topology().await.get_app_subnets().contains(&subnet_id));
+
+    pic.drop().await;
 }
 
 #[test]
@@ -2647,12 +2649,14 @@ async fn state_handle_async() {
         .build_async()
         .await;
     assert!(pic1.canister_exists(canister_id).await);
+    pic1.drop().await;
 
     let pic2 = PocketIcBuilder::new()
         .with_read_only_state(&state)
         .build_async()
         .await;
     assert!(pic2.canister_exists(canister_id).await);
+    pic2.drop().await;
 }
 
 #[test]
