@@ -1,18 +1,12 @@
 name: CI Main
 
 on:
-  merge_group:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-  push:
-    branches:
-      - master
-      - 'dev-gh-*'
-  pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
+    inputs:
+      runner:
+        required: false
+        type: string
 
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
@@ -46,8 +40,8 @@ anchors:
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
-    runs-on:
-      labels: dind-small
+    runs-on: 
+      labels: ${{ inputs.runner }}
     container:
       <<: *image
     timeout-minutes: 30
