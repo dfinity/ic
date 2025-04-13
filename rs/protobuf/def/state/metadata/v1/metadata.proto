@@ -134,6 +134,7 @@ message CanisterHttpRequestContext {
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
   reserved 5;
+  types.v1.CanisterId transform_canister_id = 11;
 }
 
 message CanisterHttpRequestContextTree {

@@ -563,6 +563,7 @@ fn system_metadata_split_with_batch_time() {
 fn subnet_call_contexts_deserialization() {
     let url = "https://".to_string();
     let transform = Transform {
+        canister_id: canister_test_id(1),
         method_name: "transform".to_string(),
         context: vec![0, 1, 2],
     };

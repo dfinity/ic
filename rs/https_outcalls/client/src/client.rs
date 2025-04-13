@@ -283,7 +283,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 async fn transform_adapter_response(
     query_handler: QueryExecutionService,
     canister_http_response: CanisterHttpResponsePayload,
-    transform_canister: CanisterId,
+    sender: CanisterId,
     transform: &Transform,
     delegation_from_nns: Option<CertificateDelegation>,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
@@ -302,8 +302,16 @@ async fn transform_adapter_response(
     })?;
 
     // Query to execution.
+    let transform_canister = transform.canister_id;
+    let source = if sender == transform_canister {
+        QuerySource::Anonymous
+    } else {
+        QuerySource::Canister {
+            canister_id: sender,
+        }
+    };
     let query = Query {
-        source: QuerySource::Anonymous,
+        source,
         receiver: transform_canister,
         method_name: transform.method_name.to_string(),
         method_payload,
@@ -351,6 +359,7 @@ mod tests {
         HttpsOutcallRequest, HttpsOutcallResponse,
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
+    use ic_test_utilities_types::ids::canister_test_id;
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::Transform;
     use ic_types::{
@@ -429,7 +438,7 @@ mod tests {
     fn build_mock_canister_http_request(
         request_id: u64,
         request_timeout: Time,
-        transform_method: Option<String>,
+        transform: Option<(CanisterId, String)>,
     ) -> CanisterHttpRequest {
         CanisterHttpRequest {
             id: CallbackId::from(request_id),
@@ -444,7 +453,8 @@ mod tests {
                 headers: Vec::new(),
                 body: None,
                 http_method: CanisterHttpMethod::GET,
-                transform: transform_method.map(|method_name| Transform {
+                transform: transform.map(|(canister_id, method_name)| Transform {
+                    canister_id,
                     method_name,
                     context: vec![],
                 }),
@@ -690,7 +700,7 @@ mod tests {
             client.send(build_mock_canister_http_request(
                 420,
                 UNIX_EPOCH,
-                Some("transform".to_string())
+                Some((canister_test_id(1), "transform".to_string()))
             )),
             Ok(())
         );
@@ -836,7 +846,7 @@ mod tests {
             client.send(build_mock_canister_http_request(
                 420,
                 UNIX_EPOCH,
-                Some("transform".to_string())
+                Some((canister_test_id(1), "transform".to_string()))
             )),
             Ok(())
         );
@@ -909,7 +919,7 @@ mod tests {
             client.send(build_mock_canister_http_request(
                 420,
                 UNIX_EPOCH,
-                Some("transform".to_string())
+                Some((canister_test_id(1), "transform".to_string()))
             )),
             Ok(())
         );

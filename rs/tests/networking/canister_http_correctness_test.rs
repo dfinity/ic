@@ -179,6 +179,12 @@ fn main() -> Result<()> {
                 .add_test(systest!(
                     reference_transform_function_exposed_by_different_canister
                 ))
+                .add_test(systest!(
+                    reference_transform_function_exposed_by_canister_on_different_subnet
+                ))
+                .add_test(systest!(
+                    reference_transform_function_exposed_by_invalid_canister
+                ))
                 .add_test(systest!(test_max_number_of_request_headers))
                 .add_test(systest!(test_max_number_of_request_headers_exceeded))
                 .add_test(systest!(test_max_number_of_response_headers))
@@ -228,6 +234,8 @@ fn test_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    let proxy_canister_id = get_proxy_canister_id(&env);
+
     let transform_context = "transform_context".as_bytes().to_vec();
 
     let response = block_on(submit_outcall(
@@ -253,11 +261,13 @@ fn test_transform_function_is_executed(env: TestEnv) {
 
     let response = response.expect("Http call should succeed");
 
-    assert_eq!(response.headers.len(), 2, "Headers: {:?}", response.headers);
+    assert_eq!(response.headers.len(), 3, "Headers: {:?}", response.headers);
     assert_eq!(response.headers[0].0, "hello");
     assert_eq!(response.headers[0].1, "bonjour");
     assert_eq!(response.headers[1].0, "caller");
     assert_eq!(response.headers[1].1, "aaaaa-aa");
+    assert_eq!(response.headers[2].0, "id");
+    assert_eq!(response.headers[2].1, proxy_canister_id.to_string());
     assert_eq!(
         response.body.as_str(),
         "transform_context",
@@ -306,6 +316,8 @@ fn test_composite_transform_function_is_executed(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    let proxy_canister_id = get_proxy_canister_id(&env);
+
     let response = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
@@ -329,11 +341,13 @@ fn test_composite_transform_function_is_executed(env: TestEnv) {
 
     let response = response.expect("Http call should succeed");
 
-    assert_eq!(response.headers.len(), 2, "Headers: {:?}", response.headers);
+    assert_eq!(response.headers.len(), 3, "Headers: {:?}", response.headers);
     assert_eq!(response.headers[0].0, "hello");
     assert_eq!(response.headers[0].1, "bonjour");
     assert_eq!(response.headers[1].0, "caller");
     assert_eq!(response.headers[1].1, "aaaaa-aa");
+    assert_eq!(response.headers[2].0, "id");
+    assert_eq!(response.headers[2].1, proxy_canister_id.to_string());
 }
 
 fn test_no_cycles_attached(env: TestEnv) {
@@ -1885,6 +1899,68 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
                 principal: proxy_canister_id_2.into(),
                 method: "test_transform".to_string(),
             }),
+            context: "transform_context".as_bytes().to_vec(),
+        }),
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ));
+
+    let response = response.expect("Http call should succeed");
+
+    assert_eq!(response.headers.len(), 3, "Headers: {:?}", response.headers);
+    assert_eq!(response.headers[0].0, "hello");
+    assert_eq!(response.headers[0].1, "bonjour");
+    assert_eq!(response.headers[1].0, "caller");
+    assert_eq!(response.headers[1].1, proxy_canister_id_1.to_string());
+    assert_eq!(response.headers[2].0, "id");
+    assert_eq!(response.headers[2].1, proxy_canister_id_2.to_string());
+    assert_eq!(
+        response.body.as_str(),
+        "transform_context",
+        "Transform function did not set the body to the provided context."
+    );
+    assert_eq!(response.status, 202);
+}
+
+fn reference_transform_function_exposed_by_canister_on_different_subnet(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "ascii", "hello_world"
+    );
+
+    let proxy_canister_id_1 = get_proxy_canister_id(&env);
+    // Create another proxy canister;
+    // Get application subnet node to deploy canister to.
+    let mut nodes = get_system_subnet_node_snapshots(&env);
+    let node = nodes.next().expect("there is no application node");
+    let runtime = get_runtime_from_node(&node);
+    let _ = create_proxy_canister_with_name(&env, &runtime, &node, "proxy_canister_2");
+    let proxy_canister_id_2 = get_proxy_canister_id_with_name(&env, "proxy_canister_2");
+
+    assert_ne!(
+        proxy_canister_id_1, proxy_canister_id_2,
+        "create_proxy_canister() should create a new proxy canister with a new canister id."
+    );
+
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        max_response_bytes: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: proxy_canister_id_2.into(),
+                method: "test_transform".to_string(),
+            }),
             context: vec![],
         }),
     };
@@ -1900,7 +1976,47 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
     assert_matches!(
         response,
         Err(RejectResponse {
-            reject_code: RejectCode::CanisterReject,
+            reject_code: RejectCode::DestinationInvalid,
+            ..
+        })
+    );
+}
+
+fn reference_transform_function_exposed_by_invalid_canister(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+    let url = format!(
+        "https://[{}]:20443/{}/{}",
+        webserver_ipv6, "ascii", "hello_world"
+    );
+
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        max_response_bytes: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: Principal::anonymous(),
+                method: "test_transform".to_string(),
+            }),
+            context: vec![],
+        }),
+    };
+
+    let response = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: 500_000_000_000,
+        },
+    ));
+
+    assert_matches!(
+        response,
+        Err(RejectResponse {
+            reject_code: RejectCode::DestinationInvalid,
             ..
         })
     );

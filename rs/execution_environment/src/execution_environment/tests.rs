@@ -2470,6 +2470,7 @@ fn execute_canister_http_request() {
     assert_eq!(
         http_request_context.transform,
         Some(Transform {
+            canister_id: caller_canister,
             method_name: transform_method_name,
             context: transform_context,
         })

@@ -155,6 +155,7 @@ impl From<&Query> for EntryKey {
         Self {
             source: match query.source {
                 QuerySource::User { user_id, .. } => user_id,
+                QuerySource::Canister { canister_id } => UserId::from(canister_id.get()),
                 QuerySource::Anonymous => UserId::from(PrincipalId::default()),
             },
             receiver: query.receiver,

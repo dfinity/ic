@@ -7,7 +7,7 @@
 //!
 use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::caller;
+use ic_cdk::{caller, id};
 use ic_cdk_macros::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
@@ -126,6 +126,10 @@ fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
         HttpHeader {
             name: "caller".to_string(),
             value: caller().to_string(),
+        },
+        HttpHeader {
+            name: "id".to_string(),
+            value: id().to_string(),
         },
     ];
     transformed.body = context;
