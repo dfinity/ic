@@ -962,6 +962,8 @@ pub struct StateMachineBuilder {
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
     is_vetkd_enabled: bool,
+    is_snapshot_download_enabled: bool,
+    is_snapshot_upload_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -995,6 +997,8 @@ impl StateMachineBuilder {
             is_ecdsa_signing_enabled: true,
             is_schnorr_signing_enabled: true,
             is_vetkd_enabled: true,
+            is_snapshot_download_enabled: false,
+            is_snapshot_upload_enabled: false,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -1197,6 +1201,20 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_snapshot_download_enabled(self, is_snapshot_download_enabled: bool) -> Self {
+        Self {
+            is_snapshot_download_enabled,
+            ..self
+        }
+    }
+
+    pub fn with_snapshot_upload_enabled(self, is_snapshot_upload_enabled: bool) -> Self {
+        Self {
+            is_snapshot_upload_enabled,
+            ..self
+        }
+    }
+
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1234,6 +1252,8 @@ impl StateMachineBuilder {
             self.is_ecdsa_signing_enabled,
             self.is_schnorr_signing_enabled,
             self.is_vetkd_enabled,
+            self.is_snapshot_download_enabled,
+            self.is_snapshot_upload_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1577,6 +1597,8 @@ impl StateMachine {
         is_ecdsa_signing_enabled: bool,
         is_schnorr_signing_enabled: bool,
         is_vetkd_enabled: bool,
+        is_snapshot_download_enabled: bool,
+        is_snapshot_upload_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1597,8 +1619,12 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        hypervisor_config.canister_snapshot_download = FlagStatus::Enabled;
-        hypervisor_config.canister_snapshot_upload = FlagStatus::Enabled;
+        if is_snapshot_download_enabled {
+            hypervisor_config.canister_snapshot_download = FlagStatus::Enabled;
+        }
+        if is_snapshot_upload_enabled {
+            hypervisor_config.canister_snapshot_upload = FlagStatus::Enabled;
+        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
