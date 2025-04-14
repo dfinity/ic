@@ -460,7 +460,7 @@ mod tests {
                 QuerySource::Canister { .. } => {
                     panic!("Expected a user query but got one from canister")
                 }
-                QuerySource::Anonymous => panic!("Expected a user query but got an anonymous one"),
+                QuerySource::System => panic!("Expected a user query but got an anonymous one"),
             },
             _ => panic!(
                 "parse_message() returned an unexpected message type: {:?}",

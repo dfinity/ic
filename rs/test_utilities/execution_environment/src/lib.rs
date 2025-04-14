@@ -1124,8 +1124,8 @@ impl ExecutionTest {
         );
     }
 
-    /// Executes an anonymous query in the given canister.
-    pub fn anonymous_query<S: ToString>(
+    /// Executes a query sent by the system in the given canister.
+    pub fn system_query<S: ToString>(
         &mut self,
         canister_id: CanisterId,
         method_name: S,
@@ -1135,7 +1135,7 @@ impl ExecutionTest {
         let state = Arc::new(self.state.take().unwrap());
 
         let query = Query {
-            source: QuerySource::Anonymous,
+            source: QuerySource::System,
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,

@@ -11,10 +11,10 @@ use std::convert::TryFrom;
 /// Represents the source of a query that is sent to a canister.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum QuerySource {
-    /// A query sent by the IC to itself.
-    Anonymous,
     /// A query sent by a canister (e.g., calling a transform function of a canister http outcall).
     Canister { canister_id: CanisterId },
+    /// A query sent by the IC to itself.
+    System,
     /// A query sent by an end user.
     User {
         user_id: UserId,
@@ -37,7 +37,7 @@ impl Query {
         match &self.source {
             QuerySource::User { user_id, .. } => user_id.get(),
             QuerySource::Canister { canister_id } => canister_id.get(),
-            QuerySource::Anonymous => IC_00.get(),
+            QuerySource::System => IC_00.get(),
         }
     }
 
@@ -67,17 +67,15 @@ impl Query {
                     None,
                 ))
             }
-            QuerySource::Anonymous => {
-                MessageId::from(representation_independent_hash_call_or_query(
-                    CallOrQuery::Query,
-                    self.receiver.get().into_vec(),
-                    &self.method_name,
-                    self.method_payload.clone(),
-                    0,
-                    IC_00.get().into_vec(),
-                    None,
-                ))
-            }
+            QuerySource::System => MessageId::from(representation_independent_hash_call_or_query(
+                CallOrQuery::Query,
+                self.receiver.get().into_vec(),
+                &self.method_name,
+                self.method_payload.clone(),
+                0,
+                IC_00.get().into_vec(),
+                None,
+            )),
         }
     }
 }

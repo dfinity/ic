@@ -338,7 +338,7 @@ impl HttpRequestContent for Query {
         match self.source {
             QuerySource::User { user_id, .. } => user_id,
             QuerySource::Canister { canister_id } => UserId::from(canister_id.get()),
-            QuerySource::Anonymous => UserId::from(PrincipalId::default()),
+            QuerySource::System => UserId::from(PrincipalId::default()),
         }
     }
 
@@ -346,7 +346,7 @@ impl HttpRequestContent for Query {
         match self.source {
             QuerySource::User { ingress_expiry, .. } => ingress_expiry,
             QuerySource::Canister { .. } => 0,
-            QuerySource::Anonymous => 0,
+            QuerySource::System => 0,
         }
     }
 
@@ -354,7 +354,7 @@ impl HttpRequestContent for Query {
         match &self.source {
             QuerySource::User { nonce, .. } => nonce.clone(),
             QuerySource::Canister { .. } => None,
-            QuerySource::Anonymous => None,
+            QuerySource::System => None,
         }
     }
 }

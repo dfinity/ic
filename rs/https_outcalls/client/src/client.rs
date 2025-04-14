@@ -304,7 +304,7 @@ async fn transform_adapter_response(
     // Query to execution.
     let transform_canister = transform.canister_id;
     let source = if sender == transform_canister {
-        QuerySource::Anonymous
+        QuerySource::System
     } else {
         QuerySource::Canister {
             canister_id: sender,
@@ -510,7 +510,7 @@ mod tests {
         }
     }
 
-    fn setup_anonymous_query_mock() -> (
+    fn setup_system_query_mock() -> (
         QueryExecutionService,
         Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>,
     ) {
@@ -565,7 +565,7 @@ mod tests {
         .await;
 
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
@@ -618,7 +618,7 @@ mod tests {
         let mock_grpc_channel =
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
@@ -670,7 +670,7 @@ mod tests {
         }))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (req, rsp) = handle.next_request().await.unwrap();
@@ -738,7 +738,7 @@ mod tests {
         )))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
@@ -804,7 +804,7 @@ mod tests {
         }))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         let adapter_h = adapter_headers.clone();
         let adapter_b = adapter_body.clone();
@@ -841,7 +841,7 @@ mod tests {
             Arc::new(OnceCell::new()),
         );
 
-        // Specify a transform_method name such that the client calls the anonymous query handler.
+        // Specify a transform_method name such that the client calls the system query handler.
         assert_eq!(
             client.send(build_mock_canister_http_request(
                 420,
@@ -873,7 +873,7 @@ mod tests {
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
     }
 
-    // Test case for anonymous query rejection. The client should pass through the rejection received from the query handler.
+    // Test case for system query rejection. The client should pass through the rejection received from the query handler.
     #[tokio::test]
     async fn test_client_transform_reject() {
         let adapter_body = "<html>
@@ -897,7 +897,7 @@ mod tests {
         }))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
@@ -914,7 +914,7 @@ mod tests {
             Arc::new(OnceCell::new()),
         );
 
-        // Specify a transform_method name such that the client calls the anonymous query handler.
+        // Specify a transform_method name such that the client calls the system query handler.
         assert_eq!(
             client.send(build_mock_canister_http_request(
                 420,
@@ -951,7 +951,7 @@ mod tests {
         let mock_grpc_channel =
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
+        let (svc, mut handle) = setup_system_query_mock();
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
