@@ -1,8 +1,14 @@
+mod backup_helper;
+mod backup_manager;
+mod cmd;
+mod config;
+mod notification_client;
+mod util;
+
+use backup_manager::BackupManager;
+use cmd::{BackupArgs, SubCommand};
+
 use clap::Parser;
-use ic_backup::{
-    backup_manager::BackupManager,
-    cmd::{BackupArgs, SubCommand},
-};
 use slog::{o, Drain};
 use std::{io::stdin, sync::Arc};
 

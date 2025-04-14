@@ -34,34 +34,21 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
-rust_library(
-    name = "backup",
-    srcs = glob(["src/**"]),
-    aliases = ALIASES,
-    crate_name = "ic_backup",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.0.2",
-    visibility = [
-        "//rs:system-tests-pkg",
-    ],
-    deps = DEPENDENCIES,
-)
-
 rust_binary(
     name = "ic-backup",
-    srcs = ["src/main.rs"],
+    srcs = glob(["src/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = [
         "//rs:release-pkg",
         "//rs:system-tests-pkg",
     ],
-    deps = DEPENDENCIES + [":backup"],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "backup_test",
     compile_data = ["test_data/fake_input_config.json.template"],
-    crate = ":backup",
+    crate = ":ic-backup",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
