@@ -67,6 +67,22 @@ To run the scenario on the local PocketIC instance:
 To start the scenario from scratch, you'll need to stop the running `pocket-ic-server` instance and
 remove `$PWD/sns-testing` and `$PWD/.dfx` directories before doing the steps mentioned above.
 
+## Get ICP tokens
+
+You can use `bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 transfer-icp` to get ICP tokens to your account.
+
+This subcommand supports transfer to the direct account ID, e.g.:
+```
+bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 transfer-icp --amount 650.0 --to 5c9b28f3e2218975ea76449cf9b949a860d741a3af7dd4dd062f7481e3a99cde
+```
+
+Or to the principal by its ID (and optionally subaccount):
+```
+bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 transfer-icp --amount 650.0 --to-principal fomoo-4i5fe-epl6n-dc7hi-lfqhi-4ii4q-txsav-xvenw-ffacw-youhl-mae
+```
+
+Obtained ICP tokens can be used to participate in SNS swap or you may stake them to get NNS neuron. This can be done either using `quill` or NNS dapp web UI.
+
 ## Deploying user-provided SNS
 
 ### Bootstrap the network
@@ -140,6 +156,7 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
    yq -i ".Distribution.Neurons[0].principal |= \""$(dfx identity get-principal --identity sns-testing)"\"" sns_init.yaml
    yq -i ".Swap.start_time |= null" sns_init.yaml
    ```
+
 3) Propose to create the new SNS:
    ```
    # //rs/sns/cli:sns doesn't support CLI-provided identities despite '--identity' option
@@ -155,6 +172,10 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
 </details>
 
 Once the NNS proposal to create the new SNS is adopted and executed, the SNS swap is supposed to open.
+
+You can participate in the swap using NNS dapp web UI by creating a new identity via Internet Identity and transferring
+some ICP to the newly created account via `sns-testing transfer-icp` command.
+
 Use `bazel run //rs/sns/testing:cli -- run swap-complete` to generate swap participations and complete the swap:
 ```
 SNS_NAME="$(yq -r .name <Path to SNS YAML>)"
@@ -240,22 +261,6 @@ To upvote the proposal using Neurons controlled by identities that participated 
 ```
 bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 sns-proposal-upvote --sns-name "<SNS name>" --proposal-id "<Proposal ID>" --wait
 ```
-
-## Get ICP tokens
-
-You can use `bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 transfer-icp` to get ICP tokens to your account.
-
-This subcommand supports transfer to the direct account ID, e.g.:
-```
-bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 transfer-icp --amount 650.0 --to 5c9b28f3e2218975ea76449cf9b949a860d741a3af7dd4dd062f7481e3a99cde
-```
-
-Or to the principal by its ID (and optionally subaccount):
-```
-bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 transfer-icp --amount 650.0 --to-principal fomoo-4i5fe-epl6n-dc7hi-lfqhi-4ii4q-txsav-xvenw-ffacw-youhl-mae
-```
-
-Obtained ICP tokens can be used to participate in SNS swap or you may stake them to get NNS neuron. This can be done either using `quill` or NNS dapp web UI.
 
 ## Check the network state
 
