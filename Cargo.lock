@@ -18169,6 +18169,7 @@ dependencies = [
  "ic-vetkd-utils",
  "k256 0.13.4",
  "lazy_static",
+ "once_cell",
  "reqwest 0.12.12",
  "schemars",
  "serde",
@@ -18185,6 +18186,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid",
  "wat",
  "wslpath",
 ]
@@ -18284,6 +18286,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid",
  "wat",
 ]
 
