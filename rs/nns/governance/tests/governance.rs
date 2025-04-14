@@ -4563,13 +4563,27 @@ fn compute_maturities(
         .with_wait_for_quiet_threshold(10)
         .build();
 
-    let gov = Governance::new(
+    let mut gov = Governance::new(
         governance_proto,
         fake_driver.get_fake_env(),
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
         fake_driver.get_fake_randomness_generator(),
     );
+
+    if let Some(DissolveState::DissolveDelaySeconds(minimum_dissolve_delay_to_vote)) =
+        not_dissolving_min_dissolve_delay
+    {
+        gov.heap_data
+            .economics
+            .as_mut()
+            .unwrap()
+            .voting_power_economics
+            .as_mut()
+            .expect("bug: voting_power_economics missing")
+            .neuron_minimum_dissolve_delay_to_vote_seconds = Some(minimum_dissolve_delay_to_vote);
+    }
+
     set_governance_for_tests(gov);
     let gov = governance_mut();
     schedule_tasks();
