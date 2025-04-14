@@ -7,12 +7,28 @@ use std::time::Duration;
 
 pub type NumUtxoPages = u32;
 
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum MetricsResult {
+    Ok,
+    Err,
+}
+
+impl MetricsResult {
+    pub fn as_str(&self) -> &str {
+        match self {
+            MetricsResult::Ok => "success",
+            MetricsResult::Err => "failure",
+        }
+    }
+}
+
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
     pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<NumUtxoPages,LatencyHistogram>> = RefCell::default();
     pub static GET_UTXOS_CALL_LATENCY: RefCell<BTreeMap<(NumUtxoPages, CallSource),LatencyHistogram>> = RefCell::default();
     pub static GET_UTXOS_RESULT_SIZE: RefCell<BTreeMap<CallSource,NumUtxosHistogram>> = RefCell::default();
+    pub static SIGN_WITH_ECDSA_LATENCY: RefCell<BTreeMap<MetricsResult, LatencyHistogram>> = RefCell::default();
 }
 
 pub const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
@@ -123,6 +139,15 @@ pub fn observe_update_call_latency(num_new_utxos: usize, start_ns: u64, end_ns: 
     UPDATE_CALL_LATENCY.with_borrow_mut(|metrics| {
         metrics
             .entry(num_new_utxos as NumUtxoPages)
+            .or_default()
+            .observe_latency(start_ns, end_ns);
+    });
+}
+
+pub fn observe_sign_with_ecdsa_latency(result: MetricsResult, start_ns: u64, end_ns: u64) {
+    SIGN_WITH_ECDSA_LATENCY.with_borrow_mut(|metrics| {
+        metrics
+            .entry(result)
             .or_default()
             .observe_latency(start_ns, end_ns);
     });
@@ -385,6 +410,22 @@ pub fn encode_metrics(
         for (call_source, histogram) in histograms {
             histogram_vec = histogram_vec.histogram(
                 &[("call_source", &call_source.to_string())],
+                histogram.0.iter(),
+                histogram.0.sum() as f64,
+            )?;
+        }
+        Ok(())
+    })?;
+
+    let mut histogram_vec = metrics.histogram_vec(
+        "ckbtc_minter_sign_with_ecdsa_latency",
+        "The latency of ckBTC minter `sign_with_ecdsa` calls in milliseconds.",
+    )?;
+
+    SIGN_WITH_ECDSA_LATENCY.with_borrow(|histograms| -> Result<(), Error> {
+        for (result, histogram) in histograms {
+            histogram_vec = histogram_vec.histogram(
+                &[("result", result.as_str())],
                 histogram.0.iter(),
                 histogram.0.sum() as f64,
             )?;

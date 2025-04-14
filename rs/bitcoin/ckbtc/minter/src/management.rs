@@ -1,6 +1,6 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
-use crate::metrics::observe_get_utxos_latency;
+use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency, MetricsResult};
 use crate::ECDSAPublicKey;
 use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
@@ -328,6 +328,9 @@ pub async fn sign_with_ecdsa(
         sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
     };
 
+    // Record start time of method execution for metrics
+    let start_time = ic_cdk::api::time();
+
     let result = sign_with_ecdsa(SignWithEcdsaArgument {
         message_hash: message_hash.to_vec(),
         derivation_path: derivation_path.into_inner(),
@@ -339,11 +342,17 @@ pub async fn sign_with_ecdsa(
     .await;
 
     match result {
-        Ok((reply,)) => Ok(reply.signature),
-        Err((code, msg)) => Err(CallError {
-            method: "sign_with_ecdsa".to_string(),
-            reason: Reason::from_reject(code, msg),
-        }),
+        Ok((reply,)) => {
+            observe_sign_with_ecdsa_latency(MetricsResult::Ok, start_time, ic_cdk::api::time());
+            Ok(reply.signature)
+        }
+        Err((code, msg)) => {
+            observe_sign_with_ecdsa_latency(MetricsResult::Err, start_time, ic_cdk::api::time());
+            Err(CallError {
+                method: "sign_with_ecdsa".to_string(),
+                reason: Reason::from_reject(code, msg),
+            })
+        }
     }
 }
 
