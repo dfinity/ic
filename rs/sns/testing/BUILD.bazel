@@ -102,8 +102,6 @@ rust_binary(
     name = "sns-testing",
     testonly = True,
     srcs = ["src/bin/main.rs"],
-    data = DEV_DATA,
-    env = DEV_ENV,
     deps = DEPENDENCIES + [
         ":sns_testing",
     ],
