@@ -1740,6 +1740,13 @@ fn test_icrc3_certificate_ledger_upgrade() {
     .unwrap()
     .unwrap();
 
+    // Verify that the label for the last block index is correctly encoded in the hash tree.
+    let new_last_block_index = leb128::read::unsigned(&mut std::io::Cursor::new(
+        lookup_hashtree(new_icrc3_certificate.hash_tree.clone(), "last_block_index").unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(NUM_BLOCKS + 1, new_last_block_index);
+
     let new_certificate = Certificate::from_cbor(new_icrc3_certificate.certificate.as_slice())
         .expect("Unable to deserialize CBOR encoded Certificate");
     let new_hash_tree: HashTree =
