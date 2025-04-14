@@ -620,13 +620,4 @@ pub mod pocket_ic {
         )
         .await
     }
-
-    pub async fn await_sns_controlled_canister_upgrade(
-        pocket_ic: &PocketIc,
-        proposal_id: ProposalId,
-        canister_id: CanisterId,
-        sns: Sns,
-    ) {
-        super::await_sns_controlled_canister_upgrade(pocket_ic, proposal_id, canister_id, sns).await
-    }
 }
