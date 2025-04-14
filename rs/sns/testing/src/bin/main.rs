@@ -96,8 +96,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
         },
     )
     .await;
-    wait_for_sns_controlled_canister_upgrade(dev_agent, proposal_id, args.test_canister_id, sns)
-        .await;
+    await_sns_controlled_canister_upgrade(dev_agent, proposal_id, args.test_canister_id, sns).await;
     println!("Test canister upgraded")
 }
 

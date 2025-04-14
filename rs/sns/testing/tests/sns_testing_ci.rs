@@ -14,8 +14,8 @@ use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::sns::sns_proposal_upvote;
 use ic_sns_testing::sns::{
     pocket_ic::{
-        create_sns, install_test_canister, propose_sns_controlled_test_canister_upgrade,
-        wait_for_sns_controlled_canister_upgrade,
+        await_sns_controlled_canister_upgrade, create_sns, install_test_canister,
+        propose_sns_controlled_test_canister_upgrade,
     },
     TestCanisterInitArgs,
 };
@@ -133,7 +133,7 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
         },
     )
     .await;
-    wait_for_sns_controlled_canister_upgrade(&pocket_ic, proposal_id, test_canister_id, sns).await;
+    await_sns_controlled_canister_upgrade(&pocket_ic, proposal_id, test_canister_id, sns).await;
 
     test_canister_query(&pocket_ic, test_canister_id, new_greeting).await;
 }
@@ -183,7 +183,7 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     .await
     .unwrap();
 
-    wait_for_sns_controlled_canister_upgrade(&pocket_ic, proposal_id, test_canister_id, sns).await;
+    await_sns_controlled_canister_upgrade(&pocket_ic, proposal_id, test_canister_id, sns).await;
 
     test_canister_query(&pocket_ic, test_canister_id, new_greeting).await;
 }
