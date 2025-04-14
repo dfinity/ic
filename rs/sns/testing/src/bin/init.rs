@@ -29,6 +29,10 @@ async fn nns_init(args: NnsInitArgs) {
     let treasury_principal_id = if let Some(icp_treasury_identity) = args.icp_treasury_identity {
         get_identity_principal(&icp_treasury_identity).unwrap()
     } else {
+        println!(
+            "Using default treasury principal ID: {}",
+            *TREASURY_PRINCIPAL_ID
+        );
         *TREASURY_PRINCIPAL_ID
     };
 

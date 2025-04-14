@@ -254,6 +254,18 @@ pub async fn validate_target_canister<C: CallCanisters>(
     validation_errors
 }
 
+/// This function performs a transfer of ICP tokens from the treasury account whose identity
+/// is either provided by the `agent` or the `TREASURY_PRINCIPAL_ID based on the provided
+/// `use_ephemeral_icp_treasury` argument.
+///
+/// The function takes the following parameters:
+/// 1) agent - The agent used to provide IC network connection info
+///    and optionally the identity of the treasury account if `use_ephemeral_icp_treasury`
+///    argument is `false`.
+/// 2) use_ephemeral_icp_treasury - If `true`, the function will use the ephemeral agent
+///    with the hardcoded `TREASURY_PRINCIPAL_ID` to perform the transfer.
+/// 3) to - The recipient of the transfer.
+/// 4) amount - The amount of ICP tokens to transfer.
 pub async fn transfer_icp_from_treasury<C: CallCanisters + BuildEphemeralAgent>(
     agent: &C,
     use_ephemeral_icp_treasury: bool,

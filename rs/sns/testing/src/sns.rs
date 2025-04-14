@@ -388,10 +388,7 @@ pub async fn sns_proposal_upvote<
         .await
         .map_err(|e| format!("Failed to get the proposal: {e}"))?;
 
-    match proposal_info
-        .result
-        .ok_or("Expecting some proposal info")?
-    {
+    match proposal_info.result.ok_or("Expecting some proposal info")? {
         ProposalResult::Proposal(proposal_data) => {
             if proposal_data.decided_timestamp_seconds > 0 {
                 return Err("The proposal was already decided".to_string());
