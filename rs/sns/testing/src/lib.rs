@@ -231,6 +231,10 @@ pub struct NnsInitArgs {
     /// The path to the state PocketIC instance state directory.
     #[arg(long)]
     pub state_dir: PathBuf,
+    /// The localhost port on which the HTTP endpoint for the IC network will be exposed.
+    /// Defaults to 8080.
+    #[arg(long, default_value_t = 8080)]
+    pub ic_network_port: u16,
     /// The name of the 'dfx' identity. The principal of this identity will be used as the
     /// hotkey for the NNS neuron with the majority voting power.
     #[arg(long)]

@@ -19,7 +19,7 @@ async fn nns_init(args: NnsInitArgs) {
         .with_application_subnet()
         .build_async()
         .await;
-    let endpoint = pocket_ic.make_live(Some(8080)).await;
+    let endpoint = pocket_ic.make_live(Some(args.ic_network_port)).await;
     println!("PocketIC endpoint: {}", endpoint);
 
     let registry_proto_path = args.state_dir.join("registry.proto");
