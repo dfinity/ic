@@ -13,6 +13,7 @@ documentation.workspace = true
 actix-web-prom = { workspace = true }
 anyhow = { workspace = true }
 axum = { workspace = true }
+bytes = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }

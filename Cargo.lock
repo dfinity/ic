@@ -19910,6 +19910,7 @@ dependencies = [
  "actix-web-prom",
  "anyhow",
  "axum 0.8.1",
+ "bytes",
  "candid",
  "hex",
  "ic-agent",
