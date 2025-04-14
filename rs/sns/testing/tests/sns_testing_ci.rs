@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
@@ -11,14 +11,10 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_sns_testing::nns_dapp::bootstrap_nns;
-use ic_sns_testing::sns::sns_proposal_upvote;
-use ic_sns_testing::sns::{
-    pocket_ic::{
-        await_sns_controlled_canister_upgrade, create_sns, install_test_canister,
-        propose_sns_controlled_test_canister_upgrade,
-    },
-    TestCanisterInitArgs,
+use ic_sns_testing::sns::pocket_ic::{
+    await_sns_controlled_canister_upgrade, create_sns, propose_sns_controlled_canister_upgrade,
 };
+use ic_sns_testing::sns::sns_proposal_upvote;
 use ic_sns_testing::utils::{
     validate_network, validate_target_canister, SnsTestingCanisterValidationError,
     SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
@@ -30,6 +26,30 @@ use tempfile::TempDir;
 
 const DEV_PARTICIPANT_ID: PrincipalId = PrincipalId::new_user_test_id(1000);
 const DEV_NEURON_ID: NeuronId = NeuronId { id: 1000u64 };
+
+// TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
+// We should extract it into a separate crate and reuse in both canister and this crates.
+#[derive(CandidType)]
+pub struct TestCanisterInitArgs {
+    pub greeting: Option<String>,
+}
+
+async fn install_test_canister(pocket_ic: &PocketIc, args: TestCanisterInitArgs) -> CanisterId {
+    let topology = pocket_ic.topology().await;
+    let application_subnet_ids = topology.get_app_subnets();
+    let application_subnet_id = application_subnet_ids[0];
+    let features = &[];
+    let test_canister_wasm =
+        Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
+    install_canister_on_subnet(
+        pocket_ic,
+        application_subnet_id,
+        Encode!(&args).unwrap(),
+        Some(test_canister_wasm),
+        vec![ROOT_CANISTER_ID.get()],
+    )
+    .await
+}
 
 async fn prepare_network_for_test(
     dev_participant_id: PrincipalId,
@@ -123,14 +143,20 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
     .await;
     let new_greeting = "Hi".to_string();
     // Upgrading the test canister via SNS voting
-    let proposal_id = propose_sns_controlled_test_canister_upgrade(
+    let proposal_id = propose_sns_controlled_canister_upgrade(
         &pocket_ic,
         dev_participant_id,
         sns.clone(),
         test_canister_id,
-        TestCanisterInitArgs {
-            greeting: Some(new_greeting.clone()),
-        },
+        Wasm::from_location_specified_by_env_var("sns_testing_canister", &[])
+            .unwrap()
+            .bytes(),
+        Some(
+            Encode!(&TestCanisterInitArgs {
+                greeting: Some(new_greeting.clone()),
+            })
+            .unwrap(),
+        ),
     )
     .await;
     await_sns_controlled_canister_upgrade(&pocket_ic, proposal_id, test_canister_id, sns).await;
@@ -162,14 +188,20 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
 
     let new_greeting = "Hi".to_string();
     // Upgrading the test canister via SNS voting
-    let proposal_id = propose_sns_controlled_test_canister_upgrade(
+    let proposal_id = propose_sns_controlled_canister_upgrade(
         &pocket_ic,
         dev_participant_id,
         sns.clone(),
         test_canister_id,
-        TestCanisterInitArgs {
-            greeting: Some(new_greeting.clone()),
-        },
+        Wasm::from_location_specified_by_env_var("sns_testing_canister", &[])
+            .unwrap()
+            .bytes(),
+        Some(
+            Encode!(&TestCanisterInitArgs {
+                greeting: Some(new_greeting.clone()),
+            })
+            .unwrap(),
+        ),
     )
     .await;
 

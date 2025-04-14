@@ -5,11 +5,11 @@ use ic_nervous_system_agent::helpers::nns::get_nns_neuron_controller;
 use ic_nervous_system_agent::helpers::sns::get_principal_neurons;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_sns_cli::upgrade_sns_controlled_canister::{validate_candid_arg_for_wasm, Wasm};
 use ic_sns_cli::utils::get_agent;
 use ic_sns_testing::sns::{
     await_sns_controlled_canister_upgrade, complete_sns_swap, create_sns, find_sns_by_name,
-    propose_sns_controlled_test_canister_upgrade, sns_proposal_upvote as sns_proposal_upvote_impl,
-    TestCanisterInitArgs,
+    propose_sns_controlled_canister_upgrade, sns_proposal_upvote as sns_proposal_upvote_impl,
 };
 use ic_sns_testing::utils::{
     get_nns_neuron_hotkeys, transfer_icp_from_treasury, validate_network as validate_network_impl,
@@ -27,7 +27,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
         .unwrap();
 
     let target_canister_validation_errors =
-        validate_target_canister(dev_agent, args.test_canister_id).await;
+        validate_target_canister(dev_agent, args.canister_id).await;
 
     if !target_canister_validation_errors.is_empty() {
         eprintln!("SNS-testing failed to validate the test canister:");
@@ -76,27 +76,30 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
         exit(1);
     }
 
+    let upgrade_canister_wasm = Wasm::try_from(args.upgrade_wasm_path).unwrap();
+    let upgrade_arg =
+        validate_candid_arg_for_wasm(&upgrade_canister_wasm, args.upgrade_candid_arg).unwrap();
+
     println!("Creating SNS...");
     let sns = create_sns(
         dev_agent,
         nns_neuron_id,
         dev_agent,
-        vec![args.test_canister_id],
+        vec![args.canister_id],
         true,
     )
     .await;
     println!("SNS created");
     println!("Upgrading SNS-controlled test canister...");
-    let proposal_id = propose_sns_controlled_test_canister_upgrade(
+    let proposal_id = propose_sns_controlled_canister_upgrade(
         dev_agent,
         sns.clone(),
-        args.test_canister_id,
-        TestCanisterInitArgs {
-            greeting: Some("Hi".to_string()),
-        },
+        args.canister_id,
+        upgrade_canister_wasm.bytes().to_vec(),
+        upgrade_arg,
     )
     .await;
-    await_sns_controlled_canister_upgrade(dev_agent, proposal_id, args.test_canister_id, sns).await;
+    await_sns_controlled_canister_upgrade(dev_agent, proposal_id, args.canister_id, sns).await;
     println!("Test canister upgraded")
 }
 

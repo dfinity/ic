@@ -1,7 +1,5 @@
 use futures::future::join_all;
 
-use candid::{CandidType, Encode};
-use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::{
@@ -29,7 +27,6 @@ use ic_nns_common::pb::v1::NeuronId;
 
 use ic_nns_governance_api::pb::v1::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution;
 
-use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_governance_api::pb::v1::{
     get_proposal_response::Result as ProposalResult, manage_neuron::Follow, proposal::Action,
     NeuronId as SnsNeuronId, Proposal, ProposalId, UpgradeSnsControlledCanister,
@@ -39,21 +36,16 @@ use icp_ledger::{AccountIdentifier, Memo, Tokens, TransferArgs, DEFAULT_TRANSFER
 
 use crate::utils::{build_ephemeral_agents, BuildEphemeralAgent, TREASURY_SECRET_KEY};
 
-// TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
-// We should extract it into a separate crate and reuse in both canister and this crates.
-#[derive(CandidType)]
-pub struct TestCanisterInitArgs {
-    pub greeting: Option<String>,
-}
-
-// Creates SNS using agents provided as arguments:
-// 1) neuron_agent - agent that controlls 'neuron_id'.
-// 2) neuron_id - ID of the neuron that has a sufficient amount of stake to propose the SNS creation and adopt the proposal.
-// 3) dev_participant_agent - Agent that will be used as an initial neuron in a newly created SNS. All other
-//    neurons will follow the dev neuron.
-// 4) dapp_canister_ids - Canister IDs of the DApps that will be added to the SNS.
-//
-// Returns SNS canisters IDs.
+/// Creates SNS using agents provided as arguments:
+/// 1) neuron_agent - agent that controlls 'neuron_id'.
+/// 2) neuron_id - ID of the neuron that has a sufficient amount of stake to propose the SNS creation and adopt the proposal.
+/// 3) dev_participant_agent - Agent that will be used as an initial neuron in a newly created SNS. All other
+///    neurons will follow the dev neuron.
+/// 4) dapp_canister_ids - Canister IDs of the DApps that will be added to the SNS.
+/// 5) follow_dev_neuron - If true, all SNS neurons controlled by swap participants will follow the neuron that is controlled
+///    by the `dev_participant_agent` identity.
+///
+/// Returns SNS canisters IDs.
 pub async fn create_sns<
     C: CallCanistersWithStoppedCanisterError + ProgressNetwork + BuildEphemeralAgent,
 >(
@@ -180,14 +172,14 @@ async fn get_current_participation<C: CallCanisters>(
     }
 }
 
-// Completes the swap by transferring the required amount of ICP from the "treasury" account
-// and participating in the swap for each participant using agents provided as arguments:
-// 1) agent - Agent that is used to provide IC network settings.
-// 2) sponsor_participants_from_agent - defines whether the ICP account of the 'agent' or 'TREASURY_PRINCIPAL_ID'.
-//    is used to transfer ICP to the swap participants.
-// 2) swap_canister - SNS Swap canister ID.
-// 3) governance_canister - SNS Governance canister ID.
-// 4) neurons_to_follow - SNS Neuron IDs that will be followed by the swap participants.
+/// Completes the swap by transferring the required amount of ICP from the "treasury" account
+/// and participating in the swap for each participant using agents provided as arguments:
+/// 1) agent - Agent that is used to provide IC network settings.
+/// 2) sponsor_participants_from_agent - defines whether the ICP account of the 'agent' or 'TREASURY_PRINCIPAL_ID'.
+///    is used to transfer ICP to the swap participants.
+/// 2) swap_canister - SNS Swap canister ID.
+/// 3) governance_canister - SNS Governance canister ID.
+/// 4) neurons_to_follow - SNS Neuron IDs that will be followed by the swap participants.
 pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemeralAgent>(
     agent: &C,
     use_ephemeral_icp_treasury: bool,
@@ -433,25 +425,21 @@ pub async fn sns_proposal_upvote<
     Ok(())
 }
 
-// Upgrades the test canister controlled by the SNS using arguments:
-// 1) dev_participant_agent - Agent for the identity that will be used to submit the proposal to upgrade the canister.
-//    It is expected that neuron associated with this identity has sufficient amount of voting power to adopt the proposal
-//    or it is followed by sufficient number of other neurons to have the proposal adopted using their voting power.
-// 2) sns - SNS canisters.
-// 3) canister_id - ID of the canister that will be upgraded.
-// 4) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
-pub async fn propose_sns_controlled_test_canister_upgrade<C: CallCanisters + ProgressNetwork>(
+/// Upgrades the test canister controlled by the SNS using arguments:
+/// 1) dev_participant_agent - Agent for the identity that will be used to submit the proposal to upgrade the canister.
+///    It is expected that neuron associated with this identity has sufficient amount of voting power to adopt the proposal
+///    or it is followed by sufficient number of other neurons to have the proposal adopted using their voting power.
+/// 2) sns - SNS canisters.
+/// 3) canister_id - ID of the canister that will be upgraded.
+/// 4) upgrade_wasm - WASM module that will be used to upgrade the canister.
+/// 5) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
+pub async fn propose_sns_controlled_canister_upgrade<C: CallCanisters + ProgressNetwork>(
     dev_participant_agent: &C,
     sns: Sns,
     canister_id: CanisterId,
-    upgrade_arg: TestCanisterInitArgs,
+    upgrade_wasm: Vec<u8>,
+    upgrade_arg: Option<Vec<u8>>,
 ) -> ProposalId {
-    // For now, we're using the same wasm module, but different init arguments used in 'post_upgrade' hook.
-    let features = &[];
-    let test_canister_wasm =
-        Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
-    let modified_test_canister_wasm = modify_wasm_bytes(&test_canister_wasm.bytes(), 42);
-
     // TODO: @rvem: It's impossible to use 'upgrade_sns_controlled_canister::exec' function to upgrade the canister
     // using the ic-agent backend on the network run by PocketIC because pocket-ic-server currently doesn't support
     // calls to the management canister ('aaaaa-aa'), hence for now the upgrade is done using a single 'manage_neuron'
@@ -505,8 +493,8 @@ pub async fn propose_sns_controlled_test_canister_upgrade<C: CallCanisters + Pro
             action: Some(Action::UpgradeSnsControlledCanister(
                 UpgradeSnsControlledCanister {
                     canister_id: Some(canister_id.get()),
-                    new_canister_wasm: modified_test_canister_wasm,
-                    canister_upgrade_arg: Some(Encode!(&upgrade_arg).unwrap()),
+                    new_canister_wasm: upgrade_wasm,
+                    canister_upgrade_arg: upgrade_arg,
                     mode: Some(CanisterInstallMode::Upgrade as i32),
                     chunked_canister_wasm: None,
                 },
@@ -517,12 +505,12 @@ pub async fn propose_sns_controlled_test_canister_upgrade<C: CallCanisters + Pro
     .unwrap()
 }
 
-// Waits for the upgrade proposal to be adopted and executed and then waits for the canister to become available
-// after upgrade using arguments:
-// 1) agent - Agent that will be used to check the status of the canister.
-// 2) proposal_id - ID of the proposal that will be waited for.
-// 3) canister_id - ID of the canister that receives an upgrade.
-// 4) sns - SNS canisters.
+/// Waits for the upgrade proposal to be adopted and executed and then waits for the canister to become available
+/// after upgrade using arguments:
+/// 1) agent - Agent that will be used to check the status of the canister.
+/// 2) proposal_id - ID of the proposal that will be waited for.
+/// 3) canister_id - ID of the canister that receives an upgrade.
+/// 4) sns - SNS canisters.
 pub async fn await_sns_controlled_canister_upgrade<
     C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
 >(
@@ -557,45 +545,25 @@ pub async fn await_sns_controlled_canister_upgrade<
 
 // Module with PocketIC-specific functions, mainly used in the tests.
 pub mod pocket_ic {
-    use super::TestCanisterInitArgs;
-
     use ::pocket_ic::nonblocking::PocketIc;
-    use candid::Encode;
-    use canister_test::Wasm;
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, sns::Sns};
-    use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-        install_canister_on_subnet, nns::ledger::mint_icp,
-    };
+    use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::ledger::mint_icp;
     use ic_nns_common::pb::v1::NeuronId;
-    use ic_nns_constants::ROOT_CANISTER_ID;
     use ic_sns_governance_api::pb::v1::ProposalId;
     use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
 
-    pub async fn install_test_canister(
-        pocket_ic: &PocketIc,
-        args: TestCanisterInitArgs,
-    ) -> CanisterId {
-        let topology = pocket_ic.topology().await;
-        let application_subnet_ids = topology.get_app_subnets();
-        let application_subnet_id = application_subnet_ids[0];
-        let features = &[];
-        let test_canister_wasm =
-            Wasm::from_location_specified_by_env_var("sns_testing_canister", features).unwrap();
-        install_canister_on_subnet(
-            pocket_ic,
-            application_subnet_id,
-            Encode!(&args).unwrap(),
-            Some(test_canister_wasm),
-            vec![ROOT_CANISTER_ID.get()],
-        )
-        .await
-    }
-
-    // PocketIC-specific version of 'create_sns' function.
-    // Takes the list of IDs of the DApps that will be added to the SNS as an argument.
-    //
-    // Returns SNS canisters IDs and the dev participant ID.
+    /// PocketIC-specific version of 'create_sns' function:
+    /// 1) pocket_ic - PocketIC instance.
+    /// 2) dev_participant_id - ID of the identity that will be used to submit the proposal to create the SNS.
+    /// 3) dev_neuron_id - ID of the neuron that will be used to create the SNS.
+    ///    This neuron is expected to be controlled by `dev_participant_id` and have a sufficient amount
+    ///    of voting power to adopt the proposal.
+    /// 4) dapp_canister_ids - Canister IDs of the DApps that will be added to the SNS.
+    /// 5) follow_dev_neuron - If true, all SNS neurons controlled by swap participants will follow the neuron that is controlled
+    ///    by the `dev_participant_id` identity.
+    ///
+    /// Returns SNS canisters IDs.
     pub async fn create_sns(
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
@@ -615,21 +583,22 @@ pub mod pocket_ic {
         .await
     }
 
-    // PocketIC-specific version of 'upgrade_sns_controlled_test_canister' function.
-    // Upgrades the test canister controlled by the SNS using arguments:
-    // 1) pocket_ic - PocketIC instance.
-    // 2) dev_participant_id - ID of the identity that will be used to submit the proposal to upgrade the canister.
-    //    It is expected that neuron associated with this identity has sufficient amount of voting power to adopt the proposal
-    //    or it is followed by sufficient number of other neurons to have the proposal adopted using their voting power.
-    // 3) sns - SNS canisters.
-    // 4) canister_id - ID of the canister that will be upgraded.
-    // 5) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
-    pub async fn propose_sns_controlled_test_canister_upgrade(
+    /// PocketIC-specific version of 'upgrade_sns_controlled_test_canister' function.
+    /// Upgrades the test canister controlled by the SNS using arguments:
+    /// 1) pocket_ic - PocketIC instance.
+    /// 2) dev_participant_id - ID of the identity that will be used to submit the proposal to upgrade the canister.
+    ///    It is expected that neuron associated with this identity has sufficient amount of voting power to adopt the proposal
+    ///    or it is followed by sufficient number of other neurons to have the proposal adopted using their voting power.
+    /// 3) sns - SNS canisters.
+    /// 4) canister_id - ID of the canister that will be upgraded.
+    /// 5) upgrade_arg - Arguments that will be passed to the canister during the upgrade.
+    pub async fn propose_sns_controlled_canister_upgrade(
         pocket_ic: &PocketIc,
         dev_participant_id: PrincipalId,
         sns: Sns,
         canister_id: CanisterId,
-        upgrade_arg: TestCanisterInitArgs,
+        upgrade_wasm: Vec<u8>,
+        upgrade_arg: Option<Vec<u8>>,
     ) -> ProposalId {
         let dev_participant_agent = PocketIcAgent::new(pocket_ic, dev_participant_id);
         mint_icp(
@@ -642,14 +611,16 @@ pub mod pocket_ic {
         )
         .await;
 
-        super::propose_sns_controlled_test_canister_upgrade(
+        super::propose_sns_controlled_canister_upgrade(
             &dev_participant_agent,
             sns,
             canister_id,
+            upgrade_wasm,
             upgrade_arg,
         )
         .await
     }
+
     pub async fn await_sns_controlled_canister_upgrade(
         pocket_ic: &PocketIc,
         proposal_id: ProposalId,

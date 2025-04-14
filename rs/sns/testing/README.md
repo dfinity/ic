@@ -59,7 +59,9 @@ To run the scenario on the local PocketIC instance:
    ```
    bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 run-basic-scenario \
       --dev-identity sns-testing --nns-neuron-id 1 \
-      --test-canister-id "$(dfx canister --network http://127.0.0.1:8080 id test)"
+      --test-canister-id "$(dfx canister --network http://127.0.0.1:8080 id test)" \
+      --upgrade-wasm-path "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz" \
+      --upgrade-candid-arg '(record { greeting = "Hi" })'
    ```
 
 To start the scenario from scratch, you'll need to stop the running `pocket-ic-server` instance and
@@ -87,7 +89,7 @@ Once these steps are completed, the PocketIC will expose the IC network HTTP end
 `sns-testing` identity will be added as a hotkey to the NNS neuron with the majority voting power, so all NNS proposals made
 by `sns-testing` will be automatically adopted.
 
-Additionally, `nns-init` will output the ID of the NNS neuron that should be used to create NNS proposals.
+Additionally, `sns-testing-init` will output the ID of the NNS neuron that should be used to create NNS proposals.
 ```
 ...
 Use the following NNS neuron ID for further testing: 1

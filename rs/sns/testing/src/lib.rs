@@ -47,7 +47,14 @@ pub struct RunBasicScenarioArgs {
     pub dev_identity: Option<String>,
     /// The ID of the canister to be controlled by the SNS created in the scenario.
     #[arg(long)]
-    pub test_canister_id: CanisterId,
+    pub canister_id: CanisterId,
+    /// Path to a canister WASM module file.
+    #[arg(long)]
+    pub upgrade_wasm_path: PathBuf,
+    /// Upgrade argument for the canister.
+    /// The argument must be a valid Candid value.
+    #[arg(long)]
+    pub upgrade_candid_arg: Option<String>,
     /// The NNS Neuron ID that will be used to submit the proposal to create the new SNS.
     /// Defaults to '1'.
     #[arg(long)]
