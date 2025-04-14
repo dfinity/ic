@@ -2,7 +2,9 @@ use clap::Parser;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::load_registry_mutations;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_testing::nns_dapp::bootstrap_nns;
-use ic_sns_testing::utils::{get_identity_principal, NNS_NEURON_ID, TREASURY_PRINCIPAL_ID};
+use ic_sns_testing::utils::{
+    get_identity_principal, DEFAULT_POWERFUL_NNS_NEURON_ID, TREASURY_PRINCIPAL_ID,
+};
 use ic_sns_testing::NnsInitArgs;
 use icp_ledger::Tokens;
 use pocket_ic::PocketIcBuilder;
@@ -33,7 +35,7 @@ async fn nns_init(args: NnsInitArgs) {
     let deciding_nns_neuron_id = args
         .deciding_nns_neuron_id
         .map(|id| NeuronId { id })
-        .unwrap_or(NNS_NEURON_ID);
+        .unwrap_or(DEFAULT_POWERFUL_NNS_NEURON_ID);
 
     bootstrap_nns(
         &pocket_ic,

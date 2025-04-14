@@ -110,29 +110,6 @@ pub async fn get_nns_neuron_hotkeys<C: CallCanisters>(
     Ok(neuron.iter().flat_map(|n| n.hot_keys.clone()).collect())
 }
 
-pub async fn get_nns_neuron_controller<C: CallCanisters>(
-    agent: &C,
-    neuron_id: NeuronId,
-) -> Result<Option<PrincipalId>> {
-    let request = ListNeurons {
-        neuron_ids: vec![neuron_id.id],
-        ..Default::default()
-    };
-    let response = list_neurons(agent, request)
-        .await
-        .map_err(|err| anyhow!("Failed to list neurons {}", err))?;
-    let neuron: Vec<Neuron> = response
-        .full_neurons
-        .into_iter()
-        .filter(|n| n.id == Some(neuron_id))
-        .collect();
-    let controller = neuron
-        .first()
-        .ok_or_else(|| anyhow!("Failed to get neuron {} full info", neuron_id.id))?
-        .controller;
-    Ok(controller)
-}
-
 pub fn get_identity_principal(identity_name: &str) -> Result<PrincipalId> {
     let logger = slog::Logger::root(slog::Discard, slog::o!());
     let mut identity_manager = IdentityManager::new(&logger, None, InitializeIdentity::Disallow)?;

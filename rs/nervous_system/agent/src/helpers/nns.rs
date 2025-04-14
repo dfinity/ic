@@ -9,12 +9,12 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command, CreateServiceNervousSystem, MakeProposalRequest,
     ManageNeuronCommandRequest, ProposalActionRequest, ProposalInfo, Topic,
 };
-use ic_nns_governance_api::pb::v1::{ExecuteNnsFunction, NnsFunction};
+use ic_nns_governance_api::pb::v1::{ExecuteNnsFunction, ListNeurons, Neuron, NnsFunction};
 use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TransferArgs};
 
-use crate::nns::governance::{get_proposal_info, manage_neuron};
+use crate::nns::governance::{get_proposal_info, list_neurons, manage_neuron};
 use crate::nns::sns_wasm::get_deployed_sns_by_proposal_id;
 use crate::sns::Sns;
 use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
@@ -190,4 +190,27 @@ pub async fn add_wasm_via_nns_proposal<
         )),
     };
     propose_and_wait(agent, neuron_id, proposal).await
+}
+
+pub async fn get_nns_neuron_controller<C: CallCanisters>(
+    agent: &C,
+    neuron_id: NeuronId,
+) -> Result<Option<PrincipalId>, String> {
+    let request = ListNeurons {
+        neuron_ids: vec![neuron_id.id],
+        ..Default::default()
+    };
+    let response = list_neurons(agent, request)
+        .await
+        .map_err(|err| format!("Failed to list neurons {}", err))?;
+    let neurons = response
+        .full_neurons
+        .into_iter()
+        .filter(|n| n.id == Some(neuron_id))
+        .collect::<Vec<Neuron>>();
+    let neuron = neurons.first();
+    let controller = neuron
+        .ok_or_else(|| format!("Failed to get neuron {} full info", neuron_id.id))?
+        .controller;
+    Ok(controller)
 }

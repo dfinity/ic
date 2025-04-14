@@ -6,6 +6,7 @@ use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::{
+    helpers::nns as nns_agent_helpers,
     pocketic_impl::{PocketIcAgent, PocketIcCallError},
     sns::Sns,
     ProgressNetwork,
@@ -235,19 +236,21 @@ impl SnsWasmCanistersInstaller {
 
     /// Specifies the ID of the neuron which will be used to create NNS proposals and
     /// principal ID that is able to submit proposals on behalf of the provided neuron.
-    /// If the neuron is not specified with this method, 'TEST_NEURON_1_ID' will be used
+    /// If the neuron is not specified with this method, `TEST_NEURON_1_ID` will be used
     pub fn with_nns_neuron(&mut self, neuron_id: NeuronId, principal_id: PrincipalId) -> &mut Self {
         self.neuron_id = Some(neuron_id);
         self.principal_id = Some(principal_id);
         self
     }
 
+    /// Adds an SNS canister WASM module to the SNS-W canister via NNS proposal.
+    /// If the neuron ID wasn't specified with `the with_nns_neuron` method,
+    /// it uses `TEST_NEURON_1_ID` as the NNS neuron ID to submit the proposal.
     pub async fn add_wasm_via_nns_proposal(
         &self,
         pocket_ic: &PocketIc,
         wasm: SnsWasm,
     ) -> Result<ProposalInfo, String> {
-        use ic_nervous_system_agent::helpers::nns as nns_agent_helpers;
         let neuron_id = self.neuron_id.unwrap_or(NeuronId {
             id: TEST_NEURON_1_ID,
         });
@@ -256,6 +259,12 @@ impl SnsWasmCanistersInstaller {
         nns_agent_helpers::add_wasm_via_nns_proposal(&agent, neuron_id, wasm).await
     }
 
+    /// Adds SNS canister WASM modules to the SNS-W canister via NNS proposals.
+    /// If the neuron ID wasn't specified with the 'with_nns_neuron' method,
+    /// it uses `TEST_NEURON_1_ID`` as the NNS neuron ID to submit the proposal.
+    /// This method either uses mainnet or tip-of-the-branch SNS canisters.
+    /// based on whether `with_mainnet_sns_canister_versions` or `with_current_sns_canister_versions`
+    /// method was called.
     pub async fn add_wasms_to_sns_wasm(
         &self,
         pocket_ic: &PocketIc,
@@ -318,7 +327,6 @@ impl SnsWasmCanistersInstaller {
     }
 }
 
-// TODO migrate this to nns::governance
 pub async fn add_wasm_via_nns_proposal(
     pocket_ic: &PocketIc,
     wasm: SnsWasm,
@@ -378,7 +386,7 @@ pub async fn add_wasms_to_sns_wasm(
 #[derive(Default)]
 pub struct NnsInstaller {
     mainnet_nns_canister_versions: Option<bool>,
-    neurons_fund_hotkeys: Vec<PrincipalId>,
+    neurons_fund_hotkeys: Option<Vec<PrincipalId>>,
     custom_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_cycles_minting_canister: bool,
@@ -404,11 +412,12 @@ impl NnsInstaller {
     /// Requests that the NNS Governance is initialized with a Neurons' Fund neuron with hotkeys
     /// taken from `neurons_fund_hotkeys`. Hotkeys are principals that can control the neuron
     /// in various ways, but generally less powerful than the neuron controller.
+    /// Mutually exclusive with `with_neurons`.
     pub fn with_neurons_fund_hotkeys(
         &mut self,
         neurons_fund_hotkeys: Vec<PrincipalId>,
     ) -> &mut Self {
-        self.neurons_fund_hotkeys = neurons_fund_hotkeys;
+        self.neurons_fund_hotkeys = Some(neurons_fund_hotkeys);
         self
     }
 
@@ -457,7 +466,7 @@ impl NnsInstaller {
     }
 
     /// Requests the NNS Governance to be initialized with the following neurons.
-    /// Overrides 'with_neurons_fund_hotkeys'.
+    /// Mutually exclusive with `with_neurons_fund_hotkeys`.
     pub fn with_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
         self.neurons = Some(neurons);
         self
@@ -492,14 +501,19 @@ impl NnsInstaller {
             nns_init_payload_builder.with_initial_invariant_compliant_mutations();
         }
 
+        assert!(
+            !(self.neurons.is_some() && self.neurons_fund_hotkeys.is_some()),
+            "'with_neurons' and 'with_neurons_fund_hotkeys' methods are mutually exclusive."
+        );
         let maturity_equivalent_icp_e8s = 1_500_000 * E8;
+
+        // Only one of the two conditions below can be true at a time due to the assert above.
         if let Some(neurons) = self.neurons {
             nns_init_payload_builder.with_additional_neurons(neurons);
-        } else {
-            nns_init_payload_builder.with_test_neurons_fund_neurons_with_hotkeys(
-                self.neurons_fund_hotkeys,
-                maturity_equivalent_icp_e8s,
-            );
+        }
+        if let Some(hotkeys) = self.neurons_fund_hotkeys {
+            nns_init_payload_builder
+                .with_test_neurons_fund_neurons_with_hotkeys(hotkeys, maturity_equivalent_icp_e8s);
         }
         nns_init_payload_builder
             .with_sns_dedicated_subnets(vec![sns_subnet_id])

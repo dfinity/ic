@@ -1,18 +1,19 @@
 use std::process::exit;
 
 use clap::Parser;
+use ic_nervous_system_agent::helpers::nns::get_nns_neuron_controller;
 use ic_nervous_system_agent::helpers::sns::get_principal_neurons;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_cli::utils::get_agent;
 use ic_sns_testing::sns::{
-    complete_sns_swap, create_sns, find_sns_by_name, propose_sns_controlled_test_canister_upgrade,
-    sns_proposal_upvote as sns_proposal_upvote_impl, wait_for_sns_controlled_canister_upgrade,
+    await_sns_controlled_canister_upgrade, complete_sns_swap, create_sns, find_sns_by_name,
+    propose_sns_controlled_test_canister_upgrade, sns_proposal_upvote as sns_proposal_upvote_impl,
     TestCanisterInitArgs,
 };
 use ic_sns_testing::utils::{
-    get_nns_neuron_controller, get_nns_neuron_hotkeys, transfer_icp_from_treasury,
-    validate_network as validate_network_impl, validate_target_canister, NNS_NEURON_ID,
+    get_nns_neuron_hotkeys, transfer_icp_from_treasury, validate_network as validate_network_impl,
+    validate_target_canister, DEFAULT_POWERFUL_NNS_NEURON_ID,
 };
 use ic_sns_testing::{
     RunBasicScenarioArgs, SnsProposalUpvoteArgs, SnsTestingArgs, SnsTestingSubCommand,
@@ -39,7 +40,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
     let nns_neuron_id = args
         .nns_neuron_id
         .map(|id| NeuronId { id })
-        .unwrap_or(NNS_NEURON_ID);
+        .unwrap_or(DEFAULT_POWERFUL_NNS_NEURON_ID);
 
     // Get neuron's controller and hotkeys to get the list of principals
     // that can create proposals on behalf of the neuron.
