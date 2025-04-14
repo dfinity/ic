@@ -1612,10 +1612,10 @@ fn test_icrc3_certificate_ledger_upgrade() {
         }
     }
 
-    // Verify that the legacy label is present in the old hash tree.
+    // Verify that the new label for the last block hash is not present in the old hash tree.
     assert!(lookup_hashtree(old_icrc3_certificate.hash_tree.clone(), "last_block_hash").is_err());
 
-    // Verify that the new label for the last block hash is not present in the old hash tree.
+    // Verify that the legacy label is present in the old hash tree.
     icrc_ledger_types::icrc::generic_value::Hash::try_from(
         lookup_hashtree(old_icrc3_certificate.hash_tree.clone(), "tip_hash").unwrap(),
     )
