@@ -335,7 +335,7 @@ async fn pulse(calls_count: u32) -> u32 {
     calls_success_counter
 }
 
-/// Calls `pulse(calls_per_heartbeat)` each round; increments `SUCCESSFUL_HEARTBEAT_INVOCATION`
+/// Calls `pulse(calls_per_heartbeat)` each round; increments `SUCCESSFUL_HEARTBEAT_INVOCATIONS`
 /// for heartbeats that try to make at least 1 call.
 #[heartbeat]
 async fn heartbeat() {
