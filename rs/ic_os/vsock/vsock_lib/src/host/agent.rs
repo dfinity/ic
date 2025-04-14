@@ -5,6 +5,7 @@ use futures::executor::block_on;
 use ic_http_utils::file_downloader::FileDownloader;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 
 pub fn dispatch(command: &Command) -> Response {
@@ -83,7 +84,7 @@ async fn create_hostos_upgrade_file(
     file_downloader
         .download_file(
             upgrade_url,
-            std::path::Path::new(file_path),
+            Path::new(file_path),
             Some(target_hash.to_string()),
         )
         .await
