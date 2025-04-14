@@ -1124,13 +1124,13 @@ fn switch_to_checkpoint(
                 Arc::clone(fd_factory),
             )?);
 
-        let wasm_binary = snapshot_layout.wasm().deserialize(Some(
+        let wasm_binary = snapshot_layout.wasm().deserialize(
             new_snapshot
                 .execution_snapshot()
                 .wasm_binary
                 .module_hash()
                 .into(),
-        ))?;
+        )?;
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
