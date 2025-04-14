@@ -1601,6 +1601,7 @@ pub struct CheckpointLayout<Permissions: AccessPolicy>(
     PhantomData<Permissions>,
 );
 
+// TODO(MR-676) prevent cloning when Permissions is intentinally non-cloneable
 impl<Permissions: AccessPolicy> Clone for CheckpointLayout<Permissions> {
     fn clone(&self) -> Self {
         CheckpointLayout(self.0.clone(), PhantomData)
