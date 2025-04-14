@@ -22,7 +22,7 @@ use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::sns::{
         governance::EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
-        swap::{is_auto_finalization_status_committed_or_err, swap_direct_participations},
+        swap::{is_auto_finalization_status_committed_or_err, remaining_swap_participations},
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
@@ -37,7 +37,7 @@ use ic_sns_governance_api::pb::v1::{
 use ic_sns_swap::pb::v1::{BuyerState, Lifecycle, TransferableAmount};
 use icp_ledger::{AccountIdentifier, Memo, Tokens, TransferArgs, DEFAULT_TRANSFER_FEE};
 
-use crate::utils::{swap_participant_agents, BuildEphemeralAgent, TREASURY_SECRET_KEY};
+use crate::utils::{build_ephemeral_agents, BuildEphemeralAgent, TREASURY_SECRET_KEY};
 
 // TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
 // We should extract it into a separate crate and reuse in both canister and this crates.
@@ -45,8 +45,6 @@ use crate::utils::{swap_participant_agents, BuildEphemeralAgent, TREASURY_SECRET
 pub struct TestCanisterInitArgs {
     pub greeting: Option<String>,
 }
-
-pub const DEFAULT_SWAP_PARTICIPANTS_NUMBER: usize = 20;
 
 // Creates SNS using agents provided as arguments:
 // 1) neuron_agent - agent that controlls 'neuron_id'.
@@ -254,11 +252,11 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
         "Performing {} direct swap participations with cumulative amount of {}",
         remaining_direct_participation_count, remaining_direct_participation
     );
-    let swap_participations = swap_direct_participations(
+    let swap_participations = remaining_swap_participations(
         remaining_direct_participation_count,
         remaining_direct_participation,
     );
-    let swap_participants = swap_participant_agents(agent, minimum_participants as usize);
+    let swap_participants = build_ephemeral_agents(agent, minimum_participants as usize);
     let mut swap_participants_iter = swap_participants.iter();
 
     for swap_participant_amount in swap_participations.iter() {
@@ -413,7 +411,7 @@ pub async fn sns_proposal_upvote<
     // Our assumption is that there are at most 'direct_participant_count' known identities that participated
     // in the swap within 'complete_sns_swap' function previously.
     // We will use these identities to upvote the proposal.
-    let vote_participant_agents = swap_participant_agents(agent, direct_participant_count as usize);
+    let vote_participant_agents = build_ephemeral_agents(agent, direct_participant_count as usize);
     for vote_participant_agent in vote_participant_agents {
         let vote_participant_neurons = get_principal_neurons(
             agent,

@@ -77,7 +77,13 @@ impl BuildEphemeralAgent for Agent {
     }
 }
 
-pub fn swap_participant_agents<C: BuildEphemeralAgent>(
+/// Function that creates a vector of ephemeral agents with unique determenistically
+/// generated secret keys.
+///
+/// The function takes the following parameters:
+/// 1) agent - The agent used to provide IC network connection info.
+/// 2) number_of_participants - The number of participants to create ephemeral agents for.
+pub fn build_ephemeral_agents<C: BuildEphemeralAgent>(
     agent: &C,
     number_of_participants: usize,
 ) -> Vec<C> {

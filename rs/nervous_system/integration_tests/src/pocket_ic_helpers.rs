@@ -2851,15 +2851,23 @@ pub mod sns {
             .unwrap()
         }
 
-        pub fn swap_direct_participations(
-            minimum_participants: u64,
-            maximum_direct_participation_icp: Tokens,
+        /// Generates the amount of individual ICP direct participations needed to complete the swap
+        /// by fulfiling the minimum number of participants and the maximum amount of direct
+        /// participation.
+        ///
+        /// 'remaining_minimum_participants' is the number of participants that are needed to complete the swap.
+        /// 'remaining_maximum_direct_participation_icp' is the cumulative amount of ICP that is needed to
+        /// complete the swap.
+        pub fn remaining_swap_participations(
+            remaining_minimum_participants: u64,
+            remaining_maximum_direct_participation_icp: Tokens,
         ) -> Vec<Tokens> {
-            let icp_needed_to_immediately_close_e8s = maximum_direct_participation_icp.get_e8s();
+            let icp_needed_to_immediately_close_e8s =
+                remaining_maximum_direct_participation_icp.get_e8s();
             let per_participant_amount_e8s =
-                icp_needed_to_immediately_close_e8s / minimum_participants;
-            let remainder = icp_needed_to_immediately_close_e8s % minimum_participants;
-            (0..minimum_participants)
+                icp_needed_to_immediately_close_e8s / remaining_minimum_participants;
+            let remainder = icp_needed_to_immediately_close_e8s % remaining_minimum_participants;
+            (0..remaining_minimum_participants)
                 .map(|i| {
                     let amount = per_participant_amount_e8s + if i == 0 { remainder } else { 0 };
                     Tokens::from_e8s(amount)
@@ -2872,7 +2880,7 @@ pub mod sns {
             swap_canister_id: PrincipalId,
             swap_parameters: SwapParameters,
         ) {
-            for (i, amount) in swap_direct_participations(
+            for (i, amount) in remaining_swap_participations(
                 swap_parameters.minimum_participants.unwrap(),
                 Tokens::from_e8s(
                     swap_parameters

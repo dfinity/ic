@@ -41,9 +41,19 @@ To run the scenario on the local PocketIC instance:
    ```
 3) Build and deploy `test` canister:
    ```
-   # 'r7inp-6aaaa-aaaaa-aaabq-cai' is the NNS Root canister
-   dfx canister --network http://127.0.0.1:8080 --identity sns-testing create test --controller r7inp-6aaaa-aaaaa-aaabq-cai --controller sns-testing --no-wallet
-   dfx canister --network http://127.0.0.1:8080 --identity sns-testing install test --wasm "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz"
+   NNS_ROOT="r7inp-6aaaa-aaaaa-aaabq-cai"
+   dfx canister \
+       --network http://127.0.0.1:8080 \
+       --identity sns-testing \
+       create test \
+       --controller "$NNS_ROOT" \
+       --controller sns-testing \
+       --no-wallet
+   dfx canister \
+        --network http://127.0.0.1:8080 \
+        --identity sns-testing \
+        install test \
+        --wasm "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz"
    ```
 4) Launch the basic SNS testing scenario:
    ```
@@ -99,15 +109,20 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
 
 **While using a custom sns_init.yaml file, make sure to set `start_time: null` in the swap parameters to ensure that the swap starts right away after the NNS proposal is executed.**
 
+0) Copy the SNS init YAML to the local directory
+   ```
+   cp ../cli/test_sns_init_v2.yaml sns_init.yaml
+   ```
+
 1) Build and deploy `test` canister:
    ```
    bazel build //rs/sns/testing:sns_testing_canister
-   # 'r7inp-6aaaa-aaaaa-aaabq-cai' is the NNS Root canister
+   NNS_ROOT="r7inp-6aaaa-aaaaa-aaabq-cai"
    dfx canister \
        --network http://127.0.0.1:8080 \
        --identity sns-testing \
        create test \
-       --controller $NNS_ROOT \
+       --controller "$NNS_ROOT" \
        --controller sns-testing \
        --no-wallet
    dfx canister \
@@ -119,22 +134,20 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
 
 2) Adjust init YAML file (you will need [`yq`](https://github.com/mikefarah/yq) to be installed to do this):
    ```
-   yq -i ".dapp_canisters |= [\""$(dfx canister --network http://127.0.0.1:8080 id test)"\"]" ../cli/test_sns_init_v2.yaml
-   yq -i ".Distribution.Neurons[0].principal |= \""$(dfx identity get-principal --identity sns-testing)"\"" ../cli/test_sns_init_v2.yaml
-   yq -i ".Swap.start_time |= null" ../cli/test_sns_init_v2.yaml
+   yq -i ".dapp_canisters |= [\""$(dfx canister --network http://127.0.0.1:8080 id test)"\"]" sns_init.yaml
+   yq -i ".Distribution.Neurons[0].principal |= \""$(dfx identity get-principal --identity sns-testing)"\"" sns_init.yaml
+   yq -i ".Swap.start_time |= null" sns_init.yaml
    ```
 3) Propose to create the new SNS:
    ```
-   pushd ../cli
    # //rs/sns/cli:sns doesn't support CLI-provided identities despite '--identity' option
    dfx identity use sns-testing
-   bazel run //rs/sns/cli:sns -- propose --network http://127.0.0.1:8080 --neuron-id 1 $PWD/test_sns_init_v2.yaml
-   popd
+   bazel run //rs/sns/cli:sns -- propose --network http://127.0.0.1:8080 --neuron-id 1 "$PWD/sns_init.yaml"
    ```
 
 4) Complete the swap for the newly created SNS
    ```
-   SNS_NAME="$(yq -r .name ../cli/test_sns_init_v2.yaml)"
+   SNS_NAME="$(yq -r .name sns_init.yaml)"
    bazel run //rs/sns/testing:sns-testing -- --network http://127.0.0.1:8080 swap-complete --sns-name "$SNS_NAME"
    ```
 </details>
