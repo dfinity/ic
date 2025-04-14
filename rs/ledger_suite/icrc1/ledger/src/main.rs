@@ -176,6 +176,17 @@ const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
+    post_upgrade_internal(args);
+    if is_ready() {
+        // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+        // This cannot be called in `post_upgrade_internal`, since that is benchmarked using
+        // canbench, and canbench calls functions as non-replicated queries, and `set_certified_data`
+        // cannot be called in non-replicated queries.
+        ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    }
+}
+
+fn post_upgrade_internal(args: Option<LedgerArgument>) {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("post_upgrade");
 
@@ -271,9 +282,6 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         migrate_next_part(
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
-    } else {
-        // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
-        ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
     }
 
     let end = ic_cdk::api::instruction_counter();
