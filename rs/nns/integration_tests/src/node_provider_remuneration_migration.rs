@@ -19,7 +19,7 @@ use ic_registry_keys::{
     make_data_center_record_key, make_node_operator_record_key, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_registry_transport::upsert;
+use ic_registry_transport::{delete, upsert};
 use ic_state_machine_tests::StateMachine;
 use maplit::btreemap;
 use prost::Message;
@@ -138,14 +138,20 @@ fn test_registry_and_node_rewards_give_same_results_with_normal_state() {
         upsert(NODE_REWARDS_TABLE_KEY, nr_table_1.encode_to_vec()),
         upsert(make_data_center_record_key("dc1"), dc_1.encode_to_vec()),
     ];
-    let version_2 = vec![upsert(
-        make_node_operator_record_key(node_operator_1_id),
-        node_operator_1.encode_to_vec(),
-    )];
-    let version_3 = vec![upsert(
-        make_node_operator_record_key(node_operator_2_id),
-        node_operator_2.encode_to_vec(),
-    )];
+    let version_2 = vec![
+        delete(NODE_REWARDS_TABLE_KEY),
+        upsert(
+            make_node_operator_record_key(node_operator_1_id),
+            node_operator_1.encode_to_vec(),
+        ),
+    ];
+    let version_3 = vec![
+        upsert(NODE_REWARDS_TABLE_KEY, nr_table_1.encode_to_vec()),
+        upsert(
+            make_node_operator_record_key(node_operator_2_id),
+            node_operator_2.encode_to_vec(),
+        ),
+    ];
     let version_4 = vec![upsert(
         make_data_center_record_key("dc2"),
         dc_2.encode_to_vec(),
@@ -262,8 +268,6 @@ fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
     let latest_registry_version =
         registry_latest_version(machine).expect("Could not fetch latest version");
 
-    println!("Latest Registry Version: {}", latest_registry_version);
-
     // Compare most recent 10, ensuring the errors are the same
     let latest_up_to_10 = (0..=latest_registry_version).rev().take(10);
 
@@ -292,7 +296,11 @@ fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
 
         for version in (0..=reasonable).rev() {
             let randomness = rand::thread_rng().gen_range(0..250);
-            let version = Some(version * 250 + randomness);
+            let mut target_version = version * 250 + randomness;
+            if target_version > latest_registry_version {
+                target_version = latest_registry_version;
+            }
+            let version = Some(target_version);
             compare(version);
         }
     }
