@@ -9695,6 +9695,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
+ "ic-cbor",
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
  "ic-cdk-timers",
