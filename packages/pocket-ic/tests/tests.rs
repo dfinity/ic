@@ -16,7 +16,7 @@ use pocket_ic::{
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, PocketIcState, RejectCode,
+    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, TEST_DRIVER_UUID,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -1808,8 +1808,8 @@ fn test_get_default_effective_canister_id_invalid_url() {
         .with_application_subnet()
         .build();
 
-    let test_driver_pid = std::process::id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
+    let port_file_path =
+        std::env::temp_dir().join(format!("pocket_ic_{}.port", &*TEST_DRIVER_UUID));
     let port = std::fs::read_to_string(port_file_path).unwrap();
 
     let server_url = format!("http://localhost:{}", port);

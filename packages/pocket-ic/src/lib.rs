@@ -71,6 +71,7 @@ use ic_management_canister_types::{
     Snapshot,
 };
 use ic_transport_types::SubnetMetrics;
+use once_cell::sync::Lazy;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,7 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
+use uuid::Uuid;
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
 
@@ -149,6 +151,8 @@ impl PocketIcState {
         }
     }
 }
+
+pub static TEST_DRIVER_UUID: Lazy<Uuid> = Lazy::new(Uuid::new_v4);
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
@@ -1796,10 +1800,10 @@ pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url
         }
     }
 
-    // We use the test driver's process ID to share the PocketIC server between multiple tests
+    // We use the TEST_DRIVER_UUID to share the PocketIC server between multiple tests
     // launched by the same test driver.
-    let test_driver_pid = std::process::id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
+    let port_file_path =
+        std::env::temp_dir().join(format!("pocket_ic_{}.port", &*TEST_DRIVER_UUID));
     let mut cmd = pocket_ic_server_cmd(&bin_path);
     cmd.arg("--port-file");
     #[cfg(windows)]

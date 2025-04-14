@@ -117,6 +117,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:uuid",
     "@crate_index//:wat",
 ]
 

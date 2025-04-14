@@ -83,6 +83,7 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]

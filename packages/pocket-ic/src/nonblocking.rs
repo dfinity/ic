@@ -10,7 +10,7 @@ use crate::common::rest::{
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
     copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
-    RejectResponse,
+    RejectResponse, TEST_DRIVER_UUID,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -44,6 +44,7 @@ use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
+use uuid::Uuid;
 
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
@@ -109,8 +110,7 @@ impl PocketIc {
         instance_id: InstanceId,
         max_request_time_ms: Option<u64>,
     ) -> Self {
-        let test_driver_pid = std::process::id();
-        let log_guard = setup_tracing(test_driver_pid);
+        let log_guard = setup_tracing(&TEST_DRIVER_UUID);
 
         let reqwest_client = reqwest::Client::new();
         debug!("instance_id={} Reusing existing instance.", instance_id);
@@ -190,8 +190,7 @@ impl PocketIc {
             bitcoind_addr,
         };
 
-        let test_driver_pid = std::process::id();
-        let log_guard = setup_tracing(test_driver_pid);
+        let log_guard = setup_tracing(&TEST_DRIVER_UUID);
 
         let reqwest_client = reqwest::Client::new();
         let instance_id = match reqwest_client
@@ -1804,13 +1803,13 @@ where
     })
 }
 
-fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
+fn setup_tracing(uuid: &Uuid) -> Option<WorkerGuard> {
     use tracing_subscriber::prelude::*;
     match std::env::var(LOG_DIR_PATH_ENV_NAME).map(std::path::PathBuf::from) {
         Ok(p) => {
             std::fs::create_dir_all(&p).expect("Could not create directory");
 
-            let file_name = format!("pocket_ic_client_{pid}.log");
+            let file_name = format!("pocket_ic_client_{uuid}.log");
             let appender = tracing_appender::rolling::never(&p, file_name);
             let (non_blocking_appender, guard) = tracing_appender::non_blocking(appender);
             let log_dir_filter: EnvFilter =
