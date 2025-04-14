@@ -65,7 +65,7 @@ where
     }
 }
 
-// A setup function to initialize ExecutionTest with a dummy canister and expose the cansiter_id.
+// A setup function to initialize ExecutionTest with a dummy canister and expose the canister_id.
 // The same canister_id and ExecutionTest reference is used in the fuzzing runs, where the
 // canister is reinstalled under the same canister_id.
 fn setup_env(memory64_enabled: bool) -> (ExecutionTest, CanisterId) {
