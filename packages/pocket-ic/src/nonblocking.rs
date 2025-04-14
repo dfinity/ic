@@ -9,7 +9,8 @@ use crate::common::rest::{
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse,
+    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
+    RejectResponse,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -35,12 +36,11 @@ use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{remove_dir_all, File};
+use std::fs::{read_dir, File};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
-use tempfile::TempDir;
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
@@ -86,8 +86,8 @@ pub struct PocketIc {
     reqwest_client: reqwest::Client,
     // the instance should only be deleted when dropping this handle if this handle owns the instance
     owns_instance: bool,
+    state_dir: Option<PocketIcState>,
     _log_guard: Option<WorkerGuard>,
-    _temp_dir: Option<TempDir>,
 }
 
 impl PocketIc {
@@ -122,8 +122,8 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: false,
+            state_dir: None,
             _log_guard: log_guard,
-            _temp_dir: None,
         }
     }
 
@@ -133,7 +133,7 @@ impl PocketIc {
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
-        mut state_dir: Option<PathBuf>,
+        mut state_dir: Option<PocketIcState>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -148,28 +148,31 @@ impl PocketIc {
 
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)
-        let mut temp_dir = None;
         if let Some(read_only_state_dir) = read_only_state_dir {
-            let instance_state_dir = if let Some(ref state_dir) = state_dir {
-                if Path::new(state_dir).exists() {
-                    remove_dir_all(state_dir).unwrap();
+            if let Some(ref state_dir) = state_dir {
+                let mut state_dir_contents = read_dir(state_dir.state_dir()).unwrap();
+                if state_dir_contents.next().is_some() {
+                    panic!(
+                        "PocketIC instance state must be empty if a read-only state is mounted."
+                    );
                 }
-                state_dir.clone()
             } else {
-                let instance_temp_dir = TempDir::new().unwrap();
-                let instance_state_dir = instance_temp_dir.path().to_path_buf();
-                temp_dir = Some(instance_temp_dir);
-                state_dir = Some(instance_state_dir.clone());
-                instance_state_dir
+                state_dir = Some(PocketIcState::new());
             };
-            copy_dir(read_only_state_dir, instance_state_dir)
-                .expect("Failed to copy state directory");
+            copy_dir(
+                read_only_state_dir,
+                state_dir
+                    .as_ref()
+                    .map(|state_dir| state_dir.state_dir())
+                    .unwrap(),
+            )
+            .expect("Failed to copy state directory");
         };
 
         // now that we initialized the state dir, we check if it contains a topology file
         let has_topology = state_dir
             .as_ref()
-            .map(|state_dir| File::open(state_dir.join("topology.json")).is_ok())
+            .map(|state_dir| File::open(state_dir.state_dir().join("topology.json")).is_ok())
             .unwrap_or_default();
 
         // if there is no topology to fetch from the state dir,
@@ -181,7 +184,7 @@ impl PocketIc {
 
         let instance_config = InstanceConfig {
             subnet_config_set,
-            state_dir,
+            state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
@@ -213,9 +216,18 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: true,
+            state_dir,
             _log_guard: log_guard,
-            _temp_dir: temp_dir,
         }
+    }
+
+    pub async fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.do_drop().await;
+        self.state_dir.take()
+    }
+
+    pub(crate) fn take_state_internal(&mut self) -> Option<PocketIcState> {
+        self.state_dir.take()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.

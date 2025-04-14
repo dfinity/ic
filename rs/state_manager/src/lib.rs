@@ -1123,6 +1123,15 @@ fn switch_to_checkpoint(
                 layout.height(),
                 Arc::clone(fd_factory),
             )?);
+
+        let wasm_binary = snapshot_layout.wasm().deserialize(Some(
+            new_snapshot
+                .execution_snapshot()
+                .wasm_binary
+                .module_hash()
+                .into(),
+        ))?;
+        new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {

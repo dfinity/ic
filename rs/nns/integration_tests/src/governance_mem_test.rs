@@ -12,7 +12,7 @@ use ic_nns_constants::{
 use ic_nns_governance_api::pb::v1::{ListProposalInfo, ListProposalInfoResponse};
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::state_test_helpers::{
-    ensure_canister_id_exists_at_position, nns_governance_get_proposal_info,
+    ensure_canister_id_exists_at_position_with_settings, nns_governance_get_proposal_info,
     nns_propose_upgrade_nns_canister, query, setup_nns_root_with_correct_canister_id,
     state_machine_builder_for_nns_tests, wait_for_canister_upgrade_to_succeed,
 };
@@ -22,7 +22,7 @@ fn governance_mem_test() {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
     let state_setup_wasm = Project::cargo_bin_maybe_from_env("governance-mem-test-canister", &[]);
-    ensure_canister_id_exists_at_position(
+    ensure_canister_id_exists_at_position_with_settings(
         &state_machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         Some(
