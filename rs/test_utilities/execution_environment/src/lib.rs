@@ -1814,6 +1814,13 @@ impl ExecutionTestBuilder {
         Self::default()
     }
 
+    pub fn with_execution_config(self, execution_config: Config) -> Self {
+        Self {
+            execution_config,
+            ..self
+        }
+    }
+
     pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
         Self {
             nns_subnet_id,
