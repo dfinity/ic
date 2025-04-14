@@ -1,5 +1,5 @@
 {
-  "checksum": "25c10e6215d471775ff9fb7eb0d5eb6cebc749601e7fc80fbd4d2065fcdba76f",
+  "checksum": "09d9538e4bd46e50f938396253b7d79fec7bbdbcbf30eb1fa80fc328d08b36f2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15777,14 +15777,17 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cranelift-assembler-x64 0.117.2": {
+    "cranelift-assembler-x64 0.117.0": {
       "name": "cranelift-assembler-x64",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": null,
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-assembler-x64/0.117.2/download",
-          "sha256": "d2b83fcf2fc1c8954561490d02079b496fd0c757da88129981e15bfe3a548229",
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/assembler-x64",
           "patch_args": [
             "-p3"
           ],
@@ -15828,14 +15831,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-assembler-x64 0.117.2",
+              "id": "cranelift-assembler-x64 0.117.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -15847,7 +15850,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-assembler-x64-meta 0.117.2",
+              "id": "cranelift-assembler-x64-meta 0.117.0",
               "target": "cranelift_assembler_x64_meta"
             }
           ],
@@ -15860,14 +15863,17 @@
       ],
       "license_file": null
     },
-    "cranelift-assembler-x64-meta 0.117.2": {
+    "cranelift-assembler-x64-meta 0.117.0": {
       "name": "cranelift-assembler-x64-meta",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": null,
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-assembler-x64-meta/0.117.2/download",
-          "sha256": "c7496a6e92b5cee48c5d772b0443df58816dee30fed6ba19b2a28e78037ecedf"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/assembler-x64/meta"
         }
       },
       "targets": [
@@ -15890,7 +15896,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -15898,14 +15904,17 @@
       ],
       "license_file": null
     },
-    "cranelift-bforest 0.117.2": {
+    "cranelift-bforest 0.117.0": {
       "name": "cranelift-bforest",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bforest/0.117.2/download",
-          "sha256": "73a9dc0a8d3d49ee772101924968830f1c1937d650c571d3c2dd69dc36a68f41"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/bforest"
         }
       },
       "targets": [
@@ -15930,14 +15939,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.117.0",
               "target": "cranelift_entity"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -15945,14 +15954,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-bitset 0.117.2": {
+    "cranelift-bitset 0.117.0": {
       "name": "cranelift-bitset",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bitset/0.117.2/download",
-          "sha256": "573c641174c40ef31021ae4a5a3ad78974e280633502d0dfc6e362385e0c100f"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/bitset"
         }
       },
       "targets": [
@@ -15999,7 +16011,7 @@
           ],
           "selects": {}
         },
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16007,14 +16019,17 @@
       ],
       "license_file": null
     },
-    "cranelift-codegen 0.117.2": {
+    "cranelift-codegen 0.117.0": {
       "name": "cranelift-codegen",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen/0.117.2/download",
-          "sha256": "2d7c94d572615156f2db682181cadbd96342892c31e08cc26a757344319a9220"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/codegen"
         }
       },
       "targets": [
@@ -16062,35 +16077,39 @@
         "deps": {
           "common": [
             {
+              "id": "arbitrary 1.4.1",
+              "target": "arbitrary"
+            },
+            {
               "id": "bumpalo 3.16.0",
               "target": "bumpalo"
             },
             {
-              "id": "cranelift-assembler-x64 0.117.2",
+              "id": "cranelift-assembler-x64 0.117.0",
               "target": "cranelift_assembler_x64"
             },
             {
-              "id": "cranelift-bforest 0.117.2",
+              "id": "cranelift-bforest 0.117.0",
               "target": "cranelift_bforest"
             },
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.117.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.117.0",
               "target": "build_script_build"
             },
             {
-              "id": "cranelift-codegen-shared 0.117.2",
+              "id": "cranelift-codegen-shared 0.117.0",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "cranelift-control 0.117.2",
+              "id": "cranelift-control 0.117.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.117.0",
               "target": "cranelift_entity"
             },
             {
@@ -16106,7 +16125,7 @@
               "target": "log"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 30.0.0",
               "target": "pulley_interpreter"
             },
             {
@@ -16129,7 +16148,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -16141,11 +16160,11 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-meta 0.117.2",
+              "id": "cranelift-codegen-meta 0.117.0",
               "target": "cranelift_codegen_meta"
             },
             {
-              "id": "cranelift-isle 0.117.2",
+              "id": "cranelift-isle 0.117.0",
               "target": "cranelift_isle"
             }
           ],
@@ -16158,14 +16177,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-meta 0.117.2": {
+    "cranelift-codegen-meta 0.117.0": {
       "name": "cranelift-codegen-meta",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.117.2/download",
-          "sha256": "beecd9fcf2c3e06da436d565de61a42676097ea6eb6b4499346ac6264b6bb9ce",
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/codegen/meta",
           "patch_args": [
             "-p4"
           ],
@@ -16203,22 +16225,22 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-assembler-x64 0.117.2",
+              "id": "cranelift-assembler-x64 0.117.0",
               "target": "cranelift_assembler_x64"
             },
             {
-              "id": "cranelift-codegen-shared 0.117.2",
+              "id": "cranelift-codegen-shared 0.117.0",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 30.0.0",
               "target": "pulley_interpreter"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16226,14 +16248,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-shared 0.117.2": {
+    "cranelift-codegen-shared 0.117.0": {
       "name": "cranelift-codegen-shared",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.117.2/download",
-          "sha256": "0f4ff8d2e1235f2d6e7fc3c6738be6954ba972cd295f09079ebffeca2f864e22"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/codegen/shared"
         }
       },
       "targets": [
@@ -16256,7 +16281,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16264,14 +16289,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-control 0.117.2": {
+    "cranelift-control 0.117.0": {
       "name": "cranelift-control",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-control/0.117.2/download",
-          "sha256": "001312e9fbc7d9ca9517474d6fe71e29d07e52997fd7efe18f19e8836446ceb2"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/control"
         }
       },
       "targets": [
@@ -16310,7 +16338,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16318,14 +16346,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-entity 0.117.2": {
+    "cranelift-entity 0.117.0": {
       "name": "cranelift-entity",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-entity/0.117.2/download",
-          "sha256": "eb0fd6d4aae680275fcbceb08683416b744e65c8b607352043d3f0951d72b3b2"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/entity"
         }
       },
       "targets": [
@@ -16358,7 +16389,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.117.0",
               "target": "cranelift_bitset"
             },
             {
@@ -16378,7 +16409,7 @@
           ],
           "selects": {}
         },
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16386,14 +16417,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-frontend 0.117.2": {
+    "cranelift-frontend 0.117.0": {
       "name": "cranelift-frontend",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-frontend/0.117.2/download",
-          "sha256": "9fd44e7e5dcea20ca104d45894748205c51365ce4cdb18f4418e3ba955971d1b"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/frontend"
         }
       },
       "targets": [
@@ -16425,7 +16459,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.117.0",
               "target": "cranelift_codegen"
             },
             {
@@ -16444,7 +16478,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16452,14 +16486,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-isle 0.117.2": {
+    "cranelift-isle 0.117.0": {
       "name": "cranelift-isle",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/cranelift/isle",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-isle/0.117.2/download",
-          "sha256": "f900e0a3847d51eed0321f0777947fb852ccfce0da7fb070100357f69a2f37fc",
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/isle/isle",
           "patch_args": [
             "-p4"
           ],
@@ -16508,14 +16545,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-isle 0.117.2",
+              "id": "cranelift-isle 0.117.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -16531,14 +16568,17 @@
       ],
       "license_file": null
     },
-    "cranelift-native 0.117.2": {
+    "cranelift-native 0.117.0": {
       "name": "cranelift-native",
-      "version": "0.117.2",
+      "version": "0.117.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cranelift-native/0.117.2/download",
-          "sha256": "7617f13f392ebb63c5126258aca8b8eca739636ca7e4eeee301d3eff68489a6a"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "cranelift/native"
         }
       },
       "targets": [
@@ -16570,7 +16610,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.117.0",
               "target": "cranelift_codegen"
             },
             {
@@ -16588,7 +16628,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.117.2"
+        "version": "0.117.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -21777,11 +21817,11 @@
               "target": "wasmprinter"
             },
             {
-              "id": "wasmtime 30.0.2",
+              "id": "wasmtime 30.0.0",
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 30.0.0",
               "target": "wasmtime_environ"
             },
             {
@@ -57851,14 +57891,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "pulley-interpreter 30.0.2": {
+    "pulley-interpreter 30.0.0": {
       "name": "pulley-interpreter",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/pulley",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pulley-interpreter/30.0.2/download",
-          "sha256": "cb0ecb9823083f71df8735f21f6c44f2f2b55986d674802831df20f27e26c907"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "pulley"
         }
       },
       "targets": [
@@ -57905,7 +57948,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.117.0",
               "target": "cranelift_bitset"
             },
             {
@@ -57913,18 +57956,18 @@
               "target": "log"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 30.0.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-math 30.0.2",
+              "id": "wasmtime-math 30.0.0",
               "target": "wasmtime_math"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -86750,14 +86793,17 @@
       ],
       "license_file": null
     },
-    "wasmtime 30.0.2": {
+    "wasmtime 30.0.0": {
       "name": "wasmtime",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime/30.0.2/download",
-          "sha256": "809cc8780708f1deed0a7c3fcab46954f0e8c08a6fe0252772481fbc88fcf946"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/wasmtime"
         }
       },
       "targets": [
@@ -86850,7 +86896,7 @@
               "target": "postcard"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 30.0.0",
               "target": "pulley_interpreter"
             },
             {
@@ -86878,31 +86924,31 @@
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime 30.0.2",
+              "id": "wasmtime 30.0.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-asm-macros 30.0.2",
+              "id": "wasmtime-asm-macros 30.0.0",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-cranelift 30.0.2",
+              "id": "wasmtime-cranelift 30.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 30.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit-icache-coherence 30.0.2",
+              "id": "wasmtime-jit-icache-coherence 30.0.0",
               "target": "wasmtime_jit_icache_coherence"
             },
             {
-              "id": "wasmtime-math 30.0.2",
+              "id": "wasmtime-math 30.0.0",
               "target": "wasmtime_math"
             },
             {
-              "id": "wasmtime-slab 30.0.2",
+              "id": "wasmtime-slab 30.0.0",
               "target": "wasmtime_slab"
             }
           ],
@@ -87147,7 +87193,7 @@
               "target": "serde_derive"
             },
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 30.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -87174,7 +87220,7 @@
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -87195,7 +87241,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 30.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -87208,14 +87254,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-asm-macros 30.0.2": {
+    "wasmtime-asm-macros 30.0.0": {
       "name": "wasmtime-asm-macros",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-asm-macros/30.0.2/download",
-          "sha256": "236964b6b35af0f08879c9c56dbfbc5adc12e8d624672341a0121df31adaa3fa"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/asm-macros"
         }
       },
       "targets": [
@@ -87247,7 +87296,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87255,14 +87304,17 @@
       ],
       "license_file": null
     },
-    "wasmtime-cranelift 30.0.2": {
+    "wasmtime-cranelift 30.0.0": {
       "name": "wasmtime-cranelift",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-cranelift/30.0.2/download",
-          "sha256": "abcc9179097235c91f299a8ff56b358ee921266b61adff7d14d6e48428954dd2"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/cranelift"
         }
       },
       "targets": [
@@ -87303,23 +87355,23 @@
               "target": "cfg_if"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.117.0",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-control 0.117.2",
+              "id": "cranelift-control 0.117.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.117.0",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.117.2",
+              "id": "cranelift-frontend 0.117.0",
               "target": "cranelift_frontend"
             },
             {
-              "id": "cranelift-native 0.117.2",
+              "id": "cranelift-native 0.117.0",
               "target": "cranelift_native"
             },
             {
@@ -87339,7 +87391,7 @@
               "target": "object"
             },
             {
-              "id": "pulley-interpreter 30.0.2",
+              "id": "pulley-interpreter 30.0.0",
               "target": "pulley_interpreter"
             },
             {
@@ -87359,7 +87411,7 @@
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 30.0.0",
               "target": "wasmtime_environ"
             }
           ],
@@ -87369,13 +87421,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 30.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87383,14 +87435,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-environ 30.0.2": {
+    "wasmtime-environ 30.0.0": {
       "name": "wasmtime-environ",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-environ/30.0.2/download",
-          "sha256": "8e90f6cba665939381839bbf2ddf12d732fca03278867910348ef1281b700954"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/environ"
         }
       },
       "targets": [
@@ -87428,11 +87483,11 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-bitset 0.117.2",
+              "id": "cranelift-bitset 0.117.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-entity 0.117.2",
+              "id": "cranelift-entity 0.117.0",
               "target": "cranelift_entity"
             },
             {
@@ -87492,7 +87547,7 @@
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87500,14 +87555,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-fiber 30.0.2": {
+    "wasmtime-fiber 30.0.0": {
       "name": "wasmtime-fiber",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-fiber/30.0.2/download",
-          "sha256": "ba5c2ac21f0b39d72d2dac198218a12b3ddeb4ab388a8fa0d2e429855876783c"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/fiber"
         }
       },
       "targets": [
@@ -87552,11 +87610,11 @@
               "target": "cfg_if"
             },
             {
-              "id": "wasmtime-asm-macros 30.0.2",
+              "id": "wasmtime-asm-macros 30.0.0",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-fiber 30.0.2",
+              "id": "wasmtime-fiber 30.0.0",
               "target": "build_script_build"
             }
           ],
@@ -87579,13 +87637,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 30.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -87606,7 +87664,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 30.0.2",
+              "id": "wasmtime-versioned-export-macros 30.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -87619,14 +87677,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-jit-icache-coherence 30.0.2": {
+    "wasmtime-jit-icache-coherence 30.0.0": {
       "name": "wasmtime-jit-icache-coherence",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/30.0.2/download",
-          "sha256": "3f180cc0d2745e3a5df5d02231cd3046f49c75512eaa987b8202363b112e125d"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/jit-icache-coherence"
         }
       },
       "targets": [
@@ -87675,7 +87736,7 @@
           }
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87683,14 +87744,17 @@
       ],
       "license_file": null
     },
-    "wasmtime-math 30.0.2": {
+    "wasmtime-math 30.0.0": {
       "name": "wasmtime-math",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-math/30.0.2/download",
-          "sha256": "f5f04c5dcf5b2f88f81cfb8d390294b2f67109dc4d0197ea7303c60a092df27c"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/math"
         }
       },
       "targets": [
@@ -87728,7 +87792,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87736,14 +87800,17 @@
       ],
       "license_file": null
     },
-    "wasmtime-slab 30.0.2": {
+    "wasmtime-slab 30.0.0": {
       "name": "wasmtime-slab",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-slab/30.0.2/download",
-          "sha256": "fe9681707f1ae9a4708ca22058722fca5c135775c495ba9b9624fe3732b94c97"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/slab"
         }
       },
       "targets": [
@@ -87766,7 +87833,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87774,14 +87841,17 @@
       ],
       "license_file": null
     },
-    "wasmtime-versioned-export-macros 30.0.2": {
+    "wasmtime-versioned-export-macros 30.0.0": {
       "name": "wasmtime-versioned-export-macros",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/30.0.2/download",
-          "sha256": "dd2fe69d04986a12fc759d2e79494100d600adcb3bb79e63dedfc8e6bb2ab03e"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/versioned-export-macros"
         }
       },
       "targets": [
@@ -87821,7 +87891,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -87829,14 +87899,17 @@
       ],
       "license_file": null
     },
-    "wasmtime-winch 30.0.2": {
+    "wasmtime-winch 30.0.0": {
       "name": "wasmtime-winch",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-winch/30.0.2/download",
-          "sha256": "5a9c8eae8395d530bb00a388030de9f543528674c382326f601de47524376975"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "crates/winch"
         }
       },
       "targets": [
@@ -87865,7 +87938,7 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.117.0",
               "target": "cranelift_codegen"
             },
             {
@@ -87885,22 +87958,22 @@
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-cranelift 30.0.2",
+              "id": "wasmtime-cranelift 30.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 30.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "winch-codegen 30.0.2",
+              "id": "winch-codegen 30.0.0",
               "target": "winch_codegen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -88950,14 +89023,17 @@
       ],
       "license_file": null
     },
-    "winch-codegen 30.0.2": {
+    "winch-codegen 30.0.0": {
       "name": "winch-codegen",
-      "version": "30.0.2",
+      "version": "30.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/winch-codegen/30.0.2/download",
-          "sha256": "7dbd4e07bd92c7ddace2f3267bdd31d4197b5ec58c315751325d45c19bfb56df"
+        "Git": {
+          "remote": "https://github.com/bytecodealliance/wasmtime",
+          "commitish": {
+            "Rev": "0a3aea35bfdaa878a8f700e8d9fb0938909d3021"
+          },
+          "strip_prefix": "winch/codegen"
         }
       },
       "targets": [
@@ -88998,7 +89074,7 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-codegen 0.117.2",
+              "id": "cranelift-codegen 0.117.0",
               "target": "cranelift_codegen"
             },
             {
@@ -89026,22 +89102,22 @@
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-cranelift 30.0.2",
+              "id": "wasmtime-cranelift 30.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 30.0.2",
+              "id": "wasmtime-environ 30.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "winch-codegen 30.0.2",
+              "id": "winch-codegen 30.0.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "30.0.2"
+        "version": "30.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -94709,8 +94785,8 @@
     "wasm-smith 0.224.1",
     "wasmparser 0.224.1",
     "wasmprinter 0.224.1",
-    "wasmtime 30.0.2",
-    "wasmtime-environ 30.0.2",
+    "wasmtime 30.0.0",
+    "wasmtime-environ 30.0.0",
     "wast 224.0.1",
     "wat 1.227.1",
     "wee_alloc 0.4.5",
