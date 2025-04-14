@@ -339,7 +339,8 @@ async fn pulse(calls_count: u32) -> u32 {
 /// for heartbeats that try to make at least 1 call.
 #[heartbeat]
 async fn heartbeat() {
-    if let calls_count @ 1.. = CONFIG.with_borrow(|config| config.calls_per_heartbeat) {
+    let calls_count = CONFIG.with_borrow(|config| config.calls_per_heartbeat);
+    if calls_count > 0 {
         pulse(calls_count).await;
         SUCCESSFUL_HEARTBEAT_INVOCATIONS
             .replace(SUCCESSFUL_HEARTBEAT_INVOCATIONS.get() + calls_count);
