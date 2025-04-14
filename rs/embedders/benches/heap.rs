@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use embedders_bench::SetupAction;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_sys::{HUGE_PAGE_SIZE, PAGE_SIZE};
+use ic_sys::PAGE_SIZE;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
@@ -50,7 +50,7 @@ enum Step {
     #[strum(serialize = "step_16kb")]
     FourPages = 4 * PAGE_SIZE as isize,
     #[strum(serialize = "step_2mb")]
-    HugePage = HUGE_PAGE_SIZE as isize,
+    HugePage = 512 * PAGE_SIZE as isize,
 }
 
 #[derive(Copy, Clone, Display, EnumIter)]
