@@ -114,48 +114,6 @@ pub struct ECDSAPublicKey {
 
 pub type GetUtxosRequest = bitcoin::GetUtxosRequest;
 
-/*
-impl GetUtxosRequest {
-    pub fn as_inner(&self) -> &bitcoin::GetUtxosRequest {
-        self.0.as_inner()
-    }
-
-    pub fn into_inner(self) -> bitcoin::GetUtxosRequest {
-        self.0.into_inner()
-    }
-
-    pub fn new<T: Into<Timestamp>>(
-        timestamp: T,
-        address: String,
-        network: Network,
-        filter: Option<bitcoin::UtxoFilter>,
-    ) -> Self {
-        Self(Timestamped::new_with(
-            timestamp,
-            bitcoin::GetUtxosRequest {
-                address,
-                network: network.into(),
-                filter,
-            },
-        ))
-    }
-
-    pub fn with_new_timestamp_and_filter<T: Into<Timestamp>>(
-        &self,
-        timestamp: T,
-        filter: bitcoin::UtxoFilter,
-    ) -> Self {
-        Self(Timestamped::new_with(
-            timestamp,
-            bitcoin::GetUtxosRequest {
-                filter: Some(filter),
-                ..self.0.as_inner().clone()
-            },
-        ))
-    }
-}
-*/
-
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetUtxosResponse {
     pub utxos: Vec<Utxo>,
