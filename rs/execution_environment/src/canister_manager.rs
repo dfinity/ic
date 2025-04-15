@@ -1380,7 +1380,7 @@ impl CanisterManager {
                         },
                     )?;
 
-                // Reserve needed cycles if the subnet is becoming saturated.
+                // Verify that cycles can be reserved if the subnet is becoming saturated.
                 canister
                     .system_state
                     .can_reserve_cycles(reservation_cycles)
