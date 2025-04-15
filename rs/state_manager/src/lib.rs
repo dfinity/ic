@@ -105,6 +105,10 @@ pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
 const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
     "state_manager_replicated_state_altered_after_checkpoint";
 
+/// Critical error tracking non-empty PageDelta at SerializeToTip
+const CRITICAL_ERROR_NON_EMPTY_PAGE_DELTA_AT_SERIALIZE_TO_TIP: &str =
+    "state_manager_non_empty_page_delta_at_serialize_to_tip";
+
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
@@ -191,6 +195,7 @@ pub struct CheckpointMetrics {
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
+    non_empty_page_delta_at_serialize_to_tip_critical: IntCounter,
     log: ReplicaLogger,
 }
 
@@ -246,6 +251,8 @@ impl CheckpointMetrics {
             replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
+            non_empty_page_delta_at_serialize_to_tip_critical: metrics_registry
+                .error_counter(CRITICAL_ERROR_NON_EMPTY_PAGE_DELTA_AT_SERIALIZE_TO_TIP),
             log: replica_logger,
         }
     }

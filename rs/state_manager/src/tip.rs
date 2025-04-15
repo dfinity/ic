@@ -5,7 +5,8 @@ use crate::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
     CheckpointError, PageMapType, SharedState, StateManagerMetrics,
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    CRITICAL_ERROR_NON_EMPTY_PAGE_DELTA_AT_SERIALIZE_TO_TIP, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
@@ -19,7 +20,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
-    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+    page_map::{MergeCandidate, StorageResult, MAX_NUMBER_OF_FILES},
 };
 use ic_replicated_state::{
     page_map::{StorageLayout, PAGE_SIZE},
@@ -302,7 +303,7 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 }),
                                 &mut thread_pool,
-                                &metrics.storage_metrics,
+                                &metrics,
                                 &lsmt_config,
                             )
                             .unwrap_or_else(|err| {
@@ -782,7 +783,7 @@ fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
-    metrics: &StorageMetrics,
+    metrics: &StateManagerMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     // Snapshots should have been handled earlier in `flush_page_delta`.
@@ -834,10 +835,11 @@ fn serialize_to_tip(
         state.canister_snapshots.iter(),
         |canister_snapshot| {
             serialize_snapshot_to_tip(
+                log,
                 canister_snapshot.0,
                 canister_snapshot.1,
                 tip,
-                metrics,
+                &metrics,
                 lsmt_config,
             )
         },
@@ -850,11 +852,25 @@ fn serialize_to_tip(
     Ok(())
 }
 
+// Report critical error for non-empty page delta during SerializeToTip.
+fn report_non_empty_page_delta(log: &ReplicaLogger, metrics: &StateManagerMetrics, message: &str) {
+    error!(
+        log,
+        "{}: non-empty delta for: {}",
+        CRITICAL_ERROR_NON_EMPTY_PAGE_DELTA_AT_SERIALIZE_TO_TIP,
+        message,
+    );
+    metrics
+        .checkpoint_metrics
+        .non_empty_page_delta_at_serialize_to_tip_critical
+        .inc();
+}
+
 fn serialize_canister_to_tip(
     log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
-    metrics: &StorageMetrics,
+    metrics: &StateManagerMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
@@ -888,17 +904,32 @@ fn serialize_canister_to_tip(
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
+            if !execution_state.wasm_memory.page_map.page_delta_is_empty() {
+                report_non_empty_page_delta(
+                    log,
+                    metrics,
+                    &format!("wasm memory for {}", canister_layout.raw_path().display()),
+                );
+            }
+            if !execution_state.stable_memory.page_map.page_delta_is_empty() {
+                report_non_empty_page_delta(
+                    log,
+                    metrics,
+                    &format!("stable memory for {}", canister_layout.raw_path().display()),
+                );
+            }
+
             execution_state.wasm_memory.page_map.persist_delta(
                 &canister_layout.vmemory_0(),
                 tip.height(),
                 lsmt_config,
-                metrics,
+                &metrics.storage_metrics,
             )?;
             execution_state.stable_memory.page_map.persist_delta(
                 &canister_layout.stable_memory(),
                 tip.height(),
                 lsmt_config,
-                metrics,
+                &metrics.storage_metrics,
             )?;
 
             Some(ExecutionStateBits {
@@ -920,6 +951,22 @@ fn serialize_canister_to_tip(
         }
     };
 
+    if !canister_state
+        .system_state
+        .wasm_chunk_store
+        .page_map()
+        .page_delta_is_empty()
+    {
+        report_non_empty_page_delta(
+            log,
+            metrics,
+            &format!(
+                "wasm chunk store for {}",
+                canister_layout.raw_path().display()
+            ),
+        );
+    }
+
     canister_state
         .system_state
         .wasm_chunk_store
@@ -928,7 +975,7 @@ fn serialize_canister_to_tip(
             &canister_layout.wasm_chunk_store(),
             tip.height(),
             lsmt_config,
-            metrics,
+            &metrics.storage_metrics,
         )?;
 
     canister_layout.canister().serialize(
@@ -1006,10 +1053,11 @@ fn serialize_canister_to_tip(
 
 /// Serialize a single snapshot to disk at checkpoint time.
 fn serialize_snapshot_to_tip(
+    log: &ReplicaLogger,
     snapshot_id: &SnapshotId,
     canister_snapshot: &CanisterSnapshot,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
-    metrics: &StorageMetrics,
+    metrics: &StateManagerMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     let snapshot_layout = tip.snapshot(snapshot_id)?;
@@ -1045,6 +1093,47 @@ fn serialize_snapshot_to_tip(
         // During `flush_page_maps` we created copied this file from the canister directory.
         debug_assert!(snapshot_layout.wasm().raw_path().exists());
     }
+    if !canister_snapshot
+        .execution_snapshot()
+        .wasm_memory
+        .page_map
+        .page_delta_is_empty()
+    {
+        report_non_empty_page_delta(
+            log,
+            metrics,
+            &format!("wasm memory for {}", snapshot_layout.raw_path().display()),
+        );
+    }
+    if !canister_snapshot
+        .execution_snapshot()
+        .stable_memory
+        .page_map
+        .page_delta_is_empty()
+    {
+        report_non_empty_page_delta(
+            log,
+            metrics,
+            &format!(
+                "stable memory  for {}",
+                snapshot_layout.raw_path().display()
+            ),
+        );
+    }
+    if !canister_snapshot
+        .chunk_store()
+        .page_map()
+        .page_delta_is_empty()
+    {
+        report_non_empty_page_delta(
+            log,
+            metrics,
+            &format!(
+                "wasm chunk store for {}",
+                snapshot_layout.raw_path().display()
+            ),
+        );
+    }
 
     canister_snapshot
         .execution_snapshot()
@@ -1054,7 +1143,7 @@ fn serialize_snapshot_to_tip(
             &snapshot_layout.vmemory_0(),
             tip.height(),
             lsmt_config,
-            metrics,
+            &metrics.storage_metrics,
         )?;
     canister_snapshot
         .execution_snapshot()
@@ -1064,13 +1153,13 @@ fn serialize_snapshot_to_tip(
             &snapshot_layout.stable_memory(),
             tip.height(),
             lsmt_config,
-            metrics,
+            &metrics.storage_metrics,
         )?;
     canister_snapshot.chunk_store().page_map().persist_delta(
         &snapshot_layout.wasm_chunk_store(),
         tip.height(),
         lsmt_config,
-        metrics,
+        &metrics.storage_metrics,
     )?;
 
     Ok(())
