@@ -394,10 +394,10 @@ impl TNet {
             // TODO: only download it once and copy it if it's already downloaded
             let args = format!(
                 "set -xe; \
-                apk add file; \
                 mkdir -p /tnet/{vm_name}; \
                 curl --user-agent curl-k8s-test --retry 10 --retry-delay 1 -o /tnet/{vm_name}/img.tar.zst {image_url}; \
                 tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
+                file /tnet/{vm_name}/disk.img | grep -q 'DOS/MBR boot sector' || exit 1; \
                 for i in $(seq 1 12); do \
                     curl --user-agent curl-k8s-test --retry 3 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img.zst {config_image_url}; \
                     if ! file /tnet/{vm_name}/config_disk.img.zst | grep -i 'zstandard'; then \
@@ -415,7 +415,7 @@ impl TNet {
             );
             create_job(
                 &vm_name.clone(),
-                "dfinity/util:0.1",
+                "dfinity/util:0.2",
                 vec!["/bin/sh", "-c"],
                 vec![&args],
                 "/srv/tnet".into(),
