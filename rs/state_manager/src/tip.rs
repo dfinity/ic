@@ -20,7 +20,7 @@ use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
-    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+    page_map::{MergeCandidate, StorageResult, MAX_NUMBER_OF_FILES},
 };
 use ic_replicated_state::{
     page_map::{StorageLayout, PAGE_SIZE},
@@ -33,8 +33,10 @@ use ic_state_layout::{
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
+use ic_wasm_types::CanisterModule;
 use prometheus::HistogramTimer;
 use std::collections::BTreeSet;
+use std::convert::identity;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -231,8 +233,6 @@ pub(crate) fn spawn_tip_thread(
                                             &result.state,
                                             &checkpoint_readwrite,
                                             &mut thread_pool,
-                                            &metrics.storage_metrics,
-                                            &lsmt_config,
                                         )
                                         .unwrap_or_else(
                                             |err| {
@@ -956,8 +956,6 @@ fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
-    metrics: &StorageMetrics,
-    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     // Snapshots should have been handled earlier in `flush_page_delta`.
     debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
@@ -1007,13 +1005,7 @@ fn serialize_to_tip(
         thread_pool,
         state.canister_snapshots.iter(),
         |canister_snapshot| {
-            serialize_snapshot_to_tip(
-                canister_snapshot.0,
-                canister_snapshot.1,
-                tip,
-                metrics,
-                lsmt_config,
-            )
+            serialize_snapshot_to_tip(canister_snapshot.0, canister_snapshot.1, tip)
         },
     );
 
@@ -1030,18 +1022,49 @@ fn serialize_wasm_binaries(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
-    let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_wasm_binary(log, canister_state, tip)
-    });
+    parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+        serialize_canister_wasm_binary(log, canister_state, tip)
+    })
+    .into_iter()
+    .try_for_each(identity)?;
+    parallel_map(
+        thread_pool,
+        state.canister_snapshots.iter(),
+        |(snapshot_id, snapshot)| serialize_snapshot_wasm_binary(log, snapshot_id, &snapshot, tip),
+    )
+    .into_iter()
+    .try_for_each(identity)
+}
 
-    for result in results.into_iter() {
-        result?;
+fn serialize_wasm_binary(
+    log: &ReplicaLogger,
+    wasm_file: &WasmFile<RwPolicy<TipHandler>>,
+    binary: &CanisterModule,
+) -> Result<(), CheckpointError> {
+    match binary.file() {
+        Some(path) => {
+            // This if should always be false, as we reflink copy the entire checkpoint to the tip
+            // It is left in mainly as defensive programming
+            if !wasm_file.raw_path().exists() {
+                ic_state_layout::utils::do_copy(log, path, wasm_file.raw_path()).map_err(
+                    |io_err| CheckpointError::IoError {
+                        path: path.to_path_buf(),
+                        message: "failed to copy Wasm file".to_string(),
+                        io_err: io_err.to_string(),
+                    },
+                )?;
+            }
+        }
+        None => {
+            // Canister was installed/upgraded. Persist the new wasm binary.
+            wasm_file.serialize(binary)?;
+        }
     }
 
     Ok(())
 }
 
-fn serialize_wasm_binary(
+fn serialize_canister_wasm_binary(
     log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
@@ -1051,33 +1074,16 @@ fn serialize_wasm_binary(
 
     match &canister_state.execution_state {
         Some(execution_state) => {
-            let wasm_binary = &execution_state.wasm_binary.binary;
-            match wasm_binary.file() {
-                Some(path) => {
-                    let wasm = canister_layout.wasm();
-                    // This if should always be false, as we reflink copy the entire checkpoint to the tip
-                    // It is left in mainly as defensive programming
-                    if !wasm.raw_path().exists() {
-                        ic_state_layout::utils::do_copy(log, path, wasm.raw_path()).map_err(
-                            |io_err| CheckpointError::IoError {
-                                path: path.to_path_buf(),
-                                message: "failed to copy Wasm file".to_string(),
-                                io_err: io_err.to_string(),
-                            },
-                        )?;
-                    }
-                }
-                None => {
-                    // Canister was installed/upgraded. Persist the new wasm binary.
-                    canister_layout
-                        .wasm()
-                        .serialize(&execution_state.wasm_binary.binary)?;
-                }
-            }
+            serialize_wasm_binary(
+                log,
+                &canister_layout.wasm(),
+                &execution_state.wasm_binary.binary,
+            )?;
             assert!(execution_state.wasm_memory.page_map.page_delta_is_empty());
             assert!(execution_state.stable_memory.page_map.page_delta_is_empty());
         }
         None => {
+            // The canister is uninstalled
             canister_layout.vmemory_0().delete_files()?;
             canister_layout.stable_memory().delete_files()?;
             canister_layout.wasm().try_delete_file()?;
@@ -1089,6 +1095,33 @@ fn serialize_wasm_binary(
         .wasm_chunk_store
         .page_map()
         .page_delta_is_empty());
+    Ok(())
+}
+
+fn serialize_snapshot_wasm_binary(
+    log: &ReplicaLogger,
+    snapshot_id: &SnapshotId,
+    snapshot: &CanisterSnapshot,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+) -> Result<(), CheckpointError> {
+    let snapshot_layout = tip.snapshot(&snapshot_id)?;
+
+    let execution_snapshot = snapshot.execution_snapshot();
+    serialize_wasm_binary(
+        log,
+        &snapshot_layout.wasm(),
+        &execution_snapshot.wasm_binary,
+    )?;
+    assert!(execution_snapshot
+        .wasm_memory
+        .page_map
+        .page_delta_is_empty());
+    assert!(execution_snapshot
+        .stable_memory
+        .page_map
+        .page_delta_is_empty());
+
+    assert!(snapshot.chunk_store().page_map().page_delta_is_empty());
     Ok(())
 }
 
@@ -1194,8 +1227,6 @@ fn serialize_snapshot_to_tip(
     snapshot_id: &SnapshotId,
     canister_snapshot: &CanisterSnapshot,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
-    metrics: &StorageMetrics,
-    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     let snapshot_layout = tip.snapshot(snapshot_id)?;
 
@@ -1220,42 +1251,6 @@ fn serialize_snapshot_to_tip(
                 .on_low_wasm_memory_hook_status,
         }
         .into(),
-    )?;
-
-    // Like for canisters, the wasm binary is either already present on disk, or it is new and needs to be written.
-    let wasm_binary = canister_snapshot.canister_module();
-    if wasm_binary.file().is_none() {
-        snapshot_layout.wasm().serialize(wasm_binary)?;
-    } else {
-        // During `flush_page_maps` we created copied this file from the canister directory.
-        debug_assert!(snapshot_layout.wasm().raw_path().exists());
-    }
-
-    canister_snapshot
-        .execution_snapshot()
-        .wasm_memory
-        .page_map
-        .persist_delta(
-            &snapshot_layout.vmemory_0(),
-            tip.height(),
-            lsmt_config,
-            metrics,
-        )?;
-    canister_snapshot
-        .execution_snapshot()
-        .stable_memory
-        .page_map
-        .persist_delta(
-            &snapshot_layout.stable_memory(),
-            tip.height(),
-            lsmt_config,
-            metrics,
-        )?;
-    canister_snapshot.chunk_store().page_map().persist_delta(
-        &snapshot_layout.wasm_chunk_store(),
-        tip.height(),
-        lsmt_config,
-        metrics,
     )?;
 
     Ok(())
