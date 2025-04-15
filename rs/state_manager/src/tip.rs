@@ -907,7 +907,7 @@ fn serialize_canister_to_tip(
                 exports: execution_state.exports.clone(),
                 last_executed_round: execution_state.last_executed_round,
                 metadata: execution_state.metadata.clone(),
-                binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
+                binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
                 next_scheduled_method: execution_state.next_scheduled_method,
                 is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
             })
@@ -1021,7 +1021,7 @@ fn serialize_snapshot_to_tip(
             canister_id: canister_snapshot.canister_id(),
             taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
             canister_version: canister_snapshot.canister_version(),
-            binary_hash: Some(canister_snapshot.canister_module().module_hash().into()),
+            binary_hash: canister_snapshot.canister_module().module_hash().into(),
             certified_data: canister_snapshot.certified_data().clone(),
             wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
             stable_memory_size: canister_snapshot.stable_memory().size,
