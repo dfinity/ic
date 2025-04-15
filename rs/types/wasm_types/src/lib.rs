@@ -89,6 +89,11 @@ impl CanisterModule {
         }
     }
 
+    /// If this module is backed by a file, return the path to that file.
+    pub fn is_file(&self) -> bool {
+        matches!(self.module, ModuleStorage::File(_))
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         self.module.as_slice()
     }
@@ -111,6 +116,13 @@ impl CanisterModule {
     /// Returns the Sha256 hash of this Wasm module.
     pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
         self.module_hash
+    }
+
+    pub fn file_loading_status(&self) -> Option<bool> {
+        match &self.module {
+            ModuleStorage::Memory(_) => None,
+            ModuleStorage::File(storage) => Some(storage.is_loaded()),
+        }
     }
 }
 
@@ -206,7 +218,6 @@ fn wasmhash_display() {
 
 /// Trait representing a Wasm file that can be memory-mapped.
 ///
-/// # Invariant
 /// Implementors **must guarantee** that the path returned by `path()`
 /// always points to a valid and accessible file whenever `mmap_file()` is called.
 pub trait MemoryMappableWasmFile {
@@ -278,14 +289,14 @@ impl ModuleStorage {
         match &self {
             Self::Memory(arc) => arc.as_slice(),
             // This is safe because the file is read-only.
-            Self::File(storage) => storage.as_slice(),
+            Self::File(file) => file.as_slice(),
         }
     }
 
     fn len(&self) -> usize {
         match &self {
             ModuleStorage::Memory(arc) => arc.len(),
-            ModuleStorage::File(storage) => storage.len(),
+            ModuleStorage::File(file) => file.len(),
         }
     }
 }

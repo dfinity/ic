@@ -2470,6 +2470,7 @@ where
 pub struct WasmFile<Permissions: AccessPolicy> {
     path: PathBuf,
     permissions_tag: PhantomData<Permissions>,
+    // Keep checkpoint alive so that the WasmFile can be loaded asynchronously.
     _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
