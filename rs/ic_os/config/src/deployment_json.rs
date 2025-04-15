@@ -40,6 +40,11 @@ pub struct Resources {
     #[serde(skip_serializing_if = "Option::is_none")]
     /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     pub cpu: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Maximum number of virtual CPUs allocated for the GuestOS,
+    /// which must be between 1 and the maximum supported by the hypervisor.
+    /// If None, defaults to 64.
+    pub nr_of_vcpus: Option<u32>,
 }
 
 pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
@@ -96,7 +101,8 @@ mod test {
               },
               "resources": {
                 "memory": "490",
-                "cpu": "kvm"
+                "cpu": "kvm",
+                "nr_of_vcpus": null
               }
             }
         )
@@ -115,7 +121,8 @@ mod test {
   },
   "resources": {
     "memory": "490",
-    "cpu": "kvm"
+    "cpu": "kvm",
+    "nr_of_vcpus": null
   }
 }"#;
 
@@ -139,6 +146,92 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
+                nr_of_vcpus: None,
+            },
+        }
+    });
+
+    const DEPLOYMENT_STR_VCPUS: &str = r#"{
+      "deployment": {
+        "name": "mainnet",
+        "mgmt_mac": null
+      },
+      "logging": {
+        "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+      },
+      "nns": {
+        "url": "https://wiki.internetcomputer.org/"
+      },
+      "resources": {
+        "memory": "490",
+        "cpu": "kvm",
+        "nr_of_vcpus": 64
+      }
+    }"#;
+
+    static DEPLOYMENT_STRUCT_VCPUS: Lazy<DeploymentSettings> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
+        DeploymentSettings {
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("kvm".to_string()),
+                nr_of_vcpus: Some(64),
+            },
+        }
+    });
+
+    const DEPLOYMENT_STR_NO_VCPUS: &str = r#"{
+      "deployment": {
+        "name": "mainnet",
+        "mgmt_mac": null
+      },
+      "logging": {
+        "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+      },
+      "nns": {
+        "url": "https://wiki.internetcomputer.org/"
+      },
+      "resources": {
+        "memory": "490",
+        "cpu": "kvm"
+      }
+    }"#;
+
+    static DEPLOYMENT_STRUCT_NO_VCPUS: Lazy<DeploymentSettings> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
+        DeploymentSettings {
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("kvm".to_string()),
+                nr_of_vcpus: None,
             },
         }
     });
@@ -179,6 +272,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
+                nr_of_vcpus: None,
             },
         }
     });
@@ -218,6 +312,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: None,
+                nr_of_vcpus: None,
             },
         }
     });
@@ -258,6 +353,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("qemu".to_string()),
+                nr_of_vcpus: None,
             },
         }
     });
@@ -316,6 +412,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: None,
+                nr_of_vcpus: None,
             },
         }
     });
@@ -352,6 +449,7 @@ mod test {
             resources: Resources {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
+                nr_of_vcpus: None,
             },
         });
 
@@ -360,6 +458,14 @@ mod test {
         let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
+
+        let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR_VCPUS).unwrap() };
+
+        assert_eq!(*DEPLOYMENT_STRUCT_VCPUS, parsed_deployment);
+
+        let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR_NO_VCPUS).unwrap() };
+
+        assert_eq!(*DEPLOYMENT_STRUCT_NO_VCPUS, parsed_deployment);
 
         let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR_NO_MGMT_MAC).unwrap() };
 

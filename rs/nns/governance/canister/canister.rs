@@ -21,8 +21,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 use ic_nns_governance::{
-    canister_state::CanisterEnv,
-    canister_state::{governance, governance_mut, set_governance},
+    canister_state::{governance, governance_mut, set_governance, CanisterEnv},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,
@@ -151,7 +150,7 @@ fn panic_with_probability(probability: f64, message: &str) {
     // state, which makes sure that the next time still panics, unless some other operation modifies
     // the `rng` successfully, such as spawning a neuron.
     let random = ChaCha20Rng::seed_from_u64(now_seconds()).next_u64();
-    let should_panic = (random as f64) / (u64::MAX as f64) < probability;
+    let should_panic = (random as f64) / (u64::MAX as f64) <= probability;
     if should_panic {
         panic!("{}", message);
     }
@@ -579,7 +578,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.9,
+        1.0,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -614,7 +613,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.9,
+        1.0,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 

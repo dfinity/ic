@@ -21,11 +21,15 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, GlobalTimer, Method as Ic00Method,
-    ReadCanisterSnapshotMetadataResponse, StoredChunksReply, UploadChunkReply,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash, GlobalTimer,
+    Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
+    StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
+    WasmChunkHash, CHUNK_SIZE,
+};
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
@@ -61,6 +65,9 @@ use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
 use types::*;
 pub(crate) mod types;
+
+/// Maximum binary slice size allowed per single message download.
+const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 
 /// The entity responsible for managing canisters (creation, installing, etc.)
 pub(crate) struct CanisterManager {
@@ -2034,6 +2041,100 @@ impl CanisterManager {
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,
         })
+    }
+
+    pub(crate) fn read_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+        snapshot_id: SnapshotId,
+        kind: CanisterSnapshotDataKind,
+        state: &ReplicatedState,
+        subnet_size: usize,
+    ) -> Result<ReadCanisterSnapshotDataResponse, CanisterManagerError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
+            return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                canister_id: canister.canister_id(),
+                snapshot_id,
+            });
+        };
+        // Verify the provided `snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister.canister_id() {
+            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                canister_id: canister.canister_id(),
+                snapshot_id,
+            });
+        }
+
+        // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
+        let num_response_bytes = match &kind {
+            CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
+            CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
+            CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
+            // In this case, we might overcharge. But the stored chunks are also charged fully even if they are smaller.
+            CanisterSnapshotDataKind::WasmChunk { .. } => CHUNK_SIZE,
+        };
+        let size = NumInstructions::new(num_response_bytes);
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            canister,
+            self.config
+                .canister_snapshot_data_baseline_instructions
+                .saturating_add(&size),
+            subnet_size,
+            // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
+            WasmExecutionMode::Wasm32,
+        ) {
+            return Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err));
+        };
+
+        let res = match kind {
+            CanisterSnapshotDataKind::StableMemory { offset, size } => {
+                if size > MAX_SLICE_SIZE_BYTES {
+                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
+                }
+                let stable_memory = snapshot.execution_snapshot().stable_memory.clone();
+                match CanisterSnapshot::get_memory_chunk(stable_memory, offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::MainMemory { offset, size } => {
+                if size > MAX_SLICE_SIZE_BYTES {
+                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
+                }
+                let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
+                match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::WasmModule { offset, size } => {
+                if size > MAX_SLICE_SIZE_BYTES {
+                    return Err(CanisterManagerError::InvalidSubslice { offset, size });
+                }
+                match snapshot.get_wasm_module_chunk(offset, size) {
+                    Ok(chunk) => Ok(chunk),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            CanisterSnapshotDataKind::WasmChunk { hash } => {
+                let Ok(hash) = <WasmChunkHash>::try_from(hash.clone()) else {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!("Bytes {:02x?} are not a valid WasmChunkHash.", hash),
+                    });
+                };
+                let Some(chunk) = snapshot.chunk_store().get_chunk_complete(&hash) else {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!("WasmChunkHash {:02x?} not found.", hash),
+                    });
+                };
+                Ok(chunk)
+            }
+        };
+        res.map(ReadCanisterSnapshotDataResponse::new)
     }
 }
 
