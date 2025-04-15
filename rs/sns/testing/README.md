@@ -41,7 +41,6 @@ To run the scenario on the local PocketIC instance:
    by `bazel run`.
    ```
    bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" \
-       --state-dir "$PWD/sns-testing" \
        --dev-identity sns-testing \
        --deciding-nns-neuron-id 1
    ```
@@ -73,7 +72,7 @@ To run the scenario on the local PocketIC instance:
    ```
 
 To start the scenario from scratch, you'll need to stop the running `pocket-ic-server` instance and
-remove `$PWD/sns-testing` and `$PWD/.dfx` directories before doing the steps mentioned above.
+remove `$PWD/.dfx` directory before doing the steps mentioned above.
 
 ## Get ICP tokens
 
@@ -108,7 +107,6 @@ All commands below assume that `. scripts/env.sh` was invoked to add required bi
    by `bazel run`.
    ```
    bazel run //rs/sns/testing:sns-testing-init -- --server-url "http://127.0.0.1:8888" \
-       --state-dir "$PWD/sns-testing" \
        --dev-identity sns-testing \
        --deciding-nns-neuron-id 1
    ```

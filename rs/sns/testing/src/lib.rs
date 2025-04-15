@@ -236,8 +236,9 @@ pub struct NnsInitArgs {
     #[arg(long)]
     pub server_url: Url,
     /// The path to the state PocketIC instance state directory.
+    /// If not specified, a new temporary directory will be created.
     #[arg(long)]
-    pub state_dir: PathBuf,
+    pub state_dir: Option<PathBuf>,
     /// The localhost port on which the HTTP endpoint for the IC network will be exposed.
     /// Defaults to 8080.
     #[arg(long, default_value_t = 8080)]

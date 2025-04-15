@@ -8,11 +8,22 @@ use ic_sns_testing::utils::{
 use ic_sns_testing::NnsInitArgs;
 use icp_ledger::Tokens;
 use pocket_ic::PocketIcBuilder;
+use tempfile::tempdir;
 
 async fn nns_init(args: NnsInitArgs) {
+    let state_dir = if let Some(state_dir) = args.state_dir {
+        state_dir
+    } else {
+        let tempdir = tempdir().unwrap();
+        println!(
+            "Using temporary PocketIC state directory: {}",
+            tempdir.path().display()
+        );
+        tempdir.into_path()
+    };
     let mut pocket_ic = PocketIcBuilder::new()
         .with_server_url(args.server_url)
-        .with_state_dir(args.state_dir.clone())
+        .with_state_dir(state_dir.clone())
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
@@ -22,7 +33,7 @@ async fn nns_init(args: NnsInitArgs) {
     let endpoint = pocket_ic.make_live(Some(args.ic_network_port)).await;
     println!("PocketIC endpoint: {}", endpoint);
 
-    let registry_proto_path = args.state_dir.join("registry.proto");
+    let registry_proto_path = state_dir.join("registry.proto");
     let initial_mutations = load_registry_mutations(registry_proto_path);
     let dev_principal_id = get_identity_principal(&args.dev_identity).unwrap();
 
