@@ -507,13 +507,13 @@ impl NnsInstaller {
         );
         let maturity_equivalent_icp_e8s = 1_500_000 * E8;
 
-        // Only one of the two conditions below can be true at a time due to the assert above.
         if let Some(neurons) = self.neurons {
             nns_init_payload_builder.with_additional_neurons(neurons);
-        }
-        if let Some(hotkeys) = self.neurons_fund_hotkeys {
-            nns_init_payload_builder
-                .with_test_neurons_fund_neurons_with_hotkeys(hotkeys, maturity_equivalent_icp_e8s);
+        } else {
+            nns_init_payload_builder.with_test_neurons_fund_neurons_with_hotkeys(
+                self.neurons_fund_hotkeys.unwrap_or_default(),
+                maturity_equivalent_icp_e8s,
+            );
         }
         nns_init_payload_builder
             .with_sns_dedicated_subnets(vec![sns_subnet_id])
