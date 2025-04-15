@@ -73,12 +73,12 @@ impl CanisterModule {
     pub fn new_from_file(
         wasm_file_layout: Box<dyn MemoryMappableWasmFile + Send + Sync>,
         module_hash: WasmHash,
-    ) -> std::io::Result<Self> {
+    ) -> Self {
         let module = ModuleStorage::from_file(wasm_file_layout);
-        Ok(Self {
+        Self {
             module,
             module_hash: module_hash.0,
-        })
+        }
     }
 
     /// If this module is backed by a file, return the path to that file.
