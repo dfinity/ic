@@ -341,26 +341,6 @@ pub async fn sign_with_ecdsa<R: CanisterRuntime>(
         })
 }
 
-pub async fn bitcoin_sign_with_ecdsa(
-    key_name: String,
-    derivation_path: DerivationPath,
-    message_hash: [u8; 32],
-) -> Result<Vec<u8>, CallError> {
-    use ic_cdk::api::management_canister::ecdsa::{EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument};
-
-    ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
-        message_hash: message_hash.to_vec(),
-        derivation_path: derivation_path.into_inner(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name.clone(),
-        },
-    })
-    .await
-    .map(|(result,)| result.signature)
-    .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
-}
-
 /// Check if the given Bitcoin address is blocked.
 pub async fn check_withdrawal_destination_address(
     btc_checker_principal: Principal,

@@ -1250,7 +1250,21 @@ impl CanisterRuntime for IcCanisterRuntime {
         derivation_path: DerivationPath,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        management::bitcoin_sign_with_ecdsa(key_name, derivation_path, message_hash).await
+        use ic_cdk::api::management_canister::ecdsa::{
+            EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+        };
+
+        ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
+            message_hash: message_hash.to_vec(),
+            derivation_path: derivation_path.into_inner(),
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: key_name.clone(),
+            },
+        })
+        .await
+        .map(|(result,)| result.signature)
+        .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
     }
 }
 
