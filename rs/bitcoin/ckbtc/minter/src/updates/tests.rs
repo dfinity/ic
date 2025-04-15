@@ -503,6 +503,66 @@ mod update_balance {
         assert_eq!(histogram.sum(), 3_600);
     }
 
+    #[tokio::test]
+    async fn should_observe_get_utxos_cache_metrics() {
+        init_state_with_ecdsa_public_key();
+        mutate_state(|s| {
+            s.get_utxos_cache
+                .set_expiration(Duration::from_millis(2500))
+        });
+
+        async fn get_utxos_with_latency(
+            now: &mut Timestamp,
+            latency: Duration,
+            account_utxos: Vec<Utxo>,
+            call_source: CallSource,
+        ) -> Result<Vec<Utxo>, CallError> {
+            let account = ledger_account();
+            let (btc_network, min_confirmations) =
+                read_state(|s| (s.btc_network, s.min_confirmations));
+            let address = read_state(|s| account_to_p2wpkh_address_from_state(s, &account));
+            let mut runtime = MockCanisterRuntime::new();
+            mock_get_utxos_for_account(&mut runtime, account, account_utxos);
+            *now = now.saturating_add(latency);
+            mock_increasing_time(&mut runtime, *now, latency);
+            Ok(get_utxos(
+                btc_network,
+                &address,
+                min_confirmations,
+                call_source,
+                &runtime,
+            )
+            .await?
+            .utxos)
+        }
+
+        let mut now = NOW;
+        // get_utxos calls with 1 page
+        let get_utxos_latencies_ms = [0, 100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
+        for millis in &get_utxos_latencies_ms {
+            let result = get_utxos_with_latency(
+                &mut now,
+                Duration::from_millis(*millis),
+                vec![utxo()],
+                CallSource::Minter,
+            )
+            .await;
+            assert_eq!(result, Ok(vec![utxo()]));
+        }
+        assert_eq!(
+            crate::metrics::GET_UTXOS_MINTER_CALLS.with(|calls| calls.get()),
+            get_utxos_latencies_ms.len() as u64
+        );
+        assert_eq!(
+            crate::metrics::GET_UTXOS_CACHE_HITS.with(|calls| calls.get()),
+            3,
+        );
+        assert_eq!(
+            crate::metrics::GET_UTXOS_CACHE_MISSES.with(|calls| calls.get()),
+            7,
+        );
+    }
+
     fn get_utxos_latency_histogram(
         num_pages: NumUtxoPages,
         call_source: CallSource,

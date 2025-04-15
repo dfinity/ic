@@ -457,7 +457,7 @@ impl CkBtcMinterState {
         }
         if let Some(expiration) = get_utxos_cache_expiration {
             self.get_utxos_cache
-                .update_expiration(Duration::from_nanos(expiration));
+                .set_expiration(Duration::from_nanos(expiration));
         }
     }
 
@@ -508,7 +508,7 @@ impl CkBtcMinterState {
         }
         if let Some(expiration) = get_utxos_cache_expiration {
             self.get_utxos_cache
-                .update_expiration(Duration::from_nanos(expiration));
+                .set_expiration(Duration::from_nanos(expiration));
         }
     }
 

@@ -1402,7 +1402,7 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
         len
     }
 
-    pub fn update_expiration(&mut self, expiration: Duration) {
+    pub fn set_expiration(&mut self, expiration: Duration) {
         self.expiration = expiration;
     }
 
