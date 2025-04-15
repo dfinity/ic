@@ -73,7 +73,7 @@ runs:
             release_build='${{ inputs.release-build }}'
 
             bazel_args=( )
-            bazel_args+=( --test_arg=test_memory_write_dirty )
+            bazel_args+=( --check_tests_up_to_date )
 
             if [[ $release_build == "true" ]]; then
               bazel_args+=( --config=release )

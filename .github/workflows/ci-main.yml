@@ -318,6 +318,7 @@ jobs:
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
+    if: ${{ always() }}
     needs: [build-ic, bazel-test-all]
     steps:
       - name: Download SHA256SUMS (cache)
