@@ -4,8 +4,6 @@
 # To require no rustfmt issues, pass --config=fmt.
 # To require no clippy issues, pass --config=clippy. Without this, warnings will still be generated.
 # To enable both of the above, pass --config=lint.
-# --config=ci implies --config=lint
-build:ci --config=lint
 # --config=lint implies both --config=fmt and --config=clippy.
 build:lint --config=fmt
 build:lint --config=clippy
@@ -59,7 +57,6 @@ test --test_tag_filters="-system_test,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
 build:ci --build_tag_filters="-system_test,-fuzz_test"
-build:ci --verbose_failures
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
@@ -75,10 +72,13 @@ test:testnet --test_output=streamed --test_tag_filters=
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
 #test:ci --config=alltests
 
-# Run all tests once by default, run flaky tests up to 3 times in CI.
-test    --flaky_test_attempts=1
-test:ci --flaky_test_attempts=default
-
+# Set all tests (including those marked as flaky) to fail explicitly on the
+# first try (can be overriden). This is useful when developing locally to
+# spot flakiness.
+#
+# see also:
+#   https://bazel.build/reference/command-line-reference#flag--flaky_test_attempts
+test --flaky_test_attempts=1
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
@@ -114,7 +114,7 @@ build:afl --action_env="LLVM_CONFIG=llvm-config-18"
 build:afl --action_env="RANLIB=llvm-ranlib-18"
 build:afl --config=fuzzing
 build:afl --build_tag_filters=afl
-run:afl --run_under="//bin:afl_wrapper"
+run:afl --run_under="//bin/fuzzing:afl_wrapper"
 
 # Fuzzing w/ Canister Sandbox configuration
 # NOTE: This is only for --config=fuzzing

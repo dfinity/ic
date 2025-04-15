@@ -38,7 +38,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -56,7 +55,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     tags = [
         # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
         #"long_test",
@@ -80,7 +78,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -106,7 +103,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     tags = [
         "k8s",
         "manual",
@@ -131,7 +127,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    flaky = True,
     tags = [
         "k8s",
         "long_test",
@@ -146,7 +141,7 @@ system_test_nns(
 
 system_test_nns(
     name = "firewall_max_connections_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",
     ],
@@ -160,7 +155,6 @@ system_test_nns(
 
 system_test_nns(
     name = "firewall_priority_test",
-    flaky = True,
     tags = [
         "long_test",
     ],
@@ -181,7 +175,7 @@ system_test_nns(
 system_test_nns(
     name = "network_large_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = True,
+    flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "k8s",
         "system_test_nightly",
@@ -199,7 +193,7 @@ system_test_nns(
 system_test_nns(
     name = "network_reliability_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
-    flaky = True,
+    flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -216,7 +210,6 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
-    flaky = True,
     tags = [
         "k8s",
         "manual",
@@ -233,7 +226,7 @@ system_test_nns(
 
 system_test_nns(
     name = "query_workload_long_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -249,7 +242,7 @@ system_test_nns(
 
 system_test_nns(
     name = "update_workload_large_payload",
-    flaky = True,
+    flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "system_test_hourly",

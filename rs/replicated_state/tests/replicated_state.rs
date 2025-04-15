@@ -37,6 +37,7 @@ use ic_types::messages::{
 };
 use ic_types::time::CoarseTime;
 use ic_types::time::UNIX_EPOCH;
+use ic_types::xnet::StreamIndex;
 use ic_types::{CountBytes, Cycles, MemoryAllocation, Time};
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -92,6 +93,14 @@ fn response_to(canister_id: CanisterId) -> Response {
     ResponseBuilder::default()
         .respondent(CANISTER_ID)
         .originator(canister_id)
+        .build()
+}
+
+fn best_effort_response_to(canister_id: CanisterId) -> Response {
+    ResponseBuilder::default()
+        .respondent(CANISTER_ID)
+        .originator(canister_id)
+        .deadline(SOME_DEADLINE)
         .build()
 }
 
@@ -171,12 +180,42 @@ impl ReplicatedStateFixture {
             .push_output_response(response.into());
     }
 
-    fn push_to_streams(&mut self, msgs: Vec<RequestOrResponse>) {
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
+        self.state
+            .canister_state_mut(&CANISTER_ID)
+            .unwrap()
+            .output_into_iter()
+            .pop()
+    }
+
+    /// Push the message to a stream.
+    fn push_to_stream(&mut self, msgs: Vec<RequestOrResponse>) {
         let mut streams = self.state.take_streams();
         for msg in msgs.into_iter() {
             streams.entry(SUBNET_ID).or_default().push(msg);
         }
         self.state.put_streams(streams);
+    }
+
+    /// Discard the next `count` messages from the same stream as `push_to_stream` uses.
+    fn discard_from_stream(&mut self, count: u64) {
+        let mut streams = self.state.take_streams();
+        let stream = streams.entry(SUBNET_ID).or_default();
+        let old_begin = stream.messages_begin();
+        stream.discard_messages_before(StreamIndex::from(old_begin.get() + count), &vec![].into());
+        self.state.put_streams(streams);
+    }
+
+    fn stop_canister(&mut self) {
+        let canister = self.state.canister_state_mut(&CANISTER_ID).unwrap();
+        canister
+            .system_state
+            .begin_stopping(ic_types::messages::StopCanisterContext::Ingress {
+                sender: user_test_id(24),
+                message_id: [0; 32].into(),
+                call_id: None,
+            });
+        assert!(canister.system_state.try_stop_canister(|_| false).0);
     }
 
     fn memory_taken(&self) -> MemoryTaken {
@@ -793,14 +832,17 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
         .iter()
         .enumerate()
     {
-        let mut request = request_to(*receiver);
+        let mut request = Request {
+            payment: Cycles::new(13),
+            ..best_effort_request_to(*receiver)
+        };
         request.sender_reply_callback = CallbackId::from(i as u64);
         fixture.push_output_request(request, UNIX_EPOCH).unwrap();
     }
 
     // Time out everything, then check that subnet input schedules are as expected.
     fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
-    assert_eq!(3, fixture.state.time_out_messages());
+    assert_eq!((3, Cycles::zero()), fixture.state.time_out_messages());
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
@@ -820,15 +862,18 @@ fn time_out_messages_in_subnet_queues() {
 
     // Enqueue 2 incoming best-effort requests for `SUBNET_ID`.
     for i in 0..2 {
-        let mut request = request_to(SUBNET_ID.into());
-        request.deadline = CoarseTime::from_secs_since_unix_epoch(1000 + i as u32);
+        let request = Request {
+            deadline: CoarseTime::from_secs_since_unix_epoch(1000 + i as u32),
+            payment: Cycles::new(13),
+            ..best_effort_request_to(SUBNET_ID.into())
+        };
         assert!(fixture.push_input(request.into()).unwrap());
     }
 
     // Time out the first request.
     let second_request_deadline = CoarseTime::from_secs_since_unix_epoch(1001);
     fixture.state.metadata.batch_time = second_request_deadline.into();
-    assert_eq!(1, fixture.state.time_out_messages());
+    assert_eq!((1, Cycles::new(13)), fixture.state.time_out_messages());
 
     // Second request should still be in the queue.
     assert_matches!(
@@ -850,15 +895,17 @@ fn enforce_best_effort_message_limit() {
         .iter()
         .enumerate()
     {
-        let mut request = request_to(*receiver);
-        request.deadline = SOME_DEADLINE;
-        request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
+        let request = Request {
+            method_name: String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap(),
+            payment: Cycles::new(1 << i),
+            ..best_effort_request_to(*receiver)
+        };
         message_sizes.push(NumBytes::from(request.count_bytes() as u64));
         assert!(fixture.push_input(request.into()).unwrap());
     }
 
     assert_eq!(
-        (0, 0.into()),
+        (0, 0.into(), Cycles::zero()),
         fixture
             .state
             .enforce_best_effort_message_limit(u64::MAX.into()),
@@ -866,7 +913,7 @@ fn enforce_best_effort_message_limit() {
 
     let best_effort_memory_usage = fixture.state.best_effort_message_memory_taken();
     assert_eq!(
-        (0, 0.into()),
+        (0, 0.into(), Cycles::zero()),
         fixture
             .state
             .enforce_best_effort_message_limit(best_effort_memory_usage),
@@ -876,7 +923,11 @@ fn enforce_best_effort_message_limit() {
     // but the first message we enqueued.
     let mean_message_size = best_effort_memory_usage / 4;
     assert_eq!(
-        (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
+        (
+            3,
+            message_sizes[1] + message_sizes[2] + message_sizes[3],
+            Cycles::new((1 << 1) + (1 << 2) + (1 << 3))
+        ),
         fixture
             .state
             .enforce_best_effort_message_limit(mean_message_size),
@@ -884,7 +935,7 @@ fn enforce_best_effort_message_limit() {
 
     // A second identical call should be a no-op.
     assert_eq!(
-        (0, 0.into()),
+        (0, 0.into(), Cycles::zero()),
         fixture
             .state
             .enforce_best_effort_message_limit(mean_message_size),
@@ -935,7 +986,7 @@ fn split() {
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.
-    fixture.push_to_streams(vec![
+    fixture.push_to_stream(vec![
         request_to(CANISTER_1).into(),
         request_to(CANISTER_2).into(),
     ]);
@@ -1093,6 +1144,48 @@ fn compatibility_for_input_source() {
         InputSource::iter().map(|x| x as i32).collect::<Vec<i32>>(),
         [0, 1, 2]
     );
+}
+
+#[test]
+fn ready_for_migration() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Canister is running, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    fixture
+        .push_input(best_effort_request_from(OTHER_CANISTER_ID).into())
+        .unwrap();
+    fixture.pop_input().unwrap();
+    fixture.push_output_response(best_effort_response_to(OTHER_CANISTER_ID));
+    fixture.stop_canister();
+
+    // Output queue is not empty, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Empty output queue.
+    let response = fixture.pop_output().unwrap();
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put best-effort response into the stream, still ready for migration.
+    fixture.push_to_stream(vec![response]);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put a guaranteed response from a different canister into the stream, still ready for migration.
+    fixture.push_to_stream(vec![response_from(OTHER_CANISTER_ID).into()]);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put a guaranteed response from the canister into the stream, not ready for migration.
+    fixture.push_to_stream(vec![response_to(OTHER_CANISTER_ID).into()]);
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Remove some messages from the stream, but not the guaranteed response, still not ready for migration.
+    fixture.discard_from_stream(2);
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Remove the guaranteed response from the stream, ready for migration.
+    fixture.discard_from_stream(1);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
 }
 
 #[test_strategy::proptest]
@@ -1343,7 +1436,7 @@ fn iter_with_stale_entries_terminates(
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
         Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
-    let timed_out_messages = replicated_state.time_out_messages();
+    let timed_out_messages = replicated_state.time_out_messages().0;
 
     // Just consume all output messages.
     //
@@ -1371,7 +1464,7 @@ fn peek_next_loop_with_stale_entries_terminates(
     const NANOS_PER_SEC: u64 = 1_000_000_000;
     replicated_state.metadata.batch_time =
         Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
-    let timed_out_messages = replicated_state.time_out_messages();
+    let timed_out_messages = replicated_state.time_out_messages().0;
 
     let mut output_iter = replicated_state.output_into_iter();
 

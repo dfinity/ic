@@ -56,8 +56,7 @@ async fn test_deployment_with_only_nns_upgrades() {
 
 #[tokio::test]
 async fn test_deployment_with_only_sns_upgrades() {
-    // TODO[NNS1-3657]: Do not upgrade SNS-W, use the mainnet version.
-    let nns_canisters_to_upgrade = vec![SNS_WASM_CANISTER_ID];
+    let nns_canisters_to_upgrade = vec![];
 
     test_sns_deployment(
         nns_canisters_to_upgrade,
@@ -74,8 +73,7 @@ async fn test_deployment_with_only_sns_upgrades() {
 
 #[tokio::test]
 async fn test_deployment_with_sns_root_and_governance_upgrade() {
-    // TODO[NNS1-3657]: Do not upgrade SNS-W, use the mainnet version.
-    let nns_canisters_to_upgrade = vec![SNS_WASM_CANISTER_ID];
+    let nns_canisters_to_upgrade = vec![];
 
     test_sns_deployment(
         nns_canisters_to_upgrade,
@@ -86,8 +84,7 @@ async fn test_deployment_with_sns_root_and_governance_upgrade() {
 
 #[tokio::test]
 async fn test_deployment_swap_upgrade() {
-    // TODO[NNS1-3657]: Do not upgrade SNS-W, use the mainnet version.
-    let nns_canisters_to_upgrade = vec![SNS_WASM_CANISTER_ID];
+    let nns_canisters_to_upgrade = vec![];
 
     test_sns_deployment(nns_canisters_to_upgrade, vec![SnsCanisterType::Swap]).await;
 }

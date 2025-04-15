@@ -44,6 +44,7 @@ const TRANSFER_FEE: u64 = 10;
 const MIN_CONFIRMATIONS: u32 = 12;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 const WITHDRAWAL_ADDRESS: &str = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c";
+const SENDER_ID: PrincipalId = PrincipalId::new_user_test_id(1);
 
 #[allow(deprecated)]
 fn default_init_args() -> CkbtcMinterInitArgs {
@@ -534,18 +535,14 @@ fn test_illegal_caller() {
 
 pub fn get_btc_address(
     env: &StateMachine,
+    sender: PrincipalId,
     minter_id: CanisterId,
     arg: &GetBtcAddressArgs,
 ) -> String {
     Decode!(
-        &env.execute_ingress_as(
-            CanisterId::from_u64(100).into(),
-            minter_id,
-            "get_btc_address",
-            Encode!(arg).unwrap()
-        )
-        .expect("failed to transfer funds")
-        .bytes(),
+        &env.execute_ingress_as(sender, minter_id, "get_btc_address", Encode!(arg).unwrap())
+            .expect("failed to get btc address")
+            .bytes(),
         String
     )
     .expect("failed to decode String response")
@@ -567,6 +564,7 @@ fn test_minter() {
 
     let btc_address_1 = get_btc_address(
         &env,
+        SENDER_ID,
         minter_id,
         &GetBtcAddressArgs {
             owner: None,
@@ -576,6 +574,7 @@ fn test_minter() {
     let address_1 = Address::from_str(&btc_address_1).expect("invalid Bitcoin address");
     let btc_address_2 = get_btc_address(
         &env,
+        SENDER_ID,
         minter_id,
         &GetBtcAddressArgs {
             owner: None,
@@ -584,6 +583,63 @@ fn test_minter() {
     );
     let address_2 = Address::from_str(&btc_address_2).expect("invalid Bitcoin address");
     assert_ne!(address_1, address_2);
+}
+
+#[test]
+fn get_btc_address_from_anonymous_caller_should_succeed() {
+    let env = new_state_machine();
+    let args = MinterArg::Init(default_init_args());
+    let args = Encode!(&args).unwrap();
+    let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
+
+    let btc_address = get_btc_address(
+        &env,
+        PrincipalId::new_anonymous(),
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: Some(Principal::from(SENDER_ID)),
+            subaccount: None,
+        },
+    );
+    assert!(!btc_address.is_empty());
+}
+
+#[test]
+#[should_panic(expected = "the owner must be non-anonymous")]
+fn get_btc_address_with_anonymous_owner_should_panic() {
+    let env = new_state_machine();
+    let args = MinterArg::Init(default_init_args());
+    let args = Encode!(&args).unwrap();
+    let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
+
+    get_btc_address(
+        &env,
+        SENDER_ID,
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: Some(Principal::anonymous()),
+            subaccount: None,
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "the owner must be non-anonymous")]
+fn get_btc_address_with_empty_owner_and_anonymous_caller_should_panic() {
+    let env = new_state_machine();
+    let args = MinterArg::Init(default_init_args());
+    let args = Encode!(&args).unwrap();
+    let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
+
+    get_btc_address(
+        &env,
+        PrincipalId::new_anonymous(),
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: None,
+            subaccount: None,
+        },
+    );
 }
 
 fn bitcoin_canister_id(btc_network: Network) -> CanisterId {

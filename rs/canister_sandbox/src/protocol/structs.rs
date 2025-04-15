@@ -1,11 +1,14 @@
-use ic_embedders::wasm_executor::SliceExecutionOutput;
-use ic_interfaces::execution_environment::{SubnetAvailableMemory, WasmExecutionOutput};
-use ic_replicated_state::{
-    page_map::PageDeltaSerialization, Global, Memory, MessageMemoryUsage, NumWasmPages, PageIndex,
+use ic_embedders::{
+    wasm_executor::SliceExecutionOutput,
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+        ApiType, ExecutionParameters,
+    },
 };
-use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, ExecutionParameters,
+use ic_interfaces::execution_environment::{SubnetAvailableMemory, WasmExecutionOutput};
+use ic_management_canister_types_private::Global;
+use ic_replicated_state::{
+    page_map::PageDeltaSerialization, Memory, MessageMemoryUsage, NumWasmPages, PageIndex,
 };
 use ic_types::{methods::FuncRef, NumBytes};
 use serde::{Deserialize, Serialize};

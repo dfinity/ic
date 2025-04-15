@@ -248,7 +248,7 @@ impl OnDiskSerializedModule {
     }
 
     /// Map the initial state file and deserialize its contents.
-    pub(crate) fn initial_state_data(&self) -> InitialStateData {
+    pub fn initial_state_data(&self) -> InitialStateData {
         // Mmap the initial state file so that the file descriptor isn't mutated
         // (they might be shared).
         let mmap_size = self

@@ -212,7 +212,7 @@ mod tests {
         }
     }
 
-    #[derive(Eq, PartialEq, Hash, Debug)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug)]
     struct MemoryDiskValue(u32, usize, usize);
 
     impl MemoryDiskBytes for MemoryDiskValue {
@@ -565,12 +565,25 @@ mod tests {
             (0..100_u32, 0..50_usize, 0..50_usize).prop_map(|(a, b, c)| MemoryDiskValue(a, b, c))
         }
 
+        #[derive(Clone, Debug)]
+        enum Action {
+            Push(MemoryDiskValue, MemoryDiskValue),
+            PopLru,
+        }
+
+        fn arb_action() -> impl Strategy<Value = Action> {
+            prop_oneof![
+                9 => (arb_value(), arb_value()).prop_map(|(a, b)| Action::Push(a, b)),
+                1 => Just(Action::PopLru),
+            ]
+        }
+
         proptest! {
             /// Proptest checking that the internal invariants are maintained
             /// and that the total space of inserted entries equals the total
             /// space of evicted entries plus the space of the cache itself.
             #[test]
-            fn test_invariants(entries in prop::collection::vec((arb_value(), arb_value()), 100)) {
+            fn test_invariants(entries in prop::collection::vec(arb_action(), 100)) {
                 let mut lru = LruCache::<MemoryDiskValue, MemoryDiskValue>::new(NumBytes::new(100), NumBytes::new(100));
                 let mut total_memory = 0;
                 let mut total_disk = 0;
@@ -584,9 +597,16 @@ mod tests {
                     *disk += v.disk_bytes();
                 }
 
-                for (k,v) in entries {
-                    update(&mut total_memory, &mut total_disk, &k, &v);
-                    let evicted = lru.push(k,v);
+                for action in entries {
+                    let evicted = match action {
+                        Action::Push(k,v) => {
+                            update(&mut total_memory, &mut total_disk, &k, &v);
+                            lru.push(k,v)
+                        }
+                        Action::PopLru => {
+                            lru.pop_lru().map_or(vec![], |e| vec![e])
+                        }
+                    };
                     for (k,v) in evicted {
                         update(&mut evicted_memory, &mut evicted_disk, &k, &v);
                     }

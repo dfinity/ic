@@ -22,7 +22,6 @@ rust_library(
 
 system_test(
     name = "catch_up_loop_prevention_test",
-    flaky = True,
     malicious = True,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
@@ -153,7 +152,6 @@ system_test(
 system_test(
     name = "max_xnet_payload_size_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -176,7 +174,6 @@ system_test(
 system_test_nns(
     name = "node_graceful_leaving_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -320,7 +317,6 @@ system_test_nns(
         "//conditions:default": [],
     }),
     extra_head_nns_tags = [],
-    flaky = False,
     tags = [
         "experimental_system_test_colocation",
         "manual",

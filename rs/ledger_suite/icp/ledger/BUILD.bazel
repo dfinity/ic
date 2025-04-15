@@ -54,6 +54,10 @@ package(default_visibility = ["//visibility:public"])
             "_next_version",
             ["next-ledger-version"],
         ),
+        (
+            "_prev_version",
+            ["prev-ledger-version"],
+        ),
     ]
 ]
 
@@ -90,8 +94,8 @@ rust_ledger_canister(
 )
 
 rust_ledger_canister(
-    name = "ledger-canister-wasm-low-limits",
-    crate_features = ["low-upgrade-instruction-limits"],
+    name = "ledger-canister-wasm-prev-version",
+    extra_deps = [":ledger_prev_version"],
 )
 
 rust_test(
@@ -113,24 +117,18 @@ rust_ic_test(
     data = [
         ":ledger-canister-wasm",
         ":ledger-canister-wasm-allowance-getter",
-        ":ledger-canister-wasm-low-limits",
         ":ledger-canister-wasm-next-version",
-        "@mainnet_icp_ledger_canister-v1//file",
-        "@mainnet_icp_ledger_canister-v2//file",
-        "@mainnet_icp_ledger_canister-v3//file",
+        ":ledger-canister-wasm-prev-version",
         "@mainnet_icp_ledger_canister//file",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/ledger",
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
-        "ICP_LEDGER_DEPLOYED_VERSION_V1_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister-v1//file)",
-        "ICP_LEDGER_DEPLOYED_VERSION_V2_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister-v2//file)",
-        "ICP_LEDGER_DEPLOYED_VERSION_V3_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister-v3//file)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
         "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
-        "LEDGER_CANISTER_LOW_LIMITS_WASM_PATH": "$(rootpath :ledger-canister-wasm-low-limits)",
+        "LEDGER_CANISTER_PREV_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-prev-version)",
     },
     tags = ["cpu:4"],
     deps = [
@@ -143,7 +141,6 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/test_utils",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
-        "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",

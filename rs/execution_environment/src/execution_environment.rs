@@ -22,13 +22,12 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_utils_canister_threshold_sig::{
-    derive_threshold_public_key, derive_vetkd_public_key, is_valid_transport_public_key,
-};
+use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
     ResourceSaturation,
 };
+use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ChainKeyData, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -43,11 +42,12 @@ use ic_management_canister_types_private::{
     EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
-    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
-    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, VetKdDeriveEncryptedKeyArgs,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, ReshareChainKeyArgs,
+    SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
+    SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -66,13 +66,11 @@ use ic_replicated_state::{
     page_map::PageAllocatorFileDescriptor,
     CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
-use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::{
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
-        vetkd::VetKdDerivationDomain,
         ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -1296,14 +1294,10 @@ impl ExecutionEnvironment {
                                         Some(id) => id.into(),
                                         None => *msg.sender(),
                                     };
-                                    self.get_vetkd_public_key(
-                                        pubkey,
-                                        canister_id,
-                                        args.derivation_domain,
-                                    )
-                                    .map(|public_key| {
-                                        (VetKdPublicKeyResult { public_key }.encode(), None)
-                                    })
+                                    self.get_vetkd_public_key(pubkey, canister_id, args.context)
+                                        .map(|public_key| {
+                                            (VetKdPublicKeyResult { public_key }.encode(), None)
+                                        })
                                 }
                             },
                         };
@@ -1334,7 +1328,7 @@ impl ExecutionEnvironment {
                     }
                 }
             }
-            Ok(Ic00Method::VetKdDeriveEncryptedKey) => match &msg {
+            Ok(Ic00Method::VetKdDeriveKey) => match &msg {
                 CanisterCall::Request(request) => {
                     if payload.is_empty() {
                         use ic_types::messages;
@@ -1357,7 +1351,7 @@ impl ExecutionEnvironment {
                         return (state, Some(NumInstructions::from(0)));
                     }
 
-                    match self.vetkd_derive_encrypted_key(
+                    match self.vetkd_derive_key(
                         request,
                         payload,
                         chain_key_data,
@@ -1382,7 +1376,7 @@ impl ExecutionEnvironment {
                     }
                 }
                 CanisterCall::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::VetKdDeriveEncryptedKey)
+                    self.reject_unexpected_ingress(Ic00Method::VetKdDeriveKey)
                 }
             },
 
@@ -1652,6 +1646,73 @@ impl ExecutionEnvironment {
                     let canister_id = args.get_canister_id();
                     self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
                         .map(|res| (res, Some(canister_id)))
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
+                let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
+                    match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
+                                .map(|x| (x, Some(canister_id)))
+                        }
+                    }
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::ReadCanisterSnapshotData) => {
+                #[allow(clippy::bind_instead_of_map)]
+                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| {
+                    match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            // TODO: [EXC-2018] do we need to account for copying the bytes -> costs and round_limits?
+                            self.read_snapshot_data(*msg.sender(), &state, args)
+                                .map(|res| (res, Some(canister_id)))
+                        }
+                    }
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::UploadCanisterSnapshotMetadata) => {
+                // TODO: EXC-1959
+                #[allow(clippy::bind_instead_of_map)]
+                let res =
+                    UploadCanisterSnapshotMetadataArgs::decode(payload).and_then(
+                        |_args| match self.config.canister_snapshot_upload {
+                            FlagStatus::Disabled => Ok((vec![], None)),
+                            FlagStatus::Enabled => Ok((vec![], None)),
+                        },
+                    );
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
+            Ok(Ic00Method::UploadCanisterSnapshotData) => {
+                // TODO: EXC-1960
+                #[allow(clippy::bind_instead_of_map)]
+                let res = UploadCanisterSnapshotDataArgs::decode(payload).and_then(|_args| {
+                    match self.config.canister_snapshot_upload {
+                        FlagStatus::Disabled => Ok((vec![], None)),
+                        FlagStatus::Enabled => Ok((vec![], None)),
+                    }
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -2387,6 +2448,33 @@ impl ExecutionEnvironment {
         result
     }
 
+    fn read_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: ReadCanisterSnapshotDataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        self.canister_manager
+            .read_snapshot_data(sender, canister, args.get_snapshot_id(), args.kind, state)
+            .map(|res| Encode!(&res).unwrap())
+            .map_err(UserError::from)
+    }
+
+    fn read_canister_snapshot_metadata(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: ReadCanisterSnapshotMetadataArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        let snapshot_id = args.get_snapshot_id();
+        self.canister_manager
+            .read_snapshot_metadata(sender, snapshot_id, canister, state)
+            .map(|res| Encode!(&res).unwrap())
+            .map_err(UserError::from)
+    }
+
     fn node_metrics_history(
         &self,
         state: &ReplicatedState,
@@ -2825,24 +2913,30 @@ impl ExecutionEnvironment {
         &self,
         subnet_public_key: &MasterPublicKey,
         caller: PrincipalId,
-        derivation_domain: Vec<u8>,
+        context: Vec<u8>,
     ) -> Result<Vec<u8>, UserError> {
-        derive_vetkd_public_key(
-            subnet_public_key,
-            &VetKdDerivationDomain {
-                caller,
-                domain: derivation_domain,
-            },
-        )
-        .map_err(|err| {
-            UserError::new(
+        if subnet_public_key.algorithm_id != ic_types::crypto::AlgorithmId::VetKD {
+            return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!("failed to retrieve VetKD public key: {}", err),
-            )
-        })
+                "Provided subnet master key is not for VetKD".to_string(),
+            ));
+        }
+
+        let dpk = ic_vetkd_utils::DerivedPublicKey::deserialize(&subnet_public_key.public_key)
+            .map_err(|err| {
+                UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("Invalid VetKD subnet key: {:?}", err),
+                )
+            })?;
+
+        Ok(dpk
+            .derive_sub_key(caller.as_slice())
+            .derive_sub_key(&context)
+            .serialize())
     }
 
-    fn vetkd_derive_encrypted_key(
+    fn vetkd_derive_key(
         &self,
         request: &Request,
         payload: &[u8],
@@ -2852,7 +2946,7 @@ impl ExecutionEnvironment {
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
     ) -> Result<(), UserError> {
-        let args = VetKdDeriveEncryptedKeyArgs::decode(payload)?;
+        let args = VetKdDeriveKeyArgs::decode(payload)?;
         let key_id = MasterPublicKeyId::VetKd(args.key_id.clone());
         let _master_public_key_exists = get_master_public_key(
             &chain_key_data.master_public_keys,
@@ -2872,7 +2966,7 @@ impl ExecutionEnvironment {
                 ),
             ));
         };
-        if !is_valid_transport_public_key(&args.encryption_public_key) {
+        if !ic_vetkd_utils::is_valid_transport_public_key_encoding(&args.transport_public_key) {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The provided transport public key is invalid.",
@@ -2882,12 +2976,12 @@ impl ExecutionEnvironment {
             (*request).clone(),
             ThresholdArguments::VetKd(VetKdArguments {
                 key_id: args.key_id,
-                derivation_id: args.derivation_id,
-                encryption_public_key: args.encryption_public_key.to_vec(),
+                input: Arc::new(args.input),
+                transport_public_key: args.transport_public_key.to_vec(),
                 ni_dkg_id: ni_dkg_id.clone(),
                 height: Height::new(current_round.get()),
             }),
-            vec![args.derivation_domain],
+            vec![args.context],
             registry_settings
                 .chain_key_settings
                 .get(&key_id)
@@ -3011,7 +3105,7 @@ impl ExecutionEnvironment {
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
-                derivation_path,
+                derivation_path: Arc::new(derivation_path),
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
                 matched_pre_signature: None,
@@ -3051,8 +3145,6 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
-    // TODO(CON-1416: Remove this directive)
-    #[allow(unreachable_code, unused_variables)]
     fn reshare_chain_key(
         &self,
         state: &mut ReplicatedState,
@@ -3072,12 +3164,6 @@ impl ExecutionEnvironment {
 
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
-
-        // TODO(CON-1416): Activate this endpoint
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "This key is not an idkg key",
-        ));
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {

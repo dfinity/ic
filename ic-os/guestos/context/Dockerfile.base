@@ -59,11 +59,17 @@ ENV TZ=UTC
 # For the dev image, use both "packages.common" and "packages.dev" -- this can
 # be set via docker build args (see above).
 ARG PACKAGE_FILES=packages.common
+# The kernel is installed here to keep the extra modules in sync.
+# Unfortunately, there is no metapackage to track the extra modules that does
+# not also include firmware.
+ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-24.04
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 RUN apt-get -y update && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
+        ${_KERNEL_PACKAGE} \
+        linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
     rm /tmp/packages.*
 
 # Install filebeat

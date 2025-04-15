@@ -48,7 +48,6 @@ rust_library(
 system_test_nns(
     name = "sr_app_same_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -67,7 +66,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_enable_tecdsa_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -86,7 +85,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_with_tecdsa_test",
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -106,7 +104,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_failover_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -125,7 +122,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_enable_tecdsa_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -145,7 +142,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_with_tecdsa_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -166,7 +163,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -186,7 +182,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_local_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -205,7 +200,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_enable_tecdsa_test",
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -225,7 +219,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_with_tecdsa_test",
-    flaky = True,
+    flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_tecdsa_test_head_nns_colocate).
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -246,7 +240,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_large_with_tecdsa_test",
     extra_head_nns_tags = ["manual"],  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
-    flaky = True,
+    flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "experimental_system_test_colocation",
         "subnet_recovery",
@@ -267,7 +261,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_nns_same_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -292,7 +285,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = False,
     tags = [
         "experimental_system_test_colocation",
         "k8s",

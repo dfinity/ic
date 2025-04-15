@@ -27,7 +27,7 @@ use ic_types::messages::{
     CallbackId, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
     MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
-use ic_types::{CanisterId, CountBytes, NumBytes, Time};
+use ic_types::{CanisterId, CountBytes, Cycles, NumBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use message_pool::ToContext;
@@ -1413,28 +1413,32 @@ impl CanisterQueues {
     /// into a previously empty input queue also requires the set of local canisters
     /// to decide whether the destination canister was local or remote.
     ///
-    /// Returns the number of messages that were timed out.
+    /// Returns the number of messages that were timed out and the total amount of
+    /// attached cycles that was lost (where a reject response refunding the cycles
+    /// was not enqueued).
     pub fn time_out_messages(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> usize {
+    ) -> (usize, Cycles) {
         let expired_messages = self.store.pool.expire_messages(current_time);
         let expired_message_count = expired_messages.len();
+        let mut cycles_lost = Cycles::zero();
 
         let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         for (reference, msg) in expired_messages.into_iter() {
-            self.on_message_dropped(reference, msg, &input_queue_type_fn);
+            cycles_lost += self.on_message_dropped(reference, msg, &input_queue_type_fn);
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
-        expired_message_count
+        (expired_message_count, cycles_lost)
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
-    /// `true` if a message was removed; `false` otherwise.
+    /// `true` if a message was removed; `false` otherwise; along with any attached
+    /// cycles that were lost (if a reject response with a refund was not enqueued).
     ///
     /// Updates the stats for the dropped message and (where applicable) the
     /// generated response. `own_canister_id` and `local_canisters` are required
@@ -1445,17 +1449,17 @@ impl CanisterQueues {
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> bool {
+    ) -> (bool, Cycles) {
         if let Some((reference, msg)) = self.store.pool.shed_largest_message() {
             let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
-            self.on_message_dropped(reference, msg, &input_queue_type_fn);
+            let cycles_lost = self.on_message_dropped(reference, msg, &input_queue_type_fn);
 
             debug_assert_eq!(Ok(()), self.test_invariants());
             debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
-            return true;
+            return (true, cycles_lost);
         }
 
-        false
+        (false, Cycles::zero())
     }
 
     /// Handles the timing out or shedding of a message from the pool.
@@ -1465,18 +1469,19 @@ impl CanisterQueues {
     ///
     /// `input_queue_type_fn` is required to determine the appropriate sender
     /// schedule to update when generating a reject response.
+    ///
+    /// Returns the amount of cycles attached to the dropped message, iff a reject
+    /// response refunding the cycles was not enqueued; i.e. cycles lost.
     fn on_message_dropped(
         &mut self,
         reference: SomeReference,
         msg: RequestOrResponse,
         input_queue_type_fn: impl Fn(&CanisterId) -> InputQueueType,
-    ) {
+    ) -> Cycles {
         match reference {
-            SomeReference::Inbound(reference) => {
-                self.on_inbound_message_dropped(reference, msg);
-            }
+            SomeReference::Inbound(reference) => self.on_inbound_message_dropped(reference, msg),
             SomeReference::Outbound(reference) => {
-                self.on_outbound_message_dropped(reference, msg, input_queue_type_fn);
+                self.on_outbound_message_dropped(reference, msg, input_queue_type_fn)
             }
         }
     }
@@ -1486,7 +1491,14 @@ impl CanisterQueues {
     /// Replaces a shed inbound best-effort response with a compact reject response.
     /// Releases the outbound slot reservation of a shed or expired inbound request.
     /// Updates the stats for the dropped message.
-    fn on_inbound_message_dropped(&mut self, reference: InboundReference, msg: RequestOrResponse) {
+    ///
+    /// Returns the amount of cycles attached to the dropped message; i.e. cycles
+    /// lost.
+    fn on_inbound_message_dropped(
+        &mut self,
+        reference: InboundReference,
+        msg: RequestOrResponse,
+    ) -> Cycles {
         match msg {
             RequestOrResponse::Response(response) => {
                 // This is an inbound response, remember its `originator_reply_callback`, so
@@ -1497,6 +1509,7 @@ impl CanisterQueues {
                         .shed_responses
                         .insert(reference, response.originator_reply_callback)
                 );
+                response.refund
             }
 
             RequestOrResponse::Request(request) => {
@@ -1515,6 +1528,7 @@ impl CanisterQueues {
                 // Release the outbound response slot.
                 Arc::make_mut(output_queue).release_reserved_response_slot();
                 self.queue_stats.on_drop_input_request(&request);
+                request.payment
             }
         }
     }
@@ -1527,12 +1541,15 @@ impl CanisterQueues {
     ///
     /// `input_queue_type_fn` is required to determine the appropriate sender
     /// schedule to update when generating a reject response.
+    ///
+    /// Returns the amount of cycles attached to the dropped message, iff a reject
+    /// response refunding the cycles was not enqueued; i.e. cycles lost.
     fn on_outbound_message_dropped(
         &mut self,
         reference: OutboundReference,
         msg: RequestOrResponse,
         input_queue_type_fn: impl Fn(&CanisterId) -> InputQueueType,
-    ) {
+    ) -> Cycles {
         let remote = msg.receiver();
         let (input_queue, output_queue) = self
             .canister_queues
@@ -1576,10 +1593,12 @@ impl CanisterQueues {
                     let input_queue_type = input_queue_type_fn(&remote);
                     self.input_schedule.schedule(remote, input_queue_type);
                 }
+                Cycles::zero()
             }
 
-            RequestOrResponse::Response(_) => {
+            RequestOrResponse::Response(response) => {
                 // Outbound (best-effort) responses can be dropped with impunity.
+                response.refund
             }
         }
     }

@@ -28,6 +28,7 @@ ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
@@ -44,6 +45,7 @@ ic-registry-transport = { path = "../transport" }
 ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"

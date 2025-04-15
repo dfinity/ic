@@ -5,13 +5,27 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
+    "//rs/nervous_system/canisters",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/registry/transport",
     "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:itertools",
+    "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/registry/keys",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
 ]
 
 SRCS = glob(
@@ -20,9 +34,10 @@ SRCS = glob(
 )
 
 rust_library(
-    name = "client",
+    name = "canister-client",
     srcs = SRCS,
     crate_name = "ic_registry_canister_client",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
@@ -30,5 +45,6 @@ rust_library(
 rust_test(
     name = "client_test",
     srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

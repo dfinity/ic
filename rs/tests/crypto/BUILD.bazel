@@ -33,7 +33,6 @@ system_test(
     env = {
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
     },
-    flaky = False,
     tags = [
         "k8s",
     ],
@@ -45,7 +44,6 @@ system_test(
 system_test(
     name = "request_signature_test",
     env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -56,7 +54,6 @@ system_test(
 
 system_test(
     name = "rpc_csp_vault_reconnection_test",
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -67,7 +64,6 @@ system_test(
 
 system_test(
     name = "ic_crypto_csp_metrics_test",
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -78,7 +74,6 @@ system_test(
 
 system_test(
     name = "ic_crypto_csp_socket_test",
-    flaky = True,
     tags = [
         "k8s",
     ],
@@ -89,7 +84,6 @@ system_test(
 
 system_test(
     name = "ic_crypto_csp_umask_test",
-    flaky = True,
     tags = [
         "k8s",
     ],

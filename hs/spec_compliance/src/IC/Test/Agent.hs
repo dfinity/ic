@@ -369,11 +369,11 @@ addNonce =
 getRand8Bytes :: IO BS.ByteString
 getRand8Bytes = BS.pack <$> replicateM 8 randomIO
 
--- Adds expiry 5 minutes
+-- Adds expiry 3 minutes
 addExpiry :: GenR -> IO GenR
 addExpiry = addIfNotThere "ingress_expiry" $ do
   t <- getPOSIXTime
-  return $ GNat $ round ((t + 60 * 5) * 1000_000_000)
+  return $ GNat $ round ((t + 60 * 3) * 1000_000_000)
 
 envelope :: SecretKey -> GenR -> IO GenR
 envelope sk = delegationEnv sk []
@@ -383,7 +383,7 @@ delegationEnv sk1 dels content = do
   let sks = sk1 : map fst dels
 
   t <- getPOSIXTime
-  let expiry = round ((t + 5 * 60) * 1000_000_000)
+  let expiry = round ((t + 3 * 60) * 1000_000_000)
   delegations <- for (zip sks dels) $ \(sk1, (sk2, targets)) -> do
     let delegation =
           rec $

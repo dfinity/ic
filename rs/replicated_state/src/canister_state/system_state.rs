@@ -1688,7 +1688,7 @@ impl SystemState {
     }
 
     /// Drops expired messages given a current time. Returns the number of messages
-    /// that were timed out.
+    /// that were timed out and the total amount of attached cycles that was lost.
     ///
     /// See [`CanisterQueues::time_out_messages`] for further details.
     pub fn time_out_messages(
@@ -1696,7 +1696,7 @@ impl SystemState {
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> usize {
+    ) -> (usize, Cycles) {
         self.queues
             .time_out_messages(current_time, own_canister_id, local_canisters)
     }
@@ -1777,14 +1777,15 @@ impl SystemState {
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
-    /// `true` if a message was removed; `false` otherwise.
+    /// `true` if a message was removed; `false` otherwise; along with any attached
+    /// cycles that were lost (if a reject response with a refund was not enqueued).
     ///
     /// Time complexity: `O(log(n))`.
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> bool {
+    ) -> (bool, Cycles) {
         self.queues
             .shed_largest_message(own_canister_id, local_canisters)
     }

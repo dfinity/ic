@@ -5,7 +5,7 @@ use crate::{
     pb::v1::{governance_error::ErrorType, GovernanceError},
 };
 
-use ic_nervous_system_common::ledger::IcpLedger;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
 
 #[cfg(feature = "tla")]

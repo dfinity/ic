@@ -98,7 +98,9 @@ pub use ic_base_types::{
     PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
 };
 pub use ic_crypto_internal_types::NodeIndex;
+use ic_management_canister_types_private::GlobalTimer;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
@@ -324,6 +326,46 @@ pub enum CanisterTimer {
     Inactive,
     /// The canister timer is set at the specific time.
     Active(Time),
+}
+
+impl From<CanisterTimer> for pb_snapshot_bits::CanisterTimer {
+    fn from(value: CanisterTimer) -> Self {
+        match value {
+            CanisterTimer::Inactive => pb_snapshot_bits::CanisterTimer {
+                global_timer_nanos: None,
+            },
+            CanisterTimer::Active(time) => pb_snapshot_bits::CanisterTimer {
+                global_timer_nanos: Some(time.as_nanos_since_unix_epoch()),
+            },
+        }
+    }
+}
+
+impl From<pb_snapshot_bits::CanisterTimer> for CanisterTimer {
+    fn from(value: pb_snapshot_bits::CanisterTimer) -> Self {
+        match value.global_timer_nanos {
+            Some(nanos) => CanisterTimer::Active(Time::from_nanos_since_unix_epoch(nanos)),
+            None => CanisterTimer::Inactive,
+        }
+    }
+}
+
+impl From<GlobalTimer> for CanisterTimer {
+    fn from(value: GlobalTimer) -> Self {
+        match value {
+            GlobalTimer::Inactive => Self::Inactive,
+            GlobalTimer::Active(nanos) => Self::Active(Time::from_nanos_since_unix_epoch(nanos)),
+        }
+    }
+}
+
+impl From<CanisterTimer> for GlobalTimer {
+    fn from(value: CanisterTimer) -> Self {
+        match value {
+            CanisterTimer::Inactive => Self::Inactive,
+            CanisterTimer::Active(time) => Self::Active(time.as_nanos_since_unix_epoch()),
+        }
+    }
 }
 
 impl CanisterTimer {

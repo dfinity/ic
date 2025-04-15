@@ -21,9 +21,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types_private::{
-    MasterPublicKeyId, Payload, VetKdDeriveEncryptedKeyResult,
-};
+use ic_management_canister_types_private::{MasterPublicKeyId, Payload, VetKdDeriveKeyResult};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -37,7 +35,7 @@ use ic_types::{
         bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse, ValidationContext,
         VetKdAgreement, VetKdErrorCode, VetKdPayload,
     },
-    crypto::vetkd::{VetKdArgs, VetKdDerivationDomain, VetKdEncryptedKey},
+    crypto::vetkd::{VetKdArgs, VetKdDerivationContext, VetKdEncryptedKey},
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
     CountBytes, Height, NumBytes, SubnetId, Time,
 };
@@ -232,20 +230,20 @@ impl VetKdPayloadBuilderImpl {
                     continue;
                 };
                 let args = VetKdArgs {
-                    derivation_domain: VetKdDerivationDomain {
+                    context: VetKdDerivationContext {
                         caller: context.request.sender.into(),
-                        domain: context.derivation_path.iter().flatten().cloned().collect(),
+                        context: context.derivation_path.iter().flatten().cloned().collect(),
                     },
                     ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-                    derivation_id: ctxt_args.derivation_id.clone(),
-                    encryption_public_key: ctxt_args.encryption_public_key.clone(),
+                    input: ctxt_args.input.to_vec(),
+                    transport_public_key: ctxt_args.transport_public_key.clone(),
                 };
                 let key_id = context.key_id();
                 match self.crypto.combine_encrypted_key_shares(shares, &args) {
                     Ok(key) => {
                         self.metrics
                             .payload_metrics_inc("vetkd_agreement_completed", &key_id);
-                        let result = VetKdDeriveEncryptedKeyResult {
+                        let result = VetKdDeriveKeyResult {
                             encrypted_key: key.encrypted_key,
                         };
                         VetKdAgreement::Success(result.encode())
@@ -349,15 +347,15 @@ impl VetKdPayloadBuilderImpl {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
         let args = VetKdArgs {
-            derivation_domain: VetKdDerivationDomain {
+            context: VetKdDerivationContext {
                 caller: context.request.sender.into(),
-                domain: context.derivation_path.iter().flatten().cloned().collect(),
+                context: context.derivation_path.iter().flatten().cloned().collect(),
             },
             ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-            derivation_id: ctxt_args.derivation_id.clone(),
-            encryption_public_key: ctxt_args.encryption_public_key.clone(),
+            input: ctxt_args.input.to_vec(),
+            transport_public_key: ctxt_args.transport_public_key.clone(),
         };
-        let reply = match VetKdDeriveEncryptedKeyResult::decode(&data) {
+        let reply = match VetKdDeriveKeyResult::decode(&data) {
             Ok(data) => data,
             Err(error) => {
                 return invalid_artifact_err(InvalidVetKdPayloadReason::DecodingError(format!(

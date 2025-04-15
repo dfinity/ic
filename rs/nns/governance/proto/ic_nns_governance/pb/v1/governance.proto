@@ -412,6 +412,9 @@ message Neuron {
   // to overwrite next.
   optional uint32 recent_ballots_next_entry_index = 25;
 
+  // The maturity disbursements that are in progress for this neuron.
+  repeated MaturityDisbursement maturity_disbursements_in_progress = 28;
+
   reserved "deciding_voting_power";
   reserved 26;
 
@@ -2278,21 +2281,6 @@ message Governance {
 
   MakingSnsProposal making_sns_proposal = 20;
 
-  // A map of followees to their followers.
-  message FollowersMap {
-    message Followers {
-      // The followers of the neuron with the given ID.
-      // These values will be non-repeating, and order does not matter.
-      repeated ic_nns_common.pb.v1.NeuronId followers = 1;
-    }
-    // The key is the neuron ID of the followee.
-    map<fixed64, Followers> followers_map = 1;
-  }
-
-  // A Structure used during upgrade to store the index of topics for neurons to their followers.
-  // This is the inverse of what is stored in a Neuron (its followees).
-  map<int32, FollowersMap> topic_followee_index = 22;
-
   // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
   optional XdrConversionRate xdr_conversion_rate = 26;
 
@@ -2317,6 +2305,10 @@ message Governance {
   // Reserved id for deprecated `genesis_neuron_accounts`
   reserved 24;
   reserved "genesis_neuron_accounts";
+
+  // Reserved id for deprecated `topic_followee_index`
+  reserved 22;
+  reserved "topic_followee_index";
 }
 
 message XdrConversionRate {
@@ -2725,4 +2717,33 @@ message Account {
 // messages.
 message RewardsDistributionInProgress {
   map<uint64, uint64> neuron_ids_to_e8_amounts = 1;
+}
+
+message MaturityDisbursement {
+  // The amount of maturity being disbursed in e8s.
+  uint64 amount_e8s = 1;
+  // The timestamp at which the maturity was disbursed.
+  uint64 timestamp_of_disbursement_seconds = 2;
+  // The account to disburse the maturity to.
+  Account account_to_disburse_to = 3;
+  // The timestamp at which the maturity disbursement should be finalized.
+  uint64 finalize_disbursement_timestamp_seconds = 4;
+}
+
+// A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
+// a proposal.
+message NeuronIdToVotingPowerMap {
+  // Map from neuron id to the voting power of the neuron.
+  map<fixed64, uint64> voting_power_map = 1;
+}
+
+// Total voting power (deciding and potential) at a certain point in time. A history of the totals
+// can be used to detect voting power spikes. See `Neuron::deciding_voting_power` and
+// `Neuron::potential_voting_power` for more information.
+message VotingPowerTotal {
+  // The total deciding voting power.
+  uint64 total_deciding_voting_power = 1;
+
+  // The total potential voting power.
+  uint64 total_potential_voting_power = 2;
 }

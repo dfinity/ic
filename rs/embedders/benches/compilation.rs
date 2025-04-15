@@ -1,4 +1,7 @@
+use candid::Encode;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+
+use embedders_bench::SetupAction;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{compile, validate_and_instrument_for_testing},
@@ -6,6 +9,12 @@ use ic_embedders::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
+use std::io::Read;
+
+lazy_static::lazy_static! {
+    static ref GOVERNANCE_BENCH_CANISTER: Vec<u8> =
+        canister_test::Project::cargo_bin_maybe_from_env("governance-bench-canister", &[]).bytes();
+}
 
 /// Enable using the same number of rayon threads that we have in production.
 fn set_production_rayon_threads() {
@@ -17,51 +26,65 @@ fn set_production_rayon_threads() {
         });
 }
 
+/// Unzip a the bytes before converting to a binary encoded Wasm.
+fn unzip_wasm(bytes: &[u8]) -> BinaryEncodedWasm {
+    let mut decoder = libflate::gzip::Decoder::new(bytes).unwrap();
+    let mut buf = vec![];
+    decoder.read_to_end(&mut buf).unwrap();
+    BinaryEncodedWasm::new(buf)
+}
+
 /// Tuples of (benchmark_name, compilation_cost, wasm) to run compilation benchmarks on.
 fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
-    let mut result = vec![
-        (
-            "simple".to_string(),
-            BinaryEncodedWasm::new(
-                wat::parse_str(
-                    r#"
+    let mut result = vec![(
+        "minimal".to_string(),
+        BinaryEncodedWasm::new(
+            wat::parse_str(
+                r#"
 			        (module
-				        (import "ic0" "msg_arg_data_copy"
-				        (func $ic0_msg_arg_data_copy (param i32 i32 i32)))
-				        (func (export "canister_update should_fail_with_contract_violation")
-				        (call $ic0_msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 0))
-				        )
+				        (import "ic0" "msg_reply" (func $ic0_msg_reply))
+                        (func (export "canister_update update_empty")
+                            (call $ic0_msg_reply)
+                        )
+                        (func (export "canister_query go")
+                            (call $ic0_msg_reply)
+                        )
 			        )
 			        "#,
-                )
-                .expect("Failed to convert wat to wasm"),
-            ),
+            )
+            .expect("Failed to convert wat to wasm"),
         ),
-        (
-            "empty".to_string(),
-            BinaryEncodedWasm::new(
-                wat::parse_str(
-                    r#"
-                    (module)
-			        "#,
-                )
-                .expect("Failed to convert wat to wasm"),
-            ),
-        ),
-    ];
+    )];
 
-    let mut many_adds = "(module (func (export \"go\") (result i64) (i64.const 1)".to_string();
+    let mut many_adds = r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (func (export "canister_update update_empty")
+                (call $ic0_msg_reply)
+            )
+            (func (export "canister_query go") (i64.const 1)"#
+        .to_string();
     for _ in 0..100_000 {
         many_adds.push_str("(i64.add (i64.const 1))");
     }
-    many_adds.push_str("))");
+    many_adds.push_str("(drop) (call $ic0_msg_reply)))");
     result.push((
         "many_adds".to_string(),
         BinaryEncodedWasm::new(wat::parse_str(many_adds).expect("Failed to convert wat to wasm")),
     ));
 
-    let mut many_funcs = "(module".to_string();
-    for _ in 0..EmbeddersConfig::default().max_functions {
+    let mut many_funcs = r#"
+        (module
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (func (export "canister_update update_empty")
+                (call $ic0_msg_reply)
+            )
+            (func (export "canister_query go")
+                (call $ic0_msg_reply)
+            )
+        "#
+    .to_string();
+    for _ in 0..EmbeddersConfig::default().max_functions - 2 {
         many_funcs.push_str("(func)");
     }
     many_funcs.push(')');
@@ -70,11 +93,27 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
         BinaryEncodedWasm::new(wat::parse_str(many_funcs).expect("Failed to convert wat to wasm")),
     ));
 
-    // This benchmark uses a real-world wasm which is stored as a binary file in this repo.
-    let real_world_wasm =
-        BinaryEncodedWasm::new(include_bytes!("test-data/user_canister_impl.wasm").to_vec());
+    // This benchmark uses the open chat user canister which is stored as a
+    // binary file in this repo.  It is generated from
+    // https://github.com/dfinity/open-chat/tree/abk/for-replica-benchmarking
+    let open_chat_wasm = unzip_wasm(&include_bytes!("test-data/user.wasm.gz")[..]);
+    result.push(("open_chat".to_string(), open_chat_wasm));
 
-    result.push(("real_world_wasm".to_string(), real_world_wasm));
+    // This benchmark uses the QR code generator canister which is stored as a
+    // binary file in this repo.  It is generated from the directory
+    // `rust/qrcode` in
+    // https://github.com/dfinity/examples/tree/abk/for-replica-benchmarking
+    let qrcode_wasm = unzip_wasm(&include_bytes!("test-data/qrcode_backend.wasm.gz")[..]);
+    result.push(("qrcode".to_string(), qrcode_wasm));
+
+    // This benchmark uses a canister from the motoko playground which is stored
+    // as a binary file in this repo.  It is generated from
+    // https://github.com/dfinity/motoko-playground/tree/abk/for-replica-benchmarking
+    let motoko_wasm = BinaryEncodedWasm::new(include_bytes!("test-data/pool.wasm").to_vec());
+    result.push(("motoko".to_string(), motoko_wasm));
+
+    let governance_wasm = unzip_wasm(&GOVERNANCE_BENCH_CANISTER[..]);
+    result.push(("governance".to_string(), governance_wasm));
 
     result
 }
@@ -115,7 +154,7 @@ fn print_table(data: Vec<Vec<String>>) {
 /// on 2B instructions per second).
 fn compilation_cost(c: &mut Criterion) {
     let binaries = generate_binaries();
-    let group = c.benchmark_group("compilation-cost");
+    let group = c.benchmark_group("embedders:compilation/compilation-cost");
     let config = EmbeddersConfig::default();
 
     let mut table = vec![];
@@ -143,7 +182,7 @@ fn wasm_compilation(c: &mut Criterion) {
     set_production_rayon_threads();
 
     let binaries = generate_binaries();
-    let mut group = c.benchmark_group("compilation");
+    let mut group = c.benchmark_group("embedders:compilation/compilation");
     let config = EmbeddersConfig::default();
     for (name, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
@@ -167,7 +206,7 @@ fn wasm_deserialization(c: &mut Criterion) {
     set_production_rayon_threads();
 
     let binaries = generate_binaries();
-    let mut group = c.benchmark_group("deserialization");
+    let mut group = c.benchmark_group("embedders:compilation/deserialization");
     for (name, wasm) in binaries {
         let config = EmbeddersConfig::default();
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());
@@ -195,7 +234,7 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
     set_production_rayon_threads();
 
     let binaries = generate_binaries();
-    let mut group = c.benchmark_group("validation-instrumentation");
+    let mut group = c.benchmark_group("embedders:compilation/validation-instrumentation");
     let config = EmbeddersConfig::default();
     for (name, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
@@ -214,11 +253,29 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benchmarks,
-    compilation_cost,
-    wasm_compilation,
-    wasm_deserialization,
-    wasm_validation_instrumentation
-);
+fn execution(c: &mut Criterion) {
+    set_production_rayon_threads();
+
+    let binaries = generate_binaries();
+    for (name, wasm) in binaries {
+        embedders_bench::query_bench(
+            c,
+            "embedders:compilation/query",
+            &name,
+            wasm.as_slice(),
+            &Encode!(&()).unwrap(),
+            "go",
+            &Encode!(&()).unwrap(),
+            None,
+            SetupAction::None,
+        );
+    }
+}
+
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = compilation_cost, wasm_compilation, wasm_deserialization,
+        wasm_validation_instrumentation, execution
+}
 criterion_main!(benchmarks);

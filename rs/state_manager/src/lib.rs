@@ -870,6 +870,8 @@ fn initialize_tip(
 ) -> ReplicatedState {
     debug_assert_eq!(snapshot.height, checkpoint_layout.height());
 
+    info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
+
     // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
     #[cfg(debug_assertions)]
     for canister in snapshot.state.canisters_iter() {
@@ -892,8 +894,6 @@ fn initialize_tip(
             }
         }
     }
-
-    info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
@@ -1123,6 +1123,15 @@ fn switch_to_checkpoint(
                 layout.height(),
                 Arc::clone(fd_factory),
             )?);
+
+        let wasm_binary = snapshot_layout.wasm().deserialize(Some(
+            new_snapshot
+                .execution_snapshot()
+                .wasm_binary
+                .module_hash()
+                .into(),
+        ))?;
+        new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
     for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
@@ -1934,6 +1943,7 @@ impl StateManagerImpl {
         }
 
         if !is_snapshot_present {
+            // Normal case: we don't have the in-memory state yet.
             states.snapshots.push_back(Snapshot {
                 height,
                 state: Arc::new(state),
@@ -1950,6 +1960,13 @@ impl StateManagerImpl {
             states
                 .certifications_metadata
                 .insert(height, certification_metadata);
+        } else {
+            // Rare case: we already have the in-memory state.
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a in-memory state locally for",
+                height
+            );
         }
 
         let state_size_bytes: i64 = manifest
@@ -1959,6 +1976,7 @@ impl StateManagerImpl {
             .sum();
 
         if !is_state_metadata_present {
+            // Normal case: we don't have the state metadata yet.
             states.states_metadata.insert(
                 height,
                 StateMetadata {
@@ -1970,6 +1988,13 @@ impl StateManagerImpl {
                     }),
                     state_sync_file_group: None,
                 },
+            );
+        } else {
+            // Rare case: we already have the state metadata.
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a StateMetadata locally for",
+                height
             );
         }
 
@@ -2302,9 +2327,13 @@ impl StateManagerImpl {
                 .with_label_values(&["wait_for_manifest_and_flush"])
                 .start_timer();
             // We need the previous manifest computation to complete because:
-            //   1) We need it it speed up the next manifest computation using ManifestDelta
+            //   1) We need it to speed up the next manifest computation using ManifestDelta
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
+
+            // Ensure all pending asynchronous checkpoint removals are completed before creating a new one.
+            // This prevents excessive accumulation of checkpoints in `fs_tmp`, which could lead to high disk usage.
+            self.state_layout.flush_checkpoint_removal_channel();
         }
 
         let previous_checkpoint_info = {
@@ -2649,10 +2678,10 @@ impl StateManager for StateManagerImpl {
         let checkpoint_layout = states
             .states_metadata
             .get(&target_snapshot.height)
-            .unwrap()
+            .expect("Attempting to initialize tip from a non-checkpoint height")
             .checkpoint_layout
             .as_ref()
-            .unwrap()
+            .expect("Missing CheckpointLayout")
             .clone();
         std::mem::drop(states);
 

@@ -273,22 +273,19 @@ impl TimeProvider {
     fn get_relative_time(&self) -> Time {
         match &self {
             TimeProvider::Constant(time) => *time,
-            TimeProvider::SystemTime => {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    Time::from_nanos_since_unix_epoch(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .expect("SystemTime is before UNIX EPOCH!")
-                            .as_nanos() as u64,
-                    )
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
-                }
-            }
+            TimeProvider::SystemTime => Time::from_nanos_since_unix_epoch(time()),
         }
+    }
+}
+
+fn time() -> u64 {
+    #[cfg(all(target_family = "wasm", not(feature = "js")))]
+    {
+        ic_cdk::api::time()
+    }
+    #[cfg(any(not(target_family = "wasm"), feature = "js"))]
+    {
+        time::OffsetDateTime::now_utc().unix_timestamp_nanos() as u64
     }
 }
 

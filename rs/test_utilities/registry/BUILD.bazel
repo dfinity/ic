@@ -11,11 +11,14 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/fake",
     "//rs/registry/keys",
+    "//rs/registry/local_store",
+    "//rs/registry/local_store/artifacts",
     "//rs/registry/proto_data_provider",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:tempfile",
 ]
 
 rust_library(

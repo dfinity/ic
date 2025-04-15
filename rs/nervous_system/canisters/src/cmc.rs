@@ -1,9 +1,38 @@
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::cmc::CMC;
 use ic_nervous_system_runtime::Runtime;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+use mockall::automock;
 use std::marker::PhantomData;
+
+/// A trait defining common patterns for accessing the CMC canister.
+#[automock]
+#[async_trait]
+pub trait CMC: Send + Sync {
+    /// Returns the current neuron maturity modulation.
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String>;
+}
+
+pub struct FakeCmc {}
+
+impl FakeCmc {
+    pub fn new() -> Self {
+        FakeCmc {}
+    }
+}
+
+impl Default for FakeCmc {
+    fn default() -> Self {
+        FakeCmc::new()
+    }
+}
+
+#[async_trait]
+impl CMC for FakeCmc {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
+        Ok(0)
+    }
+}
 
 pub struct CMCCanister<Rt: Runtime> {
     canister_id: CanisterId,

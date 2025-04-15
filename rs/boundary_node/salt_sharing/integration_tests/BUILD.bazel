@@ -63,7 +63,6 @@ rust_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = [],
-    flaky = False,
     proc_macro_deps = [],
     tags = [],
     deps = [":salt_sharing_canister_integration_tests"] + DEPENDENCIES,

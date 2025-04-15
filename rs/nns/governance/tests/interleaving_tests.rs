@@ -5,7 +5,8 @@ use assert_matches::assert_matches;
 use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
 use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
-use ic_nervous_system_common::{ledger::IcpLedger, E8};
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::E8;
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
