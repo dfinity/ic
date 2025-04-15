@@ -3986,11 +3986,11 @@ async fn main() {
                 .try_polling_latest_version(usize::MAX)
                 .unwrap();
 
-            let signing_subnets = registry_client
-                .get_chain_key_signing_subnets(registry_client.get_latest_version())
+            let chain_key_enabled_subnets = registry_client
+                .get_chain_key_enabled_subnets(registry_client.get_latest_version())
                 .unwrap()
                 .unwrap();
-            for (key_id, subnets) in signing_subnets.iter() {
+            for (key_id, subnets) in chain_key_enabled_subnets.iter() {
                 println!("KeyId {:?}: {:?}", key_id, subnets);
             }
         }
