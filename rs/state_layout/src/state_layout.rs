@@ -2446,11 +2446,18 @@ impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn deserialize(
-        &self,
-        module_hash: Option<WasmHash>,
-    ) -> Result<CanisterModule, LayoutError> {
+    pub fn deserialize(&self, module_hash: WasmHash) -> Result<CanisterModule, LayoutError> {
         CanisterModule::new_from_file(self.path.clone(), module_hash).map_err(|err| {
+            LayoutError::IoError {
+                path: self.path.clone(),
+                message: "Failed to read file contents".to_string(),
+                io_err: err,
+            }
+        })
+    }
+
+    pub fn deserialize_without_hash(&self) -> Result<CanisterModule, LayoutError> {
+        CanisterModule::new_from_file_without_hash(self.path.clone()).map_err(|err| {
             LayoutError::IoError {
                 path: self.path.clone(),
                 message: "Failed to read file contents".to_string(),

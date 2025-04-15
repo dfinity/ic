@@ -191,6 +191,7 @@ pub struct CheckpointMetrics {
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
+    missing_wasm_hash_total: IntCounter,
     log: ReplicaLogger,
 }
 
@@ -238,6 +239,10 @@ impl CheckpointMetrics {
             "How many PageMaps are loaded or not at the end of checkpoint interval.",
             &["status"],
         );
+        let missing_wasm_hash_total = metrics_registry.int_counter(
+            "state_manager_missing_wasm_hash_total",
+            "Number of times wasm hash is missing for canisters and snapshots.",
+        );
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
@@ -246,6 +251,7 @@ impl CheckpointMetrics {
             replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
+            missing_wasm_hash_total,
             log: replica_logger,
         }
     }
@@ -1124,13 +1130,13 @@ fn switch_to_checkpoint(
                 Arc::clone(fd_factory),
             )?);
 
-        let wasm_binary = snapshot_layout.wasm().deserialize(Some(
+        let wasm_binary = snapshot_layout.wasm().deserialize(
             new_snapshot
                 .execution_snapshot()
                 .wasm_binary
                 .module_hash()
                 .into(),
-        ))?;
+        )?;
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
@@ -1143,7 +1149,7 @@ fn switch_to_checkpoint(
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
             let wasm_binary = canister_layout
                 .wasm()
-                .deserialize(Some(tip_state.wasm_binary.binary.module_hash().into()))?;
+                .deserialize(tip_state.wasm_binary.binary.module_hash().into())?;
             debug_assert_eq!(
                 tip_state.wasm_binary.binary.as_slice(),
                 wasm_binary.as_slice()

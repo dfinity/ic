@@ -507,14 +507,18 @@ impl CheckpointLoader {
                 &self.metrics,
             )
         });
-
+        let mut missing_wasm_hash_total = 0u64;
         for canister_state in results.into_iter() {
             let (canister_state, durations) = canister_state?;
             canister_states.insert(canister_state.system_state.canister_id(), canister_state);
-
+            if durations.is_wasm_hash_missing {
+                missing_wasm_hash_total += 1;
+            };
             durations.apply(&self.metrics);
         }
-
+        self.metrics
+            .missing_wasm_hash_total
+            .inc_by(missing_wasm_hash_total);
         Ok(canister_states)
     }
 
@@ -730,6 +734,7 @@ fn validate_eq_checkpoint_internal(
 #[derive(Default)]
 pub struct LoadCanisterMetrics {
     durations: BTreeMap<&'static str, Duration>,
+    is_wasm_hash_missing: bool,
 }
 
 impl LoadCanisterMetrics {
@@ -797,11 +802,15 @@ pub fn load_canister_state(
             durations.insert("stable_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
-            let wasm_binary = WasmBinary::new(
-                canister_layout
-                    .wasm()
-                    .deserialize(execution_state_bits.binary_hash)?,
-            );
+            let mut is_wasm_hash_missing = false;
+            let wasm_binary = match execution_state_bits.binary_hash {
+                Some(hash) => WasmBinary::new(canister_layout.wasm().deserialize(hash)?),
+                None => {
+                    is_wasm_hash_missing = true;
+                    WasmBinary::new(canister_layout.wasm().deserialize_without_hash()?)
+                }
+            };
+
             durations.insert("wasm_binary", starting_time.elapsed());
 
             let canister_root =
@@ -903,7 +912,10 @@ pub fn load_canister_state(
         },
     };
 
-    let metrics = LoadCanisterMetrics { durations };
+    let metrics = LoadCanisterMetrics {
+        durations,
+        is_wasm_hash_missing,
+    };
 
     Ok((canister_state, metrics))
 }
@@ -977,9 +989,14 @@ pub fn load_snapshot(
         durations.insert("snapshot_stable_memory", starting_time.elapsed());
 
         let starting_time = Instant::now();
-        let wasm_binary = snapshot_layout
-            .wasm()
-            .deserialize(canister_snapshot_bits.binary_hash)?;
+        let mut is_wasm_hash_missing = false;
+        let wasm_binary = match canister_snapshot_bits.binary_hash {
+            Some(hash) => snapshot_layout.wasm().deserialize(hash)?,
+            None => {
+                is_wasm_hash_missing = true;
+                snapshot_layout.wasm().deserialize_without_hash()?
+            }
+        };
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
         let exported_globals = canister_snapshot_bits.exported_globals.clone();
@@ -1019,7 +1036,10 @@ pub fn load_snapshot(
         canister_snapshot_bits.total_size,
     );
 
-    let metrics = LoadCanisterMetrics { durations };
+    let metrics = LoadCanisterMetrics {
+        durations,
+        is_wasm_hash_missing,
+    };
 
     Ok((canister_snapshot, metrics))
 }
