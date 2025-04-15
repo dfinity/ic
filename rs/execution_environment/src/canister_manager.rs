@@ -67,6 +67,10 @@ pub(crate) mod types;
 /// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 
+/// Contains validated changes of the canister memory usage:
+/// - execution memory usage increase that can be safely deducted from the subnet available memory;
+/// - newly reserved cycles (for canister memory usage) that can be safely moved from the canister's main balance
+///   to its reserved balance.
 struct ValidatedMemoryUsage {
     memory_increase: NumBytes,
     storage_reservation_cycles: Cycles,
