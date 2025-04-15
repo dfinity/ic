@@ -96,7 +96,7 @@ pub fn setup(
     let nns_nodes = nns_nodes.unwrap_or(4);
     let mut nns = Subnet::new(SubnetType::System)
         .with_dkg_interval_length(Height::from(dkg_interval))
-        .add_nodes(4);
+        .add_nodes(nns_nodes);
 
     // TODO(CON-1471): Add a VetKD key ID
     let key_ids = make_key_ids_for_all_idkg_schemes();
