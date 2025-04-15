@@ -335,10 +335,7 @@ impl HttpRequestContent for Query {
     }
 
     fn sender(&self) -> UserId {
-        match self.source {
-            QuerySource::User { user_id, .. } => user_id,
-            QuerySource::System => UserId::from(PrincipalId::default()),
-        }
+        self.source.user_id()
     }
 
     fn ingress_expiry(&self) -> u64 {

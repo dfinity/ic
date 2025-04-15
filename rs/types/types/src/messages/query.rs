@@ -21,6 +21,16 @@ pub enum QuerySource {
     },
 }
 
+impl QuerySource {
+    pub fn user_id(&self) -> UserId {
+        let principal_id = match self {
+            QuerySource::User { user_id, .. } => user_id.get(),
+            QuerySource::System => IC_00.get(),
+        };
+        UserId::from(principal_id)
+    }
+}
+
 /// Represents a Query that is sent by an end user to a canister.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Query {
@@ -32,10 +42,7 @@ pub struct Query {
 
 impl Query {
     pub fn source(&self) -> PrincipalId {
-        match &self.source {
-            QuerySource::User { user_id, .. } => user_id.get(),
-            QuerySource::System => IC_00.get(),
-        }
+        self.source.user_id().get()
     }
 
     pub fn id(&self) -> MessageId {
