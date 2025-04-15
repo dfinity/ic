@@ -166,7 +166,7 @@ jobs:
           execlog-artifact-name: execlog-bazel-test-all
           diff-only: ${{ needs.config.outputs.diff_only }}
           release-build: ${{ needs.config.outputs.release_build }}
-          BAZEL_COMMAND: build --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
+          BAZEL_COMMAND: test --config=ci ${{ steps.bazel-extra-args.outputs.BAZEL_EXTRA_ARGS }}
           BAZEL_TARGETS: //...
           CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
