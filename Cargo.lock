@@ -9695,6 +9695,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
+ "ic-cbor",
  "ic-cdk 0.17.1",
  "ic-cdk-macros 0.17.1",
  "ic-cdk-timers",
@@ -11802,6 +11803,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-canister-chunkify"
+version = "0.9.0"
+dependencies = [
+ "ic-nervous-system-chunks",
+ "ic-registry-transport",
+ "ic-stable-structures",
+]
+
+[[package]]
 name = "ic-registry-canister-client"
 version = "0.9.0"
 dependencies = [
@@ -12211,6 +12221,7 @@ dependencies = [
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "wat",
@@ -16809,6 +16820,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-cdk 0.17.1",
+ "ic-crypto-tree-hash",
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-networking-subnet-update-workload",
@@ -16823,12 +16835,15 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.39.3",
+ "ic_consensus_system_test_utils",
+ "leb128",
  "proxy_canister",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
  "reqwest 0.12.12",
  "serde",
+ "serde_cbor",
  "serde_json",
  "slog",
  "tokio",
