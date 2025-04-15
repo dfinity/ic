@@ -75,8 +75,8 @@ use std::{io::Write, path::Path};
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
-const APP_NODES: usize = 3;
-const UNASSIGNED_NODES: usize = 3;
+const APP_NODES: usize = 4;
+const UNASSIGNED_NODES: usize = 4;
 
 const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
@@ -93,14 +93,11 @@ pub fn setup(
     dkg_interval: u64,
     env: TestEnv,
 ) {
-    let mut nns = if let Some(nns_nodes) = nns_nodes {
-        Subnet::new(SubnetType::System)
-            .with_dkg_interval_length(Height::from(dkg_interval))
-            .add_nodes(nns_nodes)
-    } else {
-        Subnet::fast_single_node(SubnetType::System)
-            .with_dkg_interval_length(Height::from(dkg_interval))
-    };
+    let nns_nodes = nns_nodes.unwrap_or(4);
+    let mut nns = Subnet::new(SubnetType::System)
+        .with_dkg_interval_length(Height::from(dkg_interval))
+        .add_nodes(4);
+
     // TODO(CON-1471): Add a VetKD key ID
     let key_ids = make_key_ids_for_all_idkg_schemes();
     let key_configs = key_ids
