@@ -319,19 +319,36 @@ pub async fn ecdsa_public_key(
 }
 
 /// Signs a message hash using the tECDSA API.
-pub async fn sign_with_ecdsa(
+pub async fn sign_with_ecdsa<R: CanisterRuntime>(
+    key_name: String,
+    derivation_path: DerivationPath,
+    message_hash: [u8; 32],
+    runtime: &R,
+) -> Result<Vec<u8>, CallError> {
+    // Record start time of method execution for metrics
+    let start_time = runtime.time();
+
+    let result = runtime
+        .sign_with_ecdsa(key_name, derivation_path, message_hash)
+        .await;
+
+    result
+        .inspect(|_| {
+            observe_sign_with_ecdsa_latency(MetricsResult::Ok, start_time, runtime.time());
+        })
+        .inspect_err(|_| {
+            observe_sign_with_ecdsa_latency(MetricsResult::Err, start_time, runtime.time());
+        })
+}
+
+pub async fn bitcoin_sign_with_ecdsa(
     key_name: String,
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
 ) -> Result<Vec<u8>, CallError> {
-    use ic_cdk::api::management_canister::ecdsa::{
-        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
-    };
+    use ic_cdk::api::management_canister::ecdsa::{EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument};
 
-    // Record start time of method execution for metrics
-    let start_time = ic_cdk::api::time();
-
-    let result = sign_with_ecdsa(SignWithEcdsaArgument {
+    ic_cdk::api::management_canister::ecdsa::sign_with_ecdsa(SignWithEcdsaArgument {
         message_hash: message_hash.to_vec(),
         derivation_path: derivation_path.into_inner(),
         key_id: EcdsaKeyId {
@@ -339,21 +356,9 @@ pub async fn sign_with_ecdsa(
             name: key_name.clone(),
         },
     })
-    .await;
-
-    match result {
-        Ok((reply,)) => {
-            observe_sign_with_ecdsa_latency(MetricsResult::Ok, start_time, ic_cdk::api::time());
-            Ok(reply.signature)
-        }
-        Err((code, msg)) => {
-            observe_sign_with_ecdsa_latency(MetricsResult::Err, start_time, ic_cdk::api::time());
-            Err(CallError {
-                method: "sign_with_ecdsa".to_string(),
-                reason: Reason::from_reject(code, msg),
-            })
-        }
-    }
+    .await
+    .map(|(result,)| result.signature)
+    .map_err(|err| CallError::from_cdk_error("sign_with_ecdsa", err))
 }
 
 /// Check if the given Bitcoin address is blocked.

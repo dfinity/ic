@@ -845,9 +845,13 @@ pub async fn sign_transaction(
 
         let sighash = sighasher.sighash(input, &pkhash);
 
-        let sec1_signature =
-            management::sign_with_ecdsa(key_name.clone(), DerivationPath::new(path), sighash)
-                .await?;
+        let sec1_signature = management::sign_with_ecdsa(
+            key_name.clone(),
+            DerivationPath::new(path),
+            sighash,
+            &IC_CANISTER_RUNTIME,
+        )
+        .await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),
@@ -1185,6 +1189,13 @@ pub trait CanisterRuntime {
         to: Account,
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError>;
+
+    async fn sign_with_ecdsa(
+        &self,
+        key_name: String,
+        derivation_path: DerivationPath,
+        message_hash: [u8; 32],
+    ) -> Result<Vec<u8>, CallError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1231,6 +1242,15 @@ impl CanisterRuntime for IcCanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
         updates::update_balance::mint(amount, to, memo).await
+    }
+
+    async fn sign_with_ecdsa(
+        &self,
+        key_name: String,
+        derivation_path: DerivationPath,
+        message_hash: [u8; 32],
+    ) -> Result<Vec<u8>, CallError> {
+        management::bitcoin_sign_with_ecdsa(key_name, derivation_path, message_hash).await
     }
 }
 
