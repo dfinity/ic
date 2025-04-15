@@ -69,10 +69,11 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         let initial_mutations = load_registry_mutations(registry_proto_path);
 
         let mut nns_installer = NnsInstaller::default();
-        nns_installer.with_current_nns_canister_versions();
-        nns_installer.with_cycles_minting_canister();
-        nns_installer.with_cycles_ledger();
-        nns_installer.with_custom_registry_mutations(vec![initial_mutations]);
+        nns_installer
+            .with_current_nns_canister_versions()
+            .with_cycles_minting_canister()
+            .with_cycles_ledger()
+            .with_custom_registry_mutations(vec![initial_mutations]);
         nns_installer.install(&pocket_ic).await;
     }
 

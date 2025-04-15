@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{copy_dir, BlobStore, OpId, Operation, SubnetBlockmaker};
+use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
@@ -41,7 +41,8 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{no_op_logger, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -81,7 +82,7 @@ use pocket_ic::common::rest::{
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
-use pocket_ic::{ErrorCode, RejectCode, RejectResponse};
+use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::hash::Hash;
@@ -97,7 +98,7 @@ use std::{
 };
 use strum::IntoEnumIterator;
 use tempfile::{NamedTempFile, TempDir};
-use tokio::sync::OnceCell;
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::{runtime::Runtime, sync::mpsc};
 use tonic::transport::{Channel, Server};
@@ -354,7 +355,7 @@ pub(crate) struct CanisterHttp {
 pub(crate) struct Subnet {
     pub state_machine: Arc<StateMachine>,
     pub canister_http: Arc<Mutex<CanisterHttp>>,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Sender<Option<CertificateDelegation>>,
     _canister_http_adapter_parts: CanisterHttpAdapterParts,
 }
 
@@ -372,7 +373,7 @@ impl Subnet {
             https_outcalls_uds_path: Some(uds_path),
             ..Default::default()
         };
-        let delegation_from_nns = Arc::new(OnceCell::new());
+        let (nns_delegation_tx, nns_delegation_rx) = watch::channel(None);
         let client = setup_canister_http_client(
             state_machine.runtime.handle().clone(),
             &state_machine.metrics_registry,
@@ -381,7 +382,7 @@ impl Subnet {
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
             state_machine.get_subnet_type(),
-            delegation_from_nns.clone(),
+            nns_delegation_rx,
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
@@ -390,7 +391,7 @@ impl Subnet {
         Self {
             state_machine,
             canister_http,
-            delegation_from_nns,
+            delegation_from_nns: nns_delegation_tx,
             _canister_http_adapter_parts: canister_http_adapter_parts,
         }
     }
@@ -400,7 +401,9 @@ impl Subnet {
     }
 
     fn set_delegation_from_nns(&self, delegation_from_nns: CertificateDelegation) {
-        self.delegation_from_nns.set(delegation_from_nns).unwrap();
+        self.delegation_from_nns
+            .send(Some(delegation_from_nns))
+            .unwrap();
     }
 }
 
@@ -656,6 +659,16 @@ impl PocketIcSubnets {
                     name: name.to_string(),
                 };
                 subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+            }
+
+            if self.nonmainnet_features {
+                for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                    let key_id = VetKdKeyId {
+                        curve: VetKdCurve::Bls12_381_G2,
+                        name: name.to_string(),
+                    };
+                    subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
+                }
             }
         }
         for chain_key in &subnet_chain_keys {
@@ -1139,7 +1152,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
         Fiduciary => 34,
         SNS => 34,
         Bitcoin => 13,
-        II => 31,
+        II => 34,
         NNS => 40,
         System => 13,
     }
@@ -1584,11 +1597,9 @@ fn process_mock_canister_https_response(
     };
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
-    let delegation = if let Some(d) = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id()) {
-        Arc::new(OnceCell::new_with(Some(d)))
-    } else {
-        Arc::new(OnceCell::new())
-    };
+    let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+    let (_, delegation_rx) = watch::channel(delegation);
+
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
             let grpc_channel = pic
@@ -1612,7 +1623,7 @@ fn process_mock_canister_https_response(
                 1,
                 MetricsRegistry::new(),
                 subnet.get_subnet_type(),
-                delegation.clone(),
+                delegation_rx.clone(),
             );
             client
                 .send(AdapterCanisterHttpRequest {
@@ -2179,13 +2190,8 @@ impl Operation for CallRequest {
                 let svc = match self.version {
                     CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
                     CallRequestVersion::V3 => {
-                        let delegation = if let Some(d) =
-                            pic.get_nns_delegation_for_subnet(subnet.get_subnet_id())
-                        {
-                            Arc::new(OnceCell::new_with(Some(d)))
-                        } else {
-                            Arc::new(OnceCell::new())
-                        };
+                        let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                        let (_, delegation_rx) = watch::channel(delegation);
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -2195,7 +2201,7 @@ impl Operation for CallRequest {
                             metrics,
                             http_handler::Config::default()
                                 .ingress_message_certificate_timeout_seconds,
-                            delegation,
+                            delegation_rx,
                             subnet.state_manager.clone(),
                         )
                     }
@@ -2279,6 +2285,7 @@ impl Operation for QueryRequest {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let (_, delegation_rx) = watch::channel(delegation);
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
@@ -2288,7 +2295,7 @@ impl Operation for QueryRequest {
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    Arc::new(OnceCell::new_with(delegation)),
+                    delegation_rx,
                     query_handler,
                 )
                 .with_time_source(subnet.time_source.clone())
@@ -2339,13 +2346,14 @@ impl Operation for CanisterReadStateRequest {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let (_, delegation_rx) = watch::channel(delegation);
                 subnet.certify_latest_state();
                 let svc = CanisterReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    Arc::new(OnceCell::new_with(delegation)),
+                    delegation_rx,
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
@@ -2394,9 +2402,10 @@ impl Operation for SubnetReadStateRequest {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let (_, delegation_rx) = watch::channel(delegation);
                 subnet.certify_latest_state();
                 let svc = SubnetReadStateServiceBuilder::builder(
-                    Arc::new(OnceCell::new_with(delegation)),
+                    delegation_rx,
                     subnet.state_manager.clone(),
                 )
                 .build_service();

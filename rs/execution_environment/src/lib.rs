@@ -25,8 +25,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
-    IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
-    Scheduler,
+    IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -81,7 +80,7 @@ pub enum NonReplicatedQueryKind {
 // This struct holds public facing components that are created by Execution.
 pub struct ExecutionServices {
     pub ingress_filter: IngressFilterService,
-    pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+    pub ingress_history_writer: Arc<IngressHistoryWriterImpl>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: QueryExecutionService,
     pub https_outcalls_service: QueryExecutionService,
@@ -146,6 +145,7 @@ impl ExecutionServices {
             scheduler_config.heap_delta_rate_limit,
             scheduler_config.upload_wasm_chunk_instructions,
             scheduler_config.canister_snapshot_baseline_instructions,
+            scheduler_config.canister_snapshot_data_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
@@ -221,7 +221,7 @@ impl ExecutionServices {
         self,
     ) -> (
         IngressFilterService,
-        Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        Arc<IngressHistoryWriterImpl>,
         Box<dyn IngressHistoryReader>,
         QueryExecutionService,
         Box<dyn Scheduler<State = ReplicatedState>>,

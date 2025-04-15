@@ -109,8 +109,9 @@ pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> (PocketIc, SnsWa
 
     // Install the (mainnet) NNS canisters.
     {
-        let with_mainnet_nns_canisters = true;
-        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+        let mut nns_installer = NnsInstaller::default();
+        nns_installer.with_mainnet_nns_canister_versions();
+        nns_installer.install(&pocket_ic).await;
     }
 
     // Publish (mainnet) SNS Wasms to SNS-W.
@@ -712,48 +713,6 @@ pub mod cycles_ledger {
             balance: _,
         } = nns::cmc::notify_mint_cycles(pocket_ic, beneficiary, None, None, block_index).await;
     }
-}
-
-/// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
-/// Requires PocketIC to have at least an NNS and an SNS subnet.
-///
-/// Arguments
-/// 1. `with_mainnet_nns_canister_versions` is a flag indicating whether the mainnet
-///    (or, therwise, tip-of-this-branch) WASM versions should be installed.
-/// 2. `with_test_nns_governance_canister` is a flag indicating whether the test version of
-///    the governance canister should be installed. Mutually exclusive with `with_mainnet_nns_canister_versions`.
-/// 3. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
-///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
-/// 3. `custom_registry_mutations` are custom mutations for the inital Registry. These
-///    mutations should comply with Registry invariants, otherwise this function will fail.
-/// 4. `neurons_fund_hotkeys` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
-///
-/// Returns
-/// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.
-pub async fn install_nns_canisters(
-    pocket_ic: &PocketIc,
-    initial_balances: Vec<(AccountIdentifier, Tokens)>,
-    with_mainnet_nns_canister_versions: bool,
-    custom_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
-    neurons_fund_hotkeys: Vec<PrincipalId>,
-) -> Vec<PrincipalId> {
-    let mut nns_installer = NnsInstaller::default();
-
-    nns_installer
-        .with_ledger_balances(initial_balances)
-        .with_neurons_fund_hotkeys(neurons_fund_hotkeys);
-
-    if with_mainnet_nns_canister_versions {
-        nns_installer.with_mainnet_nns_canister_versions();
-    } else {
-        nns_installer.with_current_nns_canister_versions();
-    }
-
-    if let Some(custom_registry_mutations) = custom_registry_mutations {
-        nns_installer.with_custom_registry_mutations(custom_registry_mutations);
-    }
-
-    nns_installer.install(pocket_ic).await
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1667,6 +1626,27 @@ pub mod sns {
                         sns_neuron.permissions.last().unwrap().principal.unwrap(),
                     )
                 })
+        }
+
+        /// Returns the neuron ID of the first neuron that is distinct from `neuron_id` or `None`.
+        pub async fn find_another_neuron(
+            pocket_ic: &PocketIc,
+            canister_id: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+        ) -> Option<sns_pb::NeuronId> {
+            let sns_neurons = list_neurons(pocket_ic, canister_id).await.neurons;
+            sns_neurons
+                .into_iter()
+                .filter_map(|Neuron { id, .. }| {
+                    let this_neuron_id = id.unwrap();
+
+                    if this_neuron_id != neuron_id {
+                        return Some(this_neuron_id);
+                    }
+
+                    None
+                })
+                .next()
         }
 
         /// This function is a wrapper around `GovernanceCanister::get_nervous_system_parameters`, kept here for convenience.

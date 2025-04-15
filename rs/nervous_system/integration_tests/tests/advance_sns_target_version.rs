@@ -6,11 +6,10 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::{
         EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
     },
 };
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_nns_canisters, nns,
-    },
+    pocket_ic_helpers::{add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, nns},
 };
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
 use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
@@ -47,8 +46,9 @@ async fn test_get_upgrade_journal(automatically_advance_target_version: bool) {
         .await;
 
     // Step 0: Install the (master) NNS canisters.
-    let with_mainnet_nns_canisters = false;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.install(&pocket_ic).await;
 
     // Step 0.1: Publish (master) SNS Wasms to SNS-W.
     let with_mainnet_sns_canisters = false;

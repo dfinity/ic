@@ -7,6 +7,5 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-bls12-381-vetkd = { path = "../../internal/crypto_lib/bls12_381/vetkd" }
 ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "../../internal/crypto_lib/threshold_sig/canister_threshold_sig" }
 ic-types = { path = "../../../types/types" }

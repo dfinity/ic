@@ -12,10 +12,11 @@ use ic_nervous_system_common::{
     assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, install_canister_with_controllers, install_nns_canisters, nns,
+        add_wasms_to_sns_wasm, install_canister_with_controllers, nns,
         sns::{self, governance::dissolve_delay_seconds, swap::SwapFinalizationStatus},
     },
 };
@@ -275,16 +276,18 @@ async fn test_sns_lifecycle(
             .map(|(account_identifier, balance_icp, _)| (*account_identifier, *balance_icp))
             .collect();
 
-        let with_mainnet_nns_canister_versions = false;
         let neurons_fund_hotkeys = neurons_fund_config.hotkeys;
-        let nns_neuron_controller_principal_ids = install_nns_canisters(
-            &pocket_ic,
-            direct_participant_initial_icp_balances,
-            with_mainnet_nns_canister_versions,
-            None,
-            neurons_fund_hotkeys,
-        )
-        .await;
+        let mut nns_installer = NnsInstaller::default();
+
+        nns_installer
+            .with_ledger_balances(direct_participant_initial_icp_balances)
+            .with_neurons_fund_hotkeys(neurons_fund_hotkeys);
+
+        nns_installer
+            .with_current_nns_canister_versions()
+            .with_test_governance_canister();
+
+        let nns_neuron_controller_principal_ids = nns_installer.install(&pocket_ic).await;
 
         let with_mainnet_sns_wasms = false;
         add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms)

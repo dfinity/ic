@@ -10,8 +10,8 @@ documentation.workspace = true
 clap = { workspace = true }
 eyre = "0.6.8"
 ic-config = { path = "../../config" }
+ic-embedders = { path = "../../embedders" }
 ic-replicated-state = { path = "../../replicated_state" }
-ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }
 serde = { workspace = true }
 serde_json = { workspace = true }

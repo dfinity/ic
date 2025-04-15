@@ -88,6 +88,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use strum_macros::EnumIter;
+use tempfile::TempDir;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
@@ -104,12 +105,58 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
 const LOCALHOST: &str = "127.0.0.1";
 
+enum PocketIcStateKind {
+    /// A persistent state dir managed by the user.
+    StateDir(PathBuf),
+    /// A fresh temporary directory used if the user does not provide
+    /// a persistent state directory managed by the user.
+    /// The temporary directory is deleted when `PocketIcState` is dropped
+    /// unless `PocketIcState` is turned into a persistent state
+    /// at the path given by `PocketIcState::into_path`.
+    TempDir(TempDir),
+}
+
+pub struct PocketIcState {
+    state: PocketIcStateKind,
+}
+
+impl PocketIcState {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let temp_dir = TempDir::new().unwrap();
+        Self {
+            state: PocketIcStateKind::TempDir(temp_dir),
+        }
+    }
+
+    pub fn new_from_path(state_dir: PathBuf) -> Self {
+        Self {
+            state: PocketIcStateKind::StateDir(state_dir),
+        }
+    }
+
+    pub fn into_path(self) -> PathBuf {
+        match self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir,
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+        }
+    }
+
+    pub(crate) fn state_dir(&self) -> PathBuf {
+        match &self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir.clone(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.path().to_path_buf(),
+        }
+    }
+}
+
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
-    state_dir: Option<PathBuf>,
+    read_only_state_dir: Option<PathBuf>,
+    state_dir: Option<PocketIcState>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -123,6 +170,7 @@ impl PocketIcBuilder {
             server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            read_only_state_dir: None,
             state_dir: None,
             nonmainnet_features: false,
             log_level: None,
@@ -142,6 +190,7 @@ impl PocketIcBuilder {
             self.server_url,
             self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
@@ -155,6 +204,7 @@ impl PocketIcBuilder {
             self.server_url,
             self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
@@ -181,7 +231,17 @@ impl PocketIcBuilder {
     }
 
     pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+        self.state_dir = Some(PocketIcState::new_from_path(state_dir));
+        self
+    }
+
+    pub fn with_state(mut self, state_dir: PocketIcState) -> Self {
         self.state_dir = Some(state_dir);
+        self
+    }
+
+    pub fn with_read_only_state(mut self, read_only_state_dir: &PocketIcState) -> Self {
+        self.read_only_state_dir = Some(read_only_state_dir.state_dir());
         self
     }
 
@@ -392,7 +452,8 @@ impl PocketIc {
         server_url: Option<Url>,
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PathBuf>,
+        read_only_state_dir: Option<PathBuf>,
+        state_dir: Option<PocketIcState>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -413,6 +474,7 @@ impl PocketIc {
                 server_url,
                 server_binary,
                 max_request_time_ms,
+                read_only_state_dir,
                 state_dir,
                 nonmainnet_features,
                 log_level,
@@ -426,6 +488,10 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    pub fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.pocket_ic.take_state_internal()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
@@ -1807,6 +1873,23 @@ pub fn get_default_effective_canister_id(
     runtime.block_on(crate::nonblocking::get_default_effective_canister_id(
         pocket_ic_url,
     ))
+}
+
+pub fn copy_dir(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

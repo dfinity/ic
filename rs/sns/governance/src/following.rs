@@ -1,5 +1,7 @@
 use crate::pb::v1::{
-    manage_neuron::SetFollowing, neuron::FolloweesForTopic, Followee, NeuronId, Topic,
+    manage_neuron::SetFollowing,
+    neuron::{FolloweesForTopic, TopicFollowees},
+    Followee, NeuronId, Topic,
 };
 use itertools::{Either, Itertools};
 use lazy_static::lazy_static;
@@ -17,9 +19,15 @@ pub const MAX_NEURON_ALIAS_BYTES: usize = 128;
 pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 
 lazy_static! {
-    /// Number of topics that are available for following.
+    /// All topics that are available for following.
     // One enum value is reserved for the unspecified topic.
-    static ref NUM_TOPICS: usize = Topic::iter().count().saturating_sub(1);
+    pub(crate) static ref TOPICS: BTreeSet<Topic> = Topic::iter().skip(1).collect();
+
+    /// All non-critical topics.
+    pub(crate) static ref NON_CRITICAL_TOPICS: BTreeSet<Topic> = TOPICS.iter().copied().filter(Topic::is_non_critical).collect();
+
+    /// Number of topics that are available for following.
+    static ref NUM_TOPICS: usize = TOPICS.len();
 }
 
 #[derive(Debug, PartialEq)]
@@ -35,6 +43,31 @@ pub(crate) struct ValidatedFolloweesForTopic {
     pub followees: BTreeSet<ValidatedFollowee>,
 
     pub topic: Topic,
+}
+
+impl From<ValidatedFollowee> for Followee {
+    fn from(value: ValidatedFollowee) -> Self {
+        let ValidatedFollowee {
+            neuron_id, alias, ..
+        } = value;
+
+        Self {
+            neuron_id: Some(neuron_id),
+            alias,
+        }
+    }
+}
+
+impl From<ValidatedFolloweesForTopic> for FolloweesForTopic {
+    fn from(value: ValidatedFolloweesForTopic) -> Self {
+        let ValidatedFolloweesForTopic { followees, topic } = value;
+
+        let followees = followees.into_iter().map(Followee::from).collect();
+
+        let topic = Some(i32::from(topic));
+
+        Self { followees, topic }
+    }
 }
 
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
@@ -406,6 +439,98 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
             .collect();
 
         Ok(Self { topic_following })
+    }
+}
+
+#[derive(Error, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum SetFollowingError {
+    #[error("existing following is not valid: {:?}", .0)]
+    InvalidExistingFollowing(FolloweesForTopicValidationError),
+
+    #[error("followees are identified by ID and cannot have more than one alias, got: {}", fmt_alias_groups(.0))]
+    InconsistentFolloweeAliases(FolloweeAliasGroups),
+}
+
+impl TopicFollowees {
+    pub fn with_default_values() -> Self {
+        Self {
+            topic_id_to_followees: Default::default(),
+        }
+    }
+
+    pub(crate) fn new(
+        topic_followees: Option<Self>,
+        set_following: ValidatedSetFollowing,
+    ) -> Result<Self, SetFollowingError> {
+        let topic_followees = if let Some(topic_followees) = topic_followees {
+            topic_followees
+        } else {
+            TopicFollowees::with_default_values()
+        };
+
+        topic_followees.set_following(set_following)
+    }
+
+    fn set_following(
+        mut self,
+        set_following: ValidatedSetFollowing,
+    ) -> Result<Self, SetFollowingError> {
+        let ValidatedSetFollowing {
+            topic_following: mut new_topic_following,
+        } = set_following;
+
+        let mut all_followees = vec![];
+
+        for topic in TOPICS.iter().copied() {
+            let Some(ValidatedFolloweesForTopic { followees, .. }) =
+                new_topic_following.remove(&topic)
+            else {
+                // Nothing to update for this topic, just keep track of what we had before for
+                // analyzing the aliases later on.
+                let followees_for_topic = self.topic_id_to_followees.get(&i32::from(topic));
+
+                if let Some(followees_for_topic) = followees_for_topic {
+                    let followees_for_topic =
+                        ValidatedFolloweesForTopic::try_from(followees_for_topic.clone())
+                            .map_err(SetFollowingError::InvalidExistingFollowing)?;
+
+                    all_followees.extend(followees_for_topic.followees.into_iter());
+                }
+
+                continue;
+            };
+
+            let topic = i32::from(topic);
+
+            all_followees.extend(followees.iter().cloned());
+
+            if followees.is_empty() {
+                // Special case: Remove following for this topic.
+                self.topic_id_to_followees.remove(&topic);
+                continue;
+            }
+
+            let followees_per_topic =
+                self.topic_id_to_followees
+                    .entry(topic)
+                    .or_insert_with(|| FolloweesForTopic {
+                        topic: Some(topic),
+                        followees: vec![],
+                    });
+
+            followees_per_topic.followees = followees.iter().cloned().map(Followee::from).collect();
+        }
+
+        // Check that after updating `topic_followees` aliases are still unique for each neuron ID.
+        let inconsistent_aliases = get_inconsistent_aliases(&all_followees.into_iter().collect());
+
+        if !inconsistent_aliases.is_empty() {
+            return Err(SetFollowingError::InconsistentFolloweeAliases(
+                inconsistent_aliases,
+            ));
+        }
+
+        Ok(self)
     }
 }
 

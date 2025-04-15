@@ -24,34 +24,13 @@ BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
-        "openssl-sys": [crate.annotation(
-            build_script_data = [
-                "@openssl//:gen_dir",
-            ],
-            build_script_env = {
-                "OPENSSL_NO_VENDOR": "1",
-                "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
-                "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
-                "OPENSSL_STATIC": "1",
-            },
-        )],
         "canbench": [crate.annotation(
             gen_binaries = True,
-        )],
-        "cc": [crate.annotation(
-            patch_args = ["-p1"],
-            patches = ["@@//bazel:cc_rs.patch"],
         )],
         "libssh2-sys": [crate.annotation(
             # Patch for determinism issues
             patch_args = ["-p1"],
             patches = ["@@//bazel:libssh2-sys.patch"],
-            build_script_data = [
-                "@openssl//:gen_dir",
-            ],
-        )],
-        "libz-sys": [crate.annotation(
-            crate_features = ["static"],
         )],
         "curve25519-dalek": [crate.annotation(
             rustc_flags = [
@@ -444,7 +423,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.4",
             ),
             "crossbeam-channel": crate.spec(
-                version = "^0.5.13",
+                version = "^0.5.15",
             ),
             "csv": crate.spec(
                 version = "^1.1",

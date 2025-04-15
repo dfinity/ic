@@ -1,5 +1,5 @@
 {
-  "checksum": "6519b9ae2df2f99918d39a51ff8ea72baf98a75b71c937b001b8a15dfcf6d54a",
+  "checksum": "25c10e6215d471775ff9fb7eb0d5eb6cebc749601e7fc80fbd4d2065fcdba76f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6901,10 +6901,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -7694,10 +7691,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -7814,10 +7808,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -7964,10 +7955,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -11495,10 +11483,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -11848,13 +11833,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.1.37/download",
-          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:cc_rs.patch"
-          ]
+          "sha256": "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
         }
       },
       "targets": [
@@ -16935,7 +16914,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -16967,14 +16946,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "crossbeam-channel 0.5.13": {
+    "crossbeam-channel 0.5.15": {
       "name": "crossbeam-channel",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "package_url": "https://github.com/crossbeam-rs/crossbeam",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/crossbeam-channel/0.5.13/download",
-          "sha256": "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
+          "url": "https://static.crates.io/crates/crossbeam-channel/0.5.15/download",
+          "sha256": "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
         }
       },
       "targets": [
@@ -17013,7 +16992,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.13"
+        "version": "0.5.15"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -20764,7 +20743,7 @@
               "target": "crossbeam"
             },
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -35115,10 +35094,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -37955,7 +37931,7 @@
               "target": "clap"
             },
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -42790,7 +42766,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -42803,12 +42779,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "data": {
-          "common": [
-            "@openssl//:gen_dir"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -42842,7 +42812,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.105",
+                "id": "openssl-sys 0.9.107",
                 "target": "openssl_sys"
               }
             ]
@@ -42992,8 +42962,7 @@
         ],
         "crate_features": {
           "common": [
-            "libc",
-            "static"
+            "libc"
           ],
           "selects": {}
         },
@@ -46673,7 +46642,7 @@
               "target": "async_lock"
             },
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -49722,14 +49691,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl 0.10.70": {
+    "openssl 0.10.72": {
       "name": "openssl",
-      "version": "0.10.70",
+      "version": "0.10.72",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl/0.10.70/download",
-          "sha256": "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
+          "url": "https://static.crates.io/crates/openssl/0.10.72/download",
+          "sha256": "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
         }
       },
       "targets": [
@@ -49786,11 +49755,11 @@
               "target": "once_cell"
             },
             {
-              "id": "openssl 0.10.70",
+              "id": "openssl 0.10.72",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49807,7 +49776,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.70"
+        "version": "0.10.72"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -49819,7 +49788,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -49976,14 +49945,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.105": {
+    "openssl-sys 0.9.107": {
       "name": "openssl-sys",
-      "version": "0.9.105",
+      "version": "0.9.107",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.105/download",
-          "sha256": "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.107/download",
+          "sha256": "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
         }
       },
       "targets": [
@@ -50024,25 +49993,19 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.105",
+              "id": "openssl-sys 0.9.107",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.105"
+        "version": "0.9.107"
       },
       "build_script_attrs": {
         "compile_data_glob": [
           "**"
         ],
-        "data": {
-          "common": [
-            "@openssl//:gen_dir"
-          ],
-          "selects": {}
-        },
         "data_glob": [
           "**"
         ],
@@ -50061,15 +50024,6 @@
               "target": "vcpkg"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "OPENSSL_INCLUDE_DIR": "$(location @openssl//:gen_dir)/include",
-            "OPENSSL_LIB_DIR": "$(location @openssl//:gen_dir)/lib64",
-            "OPENSSL_NO_VENDOR": "1",
-            "OPENSSL_STATIC": "1"
-          },
           "selects": {}
         },
         "links": "openssl"
@@ -50874,7 +50828,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -51070,7 +51024,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -73222,7 +73176,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -82089,7 +82043,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.13",
+              "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
             },
             {
@@ -87216,10 +87170,7 @@
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
             "-Zstrict-init-checks",
-            "-Cstrip=none",
-            "-Zsanitizer=address",
-            "-Zexternal-clangrt",
-            "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__nightly_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-nightly_rt.asan.a"
+            "-Zsanitizer=address"
           ],
           "selects": {}
         },
@@ -94489,7 +94440,7 @@
     "crc32fast 1.3.2",
     "criterion 0.5.1",
     "crossbeam 0.8.4",
-    "crossbeam-channel 0.5.13",
+    "crossbeam-channel 0.5.15",
     "csv 1.3.0",
     "ctrlc 3.4.5",
     "curve25519-dalek 4.1.3",

@@ -7,16 +7,19 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/memory_tracker",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/nns/constants",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/sys",
-    "//rs/system_api",
+    "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
@@ -25,6 +28,8 @@ DEPENDENCIES = [
     "//rs/wasm_transform",
     "@crate_index//:anyhow",
     "@crate_index//:bincode",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:itertools",
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
@@ -49,7 +54,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-error-types",
     "//rs/registry/routing_table",
     "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
@@ -59,13 +63,13 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:criterion",
     "@crate_index//:insta",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
+    "@crate_index//:more-asserts",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
     "@crate_index//:strum",
@@ -149,6 +153,8 @@ rust_ic_test_suite_with_extra_srcs(
         exclude = [
             "tests/wasmtime_simple.rs",
             "tests/instrumentation.rs",
+            "tests/system_api.rs",
+            "tests/sandbox_safe_system_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -177,6 +183,26 @@ rust_ic_test_suite_with_extra_srcs(
         "tests/instrumentation.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "system_api_integration_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/system_api.rs",
+    ],
+    crate_root = "tests/system_api.rs",
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "sandbox_safe_system_state_test",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/sandbox_safe_system_state.rs",
+    ],
+    crate_root = "tests/sandbox_safe_system_state.rs",
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

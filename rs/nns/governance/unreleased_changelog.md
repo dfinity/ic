@@ -9,20 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
-* The `init` method now supports candid decoding in addition to protobuf. Protobuf decoding will be
-  removed in the future, giving clients time to migrate.
+* A timer task is added to take daily snapshots of voting power for standard proposals.
 
 ## Changed
-
-* Increased the probability of failure from 70% to 90% for the deprecated _pb methods.
-* Increase the neurons limit to 500K now that neurons are stored in stable memory.
 
 ## Deprecated
 
 ## Removed
-
-* The `topic_followee_index` in the heap is removed, along with the flag
-  `USE_STABLE_MEMORY_FOLLOWING_INDEX` that was set to true in the proposal 135063.
 
 ## Fixed
 

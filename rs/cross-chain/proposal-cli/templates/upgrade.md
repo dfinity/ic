@@ -18,22 +18,19 @@ Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
 TODO: THIS MUST BE FILLED OUT
 
 
-## Upgrade args
-
-```
-git fetch
-git checkout {{to}}
-{% if let Some(dir) = canister.repo_dir() -%}
-cd {{dir.as_path().display()}}
-{% endif -%}
-{{upgrade_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
-```
-
 ## Release Notes
 
 ```
 {{release_notes}}
  ```
+
+## Upgrade args
+
+```
+git fetch
+git checkout {{to}}
+{{upgrade_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
+```
 
 ## Wasm Verification
 

@@ -8,7 +8,10 @@ use crate::common::rest::{
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{start_or_reuse_server, IngressStatusResult, PocketIcBuilder, RejectResponse};
+use crate::{
+    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
+    RejectResponse,
+};
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
@@ -33,7 +36,7 @@ use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -83,6 +86,7 @@ pub struct PocketIc {
     reqwest_client: reqwest::Client,
     // the instance should only be deleted when dropping this handle if this handle owns the instance
     owns_instance: bool,
+    state_dir: Option<PocketIcState>,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -118,6 +122,7 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: false,
+            state_dir: None,
             _log_guard: log_guard,
         }
     }
@@ -127,7 +132,8 @@ impl PocketIc {
         server_url: Option<Url>,
         server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PathBuf>,
+        read_only_state_dir: Option<PathBuf>,
+        mut state_dir: Option<PocketIcState>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -139,14 +145,46 @@ impl PocketIc {
         };
 
         let subnet_config_set = subnet_config_set.into();
-        if state_dir.is_none()
-            || File::open(state_dir.clone().unwrap().join("topology.json")).is_err()
-        {
+
+        // copy the read-only state dir to the state dir
+        // (creating an empty temp dir to serve as the state dir if no state dir is provided)
+        if let Some(read_only_state_dir) = read_only_state_dir {
+            if let Some(ref state_dir) = state_dir {
+                let mut state_dir_contents = read_dir(state_dir.state_dir()).unwrap();
+                if state_dir_contents.next().is_some() {
+                    panic!(
+                        "PocketIC instance state must be empty if a read-only state is mounted."
+                    );
+                }
+            } else {
+                state_dir = Some(PocketIcState::new());
+            };
+            copy_dir(
+                read_only_state_dir,
+                state_dir
+                    .as_ref()
+                    .map(|state_dir| state_dir.state_dir())
+                    .unwrap(),
+            )
+            .expect("Failed to copy state directory");
+        };
+
+        // now that we initialized the state dir, we check if it contains a topology file
+        let has_topology = state_dir
+            .as_ref()
+            .map(|state_dir| File::open(state_dir.state_dir().join("topology.json")).is_ok())
+            .unwrap_or_default();
+
+        // if there is no topology to fetch from the state dir,
+        // the topology will be derived from the provided subnet config set
+        // that we need to validate
+        if !has_topology {
             subnet_config_set.validate().unwrap();
         }
+
         let instance_config = InstanceConfig {
             subnet_config_set,
-            state_dir,
+            state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
@@ -178,8 +216,18 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: true,
+            state_dir,
             _log_guard: log_guard,
         }
+    }
+
+    pub async fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.do_drop().await;
+        self.state_dir.take()
+    }
+
+    pub(crate) fn take_state_internal(&mut self) -> Option<PocketIcState> {
+        self.state_dir.take()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.

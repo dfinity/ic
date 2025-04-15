@@ -1,16 +1,13 @@
 use candid::{Decode, Encode};
-use canister_test::{Wasm, WasmResult};
+use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
-use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, wait_ledger_ready, TransactionGenerationParameters,
-};
+use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
@@ -27,8 +24,6 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
-use std::collections::BTreeMap;
-use std::str::FromStr;
 use std::time::Instant;
 
 /// The number of instructions that can be executed in a single canister upgrade as per
@@ -248,9 +243,9 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.perform_upgrade_downgrade_testing(false);
 
     // Upgrade all the canisters to the latest version
-    setup.upgrade_to_master(ExpectMigration::No);
+    setup.upgrade_to_master();
     // Upgrade again to test the pre-upgrade
-    setup.upgrade_to_master(ExpectMigration::No);
+    setup.upgrade_to_master();
 
     // Perform upgrade and downgrade testing
     setup.perform_upgrade_downgrade_testing(true);
@@ -259,7 +254,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
     // stable structures, but master also has blocks in stable structures, `ledger_is_downgradable`
     // should be set to `false`, otherwise `true`.
-    setup.downgrade_to_mainnet(true, true);
+    setup.downgrade_to_mainnet(true);
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
@@ -278,14 +273,6 @@ struct Setup {
     mainnet_wasms: Wasms,
     previous_ledger_state: Option<LedgerState>,
 }
-
-#[derive(Eq, PartialEq)]
-enum ExpectMigration {
-    Yes,
-    No,
-}
-
-const LARGE_ARCHIVE_CAPACITY: u64 = 10 * 1024 * 1024 * 1024;
 
 impl Setup {
     pub fn new() -> Self {
@@ -311,27 +298,19 @@ impl Setup {
         }
     }
 
-    pub fn upgrade_to_master(&self, expect_migration: ExpectMigration) {
+    pub fn upgrade_to_master(&self) {
         println!("Upgrading to master version");
         self.upgrade_index(&self.master_wasms.index);
         self.upgrade_ledger(&self.master_wasms.ledger)
             .expect("should successfully upgrade ledger to new local version");
-        if expect_migration == ExpectMigration::Yes {
-            wait_ledger_ready(&self.state_machine, LEDGER_CANISTER_ID, 100);
-        }
-        self.check_ledger_metrics(expect_migration);
-        let upgrade_args = BTreeMap::from([(
-            CanisterId::from_str("q3fc5-haaaa-aaaaa-aaahq-cai").unwrap(),
-            2 * LARGE_ARCHIVE_CAPACITY,
-        )]);
-        self.upgrade_archive_canisters(&self.master_wasms.archive, true, upgrade_args);
+        self.check_ledger_metrics();
+        self.upgrade_archive_canisters(
+            &self.master_wasms.archive,
+            Encode!(&()).expect("failed to encode archive upgrade arg"),
+        );
     }
 
-    pub fn downgrade_to_mainnet(
-        &self,
-        ledger_is_downgradable: bool,
-        archive_is_downgradable: bool,
-    ) {
+    pub fn downgrade_to_mainnet(&self, ledger_is_downgradable: bool) {
         println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
         match (
@@ -361,12 +340,8 @@ impl Setup {
                 );
             }
         }
-        self.check_ledger_metrics(ExpectMigration::No);
-        self.upgrade_archive_canisters(
-            &self.mainnet_wasms.archive,
-            archive_is_downgradable,
-            BTreeMap::new(),
-        );
+        self.check_ledger_metrics();
+        self.upgrade_archive_canisters(&self.mainnet_wasms.archive, vec![]);
     }
 
     pub fn perform_upgrade_downgrade_testing(
@@ -383,23 +358,11 @@ impl Setup {
         ));
     }
 
-    fn check_ledger_metrics(&self, expect_migration: ExpectMigration) {
+    fn check_ledger_metrics(&self) {
         let metrics = retrieve_metrics(&self.state_machine, LEDGER_CANISTER_ID);
         println!("Ledger metrics:");
         for metric in metrics {
             println!("  {}", metric);
-        }
-        if expect_migration == ExpectMigration::Yes {
-            let migration_steps = parse_metric(
-                &self.state_machine,
-                LEDGER_CANISTER_ID,
-                "ledger_stable_upgrade_migration_steps",
-            );
-            assert!(
-                migration_steps > 0u64,
-                "Migration steps ({}) should be greater than 0",
-                migration_steps
-            );
         }
         let upgrade_instructions = parse_metric(
             &self.state_machine,
@@ -426,85 +389,16 @@ impl Setup {
         .expect("failed to decode archives response")
     }
 
-    fn get_remaining_capacity(&self, archive_canister_id: CanisterId) -> u64 {
-        let wasm_result = self
-            .state_machine
-            .execute_ingress(
-                archive_canister_id,
-                "remaining_capacity",
-                Encode!(&()).expect("should encode empty args"),
-            )
-            .unwrap();
-        match wasm_result {
-            WasmResult::Reply(bytes) => Decode!(&bytes, u64).expect("failed to decode usize"),
-            WasmResult::Reject(reason) => panic!("failed to query remaining_capacity: {reason}"),
-        }
-    }
-
-    fn upgrade_archive(
-        &self,
-        archive_canister_id: CanisterId,
-        wasm_bytes: Vec<u8>,
-        archive_is_upgradable: bool,
-        upgrade_arg_max_capacity: Option<u64>,
-    ) {
-        let (upgrade_arg, expect_large_capacity) =
-            if let Some(upgrade_arg_max_capacity) = upgrade_arg_max_capacity {
-                (
-                    Encode!(&ArchiveUpgradeArgument {
-                        max_memory_size_bytes: Some(upgrade_arg_max_capacity)
-                    })
-                    .expect("should encode archive upgrade args"),
-                    archive_is_upgradable,
-                )
-            } else {
-                (vec![], false)
-            };
-        let initial_capacity = self.get_remaining_capacity(archive_canister_id);
-        match self
-            .state_machine
-            .upgrade_canister(archive_canister_id, wasm_bytes, upgrade_arg)
-        {
-            Ok(_) => {
-                if !archive_is_upgradable {
-                    panic!("upgrade should fail")
-                }
-            }
-            Err(e) => {
-                if archive_is_upgradable {
-                    panic!(
-                        "should successfully upgrade archive '{}' to new local version: {}",
-                        archive_canister_id, e
-                    )
-                } else {
-                    assert!(e.description().contains("Decoding stable memory failed"));
-                }
-            }
-        }
-        let final_capacity = self.get_remaining_capacity(archive_canister_id);
-        if expect_large_capacity {
-            // We increased the total capacity to 2 * LARGE_ARCHIVE_CAPACITY,
-            // so the remaining capacity should be larger than LARGE_ARCHIVE_CAPACITY.
-            assert!(final_capacity > LARGE_ARCHIVE_CAPACITY);
-        } else {
-            assert_eq!(initial_capacity, final_capacity);
-        }
-    }
-
-    fn upgrade_archive_canisters(
-        &self,
-        wasm: &Wasm,
-        archive_is_upgradable: bool,
-        upgrade_arg: BTreeMap<CanisterId, u64>,
-    ) {
+    fn upgrade_archive_canisters(&self, wasm: &Wasm, upgrade_arg: Vec<u8>) {
         let archives = self.list_archives().archives;
         for archive_info in &archives {
-            self.upgrade_archive(
-                archive_info.canister_id,
-                wasm.clone().bytes(),
-                archive_is_upgradable,
-                upgrade_arg.get(&archive_info.canister_id).cloned(),
-            );
+            self.state_machine
+                .upgrade_canister(
+                    archive_info.canister_id,
+                    wasm.clone().bytes(),
+                    upgrade_arg.clone(),
+                )
+                .expect("failed to upgrade archive");
         }
     }
 

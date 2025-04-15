@@ -9,21 +9,26 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
     "//rs/node_rewards/canister/api",
+    "//rs/protobuf",
     "//rs/registry/canister-client",
+    "//rs/registry/keys",
+    "//rs/registry/node_provider_rewards",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/test_utils",
-    "//rs/protobuf",
-    "//rs/registry/keys",
+    "//rs/registry/transport",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
+    "@crate_index//:futures-util",
+    "@crate_index//:maplit",
 ]
 
 MACRO_DEPENDENCIES = [

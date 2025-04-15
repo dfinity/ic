@@ -58,6 +58,20 @@ fi
 if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     command_timestamp=$(date +%s)
     bazel_args+=(
+
+        # write execlogs, mostly for build reproducibility checks
+        --execution_log_json_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.json"
+
+        --verbose_failures=true
+
+        # enables BES upload (see config)
+        --config=bes
+        # additionally, upload build events asynchronously
+        --bes_upload_mode=fully_async
+
+        # Upload build results to cache
+        --remote_upload_local_results=true
+
         --color=yes # Nice CI output
 
         # Write build events to the dedicated tempdir

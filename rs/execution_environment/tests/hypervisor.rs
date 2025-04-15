@@ -1,13 +1,13 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_config::{
-    embedders::BestEffortResponsesFeature, execution_environment::MINIMUM_FREEZING_THRESHOLD,
-};
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+use ic_embedders::{
+    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
+};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types_private::Global;
@@ -26,7 +26,6 @@ use ic_replicated_state::{
     NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
-use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
@@ -1059,7 +1058,7 @@ fn ic0_canister_version_returns_correct_value() {
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.update_freezing_threshold(canister_id, NumSeconds::from(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::from(1))
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 5 for the previous ingress messages.
@@ -6967,7 +6966,7 @@ fn stable_memory_grow_reserves_cycles() {
             .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -7071,7 +7070,7 @@ fn wasm_memory_grow_reserves_cycles() {
 
         let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-        test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -7149,7 +7148,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7288,7 +7287,7 @@ fn resource_saturation_scaling_works_in_regular_execution() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -7354,7 +7353,7 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
 
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7391,7 +7390,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
 
     test.canister_state_mut(canister_id)
@@ -7435,7 +7434,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     let canister_id = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(MINIMUM_FREEZING_THRESHOLD))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
 
     let reserved_cycles_before = test

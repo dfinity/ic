@@ -2,11 +2,14 @@ use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_con
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::CompilationCacheBuilder;
 use ic_embedders::{
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
-    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+    },
+    CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
+    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
@@ -18,9 +21,6 @@ use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
 };
 use ic_types::{
     messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
