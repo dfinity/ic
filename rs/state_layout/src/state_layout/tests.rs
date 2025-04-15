@@ -649,8 +649,7 @@ fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
     let canister_layout: CanisterLayout<ReadOnly> =
         CanisterLayout::new_untracked(tmpdir.path().to_owned()).unwrap();
     let wasm_on_disk =
-        CanisterModule::new_from_file(Box::new(canister_layout.wasm()), wasm_hash.into())
-            .expect("failed to read Wasm from disk");
+        CanisterModule::new_from_file(Box::new(canister_layout.wasm()), wasm_hash.into());
 
     assert_eq!(wasm_in_memory.file(), None);
     assert_eq!(wasm_on_disk.file(), Some(wasm_file.path.as_path()));

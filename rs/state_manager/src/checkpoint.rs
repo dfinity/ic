@@ -809,7 +809,7 @@ pub fn load_canister_state(
             let wasm_binary = WasmBinary::new(
                 canister_layout
                     .wasm()
-                    .deserialize(execution_state_bits.binary_hash)?,
+                    .lazy_load_with_module_hash(execution_state_bits.binary_hash),
             );
             durations.insert("wasm_binary", starting_time.elapsed());
 
@@ -988,7 +988,7 @@ pub fn load_snapshot(
         let starting_time = Instant::now();
         let wasm_binary = snapshot_layout
             .wasm()
-            .deserialize(canister_snapshot_bits.binary_hash)?;
+            .lazy_load_with_module_hash(canister_snapshot_bits.binary_hash);
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
         let exported_globals = canister_snapshot_bits.exported_globals.clone();
