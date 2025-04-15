@@ -151,7 +151,7 @@ impl DelegationManager {
 
 /// Fetches a delegation from the NNS subnet to allow this subnet to issue
 /// certificates on its behalf. On the NNS subnet this method is a no-op.
-pub(crate) async fn load_root_delegation(
+async fn load_root_delegation(
     config: &Config,
     log: &ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
@@ -521,7 +521,7 @@ mod tests {
     }
 
     /// Sets up all the dependencies.
-    pub(crate) fn set_up_nns_delegation_dependencies(
+    fn set_up_nns_delegation_dependencies(
         rt_handle: tokio::runtime::Handle,
         // Optional certificate delegation returned by a mocked NNS node.
         // None means we will generate a random, valid certificate.
