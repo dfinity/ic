@@ -669,7 +669,7 @@ impl Ledger {
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
         {
             ic_cdk::trap(
-                "The fee collector account cannot be the same account as the minting account",
+                "The fee collector account cannot be the same as the minting account",
             );
         }
 

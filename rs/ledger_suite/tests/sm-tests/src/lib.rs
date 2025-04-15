@@ -4807,7 +4807,7 @@ pub fn test_setting_fee_collector_to_minting_account<T>(
         Err(err) => {
             err.assert_contains(
                 ErrorCode::CanisterCalledTrap,
-                "The fee collector account cannot be the same account as the minting account",
+                "The fee collector account cannot be the same as the minting account",
             );
         }
     }
