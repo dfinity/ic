@@ -11,10 +11,7 @@
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
-/bin/afl_test.sh          @dfinity/product-security
-/bin/afl_wrapper.sh       @dfinity/product-security
-/bin/build-all-fuzzers.sh @dfinity/product-security
-/bin/fuzzing_coverage.sh  @dfinity/product-security
+/bin/fuzzing/             @dfinity/product-security
 
 # [Bazel]
 .bazelrc                           @dfinity/idx
