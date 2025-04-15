@@ -40,7 +40,7 @@ use slog::info;
 use std::convert::TryFrom;
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 4;
+const SUBNET_SIZE: usize = 3;
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
