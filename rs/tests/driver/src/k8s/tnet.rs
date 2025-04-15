@@ -365,13 +365,9 @@ impl TNet {
         // already other k8s resources having resource requests that prevents reservation to succeeds.
         // Note that VM still gets 64 vcpus.
         let vcpus = min(42, vm_req.vcpus.get()).to_string();
-        // Same as above, we make reservation for 312142680 memory only if VM uses 512142680 memory because there are
-        // already other k8s resources having resource requests that prevents reservation to succeeds.
-        let mem = if vm_req.memory_kibibytes.to_string() == "512142680" {
-            "382142680".to_string()
-        } else {
-            vm_req.vcpus.to_string()
-        };
+        // Same as above, we make reservation for less memory if VM uses more then memory then specified below
+        // because there are already other k8s resources with resource requests that prevent this reservation to succeeds.
+        let mem = min(382142680, vm_req.memory_kibibytes.get()).to_string();
         let node = create_reservation(
             vm_name.clone(),
             vm_name.clone(),
