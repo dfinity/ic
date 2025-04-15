@@ -8,19 +8,15 @@ use ic_validate_eq_derive::ValidateEq;
 
 use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 
-const PAGES_PER_CHUNK: u64 = 256;
 /// This is the _maximum_ chunk size. A chunk may take up as little space as
 /// a single OS page. However, the cycles cost of maintaining a chunk in the
 /// store is that of the maximum chunk size. Also, the capacity calculation
 /// of the chunk store assumes every chunk is maximal, so that the number of
 /// entries in the chunk store is limited to a small number, i.e.,
 /// 'max_chunk_store_capacity' / CHUNK_SIZE = 100 entries.
-const CHUNK_SIZE: u64 = PAGES_PER_CHUNK * (PAGE_SIZE as u64);
-
-#[test]
-fn check_chunk_size() {
-    assert_eq!(1024 * 1024, CHUNK_SIZE);
-}
+pub const CHUNK_SIZE: u64 = 1024 * 1024;
+/// Depends on the OS, because OS pages have different sizes.
+const PAGES_PER_CHUNK: u64 = CHUNK_SIZE / (PAGE_SIZE as u64);
 
 pub type WasmChunkHash = [u8; 32];
 

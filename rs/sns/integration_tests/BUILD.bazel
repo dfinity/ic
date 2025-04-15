@@ -62,7 +62,6 @@ MACRO_DEPENDENCIES = [
 BASE_DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client/sender",
-    "//rs/config",
     "//rs/crypto",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
@@ -154,6 +153,7 @@ DATA_DEPS = [
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/integration_tests:unstoppable-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/node_rewards/canister:node-rewards-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/sns/governance:sns-governance-canister-test.wasm.gz",
     "//rs/sns/root:sns-root-canister",
@@ -172,6 +172,7 @@ ENV = {
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
