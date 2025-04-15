@@ -6,6 +6,9 @@ inputs:
     required: true
     description: |
       The commands to run. Will be evaluated with bash.
+  execlogs-artifact-name:
+    required: false
+    description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
   GPG_PASSPHRASE:
     required: true
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
@@ -69,6 +72,55 @@ runs:
         path: |
           ${{ steps.metrics-tmpdir.outputs.dir }}/bazel-bep-*.pb.gpg
           ${{ steps.metrics-tmpdir.outputs.dir }}/profile-*.json
+
+
+      # Remove unnecessary entries from the JSON execlogs and create a CSV out of them
+    - name: Clean up execlogs
+      shell: bash
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      run: |
+        execlogs_json_in='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.json'
+        find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.json' \
+          -exec cat {} \; > "$execlogs_json_in"
+
+        execlogs_csv_out='${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
+        if ! [ -s "$execlogs_json_in" ]; then
+          echo "no execlogs found"
+          exit 0
+        fi
+
+        # this filters out some entries from the input JSON execlogs. Without this,
+        # jq takes 3+ minutes to parse the execlogs.
+        # Effectively removes a full line of "commandArgs", and takes care of skipping
+        # multiple lines for some multiline array values we don't care about
+        prog='
+          BEGIN { arr = 0; }
+          arr == 1 && /  }],?/ { arr = 0; next }
+          arr == 1 { next }
+          /  "commandArgs":.*/ { next }
+          /  "environmentVariables": \[\{/ { arr = 1; next; }
+          /  "inputs": \[\{/ { arr = 1; next; }
+          { print }
+          '
+
+        # Turns the JSON execlogs into a CSV with the following columns:
+        #   <label>,<output path>,<hash>
+        # only the target labels matching "whitelist_pat" are considered
+        whitelist_pat='^//'
+        time (cat "$execlogs_json_in" \
+          | awk "$prog" \
+          | jq -cMr --arg whitelist_pat "$whitelist_pat" \
+              'select(.targetLabel | test($whitelist_pat)) | .targetLabel as $targetLabel | .actualOutputs | map(. | $targetLabel+","+.path+","+.digest.hash) | .[]' \
+          >"$execlogs_csv_out")
+
+    - name: Upload execution log
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.execlogs-artifact-name }}
+        if-no-files-found: ignore
+        path: |
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv
 
     - name: Cleanup
       shell: bash

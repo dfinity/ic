@@ -16,7 +16,7 @@ use pocket_ic::{
         RawEffectivePrincipal, RawMessageId, SubnetKind,
     },
     query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, RejectCode,
+    PocketIc, PocketIcBuilder, PocketIcState, RejectCode,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -2575,4 +2575,86 @@ fn test_http_methods() {
             assert_eq!(page, expected_page);
         }
     }
+}
+
+#[test]
+fn state_handle() {
+    let state = PocketIcState::new();
+
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+    let canister_id = pic.create_canister();
+    let state = pic.drop_and_take_state().unwrap();
+
+    let pic = PocketIcBuilder::new().with_state(state).build();
+    assert!(pic.canister_exists(canister_id));
+    let state = pic.drop_and_take_state().unwrap();
+
+    let path = state.into_path();
+    let state = PocketIcState::new_from_path(path);
+
+    let pic1 = PocketIcBuilder::new().with_read_only_state(&state).build();
+    assert!(pic1.canister_exists(canister_id));
+
+    let pic2 = PocketIcBuilder::new().with_read_only_state(&state).build();
+    assert!(pic2.canister_exists(canister_id));
+}
+
+#[tokio::test]
+async fn state_handle_async() {
+    let state = PocketIcState::new();
+
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build_async()
+        .await;
+    let canister_id = pic.create_canister().await;
+    let state = pic.drop_and_take_state().await.unwrap();
+
+    let pic = PocketIcBuilder::new().with_state(state).build_async().await;
+    assert!(pic.canister_exists(canister_id).await);
+    let state = pic.drop_and_take_state().await.unwrap();
+
+    let path = state.into_path();
+    let state = PocketIcState::new_from_path(path);
+
+    let pic1 = PocketIcBuilder::new()
+        .with_read_only_state(&state)
+        .build_async()
+        .await;
+    assert!(pic1.canister_exists(canister_id).await);
+
+    let pic2 = PocketIcBuilder::new()
+        .with_read_only_state(&state)
+        .build_async()
+        .await;
+    assert!(pic2.canister_exists(canister_id).await);
+}
+
+#[test]
+#[should_panic(expected = "PocketIC instance state must be empty if a read-only state is mounted.")]
+fn non_empty_state_and_read_only_state() {
+    let state = PocketIcState::new();
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+    let _canister_id = pic.create_canister();
+    let state = pic.drop_and_take_state().unwrap();
+
+    let read_only_state = PocketIcState::new();
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(read_only_state)
+        .build();
+    let _canister_id = pic.create_canister();
+    let read_only_state = pic.drop_and_take_state().unwrap();
+
+    let _pic = PocketIcBuilder::new()
+        .with_state(state)
+        .with_read_only_state(&read_only_state)
+        .build();
 }

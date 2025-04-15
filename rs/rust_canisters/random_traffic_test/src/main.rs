@@ -335,11 +335,16 @@ async fn pulse(calls_count: u32) -> u32 {
     calls_success_counter
 }
 
-/// Calls `pulse(calls_per_heartbeat)` each round.
+/// Calls `pulse(calls_per_heartbeat)` each round; increments `SUCCESSFUL_HEARTBEAT_INVOCATIONS`
+/// for heartbeats that try to make at least 1 call.
 #[heartbeat]
 async fn heartbeat() {
-    pulse(CONFIG.with_borrow(|config| config.calls_per_heartbeat)).await;
-    SUCCESSFUL_HEARTBEAT_INVOCATIONS.replace(SUCCESSFUL_HEARTBEAT_INVOCATIONS.get() + 1);
+    let calls_count = CONFIG.with_borrow(|config| config.calls_per_heartbeat);
+    if calls_count > 0 {
+        pulse(calls_count).await;
+        SUCCESSFUL_HEARTBEAT_INVOCATIONS
+            .replace(SUCCESSFUL_HEARTBEAT_INVOCATIONS.get() + calls_count);
+    }
 }
 
 /// Handles incoming calls; this method is called from the heartbeat method.

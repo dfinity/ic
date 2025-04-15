@@ -606,7 +606,7 @@ pub fn setup_nns_governance_with_correct_canister_id(
         machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         build_governance_wasm_with_features(features),
-        init_payload.encode_to_vec(),
+        Encode!(&init_payload).unwrap(),
     );
 }
 
