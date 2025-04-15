@@ -15,7 +15,7 @@ mod update_balance {
     };
     use crate::{storage, CanisterRuntime, GetUtxosResponse, Timestamp};
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_btc_interface::{Page, Utxo};
+    use ic_btc_interface::Utxo;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
@@ -309,6 +309,7 @@ mod update_balance {
                 vec![
                     NOW,                         // start time of `update_balance` method
                     NOW,                         // start time of `get_utxos` method
+                    NOW.saturating_add(latency), // time used by `get_utxos_cache.insert
                     NOW.saturating_add(latency), // end time of `get_utxos` method
                     NOW.saturating_add(latency), // time used to triage processable UTXOs
                     NOW.saturating_add(latency), // event timestamp
@@ -396,7 +397,7 @@ mod update_balance {
                         let next_page = if idx == num_pages - 1 {
                             None
                         } else {
-                            Some(Page::new())
+                            Some(vec![idx as u8].into())
                         };
                         Ok(GetUtxosResponse {
                             next_page: next_page.clone(),
@@ -431,11 +432,7 @@ mod update_balance {
                 account_utxos,
                 num_pages,
             );
-            // The divided-by-2 below is because each get_utxos call will call runtime.time()
-            // twice (when no cache is involved) before metrics is recorded. So to achieve
-            // the overall `latency` around a single get_utxos canister call, the increment
-            // per runtime.time() call has to be `latency / 2`.
-            mock_increasing_time(&mut runtime, *now, latency / 2);
+            mock_increasing_time(&mut runtime, *now, latency);
             let utxos = get_utxos(
                 btc_network,
                 &address,
