@@ -364,11 +364,11 @@ impl TNet {
         // We make reservation for 42 vcpus only if VM uses 64 vcpus because there are
         // already other k8s resources having resource requests that prevents reservation to succeeds.
         // Note that VM still gets 64 vcpus.
-        let vcpus = min(36, vm_req.vcpus.get()).to_string();
+        let vcpus = min(42, vm_req.vcpus.get()).to_string();
         // Same as above, we make reservation for 312142680 memory only if VM uses 512142680 memory because there are
         // already other k8s resources having resource requests that prevents reservation to succeeds.
         let mem = if vm_req.memory_kibibytes.to_string() == "512142680" {
-            "352142680".to_string()
+            "382142680".to_string()
         } else {
             vm_req.vcpus.to_string()
         };
