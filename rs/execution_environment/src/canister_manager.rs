@@ -24,7 +24,8 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash, GlobalTimer,
     Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
-    StoredChunksReply, UploadChunkReply,
+    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
@@ -2135,6 +2136,41 @@ impl CanisterManager {
             }
         };
         res.map(ReadCanisterSnapshotDataResponse::new)
+    }
+
+    pub(crate) fn create_snapshot_from_metadata(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+        args: UploadCanisterSnapshotMetadataArgs,
+        state: &mut ReplicatedState,
+        subnet_size: usize,
+        round_limits: &mut RoundLimits,
+        resource_saturation: &ResourceSaturation,
+    ) -> (Result<(), CanisterManagerError>, NumInstructions) {
+        let UploadCanisterSnapshotMetadataArgs {
+            canister_id,
+            replace_snapshot,
+            wasm_module_size,
+            exported_globals,
+            wasm_memory_size,
+            stable_memory_size,
+            certified_data,
+            global_timer,
+            on_low_wasm_memory_hook_status,
+        } = args;
+        todo!()
+    }
+
+    pub(crate) fn write_snapshot_data(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+        args: &UploadCanisterSnapshotDataArgs,
+        state: &mut ReplicatedState,
+        subnet_size: usize,
+    ) -> Result<(), CanisterManagerError> {
+        todo!()
     }
 }
 
