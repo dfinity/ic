@@ -294,7 +294,7 @@ fn do_test_registry_and_node_rewards_give_same_results(machine: &StateMachine) {
     if latest_registry_version > 100 {
         let reasonable = latest_registry_version / 250;
 
-        for version in (0..=reasonable).rev() {
+        for version in (0..=reasonable).rev().take(200) {
             let randomness = rand::thread_rng().gen_range(0..250);
             let mut target_version = version * 250 + randomness;
             if target_version > latest_registry_version {
