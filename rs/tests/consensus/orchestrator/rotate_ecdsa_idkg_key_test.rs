@@ -48,7 +48,7 @@ use ic_types::Height;
 use slog::{info, warn, Logger};
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 3;
+const SUBNET_SIZE: usize = 4;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
