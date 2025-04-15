@@ -93,15 +93,6 @@ This means that some development and testing could be done on the docker image i
 
 As a caching optimization, additional IC services, configuration, scripts and binaries are added to the image late in the build process.
 
-== IC-OS Directory Organization
-
-* *components/*: This directory contains scripts and components that are copied to the target IC-OS.
-** For instructions on how to make changes to the OS, refer to the link:components/README.adoc#[components/ documentation]
-
-* *bootloader/*: This directory contains everything related to building EFI firmware and the GRUB bootloader image. 
-
-* *scripts/*: This directory contains build and utility scripts for the IC-OS.
-
 == Adding a new dependency to an IC-OS image
 
 To add a new package to an IC-OS image you need to:

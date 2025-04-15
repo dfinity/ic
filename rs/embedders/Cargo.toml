@@ -79,6 +79,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 insta = "1.8.0"
 lazy_static = { workspace = true }
 maplit = "1.0.2"
+more-asserts = "0.3.1"
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 slog = { workspace = true }

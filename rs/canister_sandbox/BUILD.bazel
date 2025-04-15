@@ -123,7 +123,10 @@ rust_binary(
     srcs = ["bin/test_controller.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":backend_lib"],
+    deps = DEPENDENCIES + [
+        ":backend_lib",
+        "@crate_index//:tempfile",
+    ],
 )
 
 rust_binary(
@@ -131,7 +134,10 @@ rust_binary(
     srcs = ["bin/test_sandbox.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":backend_lib"],
+    deps = DEPENDENCIES + [
+        ":backend_lib",
+        "@crate_index//:tempfile",
+    ],
 )
 
 rust_binary(

@@ -14,10 +14,9 @@ use std::time::SystemTime;
 
 pub fn acc_id(seed: u64) -> AccountIdentifier {
     let mut rng = StdRng::seed_from_u64(seed);
-    let keypair = ic_canister_client_sender::Ed25519KeyPair::generate(&mut rng);
-    let public_key_der =
-        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public_key.to_vec());
-
+    let secret_key = ic_ed25519::PrivateKey::generate_using_rng(&mut rng);
+    let public_key = secret_key.public_key();
+    let public_key_der = public_key.serialize_rfc8410_der().to_vec();
     PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 

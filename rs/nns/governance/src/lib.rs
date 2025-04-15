@@ -163,9 +163,11 @@ pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
+mod maturity_disbursement_index;
 mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
+mod neuron_lock;
 mod neuron_store;
 pub mod neurons_fund;
 mod node_provider_rewards;
@@ -198,17 +200,18 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
-    // TODO(NNS1-3601): Delete these (assuming all goes well, ofc) in mid March.
-    // There is already a draft PR for this.
-    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
-    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(true) };
-
     static ALLOW_ACTIVE_NEURONS_IN_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static MIGRATE_ACTIVE_NEURONS_TO_STABLE_MEMORY: Cell<bool> = const { Cell::new(true) };
 
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
+
+    static IS_DISBURSE_MATURITY_ENABLED: Cell<bool>
+        = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
+
+    static USE_NODE_PROVIDER_REWARD_CANISTER: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -216,38 +219,6 @@ thread_local! {
     // begun. (This occurs in one of the prune_some_following functions.)
     static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
         const { Cell::new(0) };
-}
-
-pub fn is_voting_power_adjustment_enabled() -> bool {
-    IS_VOTING_POWER_ADJUSTMENT_ENABLED.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_voting_power_adjustment() -> Temporary {
-    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_voting_power_adjustment() -> Temporary {
-    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, false)
-}
-
-pub fn is_prune_following_enabled() -> bool {
-    IS_PRUNE_FOLLOWING_ENABLED.get()
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_prune_following() -> Temporary {
-    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, true)
-}
-
-/// Only integration tests should use this.
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_prune_following() -> Temporary {
-    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, false)
 }
 
 pub fn allow_active_neurons_in_stable_memory() -> bool {
@@ -296,6 +267,36 @@ pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
+}
+
+pub fn is_disburse_maturity_enabled() -> bool {
+    IS_DISBURSE_MATURITY_ENABLED.get()
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_disburse_maturity() -> Temporary {
+    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_disburse_maturity() -> Temporary {
+    Temporary::new(&IS_DISBURSE_MATURITY_ENABLED, false)
+}
+
+pub fn use_node_provider_reward_canister() -> bool {
+    USE_NODE_PROVIDER_REWARD_CANISTER.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_node_provider_reward_canister() -> Temporary {
+    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_node_provider_reward_canister() -> Temporary {
+    Temporary::new(&USE_NODE_PROVIDER_REWARD_CANISTER, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -571,6 +572,7 @@ pub fn encode_metrics(
         following: following_index_len,
         known_neuron: known_neuron_index_len,
         account_id: account_id_index_len,
+        maturity_disbursement: maturity_disbursement_index_len,
     } = governance.neuron_store.stable_indexes_lens();
 
     w.encode_gauge(
@@ -598,6 +600,13 @@ pub fn encode_metrics(
         account_id_index_len as f64,
         "Total number of entries in the account_id index",
     )?;
+    if is_disburse_maturity_enabled() {
+        w.encode_gauge(
+            "governance_maturity_disbursement_index_len",
+            maturity_disbursement_index_len as f64,
+            "Total number of entries in the maturity disbursement index",
+        )?;
+    }
 
     let mut builder = w.gauge_vec(
         "governance_proposal_deadline_timestamp_seconds",
