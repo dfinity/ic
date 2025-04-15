@@ -13,9 +13,9 @@ mod update_balance {
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{storage, Timestamp};
+    use crate::{storage, GetUtxosResponse, Timestamp};
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_btc_interface::{GetUtxosResponse, Page, Utxo};
+    use ic_btc_interface::{Page, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
