@@ -1374,8 +1374,8 @@ impl<Inner> Timestamped<Inner> {
 /// then all existing entries with a timestamp less than `t - expiration` are removed before
 /// the new entry is inserted.
 ///
-/// On the other hand, lookups are not affected by expiration because they are ready only.
-/// If an old entry is found, it is returned regardless of its timestamp.
+/// Similarly, lookups will also take an additional timestamp as argument, and only entries
+/// newer than that will be returned.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CacheWithExpiration<Key, Value> {
     expiration: Duration,

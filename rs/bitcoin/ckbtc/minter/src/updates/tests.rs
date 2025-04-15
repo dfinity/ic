@@ -13,7 +13,7 @@ mod update_balance {
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{storage, GetUtxosResponse, Timestamp};
+    use crate::{storage, CanisterRuntime, GetUtxosResponse, Timestamp};
     use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::{Page, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
@@ -431,9 +431,12 @@ mod update_balance {
                 account_utxos,
                 num_pages,
             );
-            *now = now.saturating_add(latency);
-            mock_increasing_time(&mut runtime, *now, latency);
-            Ok(get_utxos(
+            // The divided-by-2 below is because each get_utxos call will call runtime.time()
+            // twice (when no cache is involved) before metrics is recorded. So to achieve
+            // the overall `latency` around a single get_utxos canister call, the increment
+            // per runtime.time() call has to be `latency / 2`.
+            mock_increasing_time(&mut runtime, *now, latency / 2);
+            let utxos = get_utxos(
                 btc_network,
                 &address,
                 min_confirmations,
@@ -441,7 +444,11 @@ mod update_balance {
                 &runtime,
             )
             .await?
-            .utxos)
+            .utxos;
+            // The following is to make sure time sequence is strictly increasing
+            *now = runtime.time().into();
+            *now = now.saturating_add(Duration::from_secs(1));
+            Ok(utxos)
         }
 
         let mut now = NOW;
@@ -511,9 +518,8 @@ mod update_balance {
                 .set_expiration(Duration::from_millis(2500))
         });
 
-        async fn get_utxos_with_latency(
-            now: &mut Timestamp,
-            latency: Duration,
+        async fn get_utxos_with_no_latency(
+            now: Timestamp,
             account_utxos: Vec<Utxo>,
             call_source: CallSource,
         ) -> Result<Vec<Utxo>, CallError> {
@@ -523,8 +529,7 @@ mod update_balance {
             let address = read_state(|s| account_to_p2wpkh_address_from_state(s, &account));
             let mut runtime = MockCanisterRuntime::new();
             mock_get_utxos_for_account(&mut runtime, account, account_utxos);
-            *now = now.saturating_add(latency);
-            mock_increasing_time(&mut runtime, *now, latency);
+            mock_constant_time(&mut runtime, now, 3);
             Ok(get_utxos(
                 btc_network,
                 &address,
@@ -538,28 +543,29 @@ mod update_balance {
 
         let mut now = NOW;
         // get_utxos calls with 1 page
-        let get_utxos_latencies_ms = [0, 100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
+        let get_utxos_latencies_ms = [100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
         for millis in &get_utxos_latencies_ms {
-            let result = get_utxos_with_latency(
-                &mut now,
-                Duration::from_millis(*millis),
-                vec![utxo()],
-                CallSource::Minter,
-            )
-            .await;
+            let result = get_utxos_with_no_latency(now, vec![utxo()], CallSource::Minter).await;
+            now = now.saturating_add(Duration::from_millis(*millis));
             assert_eq!(result, Ok(vec![utxo()]));
         }
         assert_eq!(
             crate::metrics::GET_UTXOS_MINTER_CALLS.with(|calls| calls.get()),
             get_utxos_latencies_ms.len() as u64
         );
+        // Because the latency between each call to `get_utxos` follows the above
+        // `get_utxos_latencies_ms` setting, there are only 3 cache hits for the
+        // 2nd, 3rd and 4th call. By the time of 5th call (at time 3349ms), the
+        // cached entry (at time 0ms) is already considered expired for an expiry
+        // setting of 2500ms. All later calls are more than 2500ms inbetween. So
+        // in totally we have 3 hits.
         assert_eq!(
             crate::metrics::GET_UTXOS_CACHE_HITS.with(|calls| calls.get()),
             3,
         );
         assert_eq!(
             crate::metrics::GET_UTXOS_CACHE_MISSES.with(|calls| calls.get()),
-            7,
+            6,
         );
     }
 
