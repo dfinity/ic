@@ -516,22 +516,14 @@ fn validate_reshare_dealings(
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if !curr_payload.ongoing_xnet_reshares.contains_key(request) {
             if let Some(response) = new_reshare_agreement.get(request) {
-                use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
-                    let dealings_response = ComputeInitialIDkgDealingsResponse::decode(data)
-                        .map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                        })?;
+                    let initial_dealings = decode_initial_dealings(data)?;
                     let transcript_id = config.as_ref().transcript_id;
                     let param = config
                         .as_ref()
                         .translate(block_reader)
                         .map_err(InvalidIDkgPayloadReason::from)?;
-                    let initial_dealings =
-                        InitialIDkgDealings::try_from(&dealings_response.initial_dkg_dealings)
-                            .map_err(|err| {
-                                InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                            })?;
+
                     crypto
                         .verify_initial_dealings(&param, &initial_dealings)
                         .map_err(InvalidIDkgPayloadReason::from)?;
@@ -543,6 +535,31 @@ fn validate_reshare_dealings(
         }
     }
     Ok(new_dealings)
+}
+
+// TODO(CRP-2613): Remove the ComputeInitialIDkgDealingsResponse case, once the migration of the registry has happened
+fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidIDkgPayloadReason> {
+    use ic_management_canister_types_private::{
+        ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
+    };
+    let initial_dealings = match ComputeInitialIDkgDealingsResponse::decode(data) {
+        Ok(dealings_response) => dealings_response.initial_dkg_dealings,
+        Err(_) => {
+            let reshare_chain_key_response = ReshareChainKeyResponse::decode(data)
+                .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
+            match reshare_chain_key_response {
+                ReshareChainKeyResponse::IDkg(initial_idkg_dealings) => initial_idkg_dealings,
+                ReshareChainKeyResponse::NiDkg(_) => {
+                    return Err(InvalidIDkgPayloadReason::DecodingError(
+                        "Found an IDkg response".to_string(),
+                    ))
+                }
+            }
+        }
+    };
+
+    InitialIDkgDealings::try_from(&initial_dealings)
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))
 }
 
 // Validate new signature agreements in the current payload.
