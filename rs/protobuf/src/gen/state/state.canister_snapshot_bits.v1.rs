@@ -18,8 +18,8 @@ pub struct CanisterSnapshotBits {
     pub canister_version: u64,
     #[prost(bytes = "vec", tag = "5")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", optional, tag = "6")]
-    pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub binary_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "7")]
     pub wasm_chunk_store_metadata:
         ::core::option::Option<super::super::canister_state_bits::v1::WasmChunkStoreMetadata>,

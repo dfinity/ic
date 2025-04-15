@@ -27,7 +27,9 @@ use ic_management_canister_types_private::{
     StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkHash;
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
+    WasmChunkHash, CHUNK_SIZE,
+};
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
@@ -1981,10 +1983,11 @@ impl CanisterManager {
     pub(crate) fn read_snapshot_data(
         &self,
         sender: PrincipalId,
-        canister: &CanisterState,
+        canister: &mut CanisterState,
         snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
         state: &ReplicatedState,
+        subnet_size: usize,
     ) -> Result<ReadCanisterSnapshotDataResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2001,6 +2004,29 @@ impl CanisterManager {
                 snapshot_id,
             });
         }
+
+        // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
+        let num_response_bytes = match &kind {
+            CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
+            CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
+            CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
+            // In this case, we might overcharge. But the stored chunks are also charged fully even if they are smaller.
+            CanisterSnapshotDataKind::WasmChunk { .. } => CHUNK_SIZE,
+        };
+        let size = NumInstructions::new(num_response_bytes);
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            canister,
+            self.config
+                .canister_snapshot_data_baseline_instructions
+                .saturating_add(&size),
+            subnet_size,
+            // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
+            WasmExecutionMode::Wasm32,
+        ) {
+            return Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err));
+        };
+
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
                 if size > MAX_SLICE_SIZE_BYTES {
