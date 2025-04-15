@@ -225,7 +225,7 @@ impl Transport for QuicTransport {
             .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
         peer.rpc(request).await.inspect_err(|err| {
-            info!(self.log, "{:#?}", err);
+            info!(every_n_seconds => 5, self.log, "Error sending rpc request to {}: {:?}", peer_id, err);
         })
     }
 

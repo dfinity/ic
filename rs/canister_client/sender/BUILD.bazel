@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
-    "//rs/crypto/secp256k1",
+    "//packages/ic-secp256k1",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:rand",

@@ -111,6 +111,7 @@ fn setup_and_run_ic_ref_test(
     // create live PocketIc instance
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
+        .with_ii_subnet()
         .with_application_subnet()
         .build();
     let endpoint = pic.make_live(None);
@@ -130,15 +131,18 @@ fn setup_and_run_ic_ref_test(
         .map(|n| Principal::from_slice(&n.node_id))
         .collect();
 
+    let ic_ref_test_path = std::env::var_os("IC_REF_TEST_BIN")
+        .expect("Missing ic-ref-test")
+        .into_string()
+        .unwrap()
+        .into();
+
     // derive artifact paths
     let ic_ref_test_root = std::env::var_os("IC_REF_TEST_ROOT")
         .expect("Missing ic-hs directory")
         .into_string()
         .unwrap();
     let root_dir = std::path::PathBuf::from(ic_ref_test_root);
-    let mut ic_ref_test_path = root_dir.clone();
-    ic_ref_test_path.push("bin");
-    ic_ref_test_path.push("ic-ref-test");
     let mut ic_test_data_path = root_dir.clone();
     ic_test_data_path.push("test-data");
 
@@ -188,7 +192,7 @@ fn setup_and_run_ic_ref_test(
     run_ic_ref_test(
         httpbin_proto,
         Some(httpbin_url),
-        ic_ref_test_path.into_os_string().into_string().unwrap(),
+        ic_ref_test_path,
         ic_test_data_path,
         endpoint.to_string(),
         test_subnet_config,

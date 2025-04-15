@@ -36,7 +36,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str, UploadMethod};
+use util::{block_on, parse_hex_str, DataLocation};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -368,6 +368,16 @@ impl Recovery {
         }
     }
 
+    /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
+    /// node to the recovery data directory.
+    pub fn get_copy_local_state_step(&self) -> impl Step {
+        CopyLocalIcStateStep {
+            logger: self.logger.clone(),
+            working_dir: self.work_dir.display().to_string(),
+            require_confirmation: self.ssh_confirmation,
+        }
+    }
+
     /// Return a [ReplayStep] to replay the downloaded state of the given
     /// subnet.
     pub fn get_replay_step(
@@ -504,7 +514,7 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, upload_method: UploadMethod) -> impl Step {
+    pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step {
         self.get_upload_and_restart_step_with_data_src(
             upload_method,
             self.work_dir.join(IC_STATE_DIR),
@@ -515,7 +525,7 @@ impl Recovery {
     /// a node and restart it.
     pub fn get_upload_and_restart_step_with_data_src(
         &self,
-        upload_method: UploadMethod,
+        upload_method: DataLocation,
         data_src: PathBuf,
     ) -> impl Step {
         UploadAndRestartStep {

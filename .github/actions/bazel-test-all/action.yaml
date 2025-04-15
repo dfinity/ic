@@ -1,88 +1,127 @@
 name: 'Bazel-Test-All'
 description: 'Run Bazel Test'
 inputs:
+  diff-only:
+    required: false
+    default: false
+  release-build:
+    required: false
+    default: true
+  execlogs-artifact-name:
+    required: false
+    description: "When provided, the execlogs will be uploaded as an artifact with the specified name."
   BAZEL_COMMAND:
     required: true
     default: 'test'
   BAZEL_TARGETS:
-    required: false
-    default: '//...'
-  BAZEL_CI_CONFIG:
-    required: false
-    default: '--config=ci'
-  BAZEL_EXTRA_ARGS:
-    required: false
-    default: ''
-  BAZEL_STARTUP_ARGS:
-    required: false
-    default: '--output_base=/var/tmp/bazel-output/'
-  BUILDEVENT_APIKEY:
+    required: true
+  CLOUD_CREDENTIALS_CONTENT:
     required: false
   SSH_PRIVATE_KEY_BACKUP_POD:
     required: false
   GPG_PASSPHRASE:
-    required: false
+    required: true
+    description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
 
 runs:
   using: "composite"
   steps:
-      - name: Run Bazel Test All
-        id: bazel-test-all
+      - name: Prepare worker cache
         shell: bash
         run: |
-          set +e # manual error handling to ensure we can run some post-build commands
-
-          if [ -n "$SSH_PRIVATE_KEY_BACKUP_POD" ]; then
-            # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY_BACKUP_POD}"; }
-            rm -rf ~/.ssh
-            mkdir -p ~/.ssh
-            chmod 0700 ~/.ssh
-            echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+          # freshly deployed k8s machines require ownership correctly set
+          if [ -e /cache ]; then
+            sudo find /cache \( -not -user 1001 -or -not -group 1001 \) -exec chown 1001:1001 {} +
           fi
 
-          # unset honeycomb api key but use it latter for exporter
-          # TODO: remove exporter when users can use superset
-          KEY=${BUILDEVENT_APIKEY:-""}
-          unset BUILDEVENT_APIKEY
-
-          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
-          BAZEL_EXIT_CODE="$?"
-
-          export BUILDEVENT_APIKEY="$KEY"
-
-          if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
-              # avoid output unless an error occurs during bes export. This ensures
-              # only the (more relevant) output from the main bazel command is shown.
-              exportout=$(mktemp)
-              if ! bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
-                echo "bes export failed:"
-                cat "$exportout"
-              fi
-              rm "$exportout"
-              echo "BEP events exported to honeycomb!"
+      - name: Set up backup pod access
+        shell: bash
+        if: inputs.SSH_PRIVATE_KEY_BACKUP_POD != ''
+        run: |
+          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            eval "$(ssh-agent -s)"
+            ssh-add - <<< '${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}'
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           fi
-          if [ -n "$GPG_PASSPHRASE" ] && [ -f ./bazel-bep.pb ]; then
-              gpg --symmetric --cipher-algo AES256 -o bazel-bep.pb.gpg \
-                  --passphrase "$GPG_PASSPHRASE" --batch --yes bazel-bep.pb
-          fi
-          rm -f bazel-bep.pb
 
-          # output node name to gihub step summary
-          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
+          rm -rf ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 0700 ~/.ssh
+          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
 
-          exit "$BAZEL_EXIT_CODE"
+      - name: Write AWS credentials
+        shell: bash
+        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        run: |
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
         env:
-          BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
-          BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
-          BAZEL_CI_CONFIG: ${{ inputs.BAZEL_CI_CONFIG }}
-          BAZEL_EXTRA_ARGS: ${{ inputs.BAZEL_EXTRA_ARGS }}
-          BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
-          CI_EVENT_NAME: ${{ github.event_name }}
-          CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SSH_PRIVATE_KEY_BACKUP_POD: ${{ inputs.SSH_PRIVATE_KEY_BACKUP_POD }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
           GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+          execlogs-artifact-name: ${{ inputs.execlogs-artifact-name }}
+          run: |
+            set -euo pipefail
+
+            diff_only='${{ inputs.diff-only }}'
+            release_build='${{ inputs.release-build }}'
+
+            bazel_args=( )
+
+            if [[ $release_build == "true" ]]; then
+              bazel_args+=( --config=release )
+            fi
+
+            BAZEL_TARGETS='${{ inputs.BAZEL_TARGETS }}'
+
+            bazel_targets=( )
+            for tgt in $BAZEL_TARGETS; do
+              bazel_targets+=( "$tgt" )
+            done
+
+
+            if [[ $diff_only == "true" ]]; then
+                target_pattern_file=$(mktemp)
+                trap "rm $target_pattern_file" INT TERM EXIT
+
+                merge_base_sha='${{ github.event.pull_request.base.sha }}'
+                branch_head_sha='${{ github.event.pull_request.head.sha }}'
+
+                # we can't use HEAD as a fallback for branch_head_sha because that is
+                # the merge commit which contains the changes of the current HEAD of master
+                # XXX: the logic was ported from a legacy script though ranges like `HEAD..`
+                # may not make much sense
+                commit_range="${merge_base_sha:-HEAD}..${branch_head_sha:-}"
+                # get bazel targets that changed in the commit range and take the union with
+                # the targets that are expected to be built.
+                comm -12 \
+                  <("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh "$commit_range" | sort) \
+                  <(IFS='+'; bazel query "${bazel_targets[*]} except attr(tags, \"manual\", //...)" | sort; ) > "$target_pattern_file"
+
+                # if bazel targets is empty we don't need to run any tests
+                if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
+                  echo "No bazel targets to build"
+                  exit 0
+                fi
+
+                # If there are targets to build, pass them as a file to avoid bash & the OS
+                # complaining about the argument list being too long.
+                bazel_args+=( --target_pattern_file="$target_pattern_file" )
+            else
+                bazel_args+=( "${bazel_targets[@]}" )
+            fi
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            if [[ $release_build == "true" ]]; then
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}" --config=release
+            else
+              bazel ${{ inputs.BAZEL_COMMAND }} "${bazel_args[@]}"
+            fi

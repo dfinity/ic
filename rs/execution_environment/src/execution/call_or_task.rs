@@ -3,27 +3,29 @@
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, update_round_limits, validate_message,
+    ingress_status_with_processing_state, log_dirty_pages, update_round_limits, validate_message,
     wasm_result_to_query_response,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
+    wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
     CallOrigin, CanisterState,
 };
-use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
     CanisterTask, RequestMetadata,
@@ -52,7 +54,7 @@ pub fn execute_call_or_task(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (mut clean_canister, prepaid_execution_cycles, resuming_aborted) =
+    let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
             None => {
@@ -85,7 +87,7 @@ pub fn execute_call_or_task(
                     Err(err) => {
                         if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
                             //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // but it was not executed due to the freezing of the canister. To ensure that the hook is executed
                             // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
                             // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
                             // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
@@ -151,31 +153,13 @@ pub fn execute_call_or_task(
     let helper = match CallOrTaskHelper::new(&clean_canister, &original, deallocation_sender) {
         Ok(helper) => helper,
         Err(err) => {
-            if err.code() == ErrorCode::CanisterWasmMemoryLimitExceeded
-                && original.call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory)
-            {
-                //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                // but its was not executed due to error `WasmMemoryLimitExceeded`. To ensure that the hook is executed
-                // when the error is resolved we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
-                // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
-                // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
-                // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
-                clean_canister
-                    .system_state
-                    .task_queue
-                    .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-                clean_canister
-                    .system_state
-                    .task_queue
-                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-            }
             return finish_err(
                 clean_canister,
                 original.execution_parameters.instruction_limits.message(),
                 err,
                 original,
                 round,
-            );
+            )
         }
     };
 
@@ -371,7 +355,7 @@ impl CallOrTaskHelper {
         validate_message(&canister, &original.method)?;
 
         match original.call_or_task {
-            CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
+            CanisterCallOrTask::Update(_) => {
                 let wasm_memory_usage = canister
                     .execution_state
                     .as_ref()
@@ -390,6 +374,9 @@ impl CallOrTaskHelper {
                     }
                 }
             }
+            // TODO(RUN-957): Enforce the `wasm_memory_limit` in heartbeat and timer after
+            // canister logging ships.
+            CanisterCallOrTask::Task(_) => (),
             CanisterCallOrTask::Query(_) => {
                 if let WasmMethod::CompositeQuery(_) = &original.method {
                     let user_error = UserError::new(
@@ -497,7 +484,6 @@ impl CallOrTaskHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister.append_log(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -570,27 +556,23 @@ impl CallOrTaskHelper {
             }
             // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
-                if output.wasm_result.is_ok() {
-                    match canister_state_changes
-                        .system_state_modifications
-                        .apply_changes(
-                            round.time,
-                            &mut self.canister.system_state,
-                            round.network_topology,
-                            round.hypervisor.subnet_id(),
-                            round.log,
-                        ) {
-                        Ok(_) => self.canister.system_state.canister_version += 1,
-                        Err(err) => {
-                            return finish_err(
-                                clean_canister,
-                                output.num_instructions_left,
-                                err.into_user_error(&original.canister_id),
-                                original,
-                                round,
-                            );
-                        }
-                    }
+                if let Err(err) = canister_state_changes
+                    .system_state_modifications
+                    .apply_changes(
+                        round.time,
+                        &mut self.canister.system_state,
+                        round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        round.log,
+                    )
+                {
+                    return finish_err(
+                        clean_canister,
+                        output.num_instructions_left,
+                        err.into_user_error(&original.canister_id),
+                        original,
+                        round,
+                    );
                 }
                 NumBytes::from(0)
             }

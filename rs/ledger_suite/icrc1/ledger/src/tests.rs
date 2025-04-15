@@ -80,7 +80,7 @@ fn default_init_args() -> InitArgs {
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
             more_controller_ids: None,
-            cycles_for_archive_creation: None,
+            cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
         max_memo_length: None,

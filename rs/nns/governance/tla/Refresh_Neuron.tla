@@ -1,12 +1,8 @@
 ------------ MODULE Refresh_Neuron ------------
-EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
-
-CONSTANT
-    FRESH_NEURON_ID(_)
+EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants, Common
 
 CONSTANTS
-    Governance_Account_Ids,
-    Neuron_Ids
+    Governance_Account_Ids
 
 CONSTANTS
     Refresh_Neuron_Process_Ids
@@ -16,15 +12,6 @@ CONSTANTS
     MIN_STAKE,
     \* The transfer fee charged by the ledger canister
     TRANSACTION_FEE
-
-DUMMY_ACCOUNT == ""
-
-\* @type: (a -> b, Set(a)) => a -> b;
-Remove_Arguments(f, S) == [ x \in (DOMAIN f \ S) |-> f[x]]
-
-request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
-account_balance(account) == Variant("AccountBalance", [account |-> account])
-
 
 (* --algorithm Governance_Ledger_Refresh_Neuron {
 
@@ -88,12 +75,12 @@ process ( Refresh_Neuron \in Refresh_Neuron_Process_Ids )
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "e3951dde" /\ chksum(tla) = "3003d9f1")
-VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
-          ledger_to_governance, spawning_neurons, pc, neuron_id
+\* BEGIN TRANSLATION (chksum(pcal) = "e3951dde" /\ chksum(tla) = "d922bb3e")
+VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
+          ledger_to_governance, spawning_neurons, neuron_id
 
-vars == << neuron, neuron_id_by_account, locks, governance_to_ledger, 
-           ledger_to_governance, spawning_neurons, pc, neuron_id >>
+vars == << pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
+           ledger_to_governance, spawning_neurons, neuron_id >>
 
 ProcSet == (Refresh_Neuron_Process_Ids)
 
@@ -116,7 +103,7 @@ RefreshNeuron1(self) == /\ pc[self] = "RefreshNeuron1"
                                    /\ locks' = (locks \union {neuron_id'[self]})
                                    /\ governance_to_ledger' = Append(governance_to_ledger, request(self, account_balance(neuron[nid].account)))
                               /\ pc' = [pc EXCEPT ![self] = "WaitForBalanceQuery"]
-                        /\ UNCHANGED << neuron, neuron_id_by_account, 
+                        /\ UNCHANGED << neuron, neuron_id_by_account,
                                         ledger_to_governance, spawning_neurons >>
 
 WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
@@ -133,8 +120,8 @@ WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                                   /\ locks' = locks \ {neuron_id[self]}
                              /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
                              /\ pc' = [pc EXCEPT ![self] = "Done"]
-                             /\ UNCHANGED << neuron_id_by_account, 
-                                             governance_to_ledger, 
+                             /\ UNCHANGED << neuron_id_by_account,
+                                             governance_to_ledger,
                                              spawning_neurons >>
 
 Refresh_Neuron(self) == RefreshNeuron1(self) \/ WaitForBalanceQuery(self)

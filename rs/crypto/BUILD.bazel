@@ -59,6 +59,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-secp256k1",
     "//packages/ic-vetkd-utils",
     "//rs/certification/test-utils",
     "//rs/crypto/ecdsa_secp256r1",
@@ -74,7 +75,6 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
-    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
@@ -261,6 +261,16 @@ rust_bench(
     name = "canister_sig_bench",
     testonly = True,
     srcs = ["benches/canister_sig.rs"],
+    aliases = ALIASES,
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "vetkd_bench",
+    testonly = True,
+    srcs = ["benches/vetkd.rs"],
     aliases = ALIASES,
     pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,

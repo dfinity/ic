@@ -1,4 +1,4 @@
-use crate::{payload_builder, utils, PayloadCreationError};
+use crate::{crypto_validate_dealing, payload_builder, utils, PayloadCreationError};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::DkgPool,
@@ -278,17 +278,8 @@ fn validate_dealings_payload(
             return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
         };
 
-        let dealer_id = message.signature.signer;
-        // If the dealer is not in the set of dealers, reject.
-        if !config.dealers().get().contains(&dealer_id) {
-            return Err(InvalidDkgPayloadReason::InvalidDealer(dealer_id).into());
-        }
-
-        // Verify the signature.
-        crypto.verify(message, last_summary.registry_version)?;
-
-        // Verify the dealing.
-        crypto.verify_dealing(config, message.signature.signer, &message.content.dealing)?;
+        // Verify the signature and dealing.
+        crypto_validate_dealing(crypto, config, message)?;
     }
 
     Ok(())
@@ -297,9 +288,18 @@ fn validate_dealings_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{DkgImpl, DkgKeyManager};
+    use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+    use ic_interfaces::{
+        consensus_pool::ConsensusPool,
+        dkg::ChangeAction,
+        p2p::consensus::{MutablePool, PoolMutationsProducer},
+    };
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_registry_keys::make_subnet_record_key;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{
@@ -312,9 +312,13 @@ mod tests {
             idkg, DataPayload, Payload,
         },
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        time::UNIX_EPOCH,
         RegistryVersion,
     };
-    use std::ops::Deref;
+    use std::{
+        ops::Deref,
+        sync::{Arc, Mutex},
+    };
 
     /// This tests the `validate_payload` function.
     /// It sets up a subnet with 4 nodes and a dkg interval of 4.
@@ -620,5 +624,169 @@ mod tests {
             "DKG validator counter",
             &["type"],
         )
+    }
+
+    /// Test that dealings are created and validated using the same registry version
+    #[test]
+    fn test_validate_payload_dealings_registry_version() {
+        let registry_version_start = RegistryVersion::new(1);
+        let registry_version_active = RegistryVersion::new(5);
+        // The node is registered at registry verions 5, at which point its node keys exist.
+        let node_id = node_test_id(1);
+        let subnet_id = subnet_test_id(0);
+        let crypto = TempCryptoComponent::builder()
+            .with_node_id(node_id)
+            .with_keys_in_registry_version(NodeKeysToGenerate::all(), registry_version_active)
+            .build_arc();
+        let committee = vec![node_id];
+        let dkg_interval_length = 9;
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                registry,
+                state_manager,
+                registry_data_provider,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    registry_version_start.get(),
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+
+            // Both summary registry versions should be 1 initially
+            let summary_block = pool.as_cache().summary_block();
+            assert_eq!(summary_block.height.get(), 0);
+            assert_eq!(
+                summary_block.context.registry_version,
+                registry_version_start
+            );
+            assert_eq!(
+                summary_block
+                    .payload
+                    .as_ref()
+                    .as_summary()
+                    .dkg
+                    .registry_version,
+                registry_version_start
+            );
+
+            // Bump the registry version (by creating a random subnet)
+            registry_data_provider
+                .add(
+                    &make_subnet_record_key(subnet_test_id(5)),
+                    registry_version_active,
+                    Some(ic_types::subnet_id_into_protobuf(subnet_test_id(5))),
+                )
+                .unwrap();
+            registry.update_to_latest_version();
+
+            // Advance pool by one DKG interval
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+
+            // The context summary registry version should now be the active version
+            let summary_block = pool.as_cache().summary_block();
+            assert_eq!(summary_block.height.get(), 10);
+            assert_eq!(
+                summary_block.context.registry_version,
+                registry_version_active
+            );
+            let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+            assert_eq!(dkg_summary.registry_version, registry_version_start);
+
+            // Create the DKG components
+            let key_manager = DkgKeyManager::new(
+                MetricsRegistry::new(),
+                crypto.clone(),
+                no_op_logger(),
+                &PoolReader::new(&pool),
+            );
+            let key_manager = Arc::new(Mutex::new(key_manager));
+            let dkg_impl = DkgImpl::new(
+                node_id,
+                crypto.clone(),
+                pool.get_cache(),
+                key_manager,
+                MetricsRegistry::new(),
+                no_op_logger(),
+            );
+            let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+            // Update start height
+            let start_height = Height::new(10);
+            dkg_pool.apply(vec![ChangeAction::Purge(start_height)]);
+
+            // It should be possible to create a dealing
+            let result = dkg_impl.on_state_change(&dkg_pool);
+            let first = result.first().unwrap();
+            let ChangeAction::AddToValidated(ref dealing) = first else {
+                panic!("Unexpected change action: {first:?}")
+            };
+
+            // It should be possible to validate the dealing
+            let result = dkg_impl.validate_dealings_for_dealer(
+                &dkg_pool,
+                &dkg_summary.configs,
+                start_height,
+                vec![dealing],
+            );
+            let first = result.first().unwrap();
+            let ChangeAction::MoveToValidated(ref dealing_validated) = first else {
+                panic!("Unexpected change action: {first:?}")
+            };
+            assert_eq!(dealing, dealing_validated);
+
+            // It should be possible to validate the dealing as part of a block payload
+            let parent = Block::from(pool.make_next_block());
+            let context = ValidationContext {
+                registry_version: registry_version_active,
+                certified_height: Height::from(0),
+                time: UNIX_EPOCH,
+            };
+            let block_payload = BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dkg: DkgDataPayload::new(start_height, vec![dealing.clone()]),
+                idkg: idkg::Payload::default(),
+            });
+
+            let result = validate_payload(
+                subnet_id,
+                registry.as_ref(),
+                crypto.as_ref(),
+                &PoolReader::new(&pool),
+                &dkg_pool,
+                parent.clone(),
+                &block_payload,
+                state_manager.as_ref(),
+                &context,
+                &mock_metrics(),
+                &no_op_logger(),
+            );
+            assert!(result.is_ok());
+
+            // Add the dealing to the validated pool
+            dkg_pool.apply(vec![ChangeAction::AddToValidated(dealing.clone())]);
+
+            // It should be possible to validate the dealing as part of a block payload,
+            // even if the dealing is already part of the validated pool
+            let result = validate_payload(
+                subnet_id,
+                registry.as_ref(),
+                crypto.as_ref(),
+                &PoolReader::new(&pool),
+                &dkg_pool,
+                parent,
+                &block_payload,
+                state_manager.as_ref(),
+                &context,
+                &mock_metrics(),
+                &no_op_logger(),
+            );
+            assert!(result.is_ok());
+        })
     }
 }

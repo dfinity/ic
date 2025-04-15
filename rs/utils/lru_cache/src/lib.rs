@@ -83,17 +83,7 @@ where
 
         let removed_entry = self.cache.push(key, value);
         if let Some((removed_key, removed_value)) = &removed_entry {
-            let memory_removed_size = removed_key.memory_bytes() + removed_value.memory_bytes();
-            debug_assert!(self.memory_size >= memory_removed_size);
-            // This cannot underflow because we know that `self.memory_size` is
-            // the sum of sizes of all items in the cache.
-            self.memory_size -= memory_removed_size;
-
-            let disk_removed_size = removed_key.disk_bytes() + removed_value.disk_bytes();
-            debug_assert!(self.disk_size >= disk_removed_size);
-            // This cannot underflow because we know that `self.disk_size` is
-            // the sum of sizes of all items in the cache.
-            self.disk_size -= disk_removed_size;
+            self.pop_inner(removed_key, removed_value);
         }
         // This cannot overflow because we know that
         // `self.memory_size <= self.memory_capacity <= MAX_SIZE`
@@ -112,16 +102,20 @@ where
     /// `None` if it does not exist.
     pub fn pop(&mut self, key: &K) -> Option<V> {
         if let Some((key, value)) = self.cache.pop_entry(key) {
-            let memory_size = key.memory_bytes() + value.memory_bytes();
-            debug_assert!(self.memory_size >= memory_size);
-            self.memory_size -= memory_size;
-
-            let disk_size = key.disk_bytes() + value.disk_bytes();
-            debug_assert!(self.disk_size >= disk_size);
-            self.disk_size -= disk_size;
-
+            self.pop_inner(&key, &value);
             self.check_invariants();
             Some(value)
+        } else {
+            None
+        }
+    }
+
+    /// Remove the least recently used entry from the cache.
+    pub fn pop_lru(&mut self) -> Option<(K, V)> {
+        if let Some((key, value)) = self.cache.pop_lru() {
+            self.pop_inner(&key, &value);
+            self.check_invariants();
+            Some((key, value))
         } else {
             None
         }
@@ -152,24 +146,28 @@ where
         while self.memory_size > self.memory_capacity || self.disk_size > self.disk_capacity {
             match self.cache.pop_lru() {
                 Some((key, value)) => {
-                    let memory_size = key.memory_bytes() + value.memory_bytes();
-                    debug_assert!(self.memory_size >= memory_size);
-                    // This cannot underflow because we know that `self.memory_size` is
-                    // the sum of memory sizes of all items in the cache.
-                    self.memory_size = self.memory_size.saturating_sub(memory_size);
-
-                    let disk_size = key.disk_bytes() + value.disk_bytes();
-                    debug_assert!(self.disk_size >= disk_size);
-                    // This cannot underflow because we know that `self.disk_size` is
-                    // the sum of disk sizes of all items in the cache.
-                    self.disk_size = self.disk_size.saturating_sub(disk_size);
-
+                    self.pop_inner(&key, &value);
                     ret.push((key, value));
                 }
                 None => break,
             }
         }
+        self.check_invariants();
         ret
+    }
+
+    fn pop_inner(&mut self, key: &K, value: &V) {
+        let memory_size = key.memory_bytes() + value.memory_bytes();
+        debug_assert!(self.memory_size >= memory_size);
+        // This cannot underflow because we know that `self.memory_size` is
+        // the sum of memory sizes of all items in the cache.
+        self.memory_size = self.memory_size.saturating_sub(memory_size);
+
+        let disk_size = key.disk_bytes() + value.disk_bytes();
+        debug_assert!(self.disk_size >= disk_size);
+        // This cannot underflow because we know that `self.disk_size` is
+        // the sum of disk sizes of all items in the cache.
+        self.disk_size = self.disk_size.saturating_sub(disk_size);
     }
 
     fn check_invariants(&self) {
@@ -214,7 +212,7 @@ mod tests {
         }
     }
 
-    #[derive(Eq, PartialEq, Hash, Debug)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug)]
     struct MemoryDiskValue(u32, usize, usize);
 
     impl MemoryDiskBytes for MemoryDiskValue {
@@ -567,12 +565,25 @@ mod tests {
             (0..100_u32, 0..50_usize, 0..50_usize).prop_map(|(a, b, c)| MemoryDiskValue(a, b, c))
         }
 
+        #[derive(Clone, Debug)]
+        enum Action {
+            Push(MemoryDiskValue, MemoryDiskValue),
+            PopLru,
+        }
+
+        fn arb_action() -> impl Strategy<Value = Action> {
+            prop_oneof![
+                9 => (arb_value(), arb_value()).prop_map(|(a, b)| Action::Push(a, b)),
+                1 => Just(Action::PopLru),
+            ]
+        }
+
         proptest! {
             /// Proptest checking that the internal invariants are maintained
             /// and that the total space of inserted entries equals the total
             /// space of evicted entries plus the space of the cache itself.
             #[test]
-            fn test_invariants(entries in prop::collection::vec((arb_value(), arb_value()), 100)) {
+            fn test_invariants(entries in prop::collection::vec(arb_action(), 100)) {
                 let mut lru = LruCache::<MemoryDiskValue, MemoryDiskValue>::new(NumBytes::new(100), NumBytes::new(100));
                 let mut total_memory = 0;
                 let mut total_disk = 0;
@@ -586,9 +597,16 @@ mod tests {
                     *disk += v.disk_bytes();
                 }
 
-                for (k,v) in entries {
-                    update(&mut total_memory, &mut total_disk, &k, &v);
-                    let evicted = lru.push(k,v);
+                for action in entries {
+                    let evicted = match action {
+                        Action::Push(k,v) => {
+                            update(&mut total_memory, &mut total_disk, &k, &v);
+                            lru.push(k,v)
+                        }
+                        Action::PopLru => {
+                            lru.pop_lru().map_or(vec![], |e| vec![e])
+                        }
+                    };
                     for (k,v) in evicted {
                         update(&mut evicted_memory, &mut evicted_disk, &k, &v);
                     }

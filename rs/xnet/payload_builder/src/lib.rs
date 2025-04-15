@@ -18,6 +18,7 @@ use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
+use ic_config::message_routing::MAX_STREAM_MESSAGES;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::messaging::{
     InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
@@ -224,9 +225,19 @@ impl XNetPayloadBuilderMetrics {
     }
 }
 
-// TODO(MR-636): Consider making this an argument to allow for testing without generating so many
-// messages; or else at least unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
-pub const MAX_STREAM_MESSAGES: usize = 10_000;
+/// The maximum number of signals a stream header can have before pulling messages from the reverse
+/// stream stops. This limit prevents one-sided traffic by insisting the other subnet make progress
+/// after at most `MAX_SIGNALS` have been pulled.
+///
+/// More than `MAX_STREAM_MESSAGES` doesn't make sense because an honest subnet needs to garbage
+/// collect messages before it can push more messages into a stream, which it can only do by
+/// observing the signals in the reverse direction, thus advancing its `begin` and allowing for
+/// garbage collecting the signals in turn.
+///
+/// For the case of `MAX_STREAM_MESSAGES` this acts as a dishonest subnet guard, for a smaller number
+/// it acts as an ensurance that the flow of incoming traffic and that of outgoing traffic does not
+/// diverge too far.
+pub const MAX_SIGNALS: usize = MAX_STREAM_MESSAGES;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
@@ -492,6 +503,10 @@ impl XNetPayloadBuilderImpl {
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
     ///     and
+    ///
+    /// Because this code is used both for validating slices before inclusion into a
+    /// payload; and for validating proposed payloads; validation errors are logged
+    /// at configurable levels (e.g. `info` at selection, `warn` at validation).
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
@@ -499,6 +514,7 @@ impl XNetPayloadBuilderImpl {
         reject_signals: &VecDeque<RejectSignal>,
         expected: StreamIndex,
         state: &ReplicatedState,
+        log_level: slog::Level,
     ) -> SignalsValidationResult {
         // `messages_end()` of the outgoing stream.
         let (self_messages_begin, self_messages_end) = state
@@ -518,8 +534,9 @@ impl XNetPayloadBuilderImpl {
         );
 
         if expected > signals_end || signals_end > self_messages_end {
-            warn!(
+            log!(
                 self.log,
+                log_level,
                 "Invalid stream from {}: expected ({}) <= signals_end ({}) <= self.messages_end() ({})",
                 subnet_id,
                 expected,
@@ -530,25 +547,19 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
-            // TODO(MR-635): Change this check to use the same mechanism used for capping
-            // the number of signals in streams instead.
-            // Given the minimum message size (zero-length sender and receiver, no cycles,
-            // no payload) of 17 bytes; plus 16 bytes for `LabelTree` encoding plus label;
-            // and 16+6 bytes for a `Witness::Known` and a `Witness::Fork` node; we have
-            // a minimum of 55 bytes per encoded message.
-            //
-            // With a `TARGET_STREAM_SIZE_BYTES` of 10 MiB, that means a maximum of just
-            // over 190K messages in a stream. 200K to be conservative.
-            const MAX_STREAM_MESSAGES: u64 = 200_000;
-
-            // An honest subnet will only produce signals for the messages in the incoming
-            // stream (i.e. no signals for future messages; and all signals for past
-            // messages have been GC-ed). Meaning we can never have signals going back
-            // farther than the maximum number of messages in a stream.
+            // A stream can never have more than `MAX_SIGNALS` signals by design,
+            // since we stop pulling messages after reaching this limit. Any subnet with
+            // more than this number of signals can therefore be classified as dishonest.
+            // The factor of 2 allows for wiggle room in increasing this constant without
+            // touching this, but is still good enough as a guard against dishonest subnets.
+            // Furthermore, an honest subnet will only produce signals for the messages in
+            // the incoming stream (i.e. no signals for future messages; and all signals for
+            // past messages have been GC-ed).
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.index.get() > MAX_STREAM_MESSAGES {
-                warn!(
+            if signals_end.get() - signals_begin.index.get() > 2 * MAX_SIGNALS as u64 {
+                log!(
                     self.log,
+                    log_level,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
                     subnet_id,
                     signals_begin.index,
@@ -560,8 +571,9 @@ impl XNetPayloadBuilderImpl {
             let mut next = signals_end;
             for signal in reject_signals.iter().rev() {
                 if signal.index >= next {
-                    warn!(
+                    log!(
                         self.log,
+                        log_level,
                         "Invalid signals in stream from {}: reject_signals {:?}, signals_end {}",
                         subnet_id,
                         reject_signals,
@@ -587,6 +599,10 @@ impl XNetPayloadBuilderImpl {
     ///
     /// Returns the validation result, including the `CountBytes`-like estimate
     /// (deterministic, but not exact) of the slice size in bytes if valid.
+    ///
+    /// Because this code is used both for validating slices before inclusion into a
+    /// payload; and for validating proposed payloads; validation errors are logged
+    /// at configurable levels (e.g. `info` at selection, `warn` at validation).
     fn validate_slice(
         &self,
         subnet_id: SubnetId,
@@ -594,6 +610,7 @@ impl XNetPayloadBuilderImpl {
         expected: &ExpectedIndices,
         validation_context: &ValidationContext,
         state: &ReplicatedState,
+        log_level: slog::Level,
     ) -> SliceValidationResult {
         // Do not accept loopback stream slices. Those are inducted separately, entirely
         // within the DSM.
@@ -623,8 +640,9 @@ impl XNetPayloadBuilderImpl {
 
         // Valid stream message bounds.
         if slice.header().begin() > slice.header().end() {
-            warn!(
+            log!(
                 self.log,
+                log_level,
                 "Stream from {}: begin index ({}) after end index ({})",
                 subnet_id,
                 slice.header().begin(),
@@ -641,8 +659,9 @@ impl XNetPayloadBuilderImpl {
         if expected.message_index < slice.header().begin()
             || slice.header().end() < expected.message_index
         {
-            warn!(
+            log!(
                 self.log,
+                log_level,
                 "Stream from {}: expecting message {}, outside of stream bounds [{}, {})",
                 subnet_id,
                 expected.message_index,
@@ -665,8 +684,9 @@ impl XNetPayloadBuilderImpl {
         if let Some(messages) = slice.messages() {
             // Messages in slice within stream message bounds.
             if messages.begin() < slice.header().begin() || messages.end() > slice.header().end() {
-                warn!(
+                log!(
                     self.log,
+                    log_level,
                     "Stream from {}: slice bounds [{}, {}) outside of stream bounds [{}, {})",
                     subnet_id,
                     messages.begin(),
@@ -682,8 +702,9 @@ impl XNetPayloadBuilderImpl {
 
             // Messages begin exactly at the expected message index.
             if messages.begin() != expected.message_index {
-                warn!(
+                log!(
                     self.log,
+                    log_level,
                     "Stream from {}: expecting message with index {}, found {}",
                     subnet_id,
                     expected.message_index,
@@ -698,8 +719,9 @@ impl XNetPayloadBuilderImpl {
             // Ensure the message limit (dictated e.g. by the backlog size) is respected.
             if let Some(msg_limit) = get_msg_limit(subnet_id, state) {
                 if messages.len() > msg_limit {
-                    warn!(
+                    log!(
                         self.log,
+                        log_level,
                         "Stream from {}: slice length ({}) above limit ({})",
                         subnet_id,
                         messages.len(),
@@ -715,8 +737,9 @@ impl XNetPayloadBuilderImpl {
             // Ensure the signal limit is respected.
             let max_message_index = max_message_index(slice.header().begin());
             if messages.end() > max_message_index {
-                warn!(
+                log!(
                     self.log,
+                    log_level,
                     "Stream from {}: slice end ({}) exceeds max index ({})",
                     subnet_id,
                     messages.end(),
@@ -756,6 +779,7 @@ impl XNetPayloadBuilderImpl {
             slice.header().reject_signals(),
             expected.signal_index,
             state,
+            log_level,
         ) {
             SignalsValidationResult::Valid => {
                 self.metrics
@@ -851,8 +875,14 @@ impl XNetPayloadBuilderImpl {
                 debug_assert!(slice_bytes <= bytes_left);
 
                 // Filter out invalid slices.
-                let validation_result =
-                    self.validate_slice(subnet_id, &slice, &begin, validation_context, &state);
+                let validation_result = self.validate_slice(
+                    subnet_id,
+                    &slice,
+                    &begin,
+                    validation_context,
+                    &state,
+                    slog::Level::Info,
+                );
                 if let SliceValidationResult::Valid { byte_size, .. } = validation_result {
                     if byte_size != slice_bytes || byte_size > bytes_left {
                         let message = format!(
@@ -924,13 +954,13 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
 }
 
 /// The stream index up to which messages can be inducted while limiting the
-/// number of signals in the reverse stream to `MAX_STREAM_MESSAGES`.
+/// number of signals in the reverse stream to `MAX_SIGNALS`.
 ///
 /// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
 ///  It reflects the status on the remote subnet as far as we know at present. Up to this index
 ///  signals can be gc'ed in the reverse stream.
 pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
-    stream_begin + (MAX_STREAM_MESSAGES as u64).into()
+    stream_begin + (MAX_SIGNALS as u64).into()
 }
 
 /// Resolves a stream index and byte limit to an `EndpointLocator`, consisting
@@ -1098,6 +1128,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 &expected,
                 validation_context,
                 &state,
+                slog::Level::Warning,
             ) {
                 SliceValidationResult::Invalid(reason) => {
                     self.metrics

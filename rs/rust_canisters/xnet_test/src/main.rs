@@ -8,19 +8,14 @@
 use candid::{CandidType, Deserialize, Principal};
 use futures::future::join_all;
 use ic_cdk::api::management_canister::provisional::CanisterId;
-use ic_cdk::{
-    api::{
-        call::{call, call_with_payment},
-        caller, canister_balance, id, time,
-    },
-    setup,
-};
+use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
+use ic_cdk::call::{Call, CallError, ConfigurableCall, SendableCall};
+use ic_cdk::setup;
 use ic_cdk_macros::{heartbeat, query, update};
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::str::FromStr;
 use std::time::Duration;
 use xnet_test::{Metrics, NetworkTopology, StartArgs};
 
@@ -38,15 +33,21 @@ thread_local! {
     /// Number of requests to send to each subnet (other than ours) every round.
     static PER_SUBNET_RATE: RefCell<u64> = const { RefCell::new(1) };
 
-    /// Pad requests AND responses to this size (in bytes) if smaller.
-    static PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
+    /// Pad requests to this size (in bytes) if smaller.
+    static REQUEST_PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
+
+    /// Timeouts to set on calls. `None` for guaranteed response calls.
+    static CALL_TIMEOUTS_SECONDS: RefCell<Vec<Option<u32>>> = const { RefCell::new(Vec::new()) };
+
+    /// Pad responses to this size (in bytes) if smaller.
+    static RESPONSE_PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
 
     /// State of the messaging that we use to check invariants (e.g., sequence
     /// numbers).
-    static STATE: RefCell<MessagingState> = RefCell::new(Default::default());
+    static STATE: RefCell<MessagingState> = RefCell::default();
 
     /// Various metrics observed by this canister, e.g. message latency distribution.
-    static METRICS: RefCell<Metrics> = RefCell::new(Default::default());
+    static METRICS: RefCell<Metrics> = RefCell::default();
 
     /// The pseudo-random number generator we use to pick the next canister to talk to.
     /// It doesn't need to be cryptographically secure, we just want it to be simple and fast.
@@ -147,11 +148,20 @@ fn log(message: &str) {
 /// requests to other canisters.
 #[update]
 fn start(start_args: StartArgs) -> String {
+    // Default to guaranteed response calls only.
+    let call_timeouts_seconds = if start_args.call_timeouts_seconds.is_empty() {
+        vec![None]
+    } else {
+        start_args.call_timeouts_seconds
+    };
+
     NETWORK_TOPOLOGY.with(move |canisters| {
         *canisters.borrow_mut() = start_args.network_topology;
     });
     PER_SUBNET_RATE.with(|r| *r.borrow_mut() = start_args.canister_to_subnet_rate);
-    PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.payload_size_bytes);
+    REQUEST_PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.request_payload_size_bytes);
+    CALL_TIMEOUTS_SECONDS.with(|r| *r.borrow_mut() = call_timeouts_seconds);
+    RESPONSE_PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.response_payload_size_bytes);
 
     RUNNING.with(|r| *r.borrow_mut() = true);
 
@@ -169,10 +179,12 @@ fn stop() -> String {
 /// Invoked by the canister heartbeat handler as long as `RUNNING` is `true`
 /// (`start()` was and `stop()` was not yet called).
 async fn fanout() {
-    let self_id = id();
+    let self_id = canister_self();
 
     let network_topology =
         NETWORK_TOPOLOGY.with(|network_topology| network_topology.borrow().clone());
+    let timeouts_seconds = CALL_TIMEOUTS_SECONDS.with(|p| p.borrow().clone());
+    let payload_size = REQUEST_PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
 
     let mut futures = vec![];
     for canisters in network_topology {
@@ -191,15 +203,24 @@ async fn fanout() {
 
             let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister));
 
-            let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
             let payload = Request {
                 seq_no,
                 time_nanos: time(),
                 padding: vec![0; payload_size.saturating_sub(16)],
             };
 
-            let res = call::<(Request,), (Reply,)>(canister, "handle_request", (payload,));
-            futures.push(res);
+            // Cycle over the timeouts.
+            let timeout_seconds = timeouts_seconds
+                .get(seq_no as usize % timeouts_seconds.len())
+                .unwrap();
+
+            let call = Call::new(canister, "handle_request").with_arg(payload);
+            let call = if let Some(timeout_seconds) = timeout_seconds {
+                call.change_timeout(*timeout_seconds)
+            } else {
+                call.with_guaranteed_response()
+            };
+            futures.push(call.call::<Reply>());
             METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);
         }
     }
@@ -208,25 +229,32 @@ async fn fanout() {
 
     for res in results {
         match res {
-            Ok((reply,)) => {
+            Ok(reply) => {
                 let elapsed = Duration::from_nanos(time() - reply.time_nanos);
                 METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
             }
-            Err((err_code, err_message)) => {
-                // Catch whether the call failed due to a synchronous or
-                // asynchronous error. Based on the current implementation of
-                // the Rust CDK, a synchronous error will contain a specific
-                // error message.
-                if err_message.contains("Couldn't send message") {
-                    log(&format!(
-                        "{} call failed with {:?}",
-                        time() / 1_000_000,
-                        err_code
-                    ));
-                    METRICS.with(|m| m.borrow_mut().call_errors += 1);
-                } else {
-                    METRICS.with(|m| m.borrow_mut().reject_responses += 1);
-                }
+            Err(CallError::CallRejected(rejection)) if rejection.is_sync() => {
+                // Call failed due to a synchronous error.
+                log(&format!(
+                    "{} sync failure {:?} {}",
+                    time() / 1_000_000,
+                    rejection.reject_code(),
+                    rejection.reject_message()
+                ));
+                METRICS.with(|m| m.borrow_mut().call_errors += 1);
+            }
+            Err(CallError::CallRejected(rejection)) => {
+                log(&format!(
+                    "{} rejected {:?} {}",
+                    time() / 1_000_000,
+                    rejection.reject_code(),
+                    rejection.reject_message()
+                ));
+                METRICS.with(|m| m.borrow_mut().reject_responses += 1);
+            }
+            Err(CallError::CandidDecodeFailed(err)) => {
+                log(&format!("{} call failed: {}", time() / 1_000_000, err));
+                METRICS.with(|m| m.borrow_mut().call_errors += 1);
             }
         }
     }
@@ -235,14 +263,14 @@ async fn fanout() {
 /// Endpoint that handles requests from canisters located on remote subnets.
 #[update]
 fn handle_request(req: Request) -> Reply {
-    let caller = caller();
+    let caller = msg_caller();
     let in_seq_no = STATE.with(|s| s.borrow_mut().set_in_seq_no(caller, req.seq_no));
 
     if req.seq_no <= in_seq_no {
         METRICS.with(|m| m.borrow_mut().seq_errors += 1);
     }
 
-    let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
+    let payload_size = RESPONSE_PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
     Reply {
         time_nanos: req.time_nanos,
         padding: vec![0; payload_size.saturating_sub(8)],
@@ -252,14 +280,14 @@ fn handle_request(req: Request) -> Reply {
 /// Deposits the cycles this canister has minus 1T at the given destination.
 #[update]
 async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
-    let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
-    let _ = call_with_payment::<(CanisterIdRecord,), ()>(
-        Principal::from_str("aaaaa-aa").unwrap(),
-        "deposit_cycles",
-        (canister_id_record,),
-        cycle_refund,
-    )
-    .await;
+    let cycle_refund = canister_cycle_balance().saturating_sub(1_000_000_000_000);
+    Call::new(Principal::from_text("aaaaa-aa").unwrap(), "deposit_cycles")
+        .with_arg(canister_id_record)
+        .with_guaranteed_response()
+        .with_cycles(cycle_refund)
+        .call::<()>()
+        .await
+        .unwrap();
 
     "ok".to_string()
 }

@@ -124,7 +124,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

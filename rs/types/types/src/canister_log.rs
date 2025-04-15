@@ -1,5 +1,5 @@
 use candid::Deserialize;
-use ic_management_canister_types::{CanisterLogRecord, DataSize};
+use ic_management_canister_types_private::{CanisterLogRecord, DataSize};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
@@ -179,7 +179,7 @@ impl CanisterLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_management_canister_types::CanisterLogRecord;
+    use ic_management_canister_types_private::CanisterLogRecord;
 
     const TEST_MAX_ALLOWED_SIZE: usize = 4 * 1024;
     const BIGGER_THAN_LIMIT_MESSAGE: &[u8] = &[b'a'; 2 * TEST_MAX_ALLOWED_SIZE];

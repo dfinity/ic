@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/consensus/utils",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -14,7 +15,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:hex",
     "@crate_index//:prometheus",

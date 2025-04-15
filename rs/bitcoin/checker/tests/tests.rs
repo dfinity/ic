@@ -2,25 +2,26 @@ use candid::{decode_one, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
-    CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, CheckTransactionStrArgs, InitArg,
-    UpgradeArg, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionQueryArgs,
+    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
+    CheckTransactionStatus, CheckTransactionStrArgs, InitArg, UpgradeArg,
+    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
+use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use pocket_ic::management_canister::CanisterId;
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
         CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
     },
-    query_candid, PocketIc, PocketIcBuilder, RejectResponse,
+    query_candid, PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
 };
 use std::str::FromStr;
 
@@ -116,6 +117,14 @@ impl Setup {
         self.env
             .submit_call(self.caller, self.controller, "update", payload)
     }
+
+    fn query_btc_checker<I, O>(&self, method: &str, args: I) -> Result<O, RejectResponse>
+    where
+        I: candid::CandidType,
+        O: for<'a> candid::utils::ArgumentDecoder<'a>,
+    {
+        query_candid(&self.env, self.btc_checker_canister, method, (args,))
+    }
 }
 
 #[test]
@@ -172,7 +181,7 @@ fn test_check_address() {
         result
     );
 
-    // Test with an malformed address
+    // Test with a malformed address
     let result = query_candid::<_, (CheckAddressResponse,)>(
         &env,
         btc_checker_canister,
@@ -181,9 +190,10 @@ fn test_check_address() {
             address: "not an address".to_string(),
         },),
     );
+
     assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid Bitcoin address")));
 
-    // Test with an testnet address
+    // Test with a testnet address
     let result = query_candid::<_, (CheckAddressResponse,)>(
         &env,
         btc_checker_canister,
@@ -288,73 +298,8 @@ fn test_check_transaction_passed() {
         let call_id = setup
             .submit_btc_checker_call(method, arg, CHECK_TRANSACTION_CYCLES_REQUIRED)
             .expect("submit_call failed to return call id");
-        // The response body used for testing below is generated from the output of
-        //
-        //   curl -H 'User-Agent: bitcoin-value-collector' https://btcscan.org/api/tx/{txid}/raw
-        //
-        // There wll be two outcalls because the canister will first fetch the above
-        // given txid, and then fetch the vout[0] from the returned transaction body.
 
-        let canister_http_requests = tick_until_next_request(env);
-        let body = b"\
-\x02\x00\x00\x00\x01\x17\x34\x3a\xab\xa9\x67\x67\x2f\x17\xef\x0a\xbf\x4b\xb1\x14\xad\x19\x63\xe0\
-\x7d\xd2\xf2\x05\xaa\x25\xa4\xda\x50\x3e\xdb\x01\xab\x01\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x21\
-\x81\xb5\x9c\xa7\xed\x7e\x2c\x8e\x06\x96\x52\xb0\x7e\xd2\x10\x24\x9e\x83\x37\xec\xc5\x35\xca\x6b\
-\x75\x3c\x02\x44\x89\xe4\x5d\x02\x20\x2a\xc7\x55\xcb\x55\x97\xf1\xcc\x2c\xad\x32\xb8\xa4\x33\xf1\
-\x79\x6b\x5f\x51\x76\x71\x6d\xa9\x22\x2c\x65\xf9\x44\xaf\xd1\x3d\xa8\x01\x21\x02\xc4\xc6\x9e\x4d\
-\x36\x4b\x3e\xdf\x84\xb5\x20\xa0\x18\xd5\x7e\x71\xfa\xce\x19\x7e\xc8\xf9\x46\x43\x60\x7e\x4a\xca\
-\x70\xdc\x82\xc1\xfd\xff\xff\xff\x02\x10\x27\x00\x00\x00\x00\x00\x00\x19\x76\xa9\x14\x11\xb3\x66\
-\xed\xfc\x0a\x8b\x66\xfe\xeb\xae\x5c\x2e\x25\xa7\xb6\xa5\xd1\xcf\x31\x88\xac\x7c\x2e\x00\x00\x00\
-\x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
-\x56\x61\x33\x88\xac\x14\xa4\x0c\x00"
-            .to_vec();
-        env.mock_canister_http_response(MockCanisterHttpResponse {
-            subnet_id: canister_http_requests[0].subnet_id,
-            request_id: canister_http_requests[0].request_id,
-            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-                status: 200,
-                headers: vec![],
-                body,
-            }),
-            additional_responses: vec![],
-        });
-
-        let canister_http_requests = tick_until_next_request(env);
-        let body = b"\
-\x02\x00\x00\x00\x01\x82\xc8\x5d\xe7\x4d\x19\xbb\x36\x16\x2f\xca\xef\xc7\xe7\x70\x15\x65\xb0\x2d\
-\xf6\x06\x0f\x8e\xcf\x49\x64\x63\x37\xfc\xe8\x59\x37\x07\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x15\
-\xf2\xc7\x7a\x3b\x95\x13\x73\x7a\xa2\x86\xb3\xe6\x06\xf9\xb6\x82\x1c\x6d\x5d\x35\xe5\xa9\x58\xe0\
-\x1f\x65\x76\xec\xdf\xac\x76\x02\x20\x4e\xad\x06\x1d\xe8\x3c\x5b\x07\x25\x8e\xfd\x2f\x44\x3d\xeb\
-\xc8\x47\x25\x2b\xfc\xf4\x24\xb3\x75\x8f\xd1\x57\x92\xef\xf4\xa4\xaa\x01\x21\x02\xc4\xc6\x9e\x4d\
-\x36\x4b\x3e\xdf\x84\xb5\x20\xa0\x18\xd5\x7e\x71\xfa\xce\x19\x7e\xc8\xf9\x46\x43\x60\x7e\x4a\xca\
-\x70\xdc\x82\xc1\xfd\xff\xff\xff\x02\x10\x27\x00\x00\x00\x00\x00\x00\x19\x76\xa9\x14\x62\xe9\x07\
-\xb1\x5c\xbf\x27\xd5\x42\x53\x99\xeb\xf6\xf0\xfb\x50\xeb\xb8\x8f\x18\x88\xac\x00\x96\x00\x00\x00\
-\x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
-\x56\x61\x33\x88\xac\xb3\xa3\x0c\x00"
-            .to_vec();
-        env.mock_canister_http_response(MockCanisterHttpResponse {
-            subnet_id: canister_http_requests[0].subnet_id,
-            request_id: canister_http_requests[0].request_id,
-            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-                status: 200,
-                headers: vec![],
-                body: body.clone(),
-            }),
-            // Fill additional responses with different headers to test if the transform
-            // function does its job by clearing the headers.
-            additional_responses: (1..13)
-                .map(|i| {
-                    CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-                        status: 200,
-                        headers: vec![CanisterHttpHeader {
-                            name: format!("name-{}", i),
-                            value: format!("{}", i),
-                        }],
-                        body: body.clone(),
-                    })
-                })
-                .collect(),
-        });
+        mock_fetch_txids_responses(env);
 
         let result = env
             .await_call(call_id)
@@ -377,7 +322,7 @@ fn test_check_transaction_passed() {
     };
 
     // With default installation
-    test_normal_operation("check_transaction", check_transaction_args.clone());
+    test_normal_operation("check_transaction", check_transaction_args);
 
     // Test CheckMode::RejectAll
     env.tick();
@@ -478,7 +423,90 @@ fn test_check_transaction_passed() {
     )
     .unwrap();
 
+    test_normal_operation("check_transaction_str", check_transaction_str_args.clone());
+
+    // Test empty argument upgrade
+    env.tick();
+    env.upgrade_canister(
+        setup.btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!().unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+
     test_normal_operation("check_transaction_str", check_transaction_str_args);
+}
+
+/// Mock the response for the HTTP outcalls fetching the transaction inputs for txid
+/// `c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed`. There will be
+/// two outcalls because the canister will first fetch the input txid, and then fetch
+/// the `vout[0]` from the returned transaction body. The response bodies are generated
+/// from the output of:
+/// ```shell
+/// curl -H 'User-Agent: bitcoin-value-collector' https://btcscan.org/api/tx/{txid}/raw
+/// ```
+fn mock_fetch_txids_responses(env: &PocketIc) {
+    let canister_http_requests = tick_until_next_request(env);
+    let body = b"\
+\x02\x00\x00\x00\x01\x17\x34\x3a\xab\xa9\x67\x67\x2f\x17\xef\x0a\xbf\x4b\xb1\x14\xad\x19\x63\xe0\
+\x7d\xd2\xf2\x05\xaa\x25\xa4\xda\x50\x3e\xdb\x01\xab\x01\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x21\
+\x81\xb5\x9c\xa7\xed\x7e\x2c\x8e\x06\x96\x52\xb0\x7e\xd2\x10\x24\x9e\x83\x37\xec\xc5\x35\xca\x6b\
+\x75\x3c\x02\x44\x89\xe4\x5d\x02\x20\x2a\xc7\x55\xcb\x55\x97\xf1\xcc\x2c\xad\x32\xb8\xa4\x33\xf1\
+\x79\x6b\x5f\x51\x76\x71\x6d\xa9\x22\x2c\x65\xf9\x44\xaf\xd1\x3d\xa8\x01\x21\x02\xc4\xc6\x9e\x4d\
+\x36\x4b\x3e\xdf\x84\xb5\x20\xa0\x18\xd5\x7e\x71\xfa\xce\x19\x7e\xc8\xf9\x46\x43\x60\x7e\x4a\xca\
+\x70\xdc\x82\xc1\xfd\xff\xff\xff\x02\x10\x27\x00\x00\x00\x00\x00\x00\x19\x76\xa9\x14\x11\xb3\x66\
+\xed\xfc\x0a\x8b\x66\xfe\xeb\xae\x5c\x2e\x25\xa7\xb6\xa5\xd1\xcf\x31\x88\xac\x7c\x2e\x00\x00\x00\
+\x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
+\x56\x61\x33\x88\xac\x14\xa4\x0c\x00"
+        .to_vec();
+    env.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: canister_http_requests[0].subnet_id,
+        request_id: canister_http_requests[0].request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body,
+        }),
+        additional_responses: vec![],
+    });
+
+    let canister_http_requests = tick_until_next_request(env);
+    let body = b"\
+\x02\x00\x00\x00\x01\x82\xc8\x5d\xe7\x4d\x19\xbb\x36\x16\x2f\xca\xef\xc7\xe7\x70\x15\x65\xb0\x2d\
+\xf6\x06\x0f\x8e\xcf\x49\x64\x63\x37\xfc\xe8\x59\x37\x07\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x15\
+\xf2\xc7\x7a\x3b\x95\x13\x73\x7a\xa2\x86\xb3\xe6\x06\xf9\xb6\x82\x1c\x6d\x5d\x35\xe5\xa9\x58\xe0\
+\x1f\x65\x76\xec\xdf\xac\x76\x02\x20\x4e\xad\x06\x1d\xe8\x3c\x5b\x07\x25\x8e\xfd\x2f\x44\x3d\xeb\
+\xc8\x47\x25\x2b\xfc\xf4\x24\xb3\x75\x8f\xd1\x57\x92\xef\xf4\xa4\xaa\x01\x21\x02\xc4\xc6\x9e\x4d\
+\x36\x4b\x3e\xdf\x84\xb5\x20\xa0\x18\xd5\x7e\x71\xfa\xce\x19\x7e\xc8\xf9\x46\x43\x60\x7e\x4a\xca\
+\x70\xdc\x82\xc1\xfd\xff\xff\xff\x02\x10\x27\x00\x00\x00\x00\x00\x00\x19\x76\xa9\x14\x62\xe9\x07\
+\xb1\x5c\xbf\x27\xd5\x42\x53\x99\xeb\xf6\xf0\xfb\x50\xeb\xb8\x8f\x18\x88\xac\x00\x96\x00\x00\x00\
+\x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
+\x56\x61\x33\x88\xac\xb3\xa3\x0c\x00"
+        .to_vec();
+    env.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: canister_http_requests[0].subnet_id,
+        request_id: canister_http_requests[0].request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+        }),
+        // Fill additional responses with different headers to test if the transform
+        // function does its job by clearing the headers.
+        additional_responses: (1..13)
+            .map(|i| {
+                CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                    status: 200,
+                    headers: vec![CanisterHttpHeader {
+                        name: format!("name-{}", i),
+                        value: format!("{}", i),
+                    }],
+                    body: body.clone(),
+                })
+            })
+            .collect(),
+    });
 }
 
 #[test]
@@ -764,6 +792,109 @@ fn test_check_transaction_error() {
         .assert_contains_metric_matching(
             r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"IcError\(2\)\"\} 1 \d+"#,
         );
+}
+#[test]
+fn test_check_transaction_query_unknown() {
+    let setup = Setup::new(BtcNetwork::Mainnet);
+    let txid =
+        Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
+
+    let (result,): (CheckTransactionQueryResponse,) = setup
+        .query_btc_checker(
+            "check_transaction_query",
+            CheckTransactionQueryArgs::TxIdBin(txid.as_ref().to_vec()),
+        )
+        .expect("the fetch request didn't finish");
+    assert!(matches!(result, CheckTransactionQueryResponse::Unknown));
+}
+
+#[test]
+fn test_check_transaction_query_error() {
+    let setup = Setup::new(BtcNetwork::Mainnet);
+    let txid =
+        Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
+
+    // Tests for malformed txids
+    let too_short_txid_str = "a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993".to_string();
+    let too_short_txid_bin = txid.as_ref()[..=28].to_vec();
+    for arg in &[
+        CheckTransactionQueryArgs::TxIdBin(too_short_txid_bin),
+        CheckTransactionQueryArgs::TxIdStr(too_short_txid_str),
+    ] {
+        let result: Result<(CheckTransactionQueryResponse,), RejectResponse> =
+            setup.query_btc_checker("check_transaction_query", arg);
+        assert!(matches!(
+            result,
+            Err(RejectResponse {
+                reject_code: RejectCode::CanisterError,
+                ..
+            })
+        ));
+    }
+}
+
+#[test]
+fn test_check_transaction_query_already_fetched() {
+    let setup = Setup::new(BtcNetwork::Mainnet);
+    let txid =
+        Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
+
+    // Pre-fetch the txid inputs and outputs with the update method
+    let check_transaction_args = CheckTransactionArgs {
+        txid: txid.as_ref().to_vec(),
+    };
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction",
+            Encode!(&check_transaction_args).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    mock_fetch_txids_responses(&setup.env);
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    assert!(matches!(
+        decode_one(&result).unwrap(),
+        CheckTransactionResponse::Passed
+    ));
+
+    for arg in &[
+        CheckTransactionQueryArgs::TxIdBin(txid.as_ref().to_vec()),
+        CheckTransactionQueryArgs::TxIdStr(txid.to_string()),
+    ] {
+        let (result,): (CheckTransactionQueryResponse,) = setup
+            .query_btc_checker("check_transaction_query", arg)
+            .expect("the fetch request didn't finish");
+        assert!(matches!(result, CheckTransactionQueryResponse::Passed));
+    }
+
+    // Test for blocked addresses
+    setup.env.tick();
+    setup
+        .env
+        .upgrade_canister(
+            setup.btc_checker_canister,
+            btc_checker_wasm(),
+            Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
+                check_mode: Some(CheckMode::RejectAll),
+                ..UpgradeArg::default()
+            })))
+            .unwrap(),
+            Some(setup.controller),
+        )
+        .unwrap();
+
+    for arg in &[
+        CheckTransactionQueryArgs::TxIdBin(txid.as_ref().to_vec()),
+        CheckTransactionQueryArgs::TxIdStr(txid.to_string()),
+    ] {
+        let (result,): (CheckTransactionQueryResponse,) = setup
+            .query_btc_checker("check_transaction_query", arg)
+            .expect("the fetch request didn't finish");
+        assert!(matches!(result, CheckTransactionQueryResponse::Failed(_)));
+    }
 }
 
 fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {

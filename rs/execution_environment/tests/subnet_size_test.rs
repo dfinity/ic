@@ -4,7 +4,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
     CanisterInstallMode, CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId,
     HttpMethod, MasterPublicKeyId, TransformContext, TransformFunc,

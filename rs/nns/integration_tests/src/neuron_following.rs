@@ -1,4 +1,5 @@
 use assert_matches::assert_matches;
+use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, nns};
@@ -12,7 +13,7 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
-    common::{build_test_governance_wasm, NnsInitPayloadsBuilder},
+    common::{build_governance_wasm, NnsInitPayloadsBuilder},
     neuron_helpers::{
         get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
         submit_proposal, TestNeuronOwner,
@@ -29,7 +30,6 @@ use itertools::Itertools;
 use maplit::hashmap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use pretty_assertions::assert_eq;
-use prost::Message;
 use std::time::{Duration, SystemTime};
 
 const VALID_TOPIC: i32 = Topic::ParticipantManagement as i32;
@@ -483,11 +483,8 @@ async fn test_prune_some_following() {
         &pocket_ic,
         "NNS Governance",
         GOVERNANCE_CANISTER_ID,
-        governance_proto.encode_to_vec(),
-        // TODO(NNS1-3446): Once following pruning is released, replace with
-        // vanilla build_governance_wasm(). For now, the feature is only enabled
-        // when built with feature = "test".
-        build_test_governance_wasm(),
+        Encode!(&governance_proto).unwrap(),
+        build_governance_wasm(),
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;

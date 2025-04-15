@@ -2,7 +2,7 @@ use super::*;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
+use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, NiDkgTargetSubnet};
 use ic_types::Height;
 use ic_types_test_utils::ids::{node_test_id, SUBNET_1};

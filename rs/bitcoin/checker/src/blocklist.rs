@@ -1,3 +1,6 @@
+//! The script to generate this file, including information about the source data, can be found here:
+//! /rs/cross-chain/scripts/generate_blocklist.py
+
 #[cfg(test)]
 mod tests;
 
@@ -133,6 +136,7 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "1GYuu9d5HPikafbys3k5Q3DRJq6debGsoB",
     "1GcKLUUXodTQcLcPD7VLMgvCc4hs5Q775",
     "1Ge8JodC2HiBiEuT7D3MoH6Fak6XrcT9Kf",
+    "1Gekw8ACSs37oXcc5XQHvoux3iKoVFtpF4",
     "1GkLN7DbA9mAtHNzQWNPANcdWbefaz4Gzm",
     "1GnFTy5F9qi5MfaRZfgdg2jkyT5xtAHvd8",
     "1GqChmWqGtsaLrGbHfgdrV5Nkvahtjjuxr",
@@ -172,6 +176,7 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "1LpYKb3SXZPve9hsH2QEJZFX279wJVGowi",
     "1LrxsRd7zNuxPJcL5rttnoeJFy1y4AffYY",
     "1LuDiMd95Df4i2bcvrfw47t2GKpLLXAQMZ",
+    "1M5N4sJ1NHb4fviLVZA5MZLKhLZqU4CPZz",
     "1MLPqwaFFUBZePTjpR3nxRoK19Cv9mPCc7",
     "1MQBDeRWsiJBf7K1VGjJ7PWEL6GJXMfmLg",
     "1MbtT2ZsTtLp7EKZUV9r74cTyqvsMtTP2M",
@@ -286,6 +291,7 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "3F2sZ4jbhvDKQdGbHYPC6ZxFXEau2m5Lqj",
     "3F6bbvS1krsc1qR8FsbTDfYQyvkMm3QvmR",
     "3FBgeJdhiBe22UoSpp51Vd8dPHVa2A4wZX",
+    "3FfRvC3kSo2SxiQe5e7SSuNdegwgq8iusL",
     "3GAUBtrTtWp1D9yeXgr3wMg8B599QHa5m5",
     "3GMfGEDYMTq9G8dEHet1zLtUFJwYwSNa3Y",
     "3GSXNXzyCDoQ1Rhsc7F1jjjFe7DGcHHdcM",
@@ -373,6 +379,7 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "bc1q49ax787wv0mnn8wjgp3sx772qz7eun822rkv5k",
     "bc1q4namcagg5wljs0u20z6h2sqgsq4q5lts8rt2rr",
     "bc1q4rzdtlt0uslyw86cp29sctl6ct29g9a95cuup7pn5md9ddj7xgmqpp5m73",
+    "bc1q4yzd2rjmshm8ucrwy6dzj5rna20j0zlf8hf8vz",
     "bc1q5jqgm7nvrhaw2rh2vk0dk8e4gg5g373g0vz07r",
     "bc1q5zd0cwzd09k9r8xfk68sn5ytqp8f5aae80yfsm",
     "bc1q68uswkjvu7nj7mhrvfzkx7cm6u5s9puvpm5dc2",

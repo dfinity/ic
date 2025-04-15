@@ -2,24 +2,23 @@
 
 set -eEuo pipefail
 
-while read -r k v; do
-    case "$k" in
-        HOME)
-            # Required by rclone to get credentials from $HOME/.aws/credentials
-            export HOME="$v"
-            ;;
-    esac
-done <"$VERSION_FILE"
+# ~/.aws/credentials is needed by rclone. If home is not set, expect
+# VERSION_FILE to contain the $HOME.
+if [ -z "${HOME:-}" ]; then
+    while read -r k v; do
+        case "$k" in
+            HOME)
+                export HOME="$v"
+                ;;
+        esac
+    done <"$VERSION_FILE"
+fi
 
 VERSION="$(cat $VERSION_TXT)"
 
-if [ "${VERSION}" == "$FAKE_IC_VERSION" ]; then
-    echo "Attempt to upload an artifacts with fake ic version: ${VERSION}" >&2
-    exit 1
-fi
-# rclone reads the $(dirname $f) to get file attribuates.
+# rclone reads the $(dirname $f) to get file attributes.
 # Therefore symlink should be resolved.
-f="$1"
+f="${1:?No file to upload}"
 if [ -L "$f" ]; then
     f=$(readlink "$f")
 fi
@@ -29,39 +28,43 @@ if [ "$(basename $f)" == "SHA256SUMS" ]; then
     cat "$f" >&2
 fi
 
-# XXX: for historical reasons, artifacts are uploaded during a build step, expecting
-# AWS credentials to be present in $HOME. Unfortunately that makes the build non-portable
-# to machines without AWS credentials.
-# Until the upload is moved out of the build itself, this is a  workaround for
-# https://namespace.so runners: if the runner is from namespace (inferring from the presence
-# of /opt/namespace) we simply skip the upload.
-if [ -d /opt/namespace ]; then
-    touch "$2"
-    exit 0
-fi
+# Multipart upload does not work trough Cloudflare for some reason.
+# Just disabling it with `--s3-upload-cutoff` for now.
+rclone_common_flags=(
+    --stats-one-line
+    --checksum
+    --immutable
+    --s3-upload-cutoff=5G
+)
 
-# Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
-"$RCLONE" \
-    --config="$RCLONE_CONFIG" \
-    --stats-one-line \
-    --checksum \
-    --immutable \
-    --s3-upload-cutoff=5G \
+REMOTE_SUBDIR="${REMOTE_SUBDIR:?Remote subdirectory not set}"
+
+echo "uploading $f to AWS" >&2
+AWS_PROFILE=default "$RCLONE" \
+    "${rclone_common_flags[@]}" \
+    --s3-provider=AWS \
+    --s3-region=eu-central-1 \
+    --s3-env-auth \
     copy \
     "$f" \
-    "public-s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+    ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+echo "done uploading to AWS" >&2
 
 # Upload to Cloudflare's R2 (S3)
-unset RCLONE_S3_ENDPOINT
-AWS_PROFILE=cf "$RCLONE" \
-    --config="$RCLONE_CONFIG" \
-    --stats-one-line \
-    --checksum \
-    --immutable \
-    --s3-upload-cutoff=5G \
+# using profile 'cf' to look up the right creds in ~/.aws/credentials
+echo "uploading $f to Cloudflare" >&2
+AWS_PROFILE=cf "$RCLONE" -v \
+    "${rclone_common_flags[@]}" \
+    --s3-provider=Cloudflare \
+    --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
+    --s3-env-auth \
     copy \
     "$f" \
-    "public-s3-cf:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+    ":s3:dfinity-download-public/ic/${VERSION}/$REMOTE_SUBDIR/"
+echo "done uploading to Cloudflare" >&2
 
 URL_PATH="ic/${VERSION}/$REMOTE_SUBDIR/$(basename $f)"
-echo "https://download.dfinity.systems/${URL_PATH}" >"$2"
+echo "https://download.dfinity.systems/${URL_PATH}" >&2
+if [ -n "${2:-}" ]; then
+    echo "https://download.dfinity.systems/${URL_PATH}" >"$2"
+fi

@@ -7,8 +7,11 @@ use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
-use ic_embedders::wasm_executor::{
-    wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
+use ic_embedders::{
+    wasm_executor::{
+        wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
+    },
+    wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
@@ -16,7 +19,6 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
@@ -29,11 +31,10 @@ use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use crate::execution::common::{
-    self, action_to_response, apply_canister_state_changes, update_round_limits,
+    self, action_to_response, apply_canister_state_changes, log_dirty_pages, update_round_limits,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
-    RoundLimits,
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_config::flag_status::FlagStatus;
@@ -362,10 +363,6 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
-            .canister_log
-            .append(&mut output.canister_log);
-        self.canister
-            .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -448,11 +445,6 @@ impl ResponseHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister
-            .system_state
-            .canister_log
-            .append(&mut output.canister_log);
-
         // The ingress induction debit can interfere with cycles changes that happened concurrently
         // during the cleanup callback execution. If the balance of the canister is not enough to
         // cover the debit + the amount of removed cycles during execution, the canister might end

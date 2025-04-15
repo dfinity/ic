@@ -3,9 +3,10 @@ use candid::Nat;
 use ic_btc_checker::{
     blocklist::is_blocked, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
-    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
-    CheckTransactionStrArgs, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, RETRY_MAX_RESPONSE_BYTES,
+    CheckTransactionQueryArgs, CheckTransactionQueryResponse, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, CheckTransactionStrArgs,
+    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    RETRY_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
@@ -23,9 +24,9 @@ mod logs;
 mod providers;
 mod state;
 
-use fetch::{FetchEnv, FetchResult, TryFetchResult};
+use fetch::{check_for_blocked_input_addresses, FetchEnv, FetchResult, TryFetchResult};
 use logs::{Log, LogEntry, Priority, DEBUG, WARN};
-use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
+use state::{get_config, set_config, Config, FetchGuardError, FetchTxStatus, HttpGetTxError};
 
 #[derive(PartialOrd, Ord, PartialEq, Eq)]
 enum HttpsOutcallStatus {
@@ -105,15 +106,23 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// together with a text description.
 #[ic_cdk::update]
 async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
-    check_transaction_with(|| Txid::try_from(args.txid.as_ref()).map_err(|err| err.to_string()))
-        .await
+    check_transaction_with(|| Txid::try_from(args)).await
 }
 
 #[ic_cdk::update]
 async fn check_transaction_str(args: CheckTransactionStrArgs) -> CheckTransactionResponse {
-    use std::str::FromStr;
-    check_transaction_with(|| Txid::from_str(args.txid.as_ref()).map_err(|err| err.to_string()))
-        .await
+    check_transaction_with(|| Txid::try_from(args)).await
+}
+
+/// Performs the same logic as `check_transaction`, but only returns `Pass` or `Failed` if the
+/// TXID and all of its inputs are available in the heap memory cache, meaning no HTTP outcalls are
+/// performed. Returns `Unknown` if the transaction cannot be checked with only cached information.
+#[ic_cdk::query]
+async fn check_transaction_query(args: CheckTransactionQueryArgs) -> CheckTransactionQueryResponse {
+    match Txid::try_from(args) {
+        Ok(txid) => check_fetched_transaction_inputs(txid).await,
+        Err(err) => panic!("Invalid transaction ID: {}", err),
+    }
 }
 
 async fn check_transaction_with<F: FnOnce() -> Result<Txid, String>>(
@@ -152,9 +161,9 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 }
 
 #[ic_cdk::init]
-fn init(arg: CheckArg) {
+fn init(arg: Option<CheckArg>) {
     match arg {
-        CheckArg::InitArg(init_arg) => set_config(
+        Some(CheckArg::InitArg(init_arg)) => set_config(
             Config::new_and_validate(
                 init_arg.btc_network,
                 init_arg.check_mode,
@@ -162,16 +171,16 @@ fn init(arg: CheckArg) {
             )
             .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
         ),
-        CheckArg::UpgradeArg(_) => {
+        _ => {
             ic_cdk::trap("cannot init canister state without init args");
         }
     }
 }
 
 #[ic_cdk::post_upgrade]
-fn post_upgrade(arg: CheckArg) {
+fn post_upgrade(arg: Option<CheckArg>) {
     match arg {
-        CheckArg::UpgradeArg(arg) => {
+        Some(CheckArg::UpgradeArg(arg)) => {
             let old_config = get_config();
             let num_subnet_nodes = arg
                 .as_ref()
@@ -186,13 +195,16 @@ fn post_upgrade(arg: CheckArg) {
                     .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
             set_config(config);
         }
-        CheckArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
+        Some(CheckArg::InitArg(_)) => {
+            ic_cdk::trap("cannot upgrade canister state without upgrade args")
+        }
+        _ => (), // config remains unchanged if no upgrade argument is specified
     }
 }
 
 #[ic_cdk::query(hidden = true)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
-    if ic_cdk::api::data_certificate().is_none() {
+    if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 
@@ -512,6 +524,27 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
                 }
             }
         }
+    }
+}
+
+/// Check the input addresses of a transaction given its txid without performing any HTTP outcalls.
+/// A `Pass` or `Fail` status will only be returned if the txid and all of its inputs were already
+/// fetched and available in heap memory. Otherwise, `Unknown` is returned.
+pub async fn check_fetched_transaction_inputs(txid: Txid) -> CheckTransactionQueryResponse {
+    match BtcCheckerCanisterEnv.config().check_mode {
+        CheckMode::AcceptAll => CheckTransactionQueryResponse::Passed,
+        CheckMode::RejectAll => CheckTransactionQueryResponse::Failed(Vec::new()),
+        CheckMode::Normal => match state::get_fetch_status(txid) {
+            Some(FetchTxStatus::Fetched(fetched)) => {
+                check_for_blocked_input_addresses(&fetched).into()
+            }
+            Some(
+                FetchTxStatus::PendingOutcall
+                | FetchTxStatus::PendingRetry { .. }
+                | FetchTxStatus::Error(_),
+            )
+            | None => CheckTransactionQueryResponse::Unknown,
+        },
     }
 }
 

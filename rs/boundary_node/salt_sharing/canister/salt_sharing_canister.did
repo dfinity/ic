@@ -46,7 +46,7 @@ type SaltGenerationStrategy = variant {
 };
 
 // Initialization arguments used when installing/upgrading/reinstalling the canister
-type InitArgs = record {
+type InitArg = record {
     // If true salt is regenerated immediately and subsequently based on the chosen strategy
     regenerate_now: bool;
     // Strategy defining salt generation
@@ -56,7 +56,7 @@ type InitArgs = record {
     registry_polling_interval_secs: nat64;
 };
 
-service : (InitArgs) -> {
+service : (InitArg) -> {
   // Fetches the current salt (randomly generated value to be added to data before hashing)
   get_salt: () -> (GetSaltResponse) query;
   // Canister metrics (Http Interface)

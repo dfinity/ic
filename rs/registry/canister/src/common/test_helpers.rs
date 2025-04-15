@@ -22,6 +22,7 @@ use ic_registry_transport::pb::v1::{
 use ic_registry_transport::{insert, upsert};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::ReplicaVersion;
+use maplit::btreemap;
 use prost::Message;
 use std::collections::BTreeMap;
 
@@ -196,6 +197,7 @@ pub fn registry_add_node_operator_for_node(
     {
         let node_operator_record = NodeOperatorRecord {
             node_allowance,
+            rewardable_nodes: btreemap! { "type0".to_string() => 0, "type1".to_string() => 28 },
             ..Default::default()
         };
 

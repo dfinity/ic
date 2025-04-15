@@ -1,15 +1,6 @@
 ---- MODULE Disburse_Neuron_Apalache ----
 
-EXTENDS TLC, Variants
-
-(*
-@typeAlias: proc = Str;
-@typeAlias: account = Str;
-@typeAlias: neuronId = Int;
-@typeAlias: methodCall = Transfer({ from: $account, to: $account, amount: Int, fee: Int}) | AccountBalance({ account: $account });
-@typeAlias: methodResponse = Fail(UNIT) | TransferOk(UNIT) | BalanceQueryOk(Int);
-*)
-_type_alias_dummy == TRUE
+EXTENDS TLC, Variants, Common_Apalache, Integers
 
 \* CODE_LINK_INSERT_CONSTANTS
 
@@ -35,21 +26,12 @@ CONSTANTS
     \* The transfer fee charged by the ledger canister
     \* @type: Int;
     TRANSACTION_FEE
+
+\* @type: ($neurons, $neuronId) => Set(Int);
+POSSIBLE_DISBURSE_AMOUNTS(_neuron, _nid) == Nat
 *)
 
 VARIABLES
-    \* @type: $neuronId -> {cached_stake: Int, account: $account, maturity: Int, fees: Int};
-    neuron,
-    \* @type: $account -> $neuronId;
-    neuron_id_by_account,
-    \* @type: Set($neuronId);
-    locks,
-    \* @type: Seq({caller : $proc, method_and_args: $methodCall });
-    governance_to_ledger,
-    \* @type: Set({caller: $proc, response: $methodResponse });
-    ledger_to_governance,
-    \* @type: $proc -> Str;
-    pc,
     \* Not used by this model, but it's a global variable used by spawn_neurons, so
     \* it's the easiest to just add it to all the other models
     \* @type: Bool;
@@ -62,7 +44,7 @@ VARIABLES
     to_account,
     \* @type: $proc -> Int;
     fees_amount
-
+ 
 MOD == INSTANCE Disburse_Neuron
 
 Next == [MOD!Next]_MOD!vars

@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/bitcoin/client",
     "//rs/bitcoin/consensus",
     "//rs/config",
+    "//rs/consensus/certification",
     "//rs/crypto",
     "//rs/crypto/sha2",
     "//rs/cycles_account_manager",
@@ -53,6 +54,7 @@ DEPENDENCIES = [
     "@crate_index//:tikv-jemalloc-ctl",
     "@crate_index//:tikv-jemallocator",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
 ]

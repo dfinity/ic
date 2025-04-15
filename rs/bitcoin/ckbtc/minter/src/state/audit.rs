@@ -115,6 +115,22 @@ pub fn mark_utxo_checked<R: CanisterRuntime>(
     state.mark_utxo_checked_v2(utxo, &account);
 }
 
+pub fn mark_utxo_checked_mint_unknown<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    utxo: Utxo,
+    account: Account,
+    runtime: &R,
+) {
+    record_event(
+        EventType::CheckedUtxoMintUnknown {
+            utxo: utxo.clone(),
+            account,
+        },
+        runtime,
+    );
+    state.mark_utxo_checked_mint_unknown(utxo, &account);
+}
+
 pub fn quarantine_utxo<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     utxo: Utxo,

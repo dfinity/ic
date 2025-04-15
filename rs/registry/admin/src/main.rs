@@ -21,7 +21,7 @@ use ic_crypto_utils_threshold_sig_der::{
 };
 use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -1024,14 +1024,6 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
-
-    /// Keeping it around so that scripts that alreay pass this flag don't break.
-    #[clap(long, default_value = "true")]
-    use_explicit_action_type: bool,
-
-    /// If true, the proposal will be sent as `ExecuteNnsFunction` instead of `InstallCode`.
-    #[clap(long)]
-    use_legacy_execute_nns_function: bool,
 }
 
 #[async_trait]
@@ -4123,26 +4115,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if !cmd.use_legacy_execute_nns_function {
-                propose_action_from_command(cmd, canister_client, proposer).await;
-            } else if cmd.canister_id == ROOT_CANISTER_ID {
-                propose_external_proposal_from_command::<
-                    UpgradeRootProposal,
-                    ProposeToChangeNnsCanisterCmd,
-                >(cmd, NnsFunction::NnsRootUpgrade, canister_client, proposer)
-                .await;
-            } else {
-                propose_external_proposal_from_command::<
-                    ChangeCanisterRequest,
-                    ProposeToChangeNnsCanisterCmd,
-                >(
-                    cmd,
-                    NnsFunction::NnsCanisterUpgrade,
-                    canister_client,
-                    proposer,
-                )
-                .await;
-            }
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToHardResetNnsRootToVersion(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);

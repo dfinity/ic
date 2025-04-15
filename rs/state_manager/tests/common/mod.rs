@@ -301,7 +301,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
     use std::time::{Duration, Instant};
 
-    let timeout = Duration::from_secs(20);
+    let timeout = Duration::from_secs(100);
     let started = Instant::now();
     while started.elapsed() < timeout {
         match state_manager.get_state_hash_at(h) {

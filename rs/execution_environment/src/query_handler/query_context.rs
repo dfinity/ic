@@ -14,6 +14,9 @@ use crate::{
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasmtime_embedder::system_api::{
+    ApiType, ExecutionParameters, InstructionLimits,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
@@ -25,9 +28,8 @@ use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
-    CanisterState, NetworkTopology, ReplicatedState,
+    CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
 };
-use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
@@ -36,12 +38,11 @@ use ic_types::{
         RequestOrResponse, Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, SubnetId, Time,
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
 };
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
-    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -89,7 +90,6 @@ fn wasm_query_method(
 pub(super) struct QueryContext<'a> {
     log: &'a ReplicaLogger,
     hypervisor: &'a Hypervisor,
-    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     // The state against which all queries in the context will be executed.
     state: Labeled<Arc<ReplicatedState>>,
@@ -125,7 +125,6 @@ impl<'a> QueryContext<'a> {
     pub(super) fn new(
         log: &'a ReplicaLogger,
         hypervisor: &'a Hypervisor,
-        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
@@ -156,7 +155,6 @@ impl<'a> QueryContext<'a> {
         Self {
             log,
             hypervisor,
-            own_subnet_id,
             own_subnet_type,
             state,
             network_topology,
@@ -202,10 +200,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = match query.source {
-            QuerySource::User { user_id, .. } => CallOrigin::Query(user_id),
-            QuerySource::Anonymous => CallOrigin::Query(query.source().into()),
-        };
+        let call_origin = CallOrigin::Query(query.source().into());
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
@@ -224,7 +219,18 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        let (mut canister, mut result) = {
+        if let QuerySource::Anonymous = query.source {
+            if let WasmMethod::CompositeQuery(_) = &method {
+                info!(
+                    self.log,
+                    "Running composite canister http transform on canister {}.", query.receiver
+                );
+            }
+        }
+
+        let instructions_before = self.round_limits.instructions;
+
+        let (mut canister, result) = {
             let measurement_scope =
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
@@ -236,48 +242,7 @@ impl<'a> QueryContext<'a> {
             )
         };
 
-        // An attempt to call another query will result in `ContractViolation`.
-        // If that's the case then retry query execution as `Stateful` if the
-        // legacy ICQC is enabled.
-
-        // The legacy ICQC is only enabled for the subnet where Distrikt is. This is
-        // the last known user of this legacy feature. Work is under way to remove
-        // the dependency on it but until then allow this subnet to acces the legacy
-        // code. After Distrikt removes the dependency, the legacy code will be
-        // completely removed.
-        let legacy_icqc_enabled = self.own_subnet_id.get()
-            == PrincipalId::from_str(crate::query_handler::DISTRIKT_SUBNET_PRINCIPAL).unwrap(); // Safe to unwrap as the principal ID is hardcoded to a well known one.
-
-        if let WasmMethod::Query(_) = &method {
-            if let Err(err) = &result {
-                if err.code() == ErrorCode::CanisterContractViolation && legacy_icqc_enabled {
-                    if self.own_subnet_type == SubnetType::System {
-                        info!(
-                            self.log,
-                            "Canister's {} query method {} is using the legacy ICQC feature.",
-                            canister_id,
-                            method,
-                        );
-                    }
-                    let measurement_scope =
-                        MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
-                    let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-                    let (new_canister, new_result) = self.execute_query(
-                        old_canister.clone(),
-                        method,
-                        &query.method_payload,
-                        NonReplicatedQueryKind::Stateful {
-                            call_origin: call_origin.clone(),
-                        },
-                        &measurement_scope,
-                    );
-                    canister = new_canister;
-                    result = new_result;
-                }
-            };
-        }
-
-        match result {
+        let result = match result {
             // If the canister produced a result or if execution failed then it
             // does not matter whether or not it produced any outgoing requests.
             // We can simply return the response we have.
@@ -309,7 +274,21 @@ impl<'a> QueryContext<'a> {
                     }
                 }
             }
+        };
+
+        if let QuerySource::Anonymous = query.source {
+            let instructions_consumed = instructions_before - self.round_limits.instructions;
+            if instructions_consumed >= RoundInstructions::from(100_000_000) {
+                info!(
+                    self.log,
+                    "Canister http transform on canister {} consumed {} instructions.",
+                    canister_id,
+                    instructions_consumed
+                );
+            }
         }
+
+        result
     }
 
     // A helper function that extracts the query calls of the given canister and
@@ -676,8 +655,6 @@ impl<'a> QueryContext<'a> {
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
-        let canister_current_memory_usage = canister.memory_usage();
-        let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
         execution_parameters
             .instruction_limits
@@ -697,17 +674,21 @@ impl<'a> QueryContext<'a> {
                         // No cleanup closure present. Return the callback error as-is.
                         (output.num_instructions_left, Err(callback_err))
                     }
-                    Some(cleanup_closure) => self.execute_cleanup(
-                        time,
-                        &mut canister,
-                        cleanup_closure,
-                        &call_origin,
-                        callback_err,
-                        canister_current_memory_usage,
-                        canister_current_message_memory_usage,
-                        execution_parameters,
-                        call_context.instructions_executed(),
-                    ),
+                    Some(cleanup_closure) => {
+                        let canister_current_memory_usage = canister.memory_usage();
+                        let canister_current_message_memory_usage = canister.message_memory_usage();
+                        self.execute_cleanup(
+                            time,
+                            &mut canister,
+                            cleanup_closure,
+                            &call_origin,
+                            callback_err,
+                            canister_current_memory_usage,
+                            canister_current_message_memory_usage,
+                            execution_parameters,
+                            call_context.instructions_executed(),
+                        )
+                    }
                 }
             }
         };
@@ -743,7 +724,7 @@ impl<'a> QueryContext<'a> {
         call_origin: &CallOrigin,
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
@@ -1041,7 +1022,7 @@ impl<'a> QueryContext<'a> {
     /// Returns true if the total number of instructions executed by queries and
     /// response callbacks exceeds the limit in `round_limits`.
     pub fn instruction_limit_reached(&self) -> bool {
-        self.round_limits.reached()
+        self.round_limits.instructions_reached()
     }
 
     /// Return whether the time limit for this query context has been reached.

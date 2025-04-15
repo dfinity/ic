@@ -673,12 +673,7 @@ impl SnsCanisters<'_> {
                     subaccount: to_subaccount,
                 },
                 memo: None,
-                created_at_time: Some(
-                    SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                ),
+                created_at_time: None,
             },
         )
         .await

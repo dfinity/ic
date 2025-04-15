@@ -88,9 +88,7 @@ fn query_cache_metrics(test: &ExecutionTest) -> &QueryCacheMetrics {
 /// Return `ExecutionTestBuilder` with query caching, composite queries
 /// and query stats enabled.
 fn builder_with_query_caching() -> ExecutionTestBuilder {
-    ExecutionTestBuilder::new()
-        .with_composite_queries()
-        .with_query_stats()
+    ExecutionTestBuilder::new().with_query_stats()
 }
 
 /// Return `ExecutionTestBuilder` with specified query cache `capacity`.
@@ -1474,11 +1472,18 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
+        | SystemApiCallId::CanisterLiquidCycleBalance128
         | SystemApiCallId::CanisterSelfCopy
         | SystemApiCallId::CanisterSelfSize
         | SystemApiCallId::CanisterStatus
         | SystemApiCallId::CanisterVersion
         | SystemApiCallId::CertifiedDataSet
+        | SystemApiCallId::CostCall
+        | SystemApiCallId::CostCreateCanister
+        | SystemApiCallId::CostHttpRequest
+        | SystemApiCallId::CostSignWithEcdsa
+        | SystemApiCallId::CostSignWithSchnorr
+        | SystemApiCallId::CostVetkdDeriveKey
         | SystemApiCallId::CyclesBurn128
         | SystemApiCallId::DataCertificateCopy
         | SystemApiCallId::DataCertificatePresent

@@ -28,7 +28,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.0.0";
+pub const CONFIG_VERSION: &str = "1.1.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &["DUMMY_RESERVED_VALUE"];
@@ -108,7 +108,13 @@ pub struct SetupOSSettings;
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
+    #[serde(default = "default_vm_nr_of_vcpus")]
+    pub vm_nr_of_vcpus: u32,
     pub verbose: bool,
+}
+
+const fn default_vm_nr_of_vcpus() -> u32 {
+    64
 }
 
 /// GuestOS-specific settings.
@@ -236,6 +242,30 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
+    fn test_vm_nr_of_vcpus_deserialization() -> Result<(), Box<dyn std::error::Error>> {
+        // Test with vm_nr_of_vcpus specified
+        let json = r#"{
+            "vm_memory": 4096,
+            "vm_cpu": "host",
+            "vm_nr_of_vcpus": 4,
+            "verbose": true
+        }"#;
+        let settings: HostOSSettings = serde_json::from_str(json)?;
+        assert_eq!(settings.vm_nr_of_vcpus, 4);
+
+        // Test without vm_nr_of_vcpus (should use default)
+        let json = r#"{
+            "vm_memory": 4096,
+            "vm_cpu": "host",
+            "verbose": true
+        }"#;
+        let settings: HostOSSettings = serde_json::from_str(json)?;
+        assert_eq!(settings.vm_nr_of_vcpus, 64);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_no_reserved_field_names_used() -> Result<(), Box<dyn std::error::Error>> {
         let reserved_field_names: HashSet<&str> = RESERVED_FIELD_NAMES.iter().cloned().collect();
 
@@ -261,6 +291,7 @@ mod tests {
             hostos_settings: HostOSSettings {
                 vm_memory: 0,
                 vm_cpu: String::new(),
+                vm_nr_of_vcpus: 0,
                 verbose: false,
             },
             guestos_settings: GuestOSSettings::default(),

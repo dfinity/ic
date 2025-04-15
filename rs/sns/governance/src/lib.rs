@@ -3,6 +3,8 @@ use std::convert::TryInto;
 
 mod cached_upgrade_steps;
 pub mod canister_control;
+pub(crate) mod follower_index;
+pub mod following;
 pub mod governance;
 pub mod init;
 pub mod logs;
@@ -11,6 +13,7 @@ pub mod pb;
 pub mod proposal;
 pub mod reward;
 pub mod sns_upgrade;
+pub mod topics;
 mod treasury;
 pub mod types;
 pub mod upgrade_journal;

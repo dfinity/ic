@@ -1,14 +1,14 @@
 use crate::{
     admin_helper::RegistryParams,
     cli::{
-        print_height_info, read_optional, read_optional_node_ids, read_optional_upload_method,
+        print_height_info, read_optional, read_optional_data_location, read_optional_node_ids,
         read_optional_version,
     },
     command_helper::pipe_all,
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    util::UploadMethod,
+    util::DataLocation,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use clap::Parser;
@@ -83,8 +83,8 @@ pub struct NNSRecoveryFailoverNodesArgs {
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
-    #[clap(long, value_parser=crate::util::upload_method_from_str)]
-    pub upload_method: Option<UploadMethod>,
+    #[clap(long, value_parser=crate::util::data_location_from_str)]
+    pub upload_method: Option<DataLocation>,
 
     /// IP address of the parent nns host to download the registry store from
     #[clap(long)]
@@ -237,7 +237,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::WaitForCUP => {
                 if self.params.upload_method.is_none() {
-                    self.params.upload_method = read_optional_upload_method(
+                    self.params.upload_method = read_optional_data_location(
                         &self.logger,
                         "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
                     );
@@ -393,8 +393,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::WaitForCUP => {
                 if let Some(method) = self.params.upload_method {
                     let node_ip = match method {
-                        UploadMethod::Remote(ip) => ip,
-                        UploadMethod::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+                        DataLocation::Remote(ip) => ip,
+                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
                     };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {

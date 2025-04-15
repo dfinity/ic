@@ -18,7 +18,7 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     UpgradeArg as LedgerSuiteOrchestratorUpgradeArg,
 };
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
@@ -815,7 +815,12 @@ fn deploy_smart_contract(
     logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let sender_private_key = sender.private_key();
-    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
+    let cmd = format!("\
+        docker run --net {DOCKER_NETWORK_NAME} --rm \
+        -v /config/{filename}:/contracts/{filename} \
+        foundry \"forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --broadcast --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}\"\
+    ");
+    let json_output = foundry.block_on_bash_script(&cmd).unwrap();
     info!(
         logger,
         "Deployed {filename} with constructor args {constructor_args}: {}", json_output

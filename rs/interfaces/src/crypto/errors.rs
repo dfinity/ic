@@ -9,7 +9,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::Dk
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
-use ic_types::crypto::vetkd::VetKdKeyShareVerificationError;
+use ic_types::crypto::vetkd::{VetKdKeyShareVerificationError, VetKdKeyVerificationError};
 use ic_types::crypto::CryptoError;
 use ic_types::registry::RegistryClientError;
 
@@ -434,6 +434,24 @@ impl ErrorReproducibility for VetKdKeyShareVerificationError {
 
         match self {
             Self::VerificationError(crypto_error) => crypto_error.is_reproducible(),
+            // false, as the result may change if the DKG transcript is reloaded.
+            Self::ThresholdSigDataNotFound(_) => false,
+        }
+    }
+}
+
+impl ErrorReproducibility for VetKdKeyVerificationError {
+    fn is_reproducible(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        match self {
+            Self::InvalidArgumentEncryptedKey => true,
+            Self::InternalError(_) => true,
+            Self::InvalidArgumentMasterPublicKey => true,
+            Self::InvalidArgumentEncryptionPublicKey => true,
+            Self::VerificationError => true,
             // false, as the result may change if the DKG transcript is reloaded.
             Self::ThresholdSigDataNotFound(_) => false,
         }

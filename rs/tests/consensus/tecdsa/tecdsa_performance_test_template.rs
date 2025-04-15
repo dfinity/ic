@@ -47,7 +47,7 @@ use ic_consensus_system_test_utils::{
 use ic_consensus_threshold_sig_system_test_utils::{
     run_chain_key_signature_test, ChainSignatureRequest,
 };
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
@@ -131,10 +131,13 @@ fn make_key_ids() -> Vec<MasterPublicKeyId> {
             "ecdsa_secp256k1" => {
                 result.push(ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id());
             }
+            "vetkd_bls12_381_g2" => {
+                result.push(ic_consensus_threshold_sig_system_test_utils::make_vetkd_key_id());
+            }
             _ => panic!(
                 "Unknown key id {key_id} in the environment variable TECDSA_PERFORMANCE_TEST_KEY_IDS={key_ids_string}. \
-                Allowed are schnorr_bip340, schnorr_ed25519, and ecdsa_secp256k1. Also note that the key ids should be \
-                comma-separated without spaces.",
+                Allowed are vetkd_bls12_381_g2, schnorr_bip340, schnorr_ed25519, and ecdsa_secp256k1. Also note that \
+                the key ids should be comma-separated without spaces.",
             ),
         }
     }

@@ -15,7 +15,6 @@ ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-crypto-secp256k1 = { path = "secp256k1" }
 ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
@@ -31,13 +30,14 @@ ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validatio
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-crypto-utils-tls = { path = "utils/tls" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
+ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
@@ -137,4 +137,8 @@ harness = false
 
 [[bench]]
 name = "tschnorr"
+harness = false
+
+[[bench]]
+name = "vetkd"
 harness = false

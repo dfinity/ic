@@ -7,8 +7,8 @@ Before=setupos.service
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/setupos_tool generate-network-config
-StandardOutput=tty
-StandardError=tty
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=systemd-networkd.service

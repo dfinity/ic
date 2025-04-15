@@ -24,6 +24,7 @@ use ic_nns_test_utils::{
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Subaccount;
 use maplit::hashmap;
+use std::time::SystemTime;
 use std::{collections::HashMap, time::Duration};
 
 const INVALID_PROPOSAL_ID: u64 = 69420;
@@ -347,12 +348,18 @@ fn neuron_with_followees(
     }
     let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
 
+    let now_timestamp_seconds = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
     api::Neuron {
         id: Some(neuron_id),
         controller: Some(PrincipalId::new_user_test_id(id)),
         hot_keys: vec![*TEST_NEURON_1_OWNER_PRINCIPAL],
         // Use large values to avoid the possibility of collisions with other self-authenticating hotkeys
         dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+        voting_power_refreshed_timestamp_seconds: Some(now_timestamp_seconds),
         cached_neuron_stake_e8s: 1_000_000_000,
         account: subaccount.to_vec(),
         followees,
@@ -402,6 +409,7 @@ fn test_voting_can_span_multiple_rounds() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: Some(vec![]),
         },
     );
 
@@ -429,6 +437,7 @@ fn test_voting_can_span_multiple_rounds() {
             include_public_neurons_in_full_neurons: None,
             page_number: None,
             page_size: None,
+            neuron_subaccounts: Some(vec![]),
         },
     );
 

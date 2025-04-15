@@ -213,6 +213,14 @@ pub enum RejectReason {
     Unknown = 7,
 }
 
+impl RejectReason {
+    /// Produces a vector of all reject reason. Prevents having to add strum as a dependency
+    pub fn all() -> Vec<RejectReason> {
+        use strum::IntoEnumIterator;
+        Self::iter().collect()
+    }
+}
+
 impl From<RejectReason> for pb_queues::RejectReason {
     fn from(item: RejectReason) -> Self {
         match item {

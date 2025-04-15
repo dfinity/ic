@@ -12,13 +12,15 @@ use ic_system_test_driver::{
         IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
     },
     nns::{
-        get_governance_canister, submit_update_unassigned_node_version_proposal,
-        vote_execute_proposal_assert_executed,
+        get_governance_canister, submit_update_api_boundary_node_version_proposal,
+        submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
 };
+use ic_types::NodeId;
 use itertools::Itertools;
 use slog::{info, Logger};
+use std::collections::{HashMap, HashSet};
 use tokio::runtime::Handle;
 
 use super::Step;
@@ -146,6 +148,92 @@ impl Step for UpdateSubnetType {
     }
 }
 
+#[derive(Clone)]
+pub struct UpdateApiBoundaryNodes {
+    pub version: String,
+}
+
+impl Step for UpdateApiBoundaryNodes {
+    fn execute(
+        &self,
+        env: ic_system_test_driver::driver::test_env::TestEnv,
+        rt: Handle,
+    ) -> anyhow::Result<()> {
+        let logger = env.logger();
+
+        // check that there are even API boundary nodes
+        if env
+            .topology_snapshot()
+            .api_boundary_nodes()
+            .next()
+            .is_none()
+        {
+            info!(logger, "There are no API boundary nodes to be upgraded");
+            return Ok(());
+        }
+
+        // all API BNs should be on the same version
+        let versions = get_api_boundary_nodes_version(env.topology_snapshot());
+        let unique_versions: HashSet<_> = versions.values().cloned().collect();
+
+        if unique_versions.len() > 1 {
+            return Err(anyhow::anyhow!(
+                "The API BNs are on different versions: {}",
+                versions
+                    .iter()
+                    .map(|(node_id, version)| format!("{} -> {}", node_id, version))
+                    .join(", ")
+            ));
+        }
+
+        // check whether the current version of the API BNs is already the one they should be upgraded to
+        let current_version = unique_versions.iter().next().unwrap();
+        if current_version.eq(&self.version) {
+            info!(
+                logger,
+                "API boundary nodes are already on version {}", self.version
+            );
+            return Ok(());
+        }
+
+        // try to upgrade them
+        let nns_node = env.get_first_healthy_nns_node_snapshot();
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        let governance_canister = get_governance_canister(&nns);
+        let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+        let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+
+        let node_ids: Vec<_> = env
+            .topology_snapshot()
+            .api_boundary_nodes()
+            .map(|n| n.node_id)
+            .collect();
+
+        info!(logger, "Submit the proposal to upgrade the API BNs");
+        let proposal_id = rt.block_on(submit_update_api_boundary_node_version_proposal(
+            &governance_canister,
+            proposal_sender,
+            test_neuron_id,
+            node_ids,
+            self.version.clone(),
+        ));
+
+        info!(logger, "Vote on the proposal");
+        rt.block_on(vote_execute_proposal_assert_executed(
+            &governance_canister,
+            proposal_id,
+        ));
+
+        info!(
+            logger,
+            "Wait for the proposal to pass and update the registry"
+        );
+        rt.block_on(env.topology_snapshot().block_for_newer_registry_version())?;
+
+        Ok(())
+    }
+}
+
 async fn assert_version_on_all_nodes(
     nodes: Vec<IcNodeSnapshot>,
     logger: Logger,
@@ -185,4 +273,17 @@ fn get_unassigned_nodes_version(topology_snapshot: TopologySnapshot) -> Vec<Stri
         })
         .dedup()
         .collect_vec()
+}
+
+fn get_api_boundary_nodes_version(topology_snapshot: TopologySnapshot) -> HashMap<NodeId, String> {
+    topology_snapshot
+        .api_boundary_nodes()
+        .map(|n| {
+            let version = n
+                .get_initial_replica_version()
+                .expect("Should be able to read API boundary nodes version")
+                .to_string();
+            (n.node_id, version)
+        })
+        .collect()
 }

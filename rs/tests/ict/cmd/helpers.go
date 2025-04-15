@@ -152,7 +152,7 @@ func get_closest_target_matches(all_targets []string, target string) []string {
 	})
 }
 
-func sparse_checkout(repoUrl, repoDir string, sparseCheckoutPaths []string) (string, error) {
+func sparse_checkout(repoUrl, repoDir string, sparseCheckoutPaths []string, branch string) (string, error) {
 	startingPoint, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("Could not get current dir: %v", err)
@@ -179,7 +179,7 @@ func sparse_checkout(repoUrl, repoDir string, sparseCheckoutPaths []string) (str
 		return "", fmt.Errorf("Could not create repo directory: %v", err)
 	}
 
-	cloneCmd := exec.Command("git", "clone", "--filter=blob:none", "--no-checkout", repoUrl, repoDir)
+	cloneCmd := exec.Command("git", "clone", "--filter=blob:none", "--no-checkout", "--branch", branch, repoUrl, repoDir)
 	stdErrBuffer := &bytes.Buffer{}
 	cloneCmd.Stderr = stdErrBuffer
 	if err := cloneCmd.Run(); err != nil {

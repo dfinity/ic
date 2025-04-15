@@ -11,11 +11,12 @@ use crate::{
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadChunkArgs, IC_00,
+    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -551,6 +552,30 @@ pub fn extract_effective_canister_id(
                 Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
             }
         }
+        Ok(Method::ReadCanisterSnapshotMetadata) => {
+            match ReadCanisterSnapshotMetadataArgs::decode(ingress.arg()) {
+                Ok(record) => Ok(Some(record.get_canister_id())),
+                Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+            }
+        }
+        Ok(Method::ReadCanisterSnapshotData) => {
+            match ReadCanisterSnapshotDataArgs::decode(ingress.arg()) {
+                Ok(record) => Ok(Some(record.get_canister_id())),
+                Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+            }
+        }
+        Ok(Method::UploadCanisterSnapshotMetadata) => {
+            match UploadCanisterSnapshotMetadataArgs::decode(ingress.arg()) {
+                Ok(record) => Ok(Some(record.get_canister_id())),
+                Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+            }
+        }
+        Ok(Method::UploadCanisterSnapshotData) => {
+            match UploadCanisterSnapshotDataArgs::decode(ingress.arg()) {
+                Ok(record) => Ok(Some(record.get_canister_id())),
+                Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+            }
+        }
 
         Ok(Method::CreateCanister)
         | Ok(Method::SetupInitialDKG)
@@ -564,7 +589,7 @@ pub fn extract_effective_canister_id(
         | Ok(Method::SchnorrPublicKey)
         | Ok(Method::SignWithSchnorr)
         | Ok(Method::VetKdPublicKey)
-        | Ok(Method::VetKdDeriveEncryptedKey)
+        | Ok(Method::VetKdDeriveKey)
         | Ok(Method::BitcoinGetBalance)
         | Ok(Method::BitcoinGetUtxos)
         | Ok(Method::BitcoinGetBlockHeaders)
@@ -594,7 +619,7 @@ mod test {
     };
     use crate::{CanisterId, SubnetId, UserId};
     use ic_base_types::PrincipalId;
-    use ic_management_canister_types::IC_00;
+    use ic_management_canister_types_private::IC_00;
     use std::convert::From;
 
     #[test]

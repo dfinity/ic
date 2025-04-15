@@ -1095,7 +1095,6 @@ impl EcdsaSubnetConfig {
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: None,
                 chain_key_config: Some(ChainKeyConfig {
                     key_configs: vec![KeyConfig {
                         key_id: Some(ic_protobuf::types::v1::MasterPublicKeyId {
@@ -1117,9 +1116,9 @@ impl EcdsaSubnetConfig {
         }
     }
 
-    pub fn new_without_ecdsa_config(subnet_id: SubnetId, node_id: Option<NodeId>) -> Self {
+    pub fn new_without_chain_key_config(subnet_id: SubnetId, node_id: Option<NodeId>) -> Self {
         let mut subnet_config = Self::new(subnet_id, node_id, None);
-        subnet_config.subnet_record.ecdsa_config = None;
+        subnet_config.subnet_record.chain_key_config = None;
         subnet_config
     }
 

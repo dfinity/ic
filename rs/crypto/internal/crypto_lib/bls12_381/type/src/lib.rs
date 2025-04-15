@@ -31,7 +31,7 @@ pub type NodeIndex = u32;
 #[cfg(test)]
 mod tests;
 
-use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve, HashToField};
 use itertools::multiunzip;
 use pairing::group::{ff::Field, Group};
 use paste::paste;
@@ -232,6 +232,18 @@ impl Scalar {
     /// Return the scalar 1
     pub fn one() -> Self {
         Self::new(ic_bls12_381::Scalar::one())
+    }
+
+    /// Hash to scalar
+    ///
+    /// Uses the same mechanism as RFC 9380's hash_to_field except
+    /// targeting the scalar group.
+    pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+        let mut s = [ic_bls12_381::Scalar::zero()];
+        <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
+            input, domain_sep, &mut s,
+        );
+        Self::new(s[0])
     }
 
     /// Return true iff this value is zero

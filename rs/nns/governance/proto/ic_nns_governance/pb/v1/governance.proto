@@ -412,6 +412,9 @@ message Neuron {
   // to overwrite next.
   optional uint32 recent_ballots_next_entry_index = 25;
 
+  // The maturity disbursements that are in progress for this neuron.
+  repeated MaturityDisbursement maturity_disbursements_in_progress = 28;
+
   reserved "deciding_voting_power";
   reserved 26;
 
@@ -1100,6 +1103,19 @@ message ManageNeuron {
   // fields in Neuron.
   message RefreshVotingPower {}
 
+  // Disburse the maturity of a neuron to any ledger account. If an account
+  // is not specified, the caller's account will be used. The caller can choose
+  // a percentage of the current maturity to disburse to the ledger account. The
+  // resulting amount to disburse must be greater than or equal to the
+  // transaction fee.
+  message DisburseMaturity {
+    // The percentage to disburse, from 1 to 100
+    uint32 percentage_to_disburse = 1;
+
+    // The (optional) principal to which to transfer the stake.
+    Account to_account = 2;
+  }
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -1114,6 +1130,7 @@ message ManageNeuron {
     Merge merge = 14;
     StakeMaturity stake_maturity = 15;
     RefreshVotingPower refresh_voting_power = 16;
+    DisburseMaturity disburse_maturity = 17;
   }
 }
 
@@ -1672,6 +1689,15 @@ message VotingPowerEconomics {
   //
   // Initially, set to 1/12 years.
   optional uint64 clear_following_after_seconds = 2;
+
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 3;
 }
 
 // The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -2255,74 +2281,6 @@ message Governance {
 
   MakingSnsProposal making_sns_proposal = 20;
 
-  // Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-  message Migration {
-    enum MigrationStatus {
-      // Unspecified.
-      MIGRATION_STATUS_UNSPECIFIED = 0;
-      // Migration is in progress.
-      MIGRATION_STATUS_IN_PROGRESS = 1;
-      // Migration succeeded.
-      MIGRATION_STATUS_SUCCEEDED = 2;
-      // Migration failed.
-      MIGRATION_STATUS_FAILED = 3;
-    }
-
-    // Migration status.
-    optional MigrationStatus status = 1;
-
-    // The reason why it failed. Should only be present when the status is FAILED.
-    // This is only for debugging and it should not be used programmatically (other than its presence).
-    optional string failure_reason = 2;
-
-    // Migration progress (cursor).
-    oneof progress {
-      // Last neuron id migrated.
-      ic_nns_common.pb.v1.NeuronId last_neuron_id = 3;
-    }
-  }
-
-  // The status of all on-going (and recently completed) migrations (that take
-  // place over the course of multiple heartbeat calls).
-  //
-  // Each Migration field corresponds to one (ongoing or recently completed) migration.
-  //
-  // After a migration is finished, it should be OK to reserve the tag and lose the data.
-  message Migrations {
-    // Migrates neuron indexes to stable storage.
-    Migration neuron_indexes_migration = 1;
-    Migration copy_inactive_neurons_to_stable_memory_migration = 2;
-  }
-
-  // Migration related data.
-  Migrations migrations = 21;
-
-  // A map of followees to their followers.
-  message FollowersMap {
-    message Followers {
-      // The followers of the neuron with the given ID.
-      // These values will be non-repeating, and order does not matter.
-      repeated ic_nns_common.pb.v1.NeuronId followers = 1;
-    }
-    // The key is the neuron ID of the followee.
-    map<fixed64, Followers> followers_map = 1;
-  }
-
-  // A Structure used during upgrade to store the index of topics for neurons to their followers.
-  // This is the inverse of what is stored in a Neuron (its followees).
-  map<int32, FollowersMap> topic_followee_index = 22;
-
-  reserved 6;
-  reserved "authz";
-
-  // Reserved id for deprecated `seed_accounts`
-  reserved 23;
-  reserved "seed_accounts";
-
-  // Reserved id for deprecated `genesis_neuron_accounts`
-  reserved 24;
-  reserved "genesis_neuron_accounts";
-
   // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
   optional XdrConversionRate xdr_conversion_rate = 26;
 
@@ -2332,6 +2290,25 @@ message Governance {
   // Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
   // source of randomness (from the platform)
   optional bytes rng_seed = 28;
+
+  reserved 6;
+  reserved "authz";
+
+  // Reserved id for deprecated `migrations`.
+  reserved 21;
+  reserved "migrations";
+
+  // Reserved id for deprecated `seed_accounts`
+  reserved 23;
+  reserved "seed_accounts";
+
+  // Reserved id for deprecated `genesis_neuron_accounts`
+  reserved 24;
+  reserved "genesis_neuron_accounts";
+
+  // Reserved id for deprecated `topic_followee_index`
+  reserved 22;
+  reserved "topic_followee_index";
 }
 
 message XdrConversionRate {
@@ -2716,4 +2693,57 @@ message ProposalVotingStateMachine {
   repeated ic_nns_common.pb.v1.NeuronId neurons_to_check_followers = 3;
   repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
   map<uint64, Vote> recent_neuron_ballots_to_record = 5;
+}
+
+// A Ledger subaccount.
+message Subaccount {
+  bytes subaccount = 1;
+}
+
+// A Ledger account identified by the owner of the account `of` and
+// the `subaccount`. If the `subaccount` is not specified then the default
+// one is used.
+message Account {
+  // The owner of the account.
+  ic_base_types.pb.v1.PrincipalId owner = 1;
+
+  // The subaccount of the account. If not set then the default
+  // subaccount (all bytes set to 0) is used.
+  optional Subaccount subaccount = 2;
+}
+
+// A reward disbribution that has been calculated but not fully disbursed.
+// This supports large reward distributions that may need to be split into multiple
+// messages.
+message RewardsDistributionInProgress {
+  map<uint64, uint64> neuron_ids_to_e8_amounts = 1;
+}
+
+message MaturityDisbursement {
+  // The amount of maturity being disbursed in e8s.
+  uint64 amount_e8s = 1;
+  // The timestamp at which the maturity was disbursed.
+  uint64 timestamp_of_disbursement_seconds = 2;
+  // The account to disburse the maturity to.
+  Account account_to_disburse_to = 3;
+  // The timestamp at which the maturity disbursement should be finalized.
+  uint64 finalize_disbursement_timestamp_seconds = 4;
+}
+
+// A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
+// a proposal.
+message NeuronIdToVotingPowerMap {
+  // Map from neuron id to the voting power of the neuron.
+  map<fixed64, uint64> voting_power_map = 1;
+}
+
+// Total voting power (deciding and potential) at a certain point in time. A history of the totals
+// can be used to detect voting power spikes. See `Neuron::deciding_voting_power` and
+// `Neuron::potential_voting_power` for more information.
+message VotingPowerTotal {
+  // The total deciding voting power.
+  uint64 total_deciding_voting_power = 1;
+
+  // The total potential voting power.
+  uint64 total_potential_voting_power = 2;
 }

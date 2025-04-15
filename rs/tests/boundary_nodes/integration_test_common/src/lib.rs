@@ -453,7 +453,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
                 .to_vec();
 
             if res != hello_world_gzip {
-                bail!("gzipped hello world response did not match uploaded content")
+                bail!("gzipped hello world response did not match uploaded content (got {res:?}, expected {hello_world_gzip:?}")
             }
 
             Ok(())
@@ -674,7 +674,7 @@ pub fn legacy_asset_canister_test(env: TestEnv) {
                     .send()
                     .await.context("unable to request asset")?;
 
-                if res.status() != StatusCode::SERVICE_UNAVAILABLE {
+                if res.status() != StatusCode::BAD_GATEWAY {
                     bail!("invalid 4mb asset did not fail verification")
                 }
 
@@ -1768,7 +1768,7 @@ pub fn http_endpoints_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::SERVICE_UNAVAILABLE {
+            if res.status() != StatusCode::BAD_GATEWAY {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -2006,7 +2006,7 @@ pub fn cors_headers_test(env: TestEnv) {
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", &allowed_methods),
                 ("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie,X-Ic-Canister-Id"),
-                ("Access-Control-Max-Age", "600"),
+                ("Access-Control-Max-Age", "7200"),
             ] {
                 let hdr = res
                     .headers()
@@ -2017,7 +2017,7 @@ pub fn cors_headers_test(env: TestEnv) {
                 let expect = normalize(v);
 
                 if hdr != expect {
-                    bail!("{name} OPTIONS failed: wrong {k} header: {hdr} expected {expect}")
+                    bail!("{name} OPTIONS failed: wrong {k} header: {hdr} expected: {expect}")
                 }
             }
 
@@ -2044,7 +2044,7 @@ pub fn cors_headers_test(env: TestEnv) {
                 let expect = normalize(v);
 
                 if hdr != expect {
-                    bail!("{name} failed: wrong {k} header: {hdr} expected {expect}")
+                    bail!("{name} failed: wrong {k} header: {hdr} expected: {expect}")
                 }
             }
 

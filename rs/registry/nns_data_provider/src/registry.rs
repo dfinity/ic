@@ -1,4 +1,5 @@
-use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use prost::Message;
 use rand::seq::SliceRandom;
 use std::time::Duration;
@@ -6,14 +7,13 @@ use url::Url;
 
 use ic_canister_client::{Agent, Sender};
 use ic_interfaces_registry::RegistryTransportRecord;
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
-    deserialize_get_value_response, serialize_atomic_mutate_request,
-    serialize_get_changes_since_request, serialize_get_value_request,
-};
-use ic_registry_transport::{
-    pb::v1::{Precondition, RegistryDelta, RegistryMutation},
-    Error,
+    deserialize_get_value_response,
+    pb::v1::{Precondition, RegistryDelta, RegistryGetLatestVersionResponse, RegistryMutation},
+    serialize_atomic_mutate_request, serialize_get_changes_since_request,
+    serialize_get_value_request, Error,
 };
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
 
@@ -23,6 +23,46 @@ pub const MAX_NUM_SSH_KEYS: usize = 50;
 pub struct RegistryCanister {
     canister_id: CanisterId,
     agent: Vec<Agent>,
+}
+
+/// The only thing this implements in FetchLargeValue is
+/// get_chunk_no_validation. The other methods use the default implementation
+/// from FetchLargeValue.
+struct AgentBasedFetchLargeValue<'a> {
+    registry_canister_id: CanisterId,
+    agent: &'a Agent,
+}
+
+#[async_trait]
+impl crate::certification::FetchLargeValue for AgentBasedFetchLargeValue<'_> {
+    /// Just calls the Registry canister's get_chunk method.
+    async fn get_chunk_no_validation(&self, content_sha256: &[u8]) -> Result<Vec<u8>, String> {
+        fn new_err(cause: impl std::fmt::Debug) -> String {
+            format!("Unable to fetch large registry record: {:?}", cause,)
+        }
+
+        // Call get_chunk.
+        let content_sha256 = Some(content_sha256.to_vec());
+        let request = Encode!(&GetChunkRequest { content_sha256 }).map_err(new_err)?;
+        let get_chunk_response: Vec<u8> = self
+            .agent
+            .execute_query(&self.registry_canister_id, "get_chunk", request)
+            .await
+            .map_err(new_err)?
+            // I honestly do not know what it means if None is returned
+            // instead of Some(blob), but it really seems like something
+            // has gone wrong (not just empty reply, but rather, no
+            // reply at all), so we treat it as an error.
+            .ok_or_else(|| new_err("No reply (not even empty)"))?;
+
+        // Extract chunk from get_chunk call.
+        let Chunk { content } = Decode!(&get_chunk_response, Result<Chunk, String>)
+            .map_err(new_err)? // unable to decode
+            .map_err(new_err)?; // Registry canister returned Err.
+        content.ok_or_else(|| {
+            new_err("content in get_chunk response is null (not even an empty string)")
+        })
+    }
 }
 
 impl RegistryCanister {
@@ -143,7 +183,12 @@ impl RegistryCanister {
             &self.canister_id,
             nns_public_key,
             &response[..],
+            &AgentBasedFetchLargeValue {
+                registry_canister_id: self.canister_id,
+                agent: self.choose_random_agent(),
+            },
         )
+        .await
         .map_err(|err| Error::UnknownError(format!("{:?}", err)))
     }
 

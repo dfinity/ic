@@ -19,9 +19,9 @@ pub type SignMessageId = Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn Error
 /// A secp256k1 key pair
 #[derive(Clone)]
 pub struct Secp256k1KeyPair {
-    sk: ic_crypto_secp256k1::PrivateKey,
+    sk: ic_secp256k1::PrivateKey,
     /// The public key bytes only.
-    pk: ic_crypto_secp256k1::PublicKey,
+    pk: ic_secp256k1::PublicKey,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -66,11 +66,11 @@ impl Secp256k1KeyPair {
     }
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let mut rng = ChaCha20Rng::from_seed(rng.gen());
-        let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(&mut rng);
+        let sk = ic_secp256k1::PrivateKey::generate_using_rng(&mut rng);
         let pk = sk.public_key();
         Self { sk, pk }
     }
-    pub fn get_public_key(&self) -> ic_crypto_secp256k1::PublicKey {
+    pub fn get_public_key(&self) -> ic_secp256k1::PublicKey {
         self.pk.clone()
     }
 }
@@ -135,9 +135,9 @@ impl Sender {
     pub fn from_secp256k1_keys(
         sk_bytes: &[u8],
         pk_bytes: &[u8],
-    ) -> Result<Self, ic_crypto_secp256k1::KeyDecodingError> {
-        let pk = ic_crypto_secp256k1::PublicKey::deserialize_sec1(pk_bytes)?;
-        let sk = ic_crypto_secp256k1::PrivateKey::deserialize_sec1(sk_bytes)?;
+    ) -> Result<Self, ic_secp256k1::KeyDecodingError> {
+        let pk = ic_secp256k1::PublicKey::deserialize_sec1(pk_bytes)?;
+        let sk = ic_secp256k1::PrivateKey::deserialize_sec1(sk_bytes)?;
         Ok(Sender::SigKeys(SigKeys::EcdsaSecp256k1(Secp256k1KeyPair {
             sk,
             pk,

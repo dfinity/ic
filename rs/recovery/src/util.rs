@@ -11,16 +11,16 @@ use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum UploadMethod {
+pub enum DataLocation {
     Local,
     Remote(IpAddr),
 }
 
-pub fn upload_method_from_str(s: &str) -> RecoveryResult<UploadMethod> {
+pub fn data_location_from_str(s: &str) -> RecoveryResult<DataLocation> {
     if s == "local" {
-        return Ok(UploadMethod::Local);
+        return Ok(DataLocation::Local);
     }
-    Ok(UploadMethod::Remote(IpAddr::V6(
+    Ok(DataLocation::Remote(IpAddr::V6(
         Ipv6Addr::from_str(s).map_err(|e| {
             RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {:?}", e))
         })?,

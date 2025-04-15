@@ -1,29 +1,27 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::{ExecutionTask, ReplicatedState};
-use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-};
-
-use ic_management_canister_types::InstallChunkedCodeArgsLegacy;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
-    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
-    Method, Payload, UploadChunkArgs, UploadChunkReply,
+    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallChunkedCodeArgsLegacy,
+    InstallCodeArgs, InstallCodeArgsV2, Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
-use ic_replicated_state::canister_state::{execution_state::WasmExecutionMode, NextExecution};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
+use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::{ExecutionTask, MessageMemoryUsage, ReplicatedState};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
+use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
-use ic_types_test_utils::ids::user_test_id;
-use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
+use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    MAX_MEMORY_ALLOCATION,
+};
+use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 use std::mem::size_of;
@@ -91,7 +89,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
     assert_eq!(
         format!(
             "MemoryAllocation expected to be in the range [0..{}], got 18_446_744_073_709_551_615",
-            candid::Nat((MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES).into())
+            candid::Nat(MAX_MEMORY_ALLOCATION.get().into())
         ),
         err.description()
     );
@@ -769,7 +767,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         NumBytes::new(canister_history_memory_usage as u64),
-        NumBytes::new(0),
+        MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -2328,6 +2326,9 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         let final_cycles = test.canister_state(canister_id).system_state.balance();
         initial_cycles - final_cycles
     };
+
+    // Clear `expected_compiled_wasms` so that the full execution cost is applied
+    test.state_mut().metadata.expected_compiled_wasms.clear();
 
     let canister_id = test.create_canister(CYCLES);
 

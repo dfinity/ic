@@ -18,9 +18,9 @@
 //!
 //! 4. Replicated states below the certified height recorded in the block
 //!    in the latest CatchUpPackage can be purged.
-use super::{bounds::validated_pool_within_bounds, MINIMUM_CHAIN_LENGTH};
+use super::bounds::validated_pool_within_bounds;
 use crate::consensus::metrics::PurgerMetrics;
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{pool_reader::PoolReader, MINIMUM_CHAIN_LENGTH};
 use ic_interfaces::{
     consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
@@ -35,8 +35,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height,
 };
-use std::collections::BTreeSet;
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::RefCell, collections::BTreeSet, sync::Arc};
 
 pub(crate) const VALIDATED_POOL_BOUNDS_CHECK_FREQUENCY: u64 = 10;
 
@@ -477,8 +476,6 @@ fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
 
 #[cfg(test)]
 mod tests {
-    use crate::idkg::test_utils::empty_idkg_payload;
-
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::p2p::consensus::MutablePool;
@@ -487,13 +484,16 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::message_routing::FakeMessageRouting;
-    use ic_test_utilities_consensus::fake::FakeContentUpdate;
+    use ic_test_utilities_consensus::{fake::FakeContentUpdate, idkg::empty_idkg_payload};
     use ic_types::{
         consensus::{BlockPayload, BlockProposal, Payload, Rank},
         crypto::CryptoHash,
         CryptoHashOfState, SubnetId,
     };
-    use std::sync::{Arc, RwLock};
+    use std::{
+        collections::HashSet,
+        sync::{Arc, RwLock},
+    };
 
     #[test]
     fn test_purger() {
@@ -890,7 +890,10 @@ mod tests {
                 .replace(finalized_block_proposal_1.content.as_ref().height);
 
             let pool_reader = PoolReader::new(&pool);
-            let remove_from_validated_changeset: Vec<_> = purger
+            // Ignored because the `Hash` implementation of `Block` does not
+            // access the mutable payload `Thunk`.
+            #[allow(clippy::mutable_key_type)]
+            let remove_from_validated_changeset: HashSet<_> = purger
                 .on_state_change(&pool_reader)
                 .into_iter()
                 .filter(|change_action| {
@@ -900,7 +903,7 @@ mod tests {
 
             assert_eq!(
                 remove_from_validated_changeset,
-                vec![
+                HashSet::from([
                     ChangeAction::RemoveFromValidated(ConsensusMessage::Notarization(
                         non_finalized_notarization_2
                     )),
@@ -910,7 +913,7 @@ mod tests {
                     ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
                         non_finalized_block_proposal_2_1
                     )),
-                ]
+                ])
             );
         })
     }

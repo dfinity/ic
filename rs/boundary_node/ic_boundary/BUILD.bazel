@@ -6,8 +6,8 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
-    "//rs/boundary_node/anonymization/client",
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
+    "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/certification/test-utils",
@@ -73,6 +73,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:serde_regex",
     "@crate_index//:serde_yaml",
+    "@crate_index//:sha3",
     "@crate_index//:simple_moving_average",
     "@crate_index//:slog",
     "@crate_index//:strum",

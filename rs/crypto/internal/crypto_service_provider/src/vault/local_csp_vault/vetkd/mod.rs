@@ -5,12 +5,11 @@ use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_bls12_381_vetkd::{
-    DerivationPath, EncryptedKeyShare, G2Affine, PairingInvalidPoint, Scalar, TransportPublicKey,
-    TransportPublicKeyDeserializationError,
+    DerivationContext, EncryptedKeyShare, G2Affine, PairingInvalidPoint, Scalar,
+    TransportPublicKey, TransportPublicKeyDeserializationError,
 };
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use ic_types::crypto::ExtendedDerivationPath;
+use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
@@ -24,17 +23,17 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         key_id: KeyId,
         master_public_key: Vec<u8>,
-        encryption_public_key: Vec<u8>,
-        derivation_path: ExtendedDerivationPath,
-        derivation_id: Vec<u8>,
+        transport_public_key: Vec<u8>,
+        context: VetKdDerivationContext,
+        input: Vec<u8>,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
         let start_time = self.metrics.now();
         let result = self.create_encrypted_vetkd_key_share_internal(
             key_id,
             master_public_key,
-            encryption_public_key,
-            derivation_path,
-            derivation_id,
+            transport_public_key,
+            context,
+            input,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::VetKd,
@@ -54,17 +53,17 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         key_id: KeyId,
         master_public_key: Vec<u8>,
-        encryption_public_key: Vec<u8>,
-        derivation_path: ExtendedDerivationPath,
-        derivation_id: Vec<u8>,
+        transport_public_key: Vec<u8>,
+        context: VetKdDerivationContext,
+        input: Vec<u8>,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
         let master_public_key =
             G2Affine::deserialize(&master_public_key).map_err(|_: PairingInvalidPoint| {
                 VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentMasterPublicKey
             })?;
 
-        let transport_public_key = TransportPublicKey::deserialize(&encryption_public_key)
-            .map_err(|e| match e {
+        let transport_public_key =
+            TransportPublicKey::deserialize(&transport_public_key).map_err(|e| match e {
                 TransportPublicKeyDeserializationError::InvalidPublicKey => {
                     VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentEncryptionPublicKey
                 }
@@ -96,11 +95,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             &master_public_key,
             &secret_bls_scalar,
             &transport_public_key,
-            &DerivationPath::new(
-                derivation_path.caller.as_slice(),
-                &derivation_path.derivation_path,
-            ),
-            &derivation_id,
+            &DerivationContext::new(context.caller.as_slice(), &context.context),
+            &input,
         );
 
         Ok(VetKdEncryptedKeyShareContent(

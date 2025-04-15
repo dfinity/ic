@@ -1,16 +1,19 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
+    test_env_api::{get_mainnet_nns_revision, read_dependency_from_env_to_string},
 };
 use os_qualification_utils::{
     defs::QualificationExecutor,
     steps::{
         ensure_elected_version::EnsureElectedVersion,
-        retire_elected_version::RetireElectedVersions, update_subnet_type::UpdateSubnetType,
-        workload::Workload, xnet::XNet,
+        retire_elected_version::RetireElectedVersions,
+        update_subnet_type::{UpdateApiBoundaryNodes, UpdateSubnetType},
+        workload::{ApiBoundaryNodeWorkload, Workload},
+        xnet::XNet,
     },
-    ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
+    ConfigurableApiBoundaryNodes, ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig,
+    SubnetSimple,
 };
 use std::time::Duration;
 
@@ -21,8 +24,7 @@ pub fn main() -> anyhow::Result<()> {
     // setup env variable for config
     let old_version = match std::env::var("OLD_VERSION") {
         Ok(v) => v,
-        Err(_) => read_dependency_to_string("mainnet_nns_subnet_revision.txt")
-            .map_err(|_| anyhow::anyhow!("Didn't find initial version specified in `mainnet_nns_subnet_revision.txt` or in `OLD_VERSION` env variable"))?,
+        Err(_) => get_mainnet_nns_revision(),
     };
     let new_version = std::env::var("NEW_VERSION").ok();
 
@@ -42,7 +44,7 @@ pub fn main() -> anyhow::Result<()> {
             }),
         ]),
         unassigned_nodes: Some(ConfigurableUnassignedNodes::Simple(4)),
-        boundary_nodes: None,
+        api_boundary_nodes: Some(ConfigurableApiBoundaryNodes::Simple(2)),
         // If both versions are specified its safe to start from
         // the old version. If we didn't specify the new version
         // it means that we are running from the tip of the branch
@@ -110,6 +112,12 @@ pub fn main() -> anyhow::Result<()> {
                             subnet_type: None,
                             version: initial_version.clone(),
                         }),
+                        // Ensure that API boundary nodes are on the
+                        // initial version. As the step above, this
+                        // should always be true
+                        Box::new(UpdateApiBoundaryNodes {
+                            version: initial_version.clone(),
+                        }),
                         // Ensure that the new version is blessed
                         Box::new(EnsureElectedVersion {
                             version: to_version.clone(),
@@ -132,6 +140,16 @@ pub fn main() -> anyhow::Result<()> {
                             subnet_type: None,
                             version: to_version.clone(),
                         }),
+                        // Ensure that the API boundary nodes are healthy and
+                        // ensure that we can make one successful request for
+                        // each type (status, query, update, read_state):
+                        // API BN on "initial version" to replica on "to version"
+                        Box::new(ApiBoundaryNodeWorkload {}),
+                        // Ensure that API boundary nodes are on the
+                        // new version.
+                        Box::new(UpdateApiBoundaryNodes {
+                            version: to_version.clone(),
+                        }),
                         // Run workload tests
                         // Maps to `rs/tests/consensus/consensus_performance.rs` small
                         Box::new(Workload {
@@ -141,6 +159,11 @@ pub fn main() -> anyhow::Result<()> {
                         // Run xnet tests
                         // uses `rs/tests/src/message_routing/global_reboot_test`
                         Box::new(XNet::default()),
+                        // Ensure that the API boundary nodes are healthy and
+                        // ensure that we can make one successful request for
+                        // each type (status, query, update, read_state):
+                        // API BN on "to version" to replica on "to version"
+                        Box::new(ApiBoundaryNodeWorkload {}),
                         // Retire old version if it has disk-img
                         Box::new(RetireElectedVersions {
                             versions: vec![initial_version.clone()],
@@ -161,6 +184,15 @@ pub fn main() -> anyhow::Result<()> {
                         }),
                         Box::new(UpdateSubnetType {
                             subnet_type: None,
+                            version: initial_version.clone(),
+                        }),
+                        // Ensure that the API boundary nodes are healthy and
+                        // ensure that we can make one successful request for
+                        // each type (status, query, update, read_state):
+                        // API BN on "to version" to replica on "initial version"
+                        Box::new(ApiBoundaryNodeWorkload {}),
+                        // Downgrade the API Boundary Nodes to the inital version
+                        Box::new(UpdateApiBoundaryNodes {
                             version: initial_version.clone(),
                         }),
                         // Run workload tests again

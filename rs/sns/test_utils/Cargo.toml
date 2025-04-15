@@ -22,7 +22,7 @@ ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

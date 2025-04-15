@@ -1,0 +1,57 @@
+# NOTE: This configuration is for reference only, and not used by Bazel.
+#
+# To run canbench manually (assuming the current directory is this directory):
+#
+# 1. Compile minter canister with self_check feature.
+#
+#    cargo build --target wasm32-unknown-unknown --bin ic-ckbtc-minter --features self_check
+#
+# 2. Set IC_CKBTC_MINTER_WASM_PATH manually to the compilation result produced above.
+#
+#    export IC_CKBTC_MINTER_WASM_PATH=../../../../../wasm32-unknown-unknown/debug/ic-ckbtc-minter.wasm
+#
+# 3. Produce a stable memory dump, and store it in test_resources/mainnet_events.mem
+#
+#    cargo test --test dump_stable_memory
+#    gunzip ../test_resources/mainnet_events.mem.gz
+#
+# 4. Install and run canbench:
+#
+#    cargo install canbench
+#    ~/.cargo/bin/canbench
+
+build_cmd:
+  cargo build --target wasm32-unknown-unknown --profile canister-release --features canbench-rs
+
+results_path:
+  ./results.yml
+
+wasm_path:
+  ../../../../../target/wasm32-unknown-unknown/canister-release/ic-ckbtc-minter.wasm
+
+# the following hex arg was produced by command:
+#
+#   didc encode -d ./ckbtc_minter.did -t '(MinterArg)' '(
+#     variant {
+#       Init = record {
+#         ecdsa_key_name = "master_ecdsa_public_key";
+#         mode = variant { GeneralAvailability };
+#         retrieve_btc_min_amount = 100_000 : nat64;
+#         ledger_id = principal "lxzze-o7777-77777-aaaaa-cai";
+#         max_time_in_queue_nanos = 100 : nat64;
+#         btc_network = variant { Mainnet };
+#         check_fee = opt (100 : nat64);
+#         btc_checker_principal = opt principal "lz3um-vp777-77777-aaaba-cai";
+#         min_confirmations = opt (6 : nat32);
+#       }
+#     }
+#   )'
+init_args:
+  hex: 4449444c0b6b02fcb88b840301b0ced18403096e026c08f5d19a6b03e3a683c30404b6b8ba8405078ebdcfc608078fc0fec00a07b682e7c90b03f18c92d50b08cdb2eee10c076e686e056b0496bab03c068b98eaed020682b8f0da047f8390999e057f6d686e786e796c0bf5d19a6b03b6a9f6dc0271e3a683c30405b6b8ba840578f1f7fcf706688ebdcfc6087880b3d0ed090a8fc0fec00a07b682e7c90b03f18c92d50b08cdb2eee10c076b03a4d3bb457f8687acf9047fabdeaed9087f01000100176d61737465725f65636473615f7075626c69635f6b657903a086010000000000010affffffffffe00000010164000000000000000001640000000000000001010affffffffffe000020101010600000000
+
+# The following stable memory dump was produced by the following steps:
+#
+# 1. Upload ./test_resources/mainnet_events.gz into a ckbtc minter canister.
+# 2. Dump the stable memory into a file.
+stable_memory:
+  file: ../test_resources/mainnet_events.mem

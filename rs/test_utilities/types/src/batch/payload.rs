@@ -14,6 +14,7 @@ impl Default for PayloadBuilder {
                 self_validating: SelfValidatingPayload::default(),
                 canister_http: vec![],
                 query_stats: vec![],
+                vetkd: vec![],
             },
         }
     }

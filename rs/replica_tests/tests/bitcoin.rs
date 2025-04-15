@@ -14,7 +14,7 @@ use ic_config::{
 };
 use ic_error_types::RejectCode;
 use ic_http_endpoints_async_utils::incoming_from_path;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetSuccessorsArgs, BitcoinGetUtxosArgs, BitcoinSendTransactionArgs,
     BitcoinSendTransactionInternalArgs, EmptyBlob, Method, Payload,

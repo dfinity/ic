@@ -1121,7 +1121,7 @@ impl ThresholdSigInputsRef {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
             ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
-            ThresholdSigInputsRef::VetKd(inputs) => inputs.derivation_path.caller,
+            ThresholdSigInputsRef::VetKd(inputs) => inputs.context.caller,
         }
     }
 

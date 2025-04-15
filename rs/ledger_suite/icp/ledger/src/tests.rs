@@ -259,8 +259,8 @@ fn serialize() {
         state_decoded.blockchain.last_hash
     );
     assert_eq!(
-        state.blockchain.blocks.len(),
-        state_decoded.blockchain.blocks.len()
+        state.blockchain.num_unarchived_blocks(),
+        state_decoded.blockchain.num_unarchived_blocks()
     );
     assert_eq!(state.balances.store, state_decoded.balances.store);
 }
@@ -278,41 +278,46 @@ fn bad_created_at_time() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = SystemTime::now().into();
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxTooOld {
             allowed_window_nanos: Duration::from_secs(24 * 60 * 60).as_nanos() as u64,
         }),
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo(1),
                 transfer.clone(),
-                Some(now - state.transaction_window - Duration::from_secs(1))
+                Some(now - state.transaction_window - Duration::from_secs(1)),
+                now
             )
             .unwrap_err()
     );
 
     state
-        .add_payment(
+        .add_payment_with_timestamp(
             Memo(2),
             transfer.clone(),
             Some(now - Duration::from_secs(1)),
+            now,
         )
         .unwrap();
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxCreatedInFuture),
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo(3),
                 transfer.clone(),
-                Some(now + Duration::from_secs(120))
+                Some(now + Duration::from_secs(120)),
+                now
             )
             .unwrap_err()
     );
 
-    state.add_payment(Memo(4), transfer, Some(now)).unwrap();
+    state
+        .add_payment_with_timestamp(Memo(4), transfer, Some(now), now)
+        .unwrap();
 }
 
 /// Check that block timestamps don't go backwards.
@@ -328,9 +333,15 @@ fn monotonic_timestamps() {
         amount: Tokens::from_e8s(1000),
     };
 
-    state.add_payment(Memo(1), transfer.clone(), None).unwrap();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1_000_000_000);
 
-    state.add_payment(Memo(2), transfer.clone(), None).unwrap();
+    state
+        .add_payment_with_timestamp(Memo(1), transfer.clone(), None, now)
+        .unwrap();
+
+    state
+        .add_payment_with_timestamp(Memo(2), transfer.clone(), None, now)
+        .unwrap();
 
     state
         .add_payment_with_timestamp(
@@ -366,11 +377,11 @@ fn duplicate_txns() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now = dfn_core::api::now().into();
+    let now = SystemTime::now().into();
 
     assert_eq!(
         state
-            .add_payment(Memo::default(), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(now), now)
             .unwrap()
             .0,
         0
@@ -378,7 +389,7 @@ fn duplicate_txns() {
 
     assert_eq!(
         state
-            .add_payment(Memo(123), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo(123), transfer.clone(), Some(now), now)
             .unwrap()
             .0,
         1
@@ -386,10 +397,11 @@ fn duplicate_txns() {
 
     assert_eq!(
         state
-            .add_payment(
+            .add_payment_with_timestamp(
                 Memo::default(),
                 transfer.clone(),
-                Some(now - Duration::from_secs(1))
+                Some(now - Duration::from_secs(1)),
+                now
             )
             .unwrap()
             .0,
@@ -412,7 +424,7 @@ fn duplicate_txns() {
     assert_eq!(
         PaymentError::TransferError(TransferError::TxDuplicate { duplicate_of: 0 }),
         state
-            .add_payment(Memo::default(), transfer.clone(), Some(now))
+            .add_payment_with_timestamp(Memo::default(), transfer.clone(), Some(now), now)
             .unwrap_err()
     );
 
@@ -520,24 +532,24 @@ fn duplicate_txns() {
 
 #[test]
 fn get_blocks_returns_correct_blocks() {
-    let mut state = Ledger::default();
+    let mut blocks = vec![];
 
-    state.from_init(
-        vec![(
-            PrincipalId::new_user_test_id(0).into(),
-            Tokens::new(1000000, 0).unwrap(),
-        )]
-        .into_iter()
-        .collect(),
-        PrincipalId::new_user_test_id(1000).into(),
-        Some(PrincipalId::new_user_test_id(1000).0.into()),
-        SystemTime::UNIX_EPOCH.into(),
-        None,
-        HashSet::new(),
-        None,
-        Some("ICP".into()),
-        Some("icp".into()),
-        None,
+    let tx = Transaction {
+        operation: Operation::Mint {
+            to: PrincipalId::new_user_test_id(0).into(),
+            amount: Tokens::from_e8s(1000),
+        },
+        memo: Memo(0),
+        created_at_time: None,
+        icrc1_memo: None,
+    };
+    blocks.push(
+        Block {
+            parent_hash: None,
+            transaction: tx,
+            timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
+        }
+        .encode(),
     );
 
     for i in 0..10 {
@@ -546,29 +558,27 @@ fn get_blocks_returns_correct_blocks() {
             PrincipalId::new_user_test_id(1).into(),
             None,
             Tokens::new(1, 0).unwrap(),
-            state.transfer_fee,
+            tokens(1),
             Memo(i),
             TimeStamp::new(1, 0),
         );
 
         let block = Block {
-            parent_hash: state.blockchain.last_hash,
+            parent_hash: None,
             transaction: txn,
             timestamp: (SystemTime::UNIX_EPOCH + Duration::new(1, 0)).into(),
         };
 
-        state.add_block(block).unwrap();
+        blocks.push(block.encode());
     }
 
-    let blocks = &state.blockchain.blocks;
-
-    let first_blocks = icp_ledger::get_blocks(blocks, 0, 1, 5).0.unwrap();
+    let first_blocks = icp_ledger::get_blocks(&blocks, 0, 1, 5).0.unwrap();
     for i in 0..first_blocks.len() {
         let block = Block::decode(first_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, i as u64);
     }
 
-    let last_blocks = icp_ledger::get_blocks(blocks, 0, 6, 5).0.unwrap();
+    let last_blocks = icp_ledger::get_blocks(&blocks, 0, 6, 5).0.unwrap();
     for i in 0..last_blocks.len() {
         let block = Block::decode(last_blocks.get(i).unwrap().clone()).unwrap();
         assert_eq!(block.transaction.memo.0, 5 + i as u64);
@@ -670,7 +680,7 @@ fn test_throttle_tx_per_second_nok() {
         amount: Tokens::from_e8s(1000),
     };
 
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -693,7 +703,7 @@ fn test_throttle_tx_per_second_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1002)), 1);
@@ -714,7 +724,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_ok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);
@@ -741,7 +751,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_nok() {
         to: PrincipalId::new_user_test_id(1).into(),
         amount: Tokens::from_e8s(1000),
     };
-    let now: TimeStamp = dfn_core::api::now().into();
+    let now = TimeStamp::from_nanos_since_unix_epoch(1000000);
 
     assert_eq!(apply_at(&mut ledger, &op, now + millis(1)), 0);
     assert_eq!(apply_at(&mut ledger, &op, now + millis(2)), 1);

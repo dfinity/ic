@@ -527,7 +527,9 @@ fn induct_loopback_stream_success() {
 fn induct_loopback_stream_with_subnet_message_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         ..Default::default()
     });
 }
@@ -539,7 +541,9 @@ fn induct_loopback_stream_with_subnet_message_memory_limit() {
 fn legacy_induct_loopback_stream_with_subnet_message_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     legacy_induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         ..Default::default()
     });
 }
@@ -551,7 +555,9 @@ fn induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations
     // and no allowance for wasm custom sections.
     induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
         ..Default::default()
     });
@@ -565,7 +571,9 @@ fn legacy_induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations
     // and no allowance for wasm custom sections.
     legacy_induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
         ..Default::default()
     });
@@ -601,7 +609,9 @@ fn system_subnet_induct_loopback_stream_ignores_subnet_memory_limit() {
 fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         ..Default::default()
     });
 }
@@ -612,7 +622,9 @@ fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
 fn system_subnet_induct_loopback_stream_ignores_subnet_wasm_custom_sections_memory_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
     induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        guaranteed_response_message_memory_capacity: NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
+        ),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
         ..Default::default()
     });
@@ -1394,7 +1406,7 @@ fn garbage_collect_local_state_with_legal_reject_signal_for_response_success() {
     );
 }
 
-/// Tests that garbage collecting with a legal reject signal does raise a critical error.
+/// Tests that garbage collecting with an illegal reject signal does raise a critical error.
 #[test]
 fn garbage_collect_local_state_with_illegal_reject_signal_for_response_success() {
     garbage_collect_local_state_with_reject_signals_for_response_success_impl(
@@ -1492,6 +1504,16 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+            // Cycles attached to the request / reject response are lost.
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(
+                    DroppedMessages,
+                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 21)
+                        .cycles()
+                        .into(),
+                );
 
             // Act and compare to expected.
             let mut available_guaranteed_response_memory =
@@ -1525,7 +1547,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
 
 /// Tests that an incoming reject signal for a request to and from `LOCAL_CANISTER` in the stream
 /// to `REMOTE_SUBNET` triggers locally generating a reject response that is successfully inducted
-/// but the misrouted request (it should be in the loopback stream) raises a critical error.
+/// but the misrouted request (it should have been in the loopback stream) raises a critical error.
 #[test]
 fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
     with_test_setup(
@@ -1662,7 +1684,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
 /// Calls `induct_stream_slices()` with one stream slice coming from `CANISTER_MIGRATION_SUBNET`
 /// as input containing 3 messages:
 /// - a reject response for a request sent to `REMOTE_CANISTER` from `LOCAL_CANISTER`,
-/// - a data response with the same recipients.
+/// - a reply with the same recipients.
 /// - and a request with the same recipients.
 ///
 /// `LOCAL_CANISTER` is marked as having migrated from `CANISTER_MIGRATION_SUBNET` to
@@ -1684,9 +1706,9 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
             messages: vec![
                 // ...a reject response for a request sent to `REMOTE_CANISTER` @0...
                 RejectResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, RejectReason::QueueFull),
-                // ...a data response @1...
+                // ...a reply @1...
                 Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                // ...and a request from @2.
+                // ...and a request @2.
                 Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             ..StreamSliceConfig::default()
@@ -1713,6 +1735,14 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
+
+            // Cycles attached to the dropped reply and request are lost.
+            let cycles_lost = messages_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1..=2)
+                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -1964,8 +1994,11 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
             let mut callback_id = 2;
             while state
                 .push_input(
-                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
-                        .build_with(CallbackId::new(callback_id), 0),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER).build_with(
+                        CallbackId::new(callback_id),
+                        0,
+                        Cycles::new(1),
+                    ),
                     &mut (i64::MAX / 2),
                 )
                 .is_ok()
@@ -2024,6 +2057,11 @@ fn duplicate_best_effort_response_is_dropped() {
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+            // Cycles of the duplicate response are lost.
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, response.cycles().into());
 
             // Push the clone of the best effort response onto the loopback stream.
             state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
@@ -2059,6 +2097,7 @@ fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
         }],
         |stream_handler, mut state, metrics| {
             prepare_state(&mut state);
+            let response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone();
 
             // Expecting an unchanged state...
             let mut expected_state = state.clone();
@@ -2068,7 +2107,12 @@ fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
                 signals_end: 22,
                 ..StreamConfig::default()
             });
-            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream.clone()]);
+            // Cycles attached to the dropped response are lost.
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, response.cycles().into());
 
             let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
             assert_eq!(expected_state, inducted_state);
@@ -2203,8 +2247,11 @@ fn legacy_check_stream_handler_generated_reject_response_queue_full() {
             let mut callback_id = 2;
             while state
                 .push_input(
-                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
-                        .build_with(CallbackId::new(callback_id), 0),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER).build_with(
+                        CallbackId::new(callback_id),
+                        0,
+                        Cycles::new(1),
+                    ),
                     &mut (i64::MAX / 2),
                 )
                 .is_ok()
@@ -2263,7 +2310,7 @@ fn induct_stream_slices_partial_success() {
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
             messages_begin: 43,
             messages: vec![
-                // ...two incoming request @43 and @44...
+                // ...two incoming requests @43 and @44...
                 Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
                 Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
                 // ...an incoming response @45...
@@ -2312,6 +2359,16 @@ fn induct_stream_slices_partial_success() {
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            // Cycles attached to the dropped requests from `LOCAL_CANISTER` and
+            // `UNKNOWN_CANISTER`; as well as those attached to the non-existent response to
+            // `OTHER_LOCAL_CANISTER` are lost.
+            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 47..=49)
+                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
 
             let initial_available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -2439,6 +2496,16 @@ fn legacy_induct_stream_slices_partial_success() {
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
+            // Cycles attached to the dropped requests from `LOCAL_CANISTER` and
+            // `UNKNOWN_CANISTER`; as well as those attached to the non-existent response to
+            // `OTHER_LOCAL_CANISTER` are lost.
+            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 47..=49)
+                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
+
             let initial_available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
             let mut available_guaranteed_response_memory =
@@ -2551,6 +2618,14 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            // Cycles attached to all messages in the slice are lost.
+            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=46)
+                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -3052,7 +3127,7 @@ fn induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
     with_test_setup_and_config(
         // A config with only enough subnet message memory for one request + epsilon.
         HypervisorConfig {
-            subnet_message_memory_capacity: NumBytes::new(
+            guaranteed_response_message_memory_capacity: NumBytes::new(
                 MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
             ),
             ..Default::default()
@@ -3151,7 +3226,7 @@ fn legacy_induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
     with_test_setup_and_config(
         // A config with only enough subnet message memory for one request + epsilon.
         HypervisorConfig {
-            subnet_message_memory_capacity: NumBytes::new(
+            guaranteed_response_message_memory_capacity: NumBytes::new(
                 MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
             ),
             ..Default::default()
@@ -3355,6 +3430,16 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 REMOTE_SUBNET => expected_outgoing_stream,
                 CANISTER_MIGRATION_SUBNET => rerouted_stream,
             ]);
+            // Cycles attached to the dropped request from `UNKNOWN_CANISTER` are lost.
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(
+                    DroppedMessages,
+                    message_in_slice(slices.get(&REMOTE_SUBNET), 154)
+                        .cycles()
+                        .into(),
+                );
 
             // Act.
             let inducted_state = stream_handler.process_stream_slices(state, slices);
@@ -3966,6 +4051,7 @@ fn with_test_setup_and_config(
         // For all other messages a `other_callback_id` is used, i.e. something that
         // simulates callback IDs generated in a different canister.
         let mut other_callback_id = 0_u64;
+        let mut cycles = Cycles::new(1);
         let mut messages_from_builders = |builders: Vec<MessageBuilder>| -> Vec<RequestOrResponse> {
             builders
                 .into_iter()
@@ -3981,6 +4067,9 @@ fn with_test_setup_and_config(
                             (respondent, originator, NO_DEADLINE)
                         }
                     };
+                    // Attach a unique (bit mask-like) number of cycles to each message (assuming
+                    // that there are fewer than 127 messages).
+                    cycles = cycles + cycles;
 
                     // Register a callback and make an input queue reservation if `msg_config`
                     // corresponds to `LOCAL_CANISTER`; else use a dummy callback id.
@@ -4010,11 +4099,15 @@ fn with_test_setup_and_config(
                         // Empty output queues.
                         canister_state.output_into_iter().count();
 
-                        builder.build_with(callback_id, payload_size_bytes)
+                        builder.build_with(callback_id, payload_size_bytes, cycles)
                     } else {
                         // Message will not be inducted, use a replacement
                         other_callback_id += 1;
-                        builder.build_with(CallbackId::new(other_callback_id), payload_size_bytes)
+                        builder.build_with(
+                            CallbackId::new(other_callback_id),
+                            payload_size_bytes,
+                            cycles,
+                        )
                     }
                 })
                 .collect()
@@ -4322,13 +4415,19 @@ enum MessageBuilder {
 }
 
 impl MessageBuilder {
-    fn build_with(self, callback_id: CallbackId, payload_size_bytes: usize) -> RequestOrResponse {
+    fn build_with(
+        self,
+        callback_id: CallbackId,
+        payload_size_bytes: usize,
+        cycles: Cycles,
+    ) -> RequestOrResponse {
         match self {
             Self::Request(sender, receiver) => RequestBuilder::new()
                 .sender(sender)
                 .receiver(receiver)
                 .sender_reply_callback(callback_id)
                 .method_payload(vec![0_u8; payload_size_bytes])
+                .payment(cycles)
                 .build()
                 .into(),
             Self::Response(respondent, originator) => ResponseBuilder::new()
@@ -4336,6 +4435,7 @@ impl MessageBuilder {
                 .originator(originator)
                 .originator_reply_callback(callback_id)
                 .response_payload(Payload::Data(vec![0_u8; payload_size_bytes]))
+                .refund(cycles)
                 .build()
                 .into(),
             Self::BestEffortResponse(respondent, originator, deadline) => ResponseBuilder::new()
@@ -4343,6 +4443,7 @@ impl MessageBuilder {
                 .originator(originator)
                 .originator_reply_callback(callback_id)
                 .response_payload(Payload::Data(vec![0_u8; payload_size_bytes]))
+                .refund(cycles)
                 .deadline(deadline)
                 .build()
                 .into(),
@@ -4352,6 +4453,7 @@ impl MessageBuilder {
                     .sender(originator)
                     .receiver(respondent)
                     .sender_reply_callback(callback_id)
+                    .payment(cycles)
                     .build(),
             ),
         }

@@ -2,7 +2,7 @@ use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_management_canister_types::CanisterSettingsArgsBuilder;
+use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_nervous_system_clients::canister_status::DefiniteCanisterSettingsArgs;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_test_utils::state_test_helpers::{
@@ -61,7 +61,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 .with_memory_allocation(1 << 30)
                 .with_freezing_threshold(100_000)
                 .with_reserved_cycles_limit(1_000_000_000_000)
-                .with_log_visibility(ic_management_canister_types::LogVisibilityV2::Public)
+                .with_log_visibility(ic_management_canister_types_private::LogVisibilityV2::Public)
                 .with_wasm_memory_limit(1_000_000_000)
                 .build(),
         ),
@@ -199,7 +199,7 @@ fn test_manage_dapp_canister_settings_failure() {
                 .with_freezing_threshold(100_000)
                 .with_reserved_cycles_limit(1_000_000_000_000)
                 .with_wasm_memory_limit(1_000_000_000)
-                .with_log_visibility(ic_management_canister_types::LogVisibilityV2::Public)
+                .with_log_visibility(ic_management_canister_types_private::LogVisibilityV2::Public)
                 .build(),
         ),
     );

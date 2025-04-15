@@ -9,7 +9,6 @@ use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint, Scalar};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-use rand::{CryptoRng, Rng};
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
@@ -97,13 +96,15 @@ impl PrivateKey {
     pub const BYTES: usize = 32;
 
     /// Create a new random secret Ed25519 key
+    #[cfg(feature = "rand")]
     pub fn generate() -> Self {
         let mut rng = rand::thread_rng();
         Self::generate_using_rng(&mut rng)
     }
 
     /// Create a new random secret Ed25519 key using specified RNG
-    pub fn generate_using_rng<R: CryptoRng + Rng>(rng: &mut R) -> Self {
+    #[cfg(feature = "rand")]
+    pub fn generate_using_rng<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
         let sk = SigningKey::generate(rng);
         Self { sk }
     }
@@ -707,7 +708,8 @@ impl PublicKey {
     /// valid signatures (if any).
     ///
     /// This verification follows ZIP215 validation rules
-    pub fn batch_verify<R: CryptoRng + Rng>(
+    #[cfg(feature = "rand")]
+    pub fn batch_verify<R: rand::CryptoRng + rand::Rng>(
         messages: &[&[u8]],
         signatures: &[&[u8]],
         keys: &[Self],

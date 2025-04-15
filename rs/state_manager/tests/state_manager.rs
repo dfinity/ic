@@ -10,7 +10,7 @@ use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, St
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs,
     LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
@@ -37,7 +37,7 @@ use ic_state_manager::{
         },
         StateSync,
     },
-    DirtyPageMap, PageMapType, StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+    StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
@@ -4005,169 +4005,6 @@ fn can_short_circuit_state_sync() {
     })
 }
 
-/// Test if `get_dirty_pages` returns correct dirty pages of canisters.
-#[test]
-fn can_get_dirty_pages() {
-    use ic_replicated_state::page_map::PageIndex;
-    use ic_state_manager::get_dirty_pages;
-
-    fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
-        let canister_state = state.canister_state_mut(&canister_id).unwrap();
-        canister_state
-            .system_state
-            .wasm_chunk_store
-            .page_map_mut()
-            .update(&[
-                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-            ]);
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-        ]);
-        execution_state.stable_memory.page_map.update(&[
-            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-        ]);
-    }
-
-    fn drop_page_map(state: &mut ReplicatedState, canister_id: CanisterId) {
-        let canister_state = state.canister_state_mut(&canister_id).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map = PageMap::new_for_testing();
-    }
-
-    state_manager_test(|metrics, state_manager| {
-        let (_height, mut state) = state_manager.take_tip();
-        insert_dummy_canister(&mut state, canister_test_id(80));
-        insert_dummy_canister(&mut state, canister_test_id(90));
-        insert_dummy_canister(&mut state, canister_test_id(100));
-
-        update_state(&mut state, canister_test_id(80));
-        let dirty_pages = get_dirty_pages(&state);
-        // dirty_pages should be empty because there is no base checkpoint for the page
-        // deltas and the canister binaries are new.
-        assert!(dirty_pages.is_empty());
-
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
-
-        let (_height, mut state) = state_manager.take_tip();
-        update_state(&mut state, canister_test_id(90));
-        let mut dirty_pages = get_dirty_pages(&state);
-        let mut expected_dirty_pages = vec![
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmMemory(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(1),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
-                page_delta_indices: vec![],
-            },
-        ];
-
-        dirty_pages.sort();
-        expected_dirty_pages.sort();
-        assert_eq!(dirty_pages, expected_dirty_pages);
-
-        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
-
-        let (_height, mut state) = state_manager.take_tip();
-        update_state(&mut state, canister_test_id(100));
-        // It could happen during canister upgrade.
-        drop_page_map(&mut state, canister_test_id(100));
-        update_state(&mut state, canister_test_id(100));
-        replace_wasm(&mut state, canister_test_id(100));
-        let mut dirty_pages = get_dirty_pages(&state);
-        // wasm memory was dropped, but stable memory wasn't
-        let mut expected_dirty_pages = vec![
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmMemory(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::StableMemory(canister_test_id(100)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
-                page_delta_indices: vec![],
-            },
-            DirtyPageMap {
-                height: height(2),
-                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
-                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
-            },
-        ];
-
-        dirty_pages.sort();
-        expected_dirty_pages.sort();
-        assert_eq!(dirty_pages, expected_dirty_pages);
-
-        assert_error_counters(metrics);
-    })
-}
-
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
     use ic_state_manager::manifest::{compute_manifest, validate_manifest};
@@ -5875,7 +5712,7 @@ fn assert_checkpoints_are_readonly(layout: &StateLayout) {
 #[test]
 fn checkpoints_are_readonly() {
     state_manager_test(|_metrics, state_manager| {
-        // We flush the tip channel so that asychronous tip initialization cannot hide the issue
+        // We flush the tip channel so that asynchronous tip initialization cannot hide the issue
         state_manager.flush_tip_channel();
         assert_checkpoints_are_readonly(state_manager.state_layout());
 
@@ -6172,6 +6009,185 @@ fn can_create_and_delete_canister_snapshot() {
             .raw_path();
         assert!(!snapshot_path.exists());
         assert!(!snapshot_path.parent().unwrap().exists());
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_id = canister_test_id(100);
+
+        // Insert a canister, create a snapshot from it and write checkpoint
+        insert_dummy_canister(&mut state, canister_id);
+
+        let new_snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // Before checkpointing, wasm binaries of both the canister and the snapshot are in memory.
+        assert!(canister_wasm_binary.file().is_none());
+        assert!(snapshot_wasm_binary.file().is_none());
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let checkpoint_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(1))
+            .unwrap();
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+        let snapshot_layout = checkpoint_layout.snapshot(&snapshot_id).unwrap();
+
+        let (_height, state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // After checkpointing, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@1
+        // and file contents can be correctly read.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(snapshot_wasm_binary
+            .file()
+            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_id = canister_test_id(100);
+
+        // Insert a canister and a write checkpoint
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(1))
+            .unwrap()
+            .canister(&canister_id)
+            .unwrap();
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        // After checkpointing at height 1, wasm binary the canister is backed by file in checkpoint@1.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        // We create a snapshot from the canister, which already has wasm binary backed by file on disk.
+        let new_snapshot = CanisterSnapshot::from_canister(
+            state.canister_state(&canister_id).unwrap(),
+            state.time(),
+        )
+        .unwrap();
+        let snapshot_id = SnapshotId::from((canister_id, 0));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        state_manager.flush_tip_channel();
+
+        // Remove checkpoint@1
+        drop(canister_layout);
+        state_manager.remove_states_below(height(2));
+        state_manager.flush_deallocation_channel();
+
+        let checkpoint_layout = state_manager
+            .state_layout()
+            .checkpoint_verified(height(2))
+            .unwrap();
+
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+        let snapshot_layout = checkpoint_layout.snapshot(&snapshot_id).unwrap();
+
+        let (_height, state) = state_manager.take_tip();
+
+        let canister_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .as_ref()
+            .unwrap()
+            .wasm_binary
+            .binary;
+
+        let snapshot_wasm_binary = &state
+            .canister_snapshots
+            .get(snapshot_id)
+            .unwrap()
+            .execution_snapshot()
+            .wasm_binary;
+
+        // After checkpointing at height 2, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@2
+        // and file contents can be correctly read.
+        assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(canister_wasm_binary
+            .file()
+            .is_some_and(|path| path == canister_layout.wasm().raw_path()));
+
+        assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
+        assert!(snapshot_wasm_binary
+            .file()
+            .is_some_and(|path| path == snapshot_layout.wasm().raw_path()));
 
         assert_error_counters(metrics);
     });
@@ -6610,292 +6626,385 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
-proptest! {
-    #[test]
-    fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed  */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // we do not modify the slice before decoding it again - so this should succeed
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+fn stream_store_encode_decode(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed  */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // we do not modify the slice before decoding it again - so this should succeed
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_modified_hash_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed  */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, mut slice| {
-                let mut hash = slice.certification.signed.content.hash.get();
-                *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
-                slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_modified_hash_fails(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed  */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, mut slice| {
+            let mut hash = slice.certification.signed.content.hash.get();
+            *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
+            slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
 
-                (state_manager, slice)
-            }
-        );
-    }
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "Failed to deserialize witness")]
-    fn stream_store_decode_with_empty_witness_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, mut slice| {
-                slice.merkle_proof = vec![];
+#[test_strategy::proptest]
+#[should_panic(expected = "Failed to deserialize witness")]
+fn stream_store_decode_with_empty_witness_fails(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, mut slice| {
+            slice.merkle_proof = vec![];
 
-                (state_manager, slice)
-            }
-        );
-    }
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InconsistentPartialTree")]
-    fn stream_store_decode_slice_push_additional_message(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let mut messages = match decoded_slice.messages() {
-                        None => StreamIndexedQueue::default(),
-                        Some(messages) => messages.clone(),
-                    };
+#[test_strategy::proptest]
+#[should_panic(expected = "InconsistentPartialTree")]
+fn stream_store_decode_slice_push_additional_message(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let mut messages = match decoded_slice.messages() {
+                    None => StreamIndexedQueue::default(),
+                    Some(messages) => messages.clone(),
+                };
 
-                    let req = RequestBuilder::default()
-                        .sender(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[2][..]).unwrap()))
-                        .receiver(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[3][..]).unwrap()))
-                        .method_name("test".to_string())
-                        .sender_reply_callback(CallbackId::from(999))
-                        .build();
+                let req = RequestBuilder::default()
+                    .sender(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(&[2][..]).unwrap(),
+                    ))
+                    .receiver(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(&[3][..]).unwrap(),
+                    ))
+                    .method_name("test".to_string())
+                    .sender_reply_callback(CallbackId::from(999))
+                    .build();
 
-                    messages.push(req.into());
+                messages.push(req.into());
 
-                    let signals_end = decoded_slice.header().signals_end();
+                let signals_end = decoded_slice.header().signals_end();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    /// Depending on the specific input, may fail with either `InvalidSignature` or
-    /// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
-    #[test]
-    #[should_panic]
-    fn stream_store_decode_slice_modify_message_begin(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(
-                    state_manager,
-                    slice,
-                    |decoded_slice| {
-                    let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(99999));
-                    let signals_end = decoded_slice.header().signals_end();
+/// Depending on the specific input, may fail with either `InvalidSignature` or
+/// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
+#[test_strategy::proptest]
+#[should_panic]
+fn stream_store_decode_slice_modify_message_begin(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(99999));
+                let signals_end = decoded_slice.header().signals_end();
 
-                    if let Some(decoded_messages) = decoded_slice.messages() {
-                        for (_index, msg) in decoded_messages.iter() {
-                            messages.push(msg.clone());
-                        }
+                if let Some(decoded_messages) = decoded_slice.messages() {
+                    for (_index, msg) in decoded_messages.iter() {
+                        messages.push(msg.clone());
                     }
+                }
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_modify_signals_end(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let messages = decoded_slice.messages()
-                        .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let signals_end = decoded_slice.header().signals_end() + 99999.into();
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_slice_modify_signals_end(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let messages = decoded_slice
+                    .messages()
+                    .unwrap_or(&StreamIndexedQueue::default())
+                    .clone();
+                let signals_end = decoded_slice.header().signals_end() + 99999.into();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_push_signal(stream in arb_stream(0, 10, 0, 10)) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            None,
-            /* custom destination subnet */
-            None,
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                /* generate replacement stream for slice.payload  */
-                modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
-                    let messages = decoded_slice.messages()
-                        .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let mut signals_end = decoded_slice.header().signals_end();
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_slice_push_signal(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        None,
+        /* custom destination subnet */
+        None,
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            /* generate replacement stream for slice.payload  */
+            modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
+                let messages = decoded_slice
+                    .messages()
+                    .unwrap_or(&StreamIndexedQueue::default())
+                    .clone();
+                let mut signals_end = decoded_slice.header().signals_end();
 
-                    signals_end.inc_assign();
+                signals_end.inc_assign();
 
-                    Stream::new(messages, signals_end)
-                })
-            }
-        );
-    }
+                Stream::new(messages, signals_end)
+            })
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidDestination")]
-    fn stream_store_decode_with_invalid_destination(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            Some(subnet_test_id(1)),
-            /* certification verification should succeed */
-            true,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice before decoding it again - the wrong
-                // destination subnet should already make it fail
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidDestination")]
+fn stream_store_decode_with_invalid_destination(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        Some(subnet_test_id(1)),
+        /* certification verification should succeed */
+        true,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice before decoding it again - the wrong
+            // destination subnet should already make it fail
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            None,
-            /* certification verification should fail */
-            false,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice before decoding it again - the signature validation
-                // failure caused by passing the `RejectingVerifier` should already make it fail.
-                (state_manager, slice)
-            }
-        );
-    }
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_rejecting_verifier(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        None,
+        /* certification verification should fail */
+        false,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice before decoding it again - the signature validation
+            // failure caused by passing the `RejectingVerifier` should already make it fail.
+            (state_manager, slice)
+        },
+    );
+}
 
-    /// If both signature verification and slice decoding would fail, we expect to
-    /// see an error about the former.
-    #[test]
-    #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
-        encode_decode_stream_test(
-            /* stream to be used */
-            stream,
-            /* size limit used upon encoding */
-            Some(size_limit),
-            /* custom destination subnet */
-            Some(subnet_test_id(1)),
-            /* certification verification should fail  */
-            false,
-            /* modification between encoding and decoding  */
-            |state_manager, slice| {
-                // Do not modify the slice, the wrong destination subnet and rejecting verifier
-                // should make it fail regardless.
-                (state_manager, slice)
-            }
-        );
-    }
+/// If both signature verification and slice decoding would fail, we expect to
+/// see an error about the former.
+#[test_strategy::proptest]
+#[should_panic(expected = "InvalidSignature")]
+fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
+    #[strategy(arb_stream(
+        0, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    stream: Stream,
+    #[strategy(0..20usize)] size_limit: usize,
+) {
+    encode_decode_stream_test(
+        /* stream to be used */
+        stream,
+        /* size limit used upon encoding */
+        Some(size_limit),
+        /* custom destination subnet */
+        Some(subnet_test_id(1)),
+        /* certification verification should fail  */
+        false,
+        /* modification between encoding and decoding  */
+        |state_manager, slice| {
+            // Do not modify the slice, the wrong destination subnet and rejecting verifier
+            // should make it fail regardless.
+            (state_manager, slice)
+        },
+    );
+}
 
-    #[test]
-    fn stream_store_encode_partial((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
-        // Partial slice with messages beginning at `begin + 1`.
-        encode_partial_slice_test(
-            stream,
-            begin,
-            begin.increment(),
-            count - 1,
-            byte_limit
-        );
-    }
+#[test_strategy::proptest]
+fn stream_store_encode_partial(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+    #[strategy(0..1000usize)] byte_limit: usize,
+) {
+    let (stream, begin, count) = test_slice;
+    // Partial slice with messages beginning at `begin + 1`.
+    encode_partial_slice_test(stream, begin, begin.increment(), count - 1, byte_limit);
 }
 
 // 1 test case is sufficient to test index validation.
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1))]
-
-    #[test]
-    #[should_panic(expected = "failed to encode certified stream: InvalidSliceIndices")]
-    fn stream_store_encode_partial_bad_indices((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
-        // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
-        encode_partial_slice_test(
-            stream,
-            begin.increment(),
-            begin,
-            count,
-            byte_limit
-        );
-    }
+#[test_strategy::proptest(ProptestConfig::with_cases(1))]
+#[should_panic(expected = "failed to encode certified stream: InvalidSliceIndices")]
+fn stream_store_encode_partial_bad_indices(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+    #[strategy(0..1000usize)] byte_limit: usize,
+) {
+    let (stream, begin, count) = test_slice;
+    // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
+    encode_partial_slice_test(stream, begin.increment(), begin, count, byte_limit);
 }
 
 /// Test if query stats are correctly aggregated into the canister state.
@@ -7079,16 +7188,17 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
     }
 }
 
-proptest! {
-#![proptest_config(ProptestConfig {
+#[test_strategy::proptest(ProptestConfig {
     // Fork to prevent flaky timeouts due to closed sandbox fds
     fork: true,
     // We go for fewer, but longer runs
     ..ProptestConfig::with_cases(5)
 })]
-
-#[test]
-fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
+fn random_canister_input(
+    #[strategy(proptest::collection::vec(arbitrary_test_canister_op(), 1..50))] ops: Vec<
+        TestCanisterOp,
+    >,
+) {
     /// Execute op against the state machine `env`
     fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
         match op {
@@ -7113,7 +7223,8 @@ fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_caniste
             }
             TestCanisterOp::CanisterReinstall => {
                 env.reinstall_canister_wat(canister_id, TEST_CANISTER, vec![]);
-                env.execute_ingress(canister_id, "grow_page", vec![]).unwrap();
+                env.execute_ingress(canister_id, "grow_page", vec![])
+                    .unwrap();
                 env
             }
             TestCanisterOp::Checkpoint => {
@@ -7137,13 +7248,11 @@ fn random_canister_input(ops in proptest::collection::vec(arbitrary_test_caniste
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
-    env
-        .execute_ingress(canister_id, "grow_page", vec![])
+    env.execute_ingress(canister_id, "grow_page", vec![])
         .unwrap();
 
     // Execute all operations the state machine.
     for op in ops {
         env = execute_op(env, canister_id, op.clone());
     }
-}
 }

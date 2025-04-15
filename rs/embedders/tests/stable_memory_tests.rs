@@ -1,4 +1,5 @@
 use canister_test::{Cycles, PrincipalId, WasmResult};
+use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -34,7 +35,7 @@ fn wat_with_imports(wat: &str) -> String {
 
 fn run_test(wat: &str) -> HypervisorResult<Option<WasmResult>> {
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),

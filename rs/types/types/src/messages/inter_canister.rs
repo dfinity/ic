@@ -6,11 +6,13 @@ use crate::{
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -137,6 +139,12 @@ impl Request {
         NumBytes::from(bytes as u64)
     }
 
+    /// Returns `true` if this is the request of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
+    }
+
     /// Helper function to extract the effective canister id from the payload.
     pub fn extract_effective_canister_id(&self) -> Option<CanisterId> {
         match Method::from_str(&self.method_name) {
@@ -212,6 +220,30 @@ impl Request {
                     Err(_) => None,
                 }
             }
+            Ok(Method::ReadCanisterSnapshotMetadata) => {
+                match ReadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ReadCanisterSnapshotData) => {
+                match ReadCanisterSnapshotDataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotMetadata) => {
+                match UploadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotData) => {
+                match UploadCanisterSnapshotDataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
@@ -223,7 +255,7 @@ impl Request {
             | Ok(Method::SchnorrPublicKey)
             | Ok(Method::SignWithSchnorr)
             | Ok(Method::VetKdPublicKey)
-            | Ok(Method::VetKdDeriveEncryptedKey)
+            | Ok(Method::VetKdDeriveKey)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinGetBlockHeaders)

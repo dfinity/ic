@@ -1,11 +1,17 @@
+use assert_matches::assert_matches;
 use canister_test::Wasm;
-use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
+use ic_base_types::CanisterId;
+use ic_management_canister_types_private::CanisterInstallMode;
+use ic_nervous_system_agent::helpers::await_with_timeout;
+use ic_nervous_system_agent::management_canister::canister_status;
+use ic_nervous_system_agent::pocketic_impl::{
+    PocketIcAgent, PocketIcCallError::CanisterSubnetNotFound,
+};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::{
     find_neuron_with_majority_voting_power, wait_for_proposal_execution,
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    await_with_timeout, cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns,
-    sns, NnsInstaller,
+    cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns, sns, NnsInstaller,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -15,8 +21,10 @@ use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use ic_sns_cli::neuron_id_to_candid_subaccount::ParsedSnsNeuron;
 use ic_sns_cli::upgrade_sns_controlled_canister::{
-    self, UpgradeSnsControlledCanisterArgs, UpgradeSnsControlledCanisterInfo,
+    self, RefundAfterSnsControlledCanisterUpgradeArgs, UpgradeSnsControlledCanisterArgs,
+    UpgradeSnsControlledCanisterInfo,
 };
+use ic_sns_governance_api::pb::v1::{proposal, ChunkedCanisterWasm, UpgradeSnsControlledCanister};
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::Tokens;
 use pocket_ic::PocketIcBuilder;
@@ -61,10 +69,11 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         let initial_mutations = load_registry_mutations(registry_proto_path);
 
         let mut nns_installer = NnsInstaller::default();
-        nns_installer.with_current_nns_canister_versions();
-        nns_installer.with_cycles_minting_canister();
-        nns_installer.with_cycles_ledger();
-        nns_installer.with_custom_registry_mutations(vec![initial_mutations]);
+        nns_installer
+            .with_current_nns_canister_versions()
+            .with_cycles_minting_canister()
+            .with_cycles_ledger()
+            .with_custom_registry_mutations(vec![initial_mutations]);
         nns_installer.install(&pocket_ic).await;
     }
 
@@ -171,11 +180,39 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     let proposal_id = proposal_id.unwrap();
 
     // 3. Await proposal execution.
-    wait_for_proposal_execution(&pocket_ic, sns.governance.canister_id, proposal_id)
+    let action = wait_for_proposal_execution(&pocket_ic, sns.governance.canister_id, proposal_id)
         .await
+        .unwrap()
+        .proposal
+        .unwrap()
+        .action
         .unwrap();
 
-    // 4. Inspect the resulting state.
+    // 4. Inspect proposal data (and obtain store_canister_id for future inspection).
+    let proposal::Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister {
+        canister_id,
+        new_canister_wasm,
+        canister_upgrade_arg,
+        mode,
+        chunked_canister_wasm,
+    }) = action
+    else {
+        panic!("unexpected proposal action {:?}", action);
+    };
+    assert_eq!(canister_id, Some(target_canister_id.into()));
+    assert_eq!(new_canister_wasm, Vec::<u8>::new()); // Deprecated field, no longer in use.
+    assert_eq!(canister_upgrade_arg, None);
+    assert_eq!(mode, Some(CanisterInstallMode::Upgrade as i32));
+    let store_canister_id = assert_matches!(chunked_canister_wasm, Some(ChunkedCanisterWasm {
+        wasm_module_hash: observed_wasm_module_hash,
+        store_canister_id: Some(store_canister_id),
+        ..
+    }) => {
+        assert_eq!(observed_wasm_module_hash, wasm_module_hash);
+        store_canister_id
+    });
+
+    // 5. Inspect the resulting state.
     await_with_timeout(
         &pocket_ic,
         MIN_INSTALL_CHUNKED_CODE_TIME_SECONDS..MAX_INSTALL_CHUNKED_CODE_TIME_SECONDS,
@@ -191,4 +228,22 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     )
     .await
     .unwrap();
+
+    // 6. Clean-up.
+    let refund_arg = RefundAfterSnsControlledCanisterUpgradeArgs {
+        target_canister_id,
+        proposal_id: proposal_id.id,
+    };
+    upgrade_sns_controlled_canister::refund(refund_arg, &pocket_ic_agent)
+        .await
+        .unwrap();
+
+    // 7. Assert that store canister has zero cycles left on its balance.
+    let err = canister_status(
+        &pocket_ic_agent,
+        CanisterId::unchecked_from_principal(store_canister_id),
+    )
+    .await
+    .unwrap_err();
+    assert_matches!(err, CanisterSubnetNotFound { .. });
 }

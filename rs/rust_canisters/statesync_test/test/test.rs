@@ -1,6 +1,6 @@
 use candid::{Decode, Encode};
 use canister_test::*;
-use ic_management_canister_types::CanisterSettingsArgsBuilder;
+use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_state_machine_tests::StateMachine;
 
 #[test]

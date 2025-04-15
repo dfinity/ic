@@ -6,7 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "vetkd_key_life_cycle_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -15,6 +14,7 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//packages/ic-vetkd-utils",
         "//rs/config",
         "//rs/nns/constants",
         "//rs/registry/subnet_type",
@@ -25,6 +25,7 @@ system_test_nns(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
     ],

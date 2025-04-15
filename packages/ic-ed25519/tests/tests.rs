@@ -16,6 +16,10 @@ fn test_rng() -> ChaCha20Rng {
     test_rng_with_seed(seed)
 }
 
+fn random_key<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> PrivateKey {
+    PrivateKey::generate_from_seed(&rng.gen::<[u8; 32]>())
+}
+
 #[test]
 fn secret_key_serialization_round_trips() {
     let mut rng = &mut test_rng();
@@ -27,7 +31,7 @@ fn secret_key_serialization_round_trips() {
     ];
 
     for _ in 0..100 {
-        let key = PrivateKey::generate_using_rng(&mut rng);
+        let key = random_key(&mut rng);
 
         let via_raw = PrivateKey::deserialize_raw(&key.serialize_raw()).unwrap();
         assert_eq!(key, via_raw);
@@ -70,7 +74,7 @@ fn secret_key_generation_from_seed_is_stable() {
 #[test]
 fn pkcs8_v2_rep_includes_the_public_key() {
     let mut rng = &mut test_rng();
-    let sk = PrivateKey::generate_using_rng(&mut rng);
+    let sk = random_key(&mut rng);
     let pk = sk.public_key().serialize_raw();
 
     let sk_pkcs8 = sk.serialize_pkcs8(PrivateKeyFormat::Pkcs8v2);
@@ -84,7 +88,7 @@ fn pkcs8_v2_rep_includes_the_public_key() {
 fn signatures_we_generate_will_verify() {
     let mut rng = &mut test_rng();
     for _ in 0..100 {
-        let sk = PrivateKey::generate_using_rng(&mut rng);
+        let sk = random_key(&mut rng);
         let pk = sk.public_key();
 
         let msg = rng.gen::<[u8; 32]>();
@@ -116,6 +120,7 @@ fn public_key_deserialization_rejects_keys_of_incorrect_length() {
 }
 
 #[test]
+#[cfg(feature = "rand")]
 fn batch_verification_works() {
     fn batch_verifies(
         msg: &[[u8; 32]],
@@ -148,9 +153,7 @@ fn batch_verification_works() {
     assert!(PublicKey::batch_verify(&[], &[], &[], rng).is_ok());
 
     for batch_size in (1..30).chain([50, 75, 100]) {
-        let sk = (0..batch_size)
-            .map(|_| PrivateKey::generate_using_rng(rng))
-            .collect::<Vec<_>>();
+        let sk = (0..batch_size).map(|_| random_key(rng)).collect::<Vec<_>>();
         let mut pk = sk.iter().map(|k| k.public_key()).collect::<Vec<_>>();
 
         let mut msg = (0..batch_size)
@@ -186,7 +189,7 @@ fn batch_verification_works() {
         // Corrupt a random public key and check that the batch fails:
         let corrupted_pk_idx = rng.gen::<usize>() % batch_size;
         let correct_pk = pk[corrupted_pk_idx];
-        let wrong_pk = PrivateKey::generate_using_rng(rng).public_key();
+        let wrong_pk = random_key(rng).public_key();
         assert_ne!(correct_pk, wrong_pk);
         pk[corrupted_pk_idx] = wrong_pk;
         assert!(!batch_verifies(&msg, &sigs, &pk, rng));
@@ -407,7 +410,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
     }
 
     for _ in 0..100 {
-        let master_sk = PrivateKey::generate_using_rng(rng);
+        let master_sk = random_key(rng);
         let master_pk = master_sk.public_key();
 
         let path = random_path(rng);
@@ -437,7 +440,7 @@ fn private_derivation_also_works_for_derived_keys() {
     let rng = &mut test_rng();
 
     for _ in 0..100 {
-        let master_sk = PrivateKey::generate_using_rng(rng);
+        let master_sk = random_key(rng);
 
         let chain_code = rng.gen::<[u8; 32]>();
         let path_len = 2 + rng.gen::<usize>() % 32;
@@ -536,6 +539,7 @@ fn public_key_accepts_but_can_detect_non_canonical_keys_with_torsion_component()
 }
 
 #[test]
+#[cfg(feature = "rand")]
 fn verification_follows_zip215() {
     let rng = &mut test_rng();
 

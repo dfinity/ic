@@ -2,6 +2,7 @@
 
 set -o nounset
 set -o pipefail
+set -e
 
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
