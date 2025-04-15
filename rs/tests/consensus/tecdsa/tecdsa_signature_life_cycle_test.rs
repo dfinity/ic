@@ -184,12 +184,7 @@ fn test(env: TestEnv) {
             disabling signing on old app subnet, \
             and then verifying signing no longer works."
         );
-        // TODO(CON-1471): Use all key IDs, including VetKD, once supported
-        let key_ids = all_key_ids
-            .iter()
-            .filter(|id| id.is_idkg_key())
-            .cloned()
-            .collect::<Vec<_>>();
+        let key_ids = all_key_ids.iter().cloned().collect::<Vec<_>>();
 
         let registry_client = RegistryCanister::new_with_query_timeout(
             vec![nns_node.get_public_url()],
