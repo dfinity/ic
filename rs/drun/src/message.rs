@@ -457,7 +457,7 @@ mod tests {
         let ingress_expiry = match &parsed_message {
             Message::Query(query) => match query.source {
                 QuerySource::User { ingress_expiry, .. } => ingress_expiry,
-                QuerySource::System => panic!("Expected a user query but got an anonymous one"),
+                QuerySource::System => panic!("Expected a user query but got a system one"),
             },
             _ => panic!(
                 "parse_message() returned an unexpected message type: {:?}",
