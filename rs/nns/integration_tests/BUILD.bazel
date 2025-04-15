@@ -389,6 +389,7 @@ rust_ic_test(
 #       variable to be "forwarded" from your shell to the sandbox where the test
 #       is run. This authorizes the test to download the test data.
 #
+# // TODO(NNS1-3748): Remove this test
 rust_ic_test(
     name = "test_node_rewards_migration_with_golden_nns_state",
     # This uses on the order of 10 GB of disk space.

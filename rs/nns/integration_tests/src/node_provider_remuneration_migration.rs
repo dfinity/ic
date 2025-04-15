@@ -30,6 +30,7 @@ use std::env;
 use std::str::FromStr;
 
 #[test]
+// TODO(NNS1-3748): Remove this test once new canister is live
 fn test_registry_and_node_rewards_give_same_results_with_golden_state() {
     if env::var("RUN_GOLDEN_STATE_TEST").is_err() {
         return;
