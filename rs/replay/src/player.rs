@@ -1,6 +1,5 @@
 use crate::{
-    backup,
-    backup::{cup_file_name, rename_file},
+    backup::{self, cup_file_name, rename_file, ExitPoint},
     ingress::IngressWithPrinter,
     validator::{InvalidArtifact, ReplayValidator},
 };
@@ -1073,11 +1072,19 @@ impl Player {
                 &mut invalid_artifacts,
             );
 
+            // We don't want to replay heights strictly above the next CUP.
+            let replay_target_height = match result {
+                Ok(ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                    Some(target_height.unwrap_or(cup_height).min(cup_height))
+                }
+                _ => target_height,
+            };
+
             let last_batch_height = self.deliver_batches(
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
                 self.membership.as_ref().unwrap(),
-                self.replay_target_height.map(Height::from),
+                replay_target_height,
             );
             self.wait_for_state(last_batch_height);
             if let Some(height) = target_height {
@@ -1090,7 +1097,7 @@ impl Player {
             match result {
                 // Since the pool cache assumes we always have at most one CUP inside the pool,
                 // we should deliver all batches before inserting a new CUP into the pool.
-                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                Ok(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
                     info!(
                         self.log,
                         "Loading the CUP at height {cup_height} from the disk, \
@@ -1112,7 +1119,7 @@ impl Player {
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
-                Err(backup::ExitPoint::NewerRegistryVersion(new_version)) => {
+                Ok(backup::ExitPoint::NewerRegistryVersion(new_version)) => {
                     self.update_registry_local_store();
                     self.registry
                         .poll_once()
@@ -1124,22 +1131,19 @@ impl Player {
                     );
                     println!("Updated the registry.");
                 }
-                Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
-                    println!(
-                        "Validation of artifacts at height {:?} is not complete",
-                        last_validated_height
-                    );
-                    return Err(ReplayError::ValidationIncomplete(
-                        last_validated_height,
-                        invalid_artifacts,
-                    ));
-                }
-                Ok(_) => {
+                Ok(backup::ExitPoint::Done) => {
                     println!(
                         "Restored the state at the height {:?}",
                         self.state_manager.latest_state_height()
                     );
                     return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                }
+                Err(backup::Error { height, reason }) => {
+                    error!(
+                        self.log,
+                        "Validation of artifacts at height {height:?} is not complete. Reason: {reason}",
+                    );
+                    return Err(ReplayError::ValidationIncomplete(height, invalid_artifacts));
                 }
             }
         }
