@@ -106,7 +106,7 @@ impl Registry {
                             .expect("Invalid InitialChainKeyConfig")
                     });
 
-            // Call setup_initial_dkg and compute_initial_i_dkg_dealings in parallel.
+            // Call setup_initial_dkg and reshare_chain_key in parallel.
             // Since both calls may take up to 2 DKG intervals to complete, this speeds up generation of a recovery cup.
             let (response_bytes, chain_key_initializations) = futures::join!(
                 call(
@@ -115,7 +115,7 @@ impl Registry {
                     bytes,
                     Encode!(&request).unwrap(),
                 ),
-                self.get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, dkg_nodes)
+                self.get_all_chain_key_reshares_from_ic00(&initial_chain_key_config, dkg_nodes)
             );
             let response_bytes = response_bytes.unwrap();
 
