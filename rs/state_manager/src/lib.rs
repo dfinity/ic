@@ -1131,6 +1131,7 @@ fn switch_to_checkpoint(
                 .module_hash()
                 .into(),
         );
+        debug_assert_eq!(wasm_binary.file_loading_status(), Some(false));
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
