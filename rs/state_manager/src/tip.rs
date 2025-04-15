@@ -839,7 +839,7 @@ fn serialize_to_tip(
                 canister_snapshot.0,
                 canister_snapshot.1,
                 tip,
-                &metrics,
+                metrics,
                 lsmt_config,
             )
         },
