@@ -290,6 +290,9 @@ mod tests {
             Some(registry.latest_version())
         );
 
+        // Store this version to test specific version requests later.
+        let version_without_rewards_table = registry.latest_version();
+
         ///////////////////////////////
         // Now add the reward table for type0 and type2 nodes and check that the values are properly used
         ///////////////////////////////
@@ -353,6 +356,22 @@ mod tests {
         assert_eq!(
             *monthly_rewards.rewards.get(&np2.to_string()).unwrap(),
             (11 * 68) + (7 * 11)
+        );
+
+        ///////////////////////////////
+        // Test getting a previous version's rewards works
+        ///////////////////////////////
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(GetNodeProvidersMonthlyXdrRewardsRequest {
+                registry_version: Some(version_without_rewards_table),
+            })
+            .unwrap();
+        let np1 = TEST_USER1_PRINCIPAL.to_string();
+        let np1_rewards = monthly_rewards.rewards.get(&np1).unwrap();
+        assert_eq!(*np1_rewards, 5); // 5 nodes at 1 XDR/month/node
+        assert_eq!(
+            monthly_rewards.registry_version,
+            Some(version_without_rewards_table)
         );
     }
 
