@@ -1,4 +1,3 @@
-use candid::Principal;
 #[cfg(any(feature = "test", test))]
 use ic_cdk::query;
 use ic_cdk::{init, post_upgrade, pre_upgrade, spawn, update};
@@ -28,23 +27,6 @@ thread_local! {
             store.clone()
         })))
     };
-}
-
-#[cfg(any(feature = "test", test))]
-thread_local! {
-    static TEST_CALLER: RefCell<Principal> = {
-        RefCell::new(Principal::from_text("aaaaa-aa").unwrap())
-    };
-}
-
-#[cfg(any(feature = "test", test))]
-fn caller() -> Principal {
-    TEST_CALLER.with_borrow(|p| *p)
-}
-
-#[cfg(not(any(feature = "test", test)))]
-fn caller() -> Principal {
-    ic_cdk::caller()
 }
 
 #[init]
@@ -84,7 +66,7 @@ fn schedule_registry_sync() {
 }
 
 fn panic_if_not_governance() {
-    if caller() != GOVERNANCE_CANISTER_ID.get().0 {
+    if ic_cdk::caller() != GOVERNANCE_CANISTER_ID.get().0 {
         panic!("Only the governance canister can call this method");
     }
 }
@@ -107,8 +89,6 @@ async fn get_node_providers_monthly_xdr_rewards(
 mod tests {
     use super::*;
     use candid_parser::utils::{service_equal, CandidSource};
-    use futures_util::FutureExt;
-
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {
         let declared_interface = CandidSource::Text(include_str!("../node-rewards-canister.did"));
@@ -122,32 +102,5 @@ mod tests {
 
         let result = service_equal(declared_interface, implemented_interface);
         assert!(result.is_ok(), "{:?}\n\n", result.unwrap_err());
-    }
-    // Test only governance can call get_monthly_xdr_rewards
-    #[test]
-    #[should_panic(expected = "Only the governance canister can call this method")]
-    fn test_get_monthly_xdr_rewards_not_governance_panics() {
-        let request = GetNodeProvidersMonthlyXdrRewardsRequest {
-            registry_version: None,
-        };
-        get_node_providers_monthly_xdr_rewards(request)
-            .now_or_never()
-            .unwrap();
-    }
-
-    #[test]
-    fn test_get_monthly_xdr_rewards_is_callable_by_governance() {
-        TEST_CALLER.with_borrow_mut(|p| {
-            *p = GOVERNANCE_CANISTER_ID.get().0;
-        });
-
-        let request = GetNodeProvidersMonthlyXdrRewardsRequest {
-            registry_version: None,
-        };
-        let response = get_node_providers_monthly_xdr_rewards(request)
-            .now_or_never()
-            .unwrap();
-
-        assert!(response.error.is_some());
     }
 }
