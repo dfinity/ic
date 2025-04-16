@@ -711,7 +711,8 @@ fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
     let canister_layout: CanisterLayout<ReadOnly> =
         CanisterLayout::new_untracked(tmpdir.path().to_owned()).unwrap();
     let wasm_on_disk =
-        CanisterModule::new_from_file(Box::new(canister_layout.wasm()), wasm_hash.into());
+        CanisterModule::new_from_file(Box::new(canister_layout.wasm()), wasm_hash.into())
+            .expect("failed to read Wasm from disk");
 
     assert_eq!(wasm_in_memory.file(), None);
     assert_eq!(wasm_on_disk.file(), Some(wasm_file.path.as_path()));
@@ -765,7 +766,8 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
         let wasm_on_disk = CanisterModule::new_from_file(
             Box::new(cp1.canister(&canister_test_id(42)).unwrap().wasm()),
             wasm_in_memory.module_hash().into(),
-        );
+        )
+        .expect("failed to read Wasm from disk");
 
         drop(cp1);
         state_layout.remove_checkpoint_when_unused(Height::new(1));
