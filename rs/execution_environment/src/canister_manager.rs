@@ -22,16 +22,17 @@ use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailable
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash, GlobalTimer,
-    Method as Ic00Method, ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse,
-    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkReply,
+    CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
+    CanisterStatusType, ChunkHash, GlobalTimer, Method as Ic00Method,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, StoredChunksReply,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     WasmChunkHash, CHUNK_SIZE,
 };
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_replicated_state::page_map::Buffer;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{
@@ -2218,6 +2219,9 @@ impl CanisterManager {
             replace_snapshot_size,
         );
 
+        // TODO: the new_snapshot does not have the correct size yet because of the page-map
+        // backed memories. this means we are underestimating the memory here.
+
         // Actually deduct memory from the subnet. It's safe to unwrap
         // here because we already checked the available memory above.
         round_limits.subnet_available_memory
@@ -2254,7 +2258,53 @@ impl CanisterManager {
         args: &UploadCanisterSnapshotDataArgs,
         state: &mut ReplicatedState,
         subnet_size: usize,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> (Result<(), CanisterManagerError>, NumInstructions) {
+        // Check sender is a controller.
+        if let Err(err) = validate_controller(canister, &sender) {
+            return (Err(err), NumInstructions::new(0));
+        };
+        let snapshot_id = args.get_snapshot_id();
+        // If not found, the operation fails due to invalid parameters.
+        let Some(snapshot) = state.canister_snapshots.get(snapshot_id) else {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotFound {
+                    canister_id: canister.canister_id(),
+                    snapshot_id,
+                }),
+                NumInstructions::new(0),
+            );
+        };
+        // Verify the provided `snapshot_id` belongs to this canister.
+        if snapshot.canister_id() != canister.canister_id() {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                    canister_id: canister.canister_id(),
+                    snapshot_id,
+                }),
+                NumInstructions::new(0),
+            );
+        }
+        // Write data where it belongs. The memory has already been paid for in `create_snapshot_from_metadata`,
+        // but the instructions used have to be accounted for.
+        let mut snapshot = snapshot;
+        match args.kind {
+            CanisterSnapshotDataOffset::WasmModule { offset } => {
+                // TODO: this type has no good write access. writing would invalidate the module.
+                // snapshot.execution_snapshot_mut().wasm_binary.
+            }
+            CanisterSnapshotDataOffset::MainMemory { offset } => {
+                let mut buffer = Buffer::new(snapshot.wasm_memory().page_map.clone());
+                buffer.write(&args.chunk, offset as usize);
+            }
+            CanisterSnapshotDataOffset::StableMemory { offset } => {
+                let mut buffer = Buffer::new(snapshot.stable_memory().page_map.clone());
+                buffer.write(&args.chunk, offset as usize);
+            }
+            CanisterSnapshotDataOffset::WasmChunk => {
+                // TODO: use `upload_chunk`
+            }
+        }
+
         todo!()
     }
 }

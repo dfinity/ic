@@ -4186,6 +4186,10 @@ impl UploadCanisterSnapshotDataArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
