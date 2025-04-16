@@ -55,7 +55,7 @@ pub const NUMBER_OF_NODES: usize = 4;
 
 const MSG: &str = "Secret message that is totally important";
 const SEED: [u8; 32] = [13; 32];
-const GET_SIGNATURE_RETRIES: i32 = 20;
+const GET_SIGNATURE_RETRIES: i32 = 10;
 
 pub fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
