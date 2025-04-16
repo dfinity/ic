@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/pocket_ic_server:defs.bzl", "pocket_ic_rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -43,20 +44,18 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_test(
+pocket_ic_rust_test(
     name = "ic-icp-rosetta-client-tests",
     srcs = ["tests/tests.rs"],
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
-        "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/replica",
         "//rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",

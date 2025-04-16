@@ -246,6 +246,8 @@ genrule(
     export IC_BITCOIN_CANISTER_MOCK_WASM_PATH="$(location //rs/bitcoin/mock:bitcoin_canister_mock)"
     export IC_CKBTC_MINTER_WASM_PATH="$(location :ckbtc_minter_debug.wasm.gz)"
     export POCKET_IC_BIN="$(location //:pocket-ic-server)"
+    # TODO: Update TMPDIR here
+    # export TEMPDIR=""
 
     $(location :ckbtc_minter_dump_stable_memory) $(location test_resources/mainnet_events.gz) $@
 """,

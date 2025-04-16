@@ -52,6 +52,8 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         "POCKET_IC_BIN": pocket_ic_bin,
         # Hack to escape the sandbox and update the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        # TODO: Update TMPDIR here
+        # "TMPDIR": "",
     }
 
     if noise_threshold:

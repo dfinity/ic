@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("//rs/pocket_ic_server:defs.bzl", "pocket_ic_rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -84,7 +84,7 @@ rust_canister(
     ],
 )
 
-rust_ic_test(
+pocket_ic_rust_ic_test(
     name = "integration_tests",
     srcs = ["tests/tests.rs"],
     data = [
@@ -94,13 +94,11 @@ rust_ic_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/checker",
         "IC_BTC_CHECKER_CANISTER_WASM_PATH": "$(rootpath :btc_checker_canister)",
-        "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     deps = [
         # Keep sorted.
         ":btc_checker_lib",
-        "//:pocket-ic-server",
         "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/pocket-ic",
         "//rs/rust_canisters/http_types",
