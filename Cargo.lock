@@ -23269,6 +23269,8 @@ name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "futures",
+ "ic-http-utils",
  "regex",
  "reqwest 0.12.12",
  "rusb",
