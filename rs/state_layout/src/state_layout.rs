@@ -2505,7 +2505,14 @@ where
     }
 }
 
-pub fn validate_wasm(wasm_file_layout: &dyn MemoryMappableWasmFile) -> Result<(), LayoutError> {
+/// Checks that the given wasm file can be memory-mapped successfully.
+///
+/// This function does **not** validate the contents of the file as a valid wasm binary.
+/// Instead, it ensures that the file exists, is accessible, and can be memory-mapped,
+/// which is a prerequisite for asynchronously loading it later.
+pub fn validate_wasm_file(
+    wasm_file_layout: &dyn MemoryMappableWasmFile,
+) -> Result<(), LayoutError> {
     wasm_file_layout
         .mmap_file()
         .map_err(|err| LayoutError::IoError {

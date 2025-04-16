@@ -235,6 +235,15 @@ enum ModuleStorage {
     File(WasmFileStorage),
 }
 
+/// Lazily loaded memory-mapped representation of a wasm file.
+///
+/// The `file` field points to a wasm file on disk. The file is memory-mapped
+/// on first access and the resulting `mmap` is stored in a `OnceLock`, which is
+/// never cleared until the struct is dropped. After initialization, the `file`
+/// field is no longer accessed.
+///
+/// The only constructor, `lazy_load`, guarantees that the `file` field is
+/// populated when the first access occurs.
 #[derive(Clone)]
 pub struct WasmFileStorage {
     path: PathBuf,
@@ -243,18 +252,22 @@ pub struct WasmFileStorage {
 }
 
 impl WasmFileStorage {
-    /// Creates a new `WasmFileStorage` that will lazily load the provided WASM file layout.
-    ///
-    /// This constructor is the only valid way to build a `WasmFileStorage`. It requires a
-    /// valid (non-empty) `MemoryMappableWasmFile` because any attempt to call [`init_or_die`] on
-    /// a storage built with an empty layout would result in a panic.
-    pub fn lazy_load(wasm_file_layout: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> Self {
+    /// The only constructor to creates a new `WasmFileStorage`
+    /// that will lazily load the provided wasm file.
+    pub fn lazy_load(wasm_file: Box<dyn MemoryMappableWasmFile + Send + Sync>) -> Self {
         Self {
-            path: wasm_file_layout.path().to_path_buf(),
-            file: Arc::new(Mutex::new(Some(wasm_file_layout))),
+            path: wasm_file.path().to_path_buf(),
+            file: Arc::new(Mutex::new(Some(wasm_file))),
             mmap: Arc::new(OnceLock::new()),
         }
     }
+
+    /// Returns a reference to the mmap, initializing it on first access.
+    ///
+    /// This method memory-maps the file the first time it's called, which
+    /// consumes the 'file' field and stores the result in a `OnceLock`.
+    ///
+    /// Panics if the `file` has already been taken or if mapping the file fails.
     fn init_or_die(&self) -> &ic_sys::mmap::ScopedMmap {
         self.mmap.get_or_init(|| {
             let mut file = self.file.lock().expect("Failed to lock wasm file layout");
