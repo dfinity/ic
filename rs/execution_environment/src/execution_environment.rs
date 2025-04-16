@@ -380,6 +380,7 @@ impl ExecutionEnvironment {
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
         canister_snapshot_baseline_instructions: NumInstructions,
+        canister_snapshot_data_baseline_instructions: NumInstructions,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -404,6 +405,7 @@ impl ExecutionEnvironment {
             upload_wasm_chunk_instructions,
             config.embedders_config.wasm_max_size,
             canister_snapshot_baseline_instructions,
+            canister_snapshot_data_baseline_instructions,
             config.default_wasm_memory_limit,
             config.max_number_of_snapshots_per_canister,
         );
@@ -1672,15 +1674,20 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
                 #[allow(clippy::bind_instead_of_map)]
-                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| {
-                    match self.config.canister_snapshot_download {
-                        FlagStatus::Disabled => Ok((vec![], None)),
-                        FlagStatus::Enabled => {
-                            let canister_id = args.get_canister_id();
-                            // TODO: [EXC-2018] do we need to account for copying the bytes -> costs and round_limits?
-                            self.read_snapshot_data(*msg.sender(), &state, args)
-                                .map(|res| (res, Some(canister_id)))
-                        }
+                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| match self
+                    .config
+                    .canister_snapshot_download
+                {
+                    FlagStatus::Disabled => Ok((vec![], None)),
+                    FlagStatus::Enabled => {
+                        let canister_id = args.get_canister_id();
+                        self.read_snapshot_data(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                        )
+                        .map(|res| (res, Some(canister_id)))
                     }
                 });
                 ExecuteSubnetMessageResult::Finished {
@@ -2451,14 +2458,38 @@ impl ExecutionEnvironment {
     fn read_snapshot_data(
         &self,
         sender: PrincipalId,
-        state: &ReplicatedState,
+        state: &mut ReplicatedState,
         args: ReadCanisterSnapshotDataArgs,
+        subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister(args.get_canister_id(), state)?;
-        self.canister_manager
-            .read_snapshot_data(sender, canister, args.get_snapshot_id(), args.kind, state)
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", &canister_id),
+                ))
+            }
+            Some(canister) => canister,
+        };
+
+        let result = self
+            .canister_manager
+            .read_snapshot_data(
+                sender,
+                &mut canister,
+                args.get_snapshot_id(),
+                args.kind,
+                state,
+                subnet_size,
+            )
             .map(|res| Encode!(&res).unwrap())
-            .map_err(UserError::from)
+            .map_err(UserError::from);
+
+        // Put canister back.
+        state.put_canister_state(canister);
+        result
     }
 
     fn read_canister_snapshot_metadata(
