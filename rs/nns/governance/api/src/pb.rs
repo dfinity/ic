@@ -1,8 +1,7 @@
 use crate::pb::v1::{
     governance_error::ErrorType, neuron::DissolveState, CreateServiceNervousSystem,
-    GovernanceError, ListNeurons, ListNeuronsProto, NetworkEconomics, Neuron, NeuronState,
-    NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, VotingPowerEconomics,
-    XdrConversionRate,
+    GovernanceError, NetworkEconomics, Neuron, NeuronState, NeuronsFundEconomics,
+    NeuronsFundMatchedFundingCurveCoefficients, VotingPowerEconomics, XdrConversionRate,
 };
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Percentage};
@@ -257,22 +256,5 @@ impl CreateServiceNervousSystem {
             .ok_or("`duration` should not be None")?;
 
         Ok((swap_start_timestamp_seconds, swap_due_timestamp_seconds))
-    }
-}
-
-impl From<ListNeuronsProto> for ListNeurons {
-    fn from(list_neurons_proto: ListNeuronsProto) -> Self {
-        Self {
-            neuron_ids: list_neurons_proto.neuron_ids,
-            include_neurons_readable_by_caller: list_neurons_proto
-                .include_neurons_readable_by_caller,
-            include_empty_neurons_readable_by_caller: list_neurons_proto
-                .include_empty_neurons_readable_by_caller,
-            include_public_neurons_in_full_neurons: list_neurons_proto
-                .include_public_neurons_in_full_neurons,
-            page_number: list_neurons_proto.page_number,
-            page_size: list_neurons_proto.page_size,
-            neuron_subaccounts: None,
-        }
     }
 }
