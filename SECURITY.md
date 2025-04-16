@@ -8,7 +8,7 @@ DFINITY takes the security of our software products seriously, which includes al
 ## How to report a vulnerability
 
 We appreciate your help in keeping our projects secure.
-If you believe you have found a security vulnerability in any of our repositories, please report it resonsibly to us as described below:
+If you believe you have found a security vulnerability in any of our repositories, please report it responsibly to us as described below:
 
 1. **Do not disclose the vulnerability publicly.** Public disclosure could be exploited by attackers before it can be fixed.
 2. **Ideally, disclose the vulnerability through [Hackenproof](https://hackenproof.com/programs/internet-computer-protocol)**
