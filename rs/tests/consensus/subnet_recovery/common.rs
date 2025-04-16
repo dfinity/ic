@@ -75,9 +75,9 @@ use std::{io::Write, path::Path};
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
-const NNS_NODES: usize = 3;
-const APP_NODES: usize = 3;
-const UNASSIGNED_NODES: usize = 3;
+const NNS_NODES: usize = 4;
+const APP_NODES: usize = 4;
+const UNASSIGNED_NODES: usize = 4;
 
 const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
@@ -88,13 +88,12 @@ pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 *
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
 pub fn setup(
-    nns_nodes: Option<usize>,
+    nns_nodes: usize,
     app_nodes: usize,
     unassigned_nodes: usize,
     dkg_interval: u64,
     env: TestEnv,
 ) {
-    let nns_nodes = nns_nodes.unwrap_or(NNS_NODES);
     let mut nns = Subnet::new(SubnetType::System)
         .with_dkg_interval_length(Height::from(dkg_interval))
         .add_nodes(nns_nodes);
@@ -132,29 +131,29 @@ pub fn setup(
 }
 
 pub fn setup_large_tecdsa(env: TestEnv) {
+    setup(NNS_NODES_LARGE, 0, APP_NODES_LARGE, DKG_INTERVAL_LARGE, env);
+}
+
+pub fn setup_same_nodes_tecdsa(env: TestEnv) {
+    setup(NNS_NODES, 0, APP_NODES, DKG_INTERVAL, env);
+}
+
+pub fn setup_failover_nodes_tecdsa(env: TestEnv) {
     setup(
-        Some(NNS_NODES_LARGE),
+        NNS_NODES,
         0,
-        APP_NODES_LARGE,
-        DKG_INTERVAL_LARGE,
+        APP_NODES + UNASSIGNED_NODES,
+        DKG_INTERVAL,
         env,
     );
 }
 
-pub fn setup_same_nodes_tecdsa(env: TestEnv) {
-    setup(None, 0, APP_NODES, DKG_INTERVAL, env);
-}
-
-pub fn setup_failover_nodes_tecdsa(env: TestEnv) {
-    setup(None, 0, APP_NODES + UNASSIGNED_NODES, DKG_INTERVAL, env);
-}
-
 pub fn setup_same_nodes(env: TestEnv) {
-    setup(None, APP_NODES, 0, DKG_INTERVAL, env);
+    setup(NNS_NODES, APP_NODES, 0, DKG_INTERVAL, env);
 }
 
 pub fn setup_failover_nodes(env: TestEnv) {
-    setup(None, APP_NODES, UNASSIGNED_NODES, DKG_INTERVAL, env);
+    setup(NNS_NODES, APP_NODES, UNASSIGNED_NODES, DKG_INTERVAL, env);
 }
 
 struct Config {
