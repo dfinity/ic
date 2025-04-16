@@ -230,10 +230,9 @@ fn get_rewards_at_version_with_node_rewards_canister(
         machine,
         NODE_REWARDS_CANISTER_ID,
         "get_node_providers_monthly_xdr_rewards",
-        Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
+        GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: version,
-        })
-        .unwrap(),
+        },
         GOVERNANCE_CANISTER_ID.get(),
     )
     .and_then(|response| {
