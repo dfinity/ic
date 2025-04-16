@@ -1222,8 +1222,8 @@ impl Player {
                 self.log,
                 "The state height {} is strictly above the CUP height {}. \
                 Skipping the rest of CUP verification.",
-                last_cup.height(),
-                self.state_manager.latest_state_height()
+                self.state_manager.latest_state_height(),
+                last_cup.height()
             );
             return Ok(());
         }
