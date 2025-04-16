@@ -657,6 +657,76 @@ fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
     assert_eq!(wasm_in_memory, wasm_on_disk);
 }
 
+#[test]
+fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path.clone(), &metrics_registry).unwrap();
+        let scratchpad_dir = tmpdir("scratchpad");
+
+        let scratchpad = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            scratchpad_dir.path().to_path_buf().join("1"),
+            Height::new(1),
+        )
+        .unwrap();
+
+        let canister_layout = scratchpad.canister(&canister_test_id(42)).unwrap();
+        let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
+
+        // Write a wasm file to the scratchpad layout.
+        canister_layout
+            .wasm()
+            .serialize(&wasm_in_memory)
+            .expect("failed to write Wasm to disk");
+
+        let cp1 = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad, Height::new(1))
+            .unwrap();
+        cp1.finalize_and_remove_unverified_marker(None).unwrap();
+
+        // Create another checkpoint at height 2 so that we can remove the first one.
+        let cp2 = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(
+                CheckpointLayout::<RwPolicy<()>>::new_untracked(
+                    scratchpad_dir.path().to_path_buf().join("2"),
+                    Height::new(2),
+                )
+                .unwrap(),
+                Height::new(2),
+            )
+            .unwrap();
+        cp2.finalize_and_remove_unverified_marker(None).unwrap();
+
+        // Create a `CanisterModule` that holds the checkpoint layout at height 1.
+        let wasm_on_disk = CanisterModule::new_from_file(
+            Box::new(cp1.canister(&canister_test_id(42)).unwrap().wasm()),
+            wasm_in_memory.module_hash().into(),
+        );
+
+        drop(cp1);
+        state_layout.remove_checkpoint_when_unused(Height::new(1));
+
+        // The checkpoint at height 1 still exists because `wasm_on_disk` is alive.
+        assert_eq!(
+            vec![Height::new(1), Height::new(2)],
+            state_layout.checkpoint_heights().unwrap(),
+        );
+
+        // The wasm file is still accessible and the content can be correctly read.
+        // Calling `as_slice()` on the canister module will drop the wasm file as well as the checkpoint layout.
+        assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
+        assert_eq!(
+            vec![Height::new(2)],
+            state_layout.checkpoint_heights().unwrap(),
+        );
+
+        // The cached mmap is still accessible after the checkpoint is removed.
+        assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
+    });
+}
+
 #[test_strategy::proptest]
 fn read_back_wasm_memory_overlay_file_names(
     #[strategy(random_sorted_unique_heights(
