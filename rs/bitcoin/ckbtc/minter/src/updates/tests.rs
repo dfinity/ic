@@ -14,7 +14,7 @@ mod update_balance {
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
     use crate::{storage, GetUtxosResponse, Timestamp};
-    use ic_btc_checker::CheckTransactionResponse;
+    use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::{Page, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
@@ -29,6 +29,46 @@ mod update_balance {
             SuspendedReason::ValueTooSmall,
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn should_call_check_transaction_again_when_cycles_not_enough() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+        let test_utxo = utxo();
+        let amount = test_utxo.value - read_state(|s| s.check_fee);
+        mock_get_utxos_for_account(&mut runtime, account, vec![test_utxo.clone()]);
+        // The expectation below also ensures check_transaction is called exactly 3 times
+        expect_check_transaction_returning_responses(
+            &mut runtime,
+            test_utxo.clone(),
+            vec![
+                CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
+                CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
+                CheckTransactionResponse::Passed,
+            ],
+        );
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount_, account_, _memo| amount_ == &amount && account_ == &account)
+            .return_const(Ok(amount));
+        mock_schedule_now_process_logic(&mut runtime);
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        // Check if the mint is successful in the end.
+        assert!(result.is_ok());
+        assert_matches::assert_matches!(&result.unwrap()[0], UtxoStatus::Minted { utxo, .. } if *utxo == test_utxo);
     }
 
     #[tokio::test]
@@ -648,6 +688,24 @@ mod update_balance {
                 btc_checker_principal == &BTC_CHECKER_CANISTER_ID && utxo_ == &utxo
             })
             .return_const(Ok(response));
+    }
+
+    fn expect_check_transaction_returning_responses(
+        runtime: &mut MockCanisterRuntime,
+        utxo: Utxo,
+        responses: Vec<CheckTransactionResponse>,
+    ) {
+        let mut count = 0;
+        runtime
+            .expect_check_transaction()
+            .times(responses.len())
+            .returning(move |btc_checker_principal, utxo_, _cycles| {
+                assert!(btc_checker_principal == BTC_CHECKER_CANISTER_ID && utxo_ == &utxo);
+                assert!(count < responses.len());
+                let response = responses[count].clone();
+                count = count + 1;
+                Ok(response)
+            });
     }
 
     fn mock_schedule_now_process_logic(runtime: &mut MockCanisterRuntime) {
