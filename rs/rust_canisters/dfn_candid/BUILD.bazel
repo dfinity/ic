@@ -19,6 +19,7 @@ package(default_visibility = [
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/rust_canisters/dfn_core",
+    # "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "@crate_index//:candid",
