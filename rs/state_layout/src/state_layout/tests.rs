@@ -634,6 +634,68 @@ fn test_all_existing_pagemaps() {
 }
 
 #[test]
+fn test_all_existing_wasm_files() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+    assert!(checkpoint_layout
+        .all_existing_wasm_files()
+        .unwrap()
+        .is_empty());
+
+    // Create directories for a canister and its corresponding snapshot, both containing wasm files.
+    let wasm_path_1 = checkpoint_layout
+        .canister(&canister_test_id(42))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_1).unwrap();
+
+    let wasm_path_2 = checkpoint_layout
+        .snapshot(&SnapshotId::from((canister_test_id(42), 4)))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_2).unwrap();
+
+    // Create a canister directory with a wasm file.
+    let wasm_path_3 = checkpoint_layout
+        .canister(&canister_test_id(43))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_3).unwrap();
+
+    // Create a snapshot directory with a wasm file.
+    let wasm_path_4 = checkpoint_layout
+        .snapshot(&SnapshotId::from((canister_test_id(44), 4)))
+        .unwrap()
+        .wasm()
+        .path()
+        .to_path_buf();
+    File::create(&wasm_path_4).unwrap();
+
+    // Create a canister directory without wasm files.
+    let _ = checkpoint_layout.canister(&canister_test_id(45)).unwrap();
+
+    let wasm_files = checkpoint_layout.all_existing_wasm_files().unwrap();
+    assert_eq!(wasm_files.len(), 4);
+    let wasm_paths: BTreeSet<_> = wasm_files
+        .iter()
+        .map(|w| w.raw_path().to_path_buf())
+        .collect();
+
+    assert_eq!(wasm_paths.len(), 4);
+    assert_eq!(
+        wasm_paths,
+        BTreeSet::from([wasm_path_1, wasm_path_2, wasm_path_3, wasm_path_4])
+    )
+}
+
+#[test]
 fn wasm_can_be_serialized_to_and_loaded_from_a_file() {
     let wasm_in_memory = CanisterModule::new(vec![0x00, 0x61, 0x73, 0x6d]);
     let wasm_hash = wasm_in_memory.module_hash();
