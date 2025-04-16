@@ -55,6 +55,7 @@ pub const NUMBER_OF_NODES: usize = 4;
 
 const MSG: &str = "Secret message that is totally important";
 const SEED: [u8; 32] = [13; 32];
+const GET_SIGNATURE_RETRIES: i32 = 20;
 
 pub fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
@@ -624,7 +625,7 @@ pub async fn get_ecdsa_signature_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 5 {
+                if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
                         "sign_with_ecdsa returns `{}`. Trying again in 2 seconds...", err
@@ -681,7 +682,7 @@ pub async fn get_schnorr_signature_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 5 {
+                if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
                         "sign_with_schnorr returns `{}`. Trying again in 2 seconds...", err
@@ -732,7 +733,7 @@ pub async fn get_vetkd_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 5 {
+                if count < GET_SIGNATURE_RETRIES {
                     debug!(
                         logger,
                         "vetkd_derive_key returns `{}`. Trying again in 2 seconds...", err
