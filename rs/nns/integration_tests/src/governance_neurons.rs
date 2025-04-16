@@ -5,35 +5,39 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount_bytes, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
-    manage_neuron_response::{
-        Command as CommandResponse, {self},
-    },
+    manage_neuron_response::{self, Command as CommandResponse},
     neuron::DissolveState,
-    GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
+    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
+    ManageNeuronResponse, Motion, Neuron, NeuronState, ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
-        list_neurons, list_neurons_by_principal, nns_add_hot_key, nns_claim_or_refresh_neuron,
-        nns_disburse_neuron, nns_governance_get_full_neuron, nns_governance_get_neuron_info,
-        nns_join_community_fund, nns_leave_community_fund, nns_remove_hot_key,
-        nns_send_icp_to_claim_or_refresh_neuron, nns_start_dissolving, setup_nns_canisters,
-        state_machine_builder_for_nns_tests,
+        icrc1_balance, list_neurons, list_neurons_by_principal, nns_add_hot_key,
+        nns_claim_or_refresh_neuron, nns_disburse_maturity, nns_disburse_neuron,
+        nns_governance_get_full_neuron, nns_governance_get_neuron_info,
+        nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
+        nns_leave_community_fund, nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron,
+        nns_start_dissolving, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
+use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -279,6 +283,110 @@ fn test_spawn_neuron() {
 
         Err("Spawned neuron's stake did not show up.".to_string())
     });
+}
+
+#[test]
+fn test_neuron_disburse_maturity() {
+    // Step 1.1: Prepare the world by setting up NNS canisters with 2000 ICP in a ledger account.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let test_user_principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(test_user_principal, None),
+            Tokens::from_e8s(200_000_000_000),
+        )
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // Step 1.2: Create a neuron with 100 ICP and make sure it has enough dissolve delay.
+    let nonce = 123_456;
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        test_user_principal,
+        Tokens::from_e8s(100_000_000_000),
+        nonce,
+    );
+    let test_neuron_id = nns_claim_or_refresh_neuron(&state_machine, test_user_principal, nonce);
+    nns_increase_dissolve_delay(
+        &state_machine,
+        test_user_principal,
+        test_neuron_id,
+        ONE_YEAR_SECONDS * 7,
+    )
+    .unwrap();
+
+    // Step 1.3: Make a proposal and wait for rewards distribution so that the neuron has some maturity.
+    nns_governance_make_proposal(
+        &state_machine,
+        test_user_principal,
+        test_neuron_id,
+        &MakeProposalRequest {
+            title: Some("some title".to_string()),
+            url: "".to_string(),
+            summary: "some summary".to_string(),
+            action: Some(ProposalActionRequest::Motion(Motion {
+                motion_text: "some motion text".to_string(),
+            })),
+        },
+    );
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 5));
+    for _ in 0..100 {
+        state_machine.advance_time(Duration::from_secs(1));
+        state_machine.tick();
+    }
+    let neuron =
+        nns_governance_get_full_neuron(&state_machine, test_user_principal, test_neuron_id.id)
+            .expect("Failed to get neuron");
+    assert!(neuron.maturity_e8s_equivalent > 0, "{:#?}", neuron);
+    println!("{:#?}", neuron);
+
+    // Step 3: Call the code under test - disburse maturity.
+    let disburse_destination = PrincipalId::new_self_authenticating(&[1u8]);
+    let disburse_response = nns_disburse_maturity(
+        &state_machine,
+        test_user_principal,
+        test_neuron_id,
+        100,
+        Some(GovernanceAccount {
+            owner: Some(disburse_destination),
+            subaccount: None,
+        }),
+    )
+    .panic_if_error("Failed to disburse maturity");
+
+    let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
+        disburse_response.command
+    else {
+        panic!("Failed to disburse maturity: {:#?}", disburse_response)
+    };
+    assert!(disburse_maturity_response.amount_disbursed_e8s() > 0);
+
+    // Sanity check: the destination account should be empty before the disbursement is finalized.
+    let balance = icrc1_balance(
+        &state_machine,
+        LEDGER_CANISTER_ID,
+        Account {
+            owner: disburse_destination.0,
+            subaccount: None,
+        },
+    );
+    assert!(balance.get_e8s() == 0, "{}", balance);
+
+    // Step 4: Wait for 7 days and check that the disbursement was successful.
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 7));
+    for _ in 0..100 {
+        state_machine.advance_time(Duration::from_secs(1));
+        state_machine.tick();
+    }
+    let balance = icrc1_balance(
+        &state_machine,
+        LEDGER_CANISTER_ID,
+        Account {
+            owner: disburse_destination.0,
+            subaccount: None,
+        },
+    );
+    assert!(balance.get_e8s() > 0, "{}", balance);
 }
 
 /// If a neuron's controller is added as a hot key and then removed, assert that Governance

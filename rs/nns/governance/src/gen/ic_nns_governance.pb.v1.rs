@@ -3041,7 +3041,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21"
+            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21, 22"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -3093,6 +3093,8 @@ pub mod governance {
             Spawn(::ic_nns_common::pb::v1::NeuronId),
             #[prost(message, tag = "21")]
             SyncCommand(SyncCommand),
+            #[prost(message, tag = "22")]
+            FinalizeDisburseMaturity(super::super::FinalizeDisburseMaturity),
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
@@ -4207,6 +4209,23 @@ pub struct VotingPowerTotal {
     /// The total potential voting power.
     #[prost(uint64, tag = "2")]
     pub total_potential_voting_power: u64,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FinalizeDisburseMaturity {
+    /// The amount of ICPs to be disbursed in e8s.
+    #[prost(uint64, tag = "1")]
+    pub amount_to_be_disbursed_e8s: u64,
+    /// The account to which to transfer the ICPs.
+    #[prost(message, optional, tag = "2")]
+    pub to_account: ::core::option::Option<Account>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
