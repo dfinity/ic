@@ -21,7 +21,6 @@ DEFAULT_RUSTC_FLAGS = [
     "-Ccodegen-units=1",
     "-Zextra-const-ub-checks",
     "-Zstrict-init-checks",
-    "-Cstrip=none",
     # TODO(PSEC): Add configuration to enable only during profiling
     # "-Cinstrument-coverage",
 ]

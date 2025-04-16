@@ -7,10 +7,7 @@ cc_binary(
         "infogetty-cpp/network_info.cc",
         "infogetty-cpp/network_info.h",
     ],
-    copts = [
-        "-std=c++17",
-        "-Wl,--strip-debug",
-    ],
+    copts = ["-std=c++17"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
