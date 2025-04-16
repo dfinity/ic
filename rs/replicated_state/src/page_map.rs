@@ -405,7 +405,8 @@ pub struct PageMap {
     pub base_height: Option<Height>,
 
     /// The map containing pages overriding pages from `storage`.
-    /// We need these pages to be able to reconstruct the full heap.
+    /// We need these pages to be able to reconstruct the full heap.cccccbeluglhutbefnlcgcfkikrbjbbugtfjhlnjirje
+    ///
     /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_delta: PageDelta,
