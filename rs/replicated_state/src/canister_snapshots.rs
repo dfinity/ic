@@ -3,10 +3,12 @@ use crate::{
         execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore,
         WASM_PAGE_SIZE_IN_BYTES,
     },
-    page_map::Buffer,
+    page_map::{Buffer, PageAllocatorFileDescriptor},
     CanisterState, NumWasmPages, PageMap,
 };
-use ic_management_canister_types_private::{Global, OnLowWasmMemoryHookStatus, SnapshotSource};
+use ic_management_canister_types_private::{
+    Global, OnLowWasmMemoryHookStatus, SnapshotSource, UploadCanisterSnapshotMetadataArgs,
+};
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, CanisterTimer, NumBytes, SnapshotId, Time};
 use ic_validate_eq::ValidateEq;
@@ -383,6 +385,42 @@ impl CanisterSnapshot {
             execution_snapshot,
             size: canister.snapshot_size_bytes(),
         })
+    }
+
+    pub fn from_metadata(
+        metadata: &UploadCanisterSnapshotMetadataArgs,
+        taken_at_timestamp: Time,
+        canister_version: u64,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Self {
+        let stable_memory = PageMemory {
+            page_map: PageMap::new(Arc::clone(&fd_factory)),
+            size: NumWasmPages::new(0),
+        };
+        let wasm_memory = PageMemory {
+            page_map: PageMap::new(Arc::clone(&fd_factory)),
+            size: NumWasmPages::new(0),
+        };
+        let execution_snapshot = ExecutionStateSnapshot {
+            // This is invalid now, but will be written to later.
+            wasm_binary: CanisterModule::new(vec![0; metadata.wasm_module_size as usize]),
+            exported_globals: metadata.exported_globals.clone(),
+            stable_memory,
+            wasm_memory,
+            global_timer: metadata.global_timer.map(CanisterTimer::from),
+            on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
+        };
+        let chunk_store = WasmChunkStore::new(Arc::clone(&fd_factory));
+        Self {
+            canister_id: CanisterId::try_from(metadata.canister_id).unwrap(),
+            source: SnapshotSource::UploadedManually,
+            taken_at_timestamp,
+            canister_version,
+            size: metadata.snapshot_size_bytes(),
+            certified_data: metadata.certified_data.clone(),
+            chunk_store,
+            execution_snapshot,
+        }
     }
 
     pub fn canister_id(&self) -> CanisterId {

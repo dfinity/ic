@@ -1500,54 +1500,11 @@ impl CanisterManager {
             return (Err(err), NumInstructions::new(0));
         };
 
-        let replace_snapshot_size = match replace_snapshot {
-            // Check that replace snapshot ID exists if provided.
-            Some(replace_snapshot) => {
-                match state.canister_snapshots.get(replace_snapshot) {
-                    None => {
-                        // If not found, the operation fails due to invalid parameters.
-                        return (
-                            Err(CanisterManagerError::CanisterSnapshotNotFound {
-                                canister_id: canister.canister_id(),
-                                snapshot_id: replace_snapshot,
-                            }),
-                            NumInstructions::new(0),
-                        );
-                    }
-                    Some(snapshot) => {
-                        // Verify the provided replacement snapshot belongs to this canister.
-                        if snapshot.canister_id() != canister.canister_id() {
-                            return (
-                                Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                                    canister_id: canister.canister_id(),
-                                    snapshot_id: replace_snapshot,
-                                }),
-                                NumInstructions::new(0),
-                            );
-                        }
-                        snapshot.size()
-                    }
-                }
-            }
-            // No replace snapshot ID provided, check whether the maximum number of snapshots
-            // has been reached.
-            None => {
-                if state
-                    .canister_snapshots
-                    .count_by_canister(&canister.canister_id())
-                    >= self.config.max_number_of_snapshots_per_canister
-                {
-                    return (
-                        Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
-                            canister_id: canister.canister_id(),
-                            limit: self.config.max_number_of_snapshots_per_canister,
-                        }),
-                        NumInstructions::new(0),
-                    );
-                }
-                0.into()
-            }
-        };
+        let replace_snapshot_size =
+            match self.replace_snapshot_size(canister, replace_snapshot, state) {
+                Ok(value) => value,
+                Err(value) => return (Err(value), NumInstructions::new(0)),
+            };
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -1668,6 +1625,54 @@ impl CanisterManager {
             )),
             instructions,
         )
+    }
+
+    fn replace_snapshot_size(
+        &self,
+        canister: &mut CanisterState,
+        replace_snapshot: Option<SnapshotId>,
+        state: &mut ReplicatedState,
+    ) -> Result<NumBytes, CanisterManagerError> {
+        let replace_snapshot_size = match replace_snapshot {
+            // Check that replace snapshot ID exists if provided.
+            Some(replace_snapshot) => {
+                match state.canister_snapshots.get(replace_snapshot) {
+                    None => {
+                        // If not found, the operation fails due to invalid parameters.
+                        return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                            canister_id: canister.canister_id(),
+                            snapshot_id: replace_snapshot,
+                        });
+                    }
+                    Some(snapshot) => {
+                        // Verify the provided replacement snapshot belongs to this canister.
+                        if snapshot.canister_id() != canister.canister_id() {
+                            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                canister_id: canister.canister_id(),
+                                snapshot_id: replace_snapshot,
+                            });
+                        }
+                        snapshot.size()
+                    }
+                }
+            }
+            // No replace snapshot ID provided, check whether the maximum number of snapshots
+            // has been reached.
+            None => {
+                if state
+                    .canister_snapshots
+                    .count_by_canister(&canister.canister_id())
+                    >= self.config.max_number_of_snapshots_per_canister
+                {
+                    return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
+                        canister_id: canister.canister_id(),
+                        limit: self.config.max_number_of_snapshots_per_canister,
+                    });
+                }
+                0.into()
+            }
+        };
+        Ok(replace_snapshot_size)
     }
 
     pub(crate) fn load_canister_snapshot(
@@ -2158,7 +2163,79 @@ impl CanisterManager {
             certified_data,
             global_timer,
             on_low_wasm_memory_hook_status,
-        } = args;
+        } = &args;
+        // Check sender is a controller.
+        if let Err(err) = validate_controller(canister, &sender) {
+            return (Err(err), NumInstructions::new(0));
+        };
+
+        let replace_snapshot_size =
+            match self.replace_snapshot_size(canister, args.replace_snapshot(), state) {
+                Ok(value) => value,
+                Err(value) => return (Err(value), NumInstructions::new(0)),
+            };
+
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
+            && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
+        {
+            return (
+                Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
+                    canister_id: canister.canister_id(),
+                    value: canister.scheduler_state.heap_delta_debit,
+                    limit: self.config.heap_delta_rate_limit,
+                }),
+                NumInstructions::new(0),
+            );
+        }
+
+        let new_snapshot_size = args.snapshot_size_bytes();
+        let old_memory_usage = canister.memory_usage();
+        let new_memory_usage = canister
+            .memory_usage()
+            .saturating_add(&new_snapshot_size)
+            .saturating_sub(&replace_snapshot_size);
+        if let Err(err) = self.memory_usage_checks(
+            subnet_size,
+            canister,
+            round_limits,
+            new_memory_usage,
+            old_memory_usage,
+            resource_saturation,
+        ) {
+            return (Err(err), NumInstructions::from(0));
+        }
+
+        // Charge for taking a snapshot of the canister.
+        let instructions = self
+            .config
+            .canister_snapshot_baseline_instructions
+            .saturating_add(&new_snapshot_size.get().into());
+
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            canister,
+            instructions,
+            subnet_size,
+            // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
+            // since the number of instructions charged depends on constant set fee and snapshot size
+            // and Wasm64 does not bring any additional overhead for this operation.
+            // The only overhead is during execution time.
+            WasmExecutionMode::Wasm32,
+        ) {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                0.into(),
+            );
+        };
+
+        // Create new snapshot.
+        let new_snapshot = CanisterSnapshot::from_metadata(
+            &args,
+            state.time(),
+            canister.system_state.canister_version,
+            Arc::clone(&self.fd_factory),
+        );
+
         todo!()
     }
 

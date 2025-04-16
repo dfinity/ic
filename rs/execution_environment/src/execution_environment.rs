@@ -2575,12 +2575,10 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
 
-        // match result {
-        //     Ok(response) => (Ok(response.encode()), instructions_used),
-        //     Err(err) => (Err(err.into()), instructions_used),
-        // }
-        // EmptyBlob.encode()
-        todo!()
+        match result {
+            Ok(()) => (Ok(EmptyBlob.encode()), instructions_used),
+            Err(err) => (Err(err.into()), instructions_used),
+        }
     }
 
     fn write_snapshot_data(
