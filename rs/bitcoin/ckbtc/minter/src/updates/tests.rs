@@ -693,18 +693,15 @@ mod update_balance {
     fn expect_check_transaction_returning_responses(
         runtime: &mut MockCanisterRuntime,
         utxo: Utxo,
-        responses: Vec<CheckTransactionResponse>,
+        mut responses: Vec<CheckTransactionResponse>,
     ) {
-        let mut count = 0;
         runtime
             .expect_check_transaction()
             .times(responses.len())
             .returning(move |btc_checker_principal, utxo_, _cycles| {
                 assert!(btc_checker_principal == BTC_CHECKER_CANISTER_ID && utxo_ == &utxo);
-                assert!(count < responses.len());
-                let response = responses[count].clone();
-                count = count + 1;
-                Ok(response)
+                assert!(!responses.is_empty());
+                Ok(responses.remove(0))
             });
     }
 
