@@ -6,7 +6,7 @@ use ic_nns_test_utils::common::{
 };
 use ic_nns_test_utils::state_test_helpers::{
     registry_latest_version, setup_nns_canisters_with_features,
-    state_machine_builder_for_nns_tests, update, update_with_sender_bytes,
+    state_machine_builder_for_nns_tests, update_with_sender, update_with_sender_bytes,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -226,18 +226,15 @@ fn get_rewards_at_version_with_node_rewards_canister(
     machine: &StateMachine,
     version: Option<u64>,
 ) -> Result<(BTreeMap<PrincipalId, u64>, Option<u64>), String> {
-    update(
+    update_with_sender(
         machine,
         NODE_REWARDS_CANISTER_ID,
         "get_node_providers_monthly_xdr_rewards",
-        Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
+        GetNodeProvidersMonthlyXdrRewardsRequest {
             registry_version: version,
-        })
-        .unwrap(),
+        },
+        GOVERNANCE_CANISTER_ID.get(),
     )
-    .and_then(|r| {
-        Decode!(&r, GetNodeProvidersMonthlyXdrRewardsResponse).map_err(|e| format!("{}", e))
-    })
     .and_then(|response| {
         let GetNodeProvidersMonthlyXdrRewardsResponse { rewards, error } = response;
 

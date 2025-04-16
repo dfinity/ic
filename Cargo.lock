@@ -11460,6 +11460,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-interfaces-registry",
  "ic-nervous-system-canisters",
+ "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
  "ic-protobuf",
