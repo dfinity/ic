@@ -68,7 +68,6 @@ use icrc_ledger_types::{
 };
 use num_traits::{bounds::Bounded, ToPrimitive};
 use serde_bytes::ByteBuf;
-use std::char::MAX;
 use std::{
     cell::RefCell,
     io::{Read, Write},

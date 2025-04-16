@@ -898,7 +898,7 @@ impl Ledger {
         records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true"));
         records.push(Value::entry(
             METADATA_MAX_TAKE_ALLOWANCES,
-            self.max_take_allowances(),
+            Nat::from(self.max_take_allowances()),
         ));
         records
     }
