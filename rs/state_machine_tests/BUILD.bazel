@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/test_utils/vetkd",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",

@@ -313,9 +313,9 @@ impl RosettaApiServer {
                     e
                 )
             });
-            std::fs::write(
-                listen_port_file,
-                server.addrs().first().unwrap().port().to_string(),
+            ic_sys::fs::write_string_using_tmp_file(
+                &listen_port_file,
+                &server.addrs().first().unwrap().port().to_string(),
             )
             .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {}", e));
         }
@@ -365,6 +365,7 @@ impl RosettaApiServer {
                     BLOCK_SYNC_TIMEOUT,
                     on_restart_callback,
                     skip_first_heartbeat_check,
+                    None,
                 );
                 let server_handle = self.server_handle.clone();
                 let ledger = self.ledger.clone();

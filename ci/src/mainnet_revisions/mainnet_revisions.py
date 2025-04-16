@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import logging
 import os
 import pathlib
 import subprocess
+import tempfile
 import urllib.request
 from enum import Enum
 from typing import List
@@ -34,7 +36,7 @@ def sync_main_branch_and_checkout_branch(
         raise Exception("Found uncommited work! Commit and then proceed. Uncommited work:\n%s", result.stdout.strip())
 
     if subprocess.call(["git", "checkout", branch_to_checkout], cwd=repo_root) == 0:
-        # The branch already exists, update the existing MR
+        # The branch already exists, update the existing PR
         logger.info("Found an already existing target branch")
     else:
         subprocess.check_call(["git", "checkout", "-b", branch_to_checkout], cwd=repo_root)
@@ -58,7 +60,7 @@ def commit_and_create_pr(
     paths_to_add = [path for path in check_for_updates_in_paths if path in git_modified_files]
 
     if len(paths_to_add) > 0:
-        logger.info("Creating/updating a MR that updates the saved NNS subnet revision")
+        logger.info("Creating/updating a PR that updates the saved icos revisions")
         cmd = ["git", "add"] + paths_to_add
         logger.info("Running command '%s'", " ".join(cmd))
         subprocess.check_call(cmd, cwd=repo_root)
@@ -170,7 +172,35 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         return latest_replica_version
 
 
-def update_mainnet_revisions_subnets_file(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
+def update_saved_hostos_revision(
+    repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, version: str
+):
+    """Download the hostos update image for the given version, compute its sha256 hash, and update the saved version."""
+    full_path = repo_root / file_path
+    # Check if the hostos revision is already up-to-date.
+    with open(full_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    hostos_info = data.get("hostos", {})
+    latest_release = hostos_info.get("latest_release", {})
+    existing_version = latest_release.get("version", "")
+    if existing_version == version:
+        logger.info("Hostos revision already updated to version %s. Skipping download.", version)
+        return
+
+    url = f"https://download.dfinity.systems/ic/{version}/host-os/update-img/update-img.tar.zst"
+    logger.info("Downloading hostos update image from %s", url)
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        urllib.request.urlretrieve(url, tmp_file.name)
+        with open(tmp_file.name, "rb") as f:
+            update_img_hash = hashlib.file_digest(f, "sha256").hexdigest()
+
+    data["hostos"] = {"latest_release": {"version": version, "update_img_hash": update_img_hash}}
+    with open(full_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    logger.info("Updated hostos revision to version %s with image hash %s", version, update_img_hash)
+
+
+def update_mainnet_icos_revisions_file(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     current_nns_version = get_subnet_replica_version(nns_subnet_id)
     logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
@@ -182,6 +212,7 @@ def update_mainnet_revisions_subnets_file(repo_root: pathlib.Path, logger: loggi
     update_saved_subnet_version(
         subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root, file_path=file_path
     )
+    update_saved_hostos_revision(repo_root, logger, file_path, current_app_subnet_version)
 
 
 def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: logging.Logger):
@@ -248,14 +279,14 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
     if args.command == Command.SUBNETS:
         branch = "ic-mainnet-revisions"
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
-        update_mainnet_revisions_subnets_file(repo_root, logger, pathlib.Path(MAINNET_ICOS_REVISIONS_FILE))
+        update_mainnet_icos_revisions_file(repo_root, logger, pathlib.Path(MAINNET_ICOS_REVISIONS_FILE))
         commit_and_create_pr(
             repo,
             repo_root,
             branch,
             [MAINNET_ICOS_REVISIONS_FILE],
             logger,
-            "chore: Update Mainnet IC revisions subnets file",
+            "chore: Update Mainnet IC revisions file",
             pr_description.format(
                 description="Update mainnet revisions file to include the latest version released on the mainnet."
             ),

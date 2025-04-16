@@ -89,22 +89,22 @@ RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/
 
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.4.1
+ARG MOLD_VERSION=2.37.1
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
+    echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 # Add IC SDK (dfx)
-ARG sdk_version=0.12.0
-ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
+ARG sdk_version=0.25.1
+ARG sdk_sha=1e2118e0463aa44fed3a5dee8d638144c67e7b6ee8e0beaf75cfd56687bdb7e7
 RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
     echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
     tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/dfx
 
 # Add motoko compiler
-ARG motoko_version=0.9.1
-RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+ARG motoko_version=0.14.7
+RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Add kubectl
 ARG KUBECTL_BIN="/usr/local/bin/kubectl"
@@ -129,11 +129,11 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 
 # Install AFLplusplus
-ARG AFL_RELEASE_VERSION=v4.21c
+ARG AFLPLUSPLUS_RELEASE_VERSION=v4.21c
 RUN mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
-    git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
+    git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make install && \

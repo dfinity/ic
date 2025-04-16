@@ -776,7 +776,6 @@ fn test_compute_neuron_metrics_public_neurons() {
 fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     // Step 1: Prepare the world.
 
-    let _reset_on_drop = crate::temporarily_enable_voting_power_adjustment();
     let now_seconds = 1718213756;
 
     // Step 1.1: Construct neurons (as described in the docstring).

@@ -3866,8 +3866,8 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub canister_version: u64,
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    pub global_timer: GlobalTimer,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub global_timer: Option<GlobalTimer>,
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
@@ -3997,6 +3997,11 @@ impl ReadCanisterSnapshotDataArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
+
+    // TODO: EXC-1997 strengthen types
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
@@ -4026,6 +4031,12 @@ pub enum CanisterSnapshotDataKind {
 pub struct ReadCanisterSnapshotDataResponse {
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
+}
+
+impl ReadCanisterSnapshotDataResponse {
+    pub fn new(chunk: Vec<u8>) -> Self {
+        Self { chunk }
+    }
 }
 
 /// Struct to encode/decode

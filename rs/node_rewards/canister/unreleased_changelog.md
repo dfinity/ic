@@ -8,8 +8,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* The Node Reward Canister will now sync changes from the Registry canister.
-
 ## Changed
 
 ## Deprecated
@@ -17,5 +15,7 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
+
+* Fixed a bug with the registry client that prevented the canister from reading registry data when there were deletions.
 
 ## Security
