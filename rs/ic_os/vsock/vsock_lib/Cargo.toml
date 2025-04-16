@@ -15,5 +15,3 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 vsock = "0.4"
-ic-http-utils = { path = "../../../http_utils" }
-futures = { workspace = true }
