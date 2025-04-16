@@ -149,6 +149,12 @@ test --test_env=CLICOLOR_FORCE=true
 common --local_termination_grace_seconds=90
 
 # Speed up compilation with zig cc
-# Currently this is disabled as it breaks pocket-ic tests as the port files
-# collide across tests.
-# build --sandbox_add_mount_pair=/tmp
+# zig cc compiles the standard library on demand, so a shared cache makes a big
+# difference by cutting out duplicated work.
+
+# Set the cache path for all environments
+build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
+# Share /tmp/zig-cache across targets
+build --sandbox_add_mount_pair=/tmp/zig-cache
+# Allow writes to the shared cache
+build --sandbox_writable_path=/tmp/zig-cache
