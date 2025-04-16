@@ -736,25 +736,11 @@ fn run_two_neuron_agreement_proposal_should_be_accepted(
     );
 }
 
-#[test]
-fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected_3_months() {
-    run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(Some(
-        DissolveState::DissolveDelaySeconds(THREE_MONTHS),
-    ));
-}
-
-#[test]
-fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected_6_months() {
-    run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(Some(
-        DissolveState::DissolveDelaySeconds(SIX_MONTHS),
-    ));
-}
-
 /// Here two neurons with identical stake, age, and dissolve delay disagree. The
 /// proposal should be rejected.
-fn run_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected(
-    not_dissolving_min_dissolve_delay: Option<DissolveState>,
-) {
+#[test]
+fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected() {
+    let not_dissolving_min_dissolve_delay = Some(DissolveState::DissolveDelaySeconds(SIX_MONTHS));
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             Neuron {
