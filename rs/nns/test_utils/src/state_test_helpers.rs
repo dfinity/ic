@@ -57,6 +57,7 @@ use ic_nns_governance_api::pb::v1::{
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_canister_api::GetChunkRequest;
+use ic_registry_transport::deserialize_get_latest_version_response;
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
@@ -107,6 +108,17 @@ pub fn reduce_state_machine_logging_unless_env_set() {
         Ok(_) => {}
         Err(_) => env::set_var("RUST_LOG", "ERROR"),
     }
+}
+
+pub fn registry_latest_version(state_machine: &StateMachine) -> Result<u64, String> {
+    let response = update(
+        state_machine,
+        REGISTRY_CANISTER_ID,
+        "get_latest_version",
+        vec![],
+    )?;
+    deserialize_get_latest_version_response(response)
+        .map_err(|e| format!("Could not decode response {e:?}"))
 }
 
 pub fn registry_get_changes_since(
@@ -236,8 +248,24 @@ pub fn update(
 ) -> Result<Vec<u8>, String> {
     // move time forward
     machine.advance_time(Duration::from_secs(2));
+    update_with_sender_bytes(
+        machine,
+        canister_target,
+        method_name,
+        payload,
+        PrincipalId::new_anonymous(),
+    )
+}
+
+pub fn update_with_sender_bytes(
+    machine: &StateMachine,
+    canister_target: CanisterId,
+    method_name: &str,
+    payload: Vec<u8>,
+    sender: PrincipalId,
+) -> Result<Vec<u8>, String> {
     let result = machine
-        .execute_ingress(canister_target, method_name, payload)
+        .execute_ingress_as(sender, canister_target, method_name, payload)
         .map_err(|e| e.to_string())?;
     match result {
         WasmResult::Reply(v) => Ok(v),
@@ -258,19 +286,16 @@ where
 {
     // move time forward
     machine.advance_time(Duration::from_secs(2));
-    let result = machine
-        .execute_ingress_as(
-            sender,
-            canister_target,
-            method_name,
-            Encode!(&payload).unwrap(),
-        )
-        .map_err(|e| e.to_string())?;
 
-    match result {
-        WasmResult::Reply(v) => Decode!(&v, ReturnType).map_err(|e| e.to_string()),
-        WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
-    }
+    let response = update_with_sender_bytes(
+        machine,
+        canister_target,
+        method_name,
+        Encode!(&payload).unwrap(),
+        sender,
+    )?;
+
+    Decode!(&response, ReturnType).map_err(|e| e.to_string())
 }
 
 /// Internal impl of querying canister
@@ -606,7 +631,7 @@ pub fn setup_nns_governance_with_correct_canister_id(
         machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
         build_governance_wasm_with_features(features),
-        init_payload.encode_to_vec(),
+        Encode!(&init_payload).unwrap(),
     );
 }
 
@@ -681,7 +706,7 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
     );
 }
 
-fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine) {
+pub fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine) {
     setup_nns_canister_at_position(
         machine,
         NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
