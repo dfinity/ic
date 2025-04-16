@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:vsock",
 ]
 

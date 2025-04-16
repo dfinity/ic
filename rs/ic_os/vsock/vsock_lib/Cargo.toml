@@ -17,3 +17,4 @@ tempfile = { workspace = true }
 vsock = "0.4"
 ic-http-utils = { path = "../../../http_utils" }
 futures = { workspace = true }
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
