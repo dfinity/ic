@@ -1108,7 +1108,7 @@ impl EcdsaSubnetConfig {
                         pre_signatures_to_create_in_advance: Some(1),
                         max_queue_size: Some(20),
                     }],
-                    signature_request_timeout_ns: None,
+                    request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
                 }),

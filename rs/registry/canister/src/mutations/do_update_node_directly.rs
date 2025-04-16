@@ -310,7 +310,7 @@ mod test {
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![key_config],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
@@ -366,7 +366,7 @@ mod test {
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![key_config],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
         }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(
@@ -432,7 +432,7 @@ mod test {
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![key_config],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
         }));
         registry.maybe_apply_mutation_internal(add_fake_subnet(

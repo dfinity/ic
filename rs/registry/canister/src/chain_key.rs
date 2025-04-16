@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub(crate) struct InitialChainKeyConfigInternal {
     pub key_configs: Vec<KeyConfigRequestInternal>,
-    pub signature_request_timeout_ns: Option<u64>,
+    pub request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
@@ -33,7 +33,7 @@ impl From<InitialChainKeyConfigInternal> for ChainKeyConfigPb {
     fn from(src: InitialChainKeyConfigInternal) -> Self {
         let InitialChainKeyConfigInternal {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         } = src;
 
@@ -44,7 +44,7 @@ impl From<InitialChainKeyConfigInternal> for ChainKeyConfigPb {
 
         Self {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         }
     }

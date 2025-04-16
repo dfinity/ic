@@ -289,7 +289,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
                 pre_signatures_to_create_in_advance: 100,
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }));
 
@@ -361,7 +361,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
 
         wait_for_chain_key_setup(&runtime, &fake_governance_canister, &key_id).await;
 
-        let signature_request_timeout_ns = Some(12345);
+        let request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
@@ -379,7 +379,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
                     }),
                     subnet_id: Some(system_subnet_id.get()),
                 }],
-                signature_request_timeout_ns,
+                request_timeout_ns,
                 idkg_key_rotation_period_ms,
             }),
         };
@@ -408,10 +408,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
         let chain_key_config = subnet_record.chain_key_config.unwrap();
 
-        assert_eq!(
-            chain_key_config.signature_request_timeout_ns,
-            signature_request_timeout_ns
-        );
+        assert_eq!(chain_key_config.request_timeout_ns, request_timeout_ns);
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
@@ -509,7 +506,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
                     pre_signatures_to_create_in_advance: Some(1),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 }],
-                signature_request_timeout_ns: None,
+                request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             };
             Some(chain_key_config_pb)
@@ -593,7 +590,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         // Install the universal canister in place of the governance canister
         let fake_governance_canister = set_up_universal_canister_as_governance(&runtime).await;
 
-        let signature_request_timeout_ns = Some(12345);
+        let request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
@@ -604,7 +601,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
             registry_store_uri: None,
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![],
-                signature_request_timeout_ns,
+                request_timeout_ns,
                 idkg_key_rotation_period_ms,
             }),
         };
@@ -629,10 +626,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
         let chain_key_config = subnet_record.chain_key_config.unwrap();
 
-        assert_eq!(
-            chain_key_config.signature_request_timeout_ns,
-            signature_request_timeout_ns
-        );
+        assert_eq!(chain_key_config.request_timeout_ns, request_timeout_ns);
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
@@ -955,7 +949,7 @@ fn test_recover_subnet_resets_cup_contents() {
                 pre_signatures_to_create_in_advance: 100,
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         }));
 
@@ -1054,7 +1048,7 @@ fn test_recover_subnet_resets_cup_contents() {
 
         wait_for_chain_key_setup(&runtime, &fake_governance_canister, &key_id).await;
 
-        let signature_request_timeout_ns = Some(12345);
+        let request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
@@ -1072,7 +1066,7 @@ fn test_recover_subnet_resets_cup_contents() {
                     }),
                     subnet_id: Some(system_subnet_id.get()),
                 }],
-                signature_request_timeout_ns,
+                request_timeout_ns,
                 idkg_key_rotation_period_ms,
             }),
         };
@@ -1105,10 +1099,7 @@ fn test_recover_subnet_resets_cup_contents() {
 
         let chain_key_config = subnet_record.chain_key_config.unwrap();
 
-        assert_eq!(
-            chain_key_config.signature_request_timeout_ns,
-            signature_request_timeout_ns
-        );
+        assert_eq!(chain_key_config.request_timeout_ns, request_timeout_ns);
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms

@@ -338,9 +338,9 @@ pub struct ChainKeyConfig {
     /// Configurations for keys held by the subnet.
     #[prost(message, repeated, tag = "1")]
     pub key_configs: ::prost::alloc::vec::Vec<KeyConfig>,
-    /// Signature requests will timeout after the given number of nano seconds.
+    /// Requests will timeout after the given number of nano seconds.
     #[prost(uint64, optional, tag = "2")]
-    pub signature_request_timeout_ns: ::core::option::Option<u64>,
+    pub request_timeout_ns: ::core::option::Option<u64>,
     /// Key rotation period of a single node in milliseconds.
     /// If none is specified key rotation is disabled.
     #[prost(uint64, optional, tag = "3")]

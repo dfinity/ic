@@ -264,7 +264,7 @@ pub struct UpdateSubnetPayload {
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
-    pub signature_request_timeout_ns: Option<u64>,
+    pub request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
@@ -272,7 +272,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
     fn from(src: ChainKeyConfigInternal) -> Self {
         let ChainKeyConfigInternal {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         } = src;
 
@@ -293,7 +293,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
 
         Self {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         }
     }
@@ -305,7 +305,7 @@ impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
     fn try_from(src: ChainKeyConfig) -> Result<Self, Self::Error> {
         let ChainKeyConfig {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         } = src;
 
@@ -330,7 +330,7 @@ impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
 
         Ok(Self {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         })
     }
@@ -577,7 +577,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(111),
                 max_queue_size: Some(222),
             }],
-            signature_request_timeout_ns: Some(333),
+            request_timeout_ns: Some(333),
             idkg_key_rotation_period_ms: Some(444),
         };
 
@@ -786,7 +786,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -841,7 +841,7 @@ mod tests {
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 },
             ],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -888,7 +888,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -931,7 +931,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -1070,7 +1070,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -1095,7 +1095,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -1179,7 +1179,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -1199,7 +1199,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
 
@@ -1259,7 +1259,7 @@ mod tests {
                 fake_key_config(&existing_key_1),
                 fake_key_config(&existing_key_2),
             ],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
 

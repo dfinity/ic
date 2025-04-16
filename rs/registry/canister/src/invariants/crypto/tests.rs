@@ -643,7 +643,7 @@ mod ecdsa_signing_subnet_lists {
                     max_queue_size: Some(100),
                 },
             ],
-            signature_request_timeout_ns: Some(10_000),
+            request_timeout_ns: Some(10_000),
             idkg_key_rotation_period_ms: Some(20_000),
         }
     }

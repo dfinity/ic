@@ -145,7 +145,7 @@ impl TryFrom<pb::KeyConfig> for KeyConfig {
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
-    pub signature_request_timeout_ns: Option<u64>,
+    pub request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
@@ -162,7 +162,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
     fn from(src: ChainKeyConfig) -> Self {
         let ChainKeyConfig {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         } = src;
 
@@ -170,7 +170,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
 
         Self {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         }
     }
@@ -186,7 +186,7 @@ impl TryFrom<pb::ChainKeyConfig> for ChainKeyConfig {
         }
         Ok(ChainKeyConfig {
             key_configs,
-            signature_request_timeout_ns: value.signature_request_timeout_ns,
+            request_timeout_ns: value.request_timeout_ns,
             idkg_key_rotation_period_ms: value.idkg_key_rotation_period_ms,
         })
     }
@@ -229,7 +229,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: 77,
                 max_queue_size: 30,
             }],
-            signature_request_timeout_ns: Some(123_456),
+            request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
         };
 
@@ -249,7 +249,7 @@ mod tests {
                 pre_signatures_to_create_in_advance: Some(77),
                 max_queue_size: Some(30),
             }],
-            signature_request_timeout_ns: Some(123_456),
+            request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
         };
 

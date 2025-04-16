@@ -105,7 +105,7 @@ pub(super) fn make_chain_key_config() -> ChainKeyConfig {
             key_config_2.clone(),
         ],
         // 1 second timeout
-        signature_request_timeout_ns: Some(1_000_000_000),
+        request_timeout_ns: Some(1_000_000_000),
         ..ChainKeyConfig::default()
     }
 }

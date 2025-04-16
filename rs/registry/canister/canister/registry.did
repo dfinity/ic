@@ -116,7 +116,7 @@ type DeployGuestosToAllUnassignedNodesPayload = record {
 
 type InitialChainKeyConfig = record {
   key_configs : vec KeyConfigRequest;
-  signature_request_timeout_ns : opt nat64;
+  request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
 };
 
@@ -442,7 +442,7 @@ type UpdateSubnetPayload = record {
 
 type ChainKeyConfig = record {
   key_configs : vec KeyConfig;
-  signature_request_timeout_ns : opt nat64;
+  request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
 };
 

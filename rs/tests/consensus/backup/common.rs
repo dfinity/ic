@@ -81,7 +81,7 @@ fn setup_common() -> InternetComputer {
                         key_id,
                     })
                     .collect(),
-                signature_request_timeout_ns: None,
+                request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             })
             .with_dkg_interval_length(Height::from(DKG_INTERVAL)),

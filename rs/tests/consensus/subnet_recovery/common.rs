@@ -113,7 +113,7 @@ pub fn setup(
         .collect();
     nns = nns.with_chain_key_config(ChainKeyConfig {
         key_configs,
-        signature_request_timeout_ns: None,
+        request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
     });
 

@@ -793,7 +793,7 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 })
                 .collect(),
-            signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
+            request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
             idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
         }),
         ..empty_subnet_update()
@@ -855,7 +855,7 @@ pub async fn create_new_subnet_with_keys(
                 subnet_id: Some(subnet_id),
             })
             .collect(),
-        signature_request_timeout_ns: None,
+        request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
     };
     let config = ic_prep_lib::subnet_configuration::get_default_config_params(

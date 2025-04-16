@@ -115,10 +115,10 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub initial_chain_key_configs_to_request: Option<String>,
 
-    /// The number of nanoseconds that a chain key signature request will time out.
-    /// If none is specified, no request will time out.
+    /// The number of nanoseconds after which a chain key request will time out.
+    /// If none is specified, requests do not time out.
     #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
+    pub request_timeout_ns: Option<u64>,
 
     /// Configuration for chain key:
     /// idkg key rotation period of a single node in milliseconds.
@@ -244,7 +244,7 @@ impl ProposeToCreateSubnetCmd {
             .map(NodeId::from)
             .collect();
 
-        let chain_key_config = if self.signature_request_timeout_ns.is_none()
+        let chain_key_config = if self.request_timeout_ns.is_none()
             && self.idkg_key_rotation_period_ms.is_none()
             && self.initial_chain_key_configs_to_request.is_none()
         {
@@ -254,7 +254,7 @@ impl ProposeToCreateSubnetCmd {
                 parse_key_config_requests_option(&self.initial_chain_key_configs_to_request);
             Some(do_create_subnet::InitialChainKeyConfig {
                 key_configs,
-                signature_request_timeout_ns: self.signature_request_timeout_ns,
+                request_timeout_ns: self.request_timeout_ns,
                 idkg_key_rotation_period_ms: self.idkg_key_rotation_period_ms,
             })
         };
@@ -349,7 +349,7 @@ mod tests {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             initial_chain_key_configs_to_request: None,
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
             max_number_of_canisters: None,
             features: None,
@@ -376,13 +376,13 @@ mod tests {
             }]"#
         .to_string();
         let initial_chain_key_configs_to_request = Some(initial_chain_key_configs_to_request);
-        let signature_request_timeout_ns = Some(111);
+        let request_timeout_ns = Some(111);
         let idkg_key_rotation_period_ms = Some(222);
 
         // Run code under test
         let cmd = ProposeToCreateSubnetCmd {
             initial_chain_key_configs_to_request,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
 
             replica_version_id: Some(replica_version_id.clone()),
@@ -421,7 +421,7 @@ mod tests {
                             ),
                         },
                     ],
-                    signature_request_timeout_ns: Some(111),
+                    request_timeout_ns: Some(111),
                     idkg_key_rotation_period_ms: Some(222),
                 }),
                 replica_version_id: replica_version_id.to_string(),

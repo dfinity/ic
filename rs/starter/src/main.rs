@@ -117,7 +117,7 @@ fn main() -> Result<()> {
                             pre_signatures_to_create_in_advance: 1,
                         })
                         .collect(),
-                    signature_request_timeout_ns: None,
+                    request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 }
                 .into(),

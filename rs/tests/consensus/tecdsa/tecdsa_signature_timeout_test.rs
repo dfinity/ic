@@ -22,7 +22,7 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url, MessageCanister},
 };
 
-/// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` can be timed out when setting signature_request_timeout_ns.
+/// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` can be timed out when setting request_timeout_ns.
 fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();

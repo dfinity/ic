@@ -75,7 +75,7 @@ fn setup(env: TestEnv) {
                             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                         })
                         .collect(),
-                    signature_request_timeout_ns: None,
+                    request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 }),
         )

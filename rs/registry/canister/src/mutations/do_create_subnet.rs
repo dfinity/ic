@@ -297,7 +297,7 @@ pub struct CreateSubnetPayload {
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
-    pub signature_request_timeout_ns: Option<u64>,
+    pub request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
@@ -305,7 +305,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
     fn from(src: InitialChainKeyConfigInternal) -> Self {
         let InitialChainKeyConfigInternal {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         } = src;
 
@@ -316,7 +316,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
 
         Self {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         }
     }
@@ -328,7 +328,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
     fn try_from(src: InitialChainKeyConfig) -> Result<Self, Self::Error> {
         let InitialChainKeyConfig {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         } = src;
 
@@ -354,7 +354,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
 
         Ok(Self {
             key_configs,
-            signature_request_timeout_ns,
+            request_timeout_ns,
             idkg_key_rotation_period_ms,
         })
     }
@@ -554,7 +554,7 @@ mod test {
                     }),
                     subnet_id: Some(*TEST_USER2_PRINCIPAL),
                 }],
-                signature_request_timeout_ns: None,
+                request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
@@ -589,7 +589,7 @@ mod test {
                 pre_signatures_to_create_in_advance: 1,
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
@@ -614,7 +614,7 @@ mod test {
                     }),
                     subnet_id: None,
                 }],
-                signature_request_timeout_ns: None,
+                request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
@@ -651,7 +651,7 @@ mod test {
                 pre_signatures_to_create_in_advance: 1,
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
@@ -676,7 +676,7 @@ mod test {
                     }),
                     subnet_id: Some(*TEST_USER2_PRINCIPAL),
                 }],
-                signature_request_timeout_ns: None,
+                request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
@@ -711,7 +711,7 @@ mod test {
                 pre_signatures_to_create_in_advance: 1,
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
-            signature_request_timeout_ns: None,
+            request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         };
 
@@ -739,7 +739,7 @@ mod test {
             replica_version_id: ReplicaVersion::default().into(),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![key_config_request; 2],
-                signature_request_timeout_ns: None,
+                request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
             }),
             ..Default::default()
