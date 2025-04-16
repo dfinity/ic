@@ -118,6 +118,12 @@ impl CanisterModule {
         self.module_hash
     }
 
+    /// Returns the loading status of the module if it is backed by a file.
+    ///
+    /// # Returns
+    /// - `None` if the module is stored in memory.
+    /// - `Some(true)` if the module is backed by a file and has been loaded.
+    /// - `Some(false)` if the module is backed by a file but has not been loaded yet.
     pub fn file_loading_status(&self) -> Option<bool> {
         match &self.module {
             ModuleStorage::Memory(_) => None,
