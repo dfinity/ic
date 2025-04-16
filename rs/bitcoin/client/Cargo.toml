@@ -7,8 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+hyper-util = { workspace = true }
 ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
-ic-async-utils = { path = "../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-btc-replica-types = { path = "../replica_types" }
 ic-btc-service = { path = "../service" }
 ic-config = { path = "../../config" }

@@ -2,8 +2,14 @@ use ic_nervous_system_proto::pb::v1::{Duration, Percentage};
 
 /// It is more difficult to pass critical proposals. This controls voting power thresholds and
 /// voting duration parameters on proposals.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub enum ProposalCriticality {
+    /// Proposal criticality is mainly determined by the topic to which a proposal belongs.
+    ///
+    /// However, since some custom proposals might not have a topic yet, *this* proposal criticality
+    /// should be used for those proposals, to ensure backward compatibility (before proposal
+    /// topics were introduced to the SNS, all custom proposals had this criticality).
+    #[default]
     Normal,
     Critical,
 }
@@ -40,7 +46,7 @@ impl ProposalCriticality {
 /// denominator of the former is not less than that of the latter (and the numerator for both is the
 /// same). However, if such a thing were to occur, it would still be possible for a proposal to
 /// pass. It's just that that *_of_exercised requirement would be superfluous.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct VotingPowerThresholds {
     /// Out of the total available voting power, this much must vote to adopt.
     pub minimum_yes_proportion_of_total: Percentage,
@@ -56,7 +62,7 @@ pub struct VotingPowerThresholds {
 /// (i.e. becomes greater or becomes less than or equal). The amount that gets added to the deadline
 /// is complicated and described elsewhere. However, one notable property of wait for quiet is that
 /// the total amount of increase is at most 2 * wait_for_quiet_deadline_increase.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct VotingDurationParameters {
     pub initial_voting_period: Duration,
     pub wait_for_quiet_deadline_increase: Duration,

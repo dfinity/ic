@@ -273,12 +273,12 @@ fn try_from_reject_context_code_zero() {
 #[test]
 fn try_from_reject_context_code_out_of_range() {
     let context = types::RejectContext {
-        code: RejectCode::CanisterError as u8 + 1,
+        code: RejectCode::SysUnknown as u8 + 1,
         message: "Oops".into(),
     };
 
     assert_matches!(
         RejectContext::try_from(context),
-        Err(ProxyDecodeError::ValueOutOfRange { typ, err }) if typ == "RejectContext" && err == "6"
+        Err(ProxyDecodeError::ValueOutOfRange { typ, err }) if typ == "RejectContext" && err == "7"
     );
 }

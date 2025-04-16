@@ -3,8 +3,9 @@ use candid::candid_method;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::println;
-use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{api::time, println};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_timers::TimerId;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
     management_canister_client::ManagementCanisterClientImpl,
@@ -12,6 +13,9 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
+};
+use ic_nervous_system_proto::pb::v1::{
+    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
@@ -29,13 +33,23 @@ use ic_sns_root::{
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
-use std::cell::RefCell;
+use std::{
+    cell::RefCell,
+    time::{Duration, SystemTime},
+};
 
 type CanisterRuntime = CdkRuntime;
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
+const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(60 * 60 * 24); // one day
+
+/// This guarantees that timers cannot be restarted more often than once every 7 intervals.
+const RESET_TIMERS_COOL_DOWN_INTERVAL: Duration = Duration::from_secs(60 * 60 * 24 * 7); // one week
+
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
+
+    static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
 }
 
 struct CanisterEnvironment {}
@@ -91,10 +105,10 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
 #[candid_method(init)]
 #[init]
 fn init(args: SnsRootCanister) {
-    canister_init_(args);
+    canister_init(args);
 }
 
-fn canister_init_(init_payload: SnsRootCanister) {
+fn canister_init(init_payload: SnsRootCanister) {
     log!(INFO, "canister_init: Begin...");
 
     assert_state_is_valid(&init_payload);
@@ -103,6 +117,8 @@ fn canister_init_(init_payload: SnsRootCanister) {
         let mut state = state.borrow_mut();
         *state = init_payload;
     });
+
+    init_timers();
 
     log!(INFO, "canister_init: Done!");
 }
@@ -133,7 +149,7 @@ fn canister_post_upgrade() {
         "Couldn't upgrade canister, due to state deserialization \
          failure during post-upgrade.",
     );
-    canister_init_(state);
+    canister_init(state);
 
     log!(INFO, "canister_post_upgrade: Done!");
 }
@@ -356,18 +372,8 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
     });
 }
 
-#[heartbeat]
-async fn heartbeat() {
-    // Asynchronous method called for the canister_heartbeat that injects
-    // dependencies to run_periodic_tasks.
-    let now = CanisterEnvironment {}.now();
-    let ledger_client = create_ledger_client();
-
-    SnsRootCanister::heartbeat(&STATE, &ledger_client, now).await
-}
-
 // Resources to serve for a given http_request
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
@@ -381,68 +387,100 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
+async fn run_periodic_tasks() {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        if let Some(ref mut timers) = state.timers {
+            timers.last_spawned_timestamp_seconds.replace(now_seconds());
+        };
+    });
+
+    let ledger_client = create_ledger_client();
+    SnsRootCanister::poll_for_new_archive_canisters(&STATE, &ledger_client).await
+}
+
+#[query]
+fn get_timers(arg: GetTimersRequest) -> GetTimersResponse {
+    let GetTimersRequest {} = arg;
+    let timers = STATE.with(|state| state.borrow().timers);
+    GetTimersResponse { timers }
+}
+
+fn init_timers() {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        state.timers.replace(Timers {
+            last_reset_timestamp_seconds: Some(now_seconds()),
+            ..Default::default()
+        });
+    });
+
+    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
+        ic_cdk::spawn(run_periodic_tasks())
+    });
+    TIMER_ID.with(|saved_timer_id| {
+        let mut saved_timer_id = saved_timer_id.borrow_mut();
+        if let Some(saved_timer_id) = *saved_timer_id {
+            ic_cdk_timers::clear_timer(saved_timer_id);
+        }
+        saved_timer_id.replace(new_timer_id);
+    });
+}
+
+#[update]
+fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
+    let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
+
+    STATE.with(|state| {
+        let state = state.borrow();
+        if let Some(timers) = state.timers {
+            if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
+                assert!(
+                    now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                        >= reset_timers_cool_down_interval_seconds,
+                    "Reset has already been called within the past {:?} seconds",
+                    reset_timers_cool_down_interval_seconds
+                );
+            }
+        }
+    });
+
+    init_timers();
+
+    ResetTimersResponse {}
+}
+
 /// Encode the metrics in a format that can be understood by Prometheus.
 fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     Ok(())
 }
 
-/// This makes this Candid service self-describing, so that for example Candid
-/// UI, but also other tools, can seamlessly integrate with it.
-/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-/// works.
-///
-/// We include the .did file as committed, which means it is included verbatim in
-/// the .wasm; using `candid::export_service` here would involve unnecessary
-/// runtime computation.
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    include_str!("root.did").to_string()
-}
+// =============================================================================
+// ===               Canister helper & boilerplate methods                   ===
+// =============================================================================
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
-/// When run on native, this prints the candid service definition of this
-/// canister, from the methods annotated with `candid_method` above.
-///
-/// Note that `cargo test` calls `main`, and `export_service` (which defines
-/// `__export_service` in the current scope) needs to be called exactly once. So
-/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-/// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
-fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A test that fails if the API was updated but the candid definition was not.
-    #[test]
-    fn check_candid_interface_definition_file() {
-        let did_path = std::path::PathBuf::from(
-            std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
-        )
-        .join("canister/root.did");
-
-        let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-        // See comments in main above
-        candid::export_service!();
-        let expected = __export_service();
-
-        if did_contents != expected {
-            panic!(
-                "Generated candid definition does not match canister/root.did. \
-                 Run `bazel run :generate_did > canister/root.did` (no nix and/or direnv) or \
-                 `cargo run --bin sns-root-canister > canister/root.did` in \
-                 rs/sns/root to update canister/root.did."
-            )
-        }
+fn now_nanoseconds() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
     }
 }
+
+fn now_seconds() -> u64 {
+    Duration::from_nanos(now_nanoseconds()).as_secs()
+}
+
+fn main() {
+    // This block is intentionally left blank.
+}
+
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
+#[cfg(test)]
+mod tests;

@@ -25,7 +25,7 @@ cargo_build_script(
         "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
     },
     data = [
-        "proto/canister_http_service/v1/proto.proto",
+        "proto/https_outcalls_service/v1/proto.proto",
         "@com_google_protobuf//:protoc",
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],

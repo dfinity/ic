@@ -1,29 +1,29 @@
 use std::{fmt, sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Context, Error};
 use axum::{
-    body::Body,
-    extract::State,
-    http::{Request, StatusCode},
+    body::{Body, HttpBody},
+    extract::{Request, State},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
     Extension,
 };
 use bytes::Bytes;
-use http::header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH};
-use http::{response, Version};
+use http::{
+    header::{HeaderMap, CACHE_CONTROL},
+    response, Extensions, Version,
+};
+use ic_bn_lib::{http::body::buffer_body, types::RequestType};
 use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
-use crate::{
-    http::{read_streaming_body, AxumResponse},
-    routes::{ApiError, ErrorCause, RequestContext},
-};
+use crate::routes::{ApiError, RequestContext};
 
 // A list of possible Cache-Control directives that ask us not to cache the response
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
 
 // Reason why the caching was skipped
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum CacheBypassReason {
     Nonce,
     NonAnonymous,
@@ -46,7 +46,7 @@ impl fmt::Display for CacheBypassReason {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub enum CacheStatus {
     #[default]
     Disabled,
@@ -57,7 +57,7 @@ pub enum CacheStatus {
 
 // Injects itself into a given response to be accessible by middleware
 impl CacheStatus {
-    fn with_response(self, mut resp: AxumResponse) -> AxumResponse {
+    fn with_response(self, mut resp: Response) -> Response {
         resp.extensions_mut().insert(self);
         resp
     }
@@ -79,6 +79,7 @@ struct CacheItem {
     status: StatusCode,
     version: Version,
     headers: HeaderMap,
+    extensions: Extensions,
     body: Bytes,
 }
 
@@ -92,17 +93,19 @@ pub struct Cache {
 // Estimate rough amount of bytes that cache entry takes in memory
 fn weigh_entry(k: &Arc<RequestContext>, v: &CacheItem) -> u32 {
     let mut cost = v.body.len()
-        + std::mem::size_of::<CacheItem>()
-        + std::mem::size_of::<Arc<RequestContext>>()
+        + size_of::<CacheItem>()
+        + size_of::<Arc<RequestContext>>()
         + k.method_name.as_ref().map(|x| x.len()).unwrap_or(0)
         + k.arg.as_ref().map(|x| x.len()).unwrap_or(0)
         + k.nonce.as_ref().map(|x| x.len()).unwrap_or(0)
         + 58; // 2 x Principal
 
     for (k, v) in v.headers.iter() {
-        cost += k.as_str().as_bytes().len();
+        cost += k.as_str().len();
         cost += v.as_bytes().len();
     }
+
+    // TODO no way currently to estimate Extensions size
 
     cost as u32
 }
@@ -142,6 +145,7 @@ impl Cache {
             status: parts.status,
             version: parts.version,
             headers: parts.headers.clone(),
+            extensions: parts.extensions.clone(),
             body,
         };
 
@@ -150,7 +154,7 @@ impl Cache {
     }
 
     // Looks up the request in the cache
-    async fn lookup(&self, ctx: &RequestContext) -> Option<AxumResponse> {
+    async fn lookup(&self, ctx: &RequestContext) -> Option<Response> {
         let item = match self.cache.get(ctx).await {
             Some(v) => v,
             None => return None,
@@ -161,13 +165,10 @@ impl Cache {
             .status(item.status)
             .version(item.version);
 
+        *builder.extensions_mut().unwrap() = item.extensions;
         *builder.headers_mut().unwrap() = item.headers;
 
-        Some(
-            builder
-                .body(axum::body::boxed(Body::from(item.body)))
-                .unwrap(),
-        )
+        Some(builder.body(Body::from(item.body)).unwrap())
     }
 
     pub fn size(&self) -> u64 {
@@ -182,31 +183,25 @@ impl Cache {
         self.cache.run_pending_tasks().await;
     }
 
-    // For now stuff below is used only in tests, but belongs here
-    #[allow(dead_code)]
+    #[cfg(test)]
     async fn clear(&self) {
         self.cache.invalidate_all();
         self.housekeep().await;
     }
 }
 
-// Try to get & parse content-length header
-fn extract_content_length(resp: &Response) -> Result<Option<u64>, Error> {
-    let size = match resp.headers().get(CONTENT_LENGTH) {
-        Some(v) => v.to_str()?.parse::<u64>()?,
-        None => return Ok(None),
-    };
-
-    Ok(Some(size))
-}
-
 // Axum middleware that handles response caching
 pub async fn cache_middleware(
     State(cache): State<Arc<Cache>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Just bypass if it's not Query
+    if ctx.request_type != RequestType::Query {
+        return Ok(next.run(request).await);
+    }
+
     let bypass_reason = (|| {
         // Skip cache if there's a nonce
         if ctx.nonce.is_some() {
@@ -247,12 +242,8 @@ pub async fn cache_middleware(
         return Ok(CacheStatus::Bypass(CacheBypassReason::HTTPError).with_response(response));
     }
 
-    let content_length = extract_content_length(&response).map_err(|_| {
-        ErrorCause::MalformedResponse("Malformed Content-Length header in response".into())
-    })?;
-
     // Do not cache responses that have no known size (probably streaming etc)
-    let body_size = match content_length {
+    let body_size = match response.body().size_hint().exact() {
         Some(v) => v,
         None => {
             return Ok(CacheStatus::Bypass(CacheBypassReason::SizeUnknown).with_response(response))
@@ -266,13 +257,15 @@ pub async fn cache_middleware(
 
     // Buffer entire response body to be able to cache it
     let (parts, body) = response.into_parts();
-    let body = read_streaming_body(body, body_size as usize).await?;
+    let body = buffer_body(body, body_size as usize, Duration::from_secs(60))
+        .await
+        .context("unable to read body")?;
 
     // Insert the response into the cache
     cache.store(ctx, &parts, body.clone()).await;
 
     // Reconstruct the response from components
-    let response = Response::from_parts(parts, axum::body::boxed(Body::from(body)));
+    let response = Response::from_parts(parts, Body::from(body));
 
     Ok(CacheStatus::Miss.with_response(response))
 }

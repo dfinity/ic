@@ -5,18 +5,16 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = [
     # Keep sorted.
     "//publish/canisters:__pkg__",
+    "//rs/ledger_suite/icp:__subpackages__",
+    "//rs/nervous_system/canisters:__subpackages__",
     "//rs/nervous_system/clients:__pkg__",
     "//rs/nervous_system/common:__subpackages__",
     "//rs/nervous_system/root:__pkg__",
     "//rs/nervous_system/runtime:__pkg__",
     "//rs/nns:__subpackages__",
     "//rs/registry/canister:__pkg__",
-    "//rs/rosetta-api/icp_ledger:__subpackages__",
-    "//rs/rosetta-api/icrc1/benchmark/generator:__pkg__",
-    "//rs/rosetta-api/icrc1/benchmark/worker:__pkg__",
     "//rs/rust_canisters:__subpackages__",
     "//rs/sns:__subpackages__",
-    "//rs/tests/test_canisters/message:__pkg__",
 ])
 
 DEPENDENCIES = [
@@ -39,7 +37,7 @@ ALIASES = {}
 
 rust_library(
     name = "dfn_core",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "dfn_core",
     proc_macro_deps = MACRO_DEPENDENCIES,

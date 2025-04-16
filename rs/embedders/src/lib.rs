@@ -7,15 +7,18 @@ pub mod wasmtime_embedder;
 
 use std::{sync::Arc, time::Duration};
 
-pub use compilation_cache::CompilationCache;
+pub use compilation_cache::{CompilationCache, CompilationCacheBuilder};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_replicated_state::{Global, PageIndex};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
-};
+use ic_management_canister_types_private::Global;
+use ic_replicated_state::{MessageMemoryUsage, PageIndex};
 use ic_types::{methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
-pub use serialized_module::{SerializedModule, SerializedModuleBytes};
+pub use serialized_module::{
+    InitialStateData, OnDiskSerializedModule, SerializedModule, SerializedModuleBytes,
+};
+use wasmtime_embedder::system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 /// The minimal required guard region for correctness is 2GiB. We use 8GiB as a
@@ -30,14 +33,14 @@ pub struct WasmExecutionInput {
     pub api_type: ApiType,
     pub sandbox_safe_system_state: SandboxSafeSystemState,
     pub canister_current_memory_usage: NumBytes,
-    pub canister_current_message_memory_usage: NumBytes,
+    pub canister_current_message_memory_usage: MessageMemoryUsage,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
     pub func_ref: FuncRef,
     pub compilation_cache: Arc<CompilationCache>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct InstanceRunResult {
     pub wasm_dirty_pages: Vec<PageIndex>,
     pub stable_memory_dirty_pages: Vec<PageIndex>,
@@ -46,7 +49,7 @@ pub struct InstanceRunResult {
 
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CompilationResult {
     /// The number of instructions in the canister's largest function.
     pub largest_function_instruction_count: NumInstructions,
@@ -54,8 +57,8 @@ pub struct CompilationResult {
     pub compilation_time: Duration,
     /// The maximum function complexity found in the canister's wasm module.
     pub max_complexity: u64,
-    /// The number of tables declared in the module.
-    pub num_tables: usize,
+    /// The size of this Wasm module's code section.
+    pub code_section_size: NumBytes,
 }
 
 impl CompilationResult {
@@ -64,7 +67,7 @@ impl CompilationResult {
             largest_function_instruction_count: NumInstructions::new(0),
             compilation_time: Duration::from_millis(1),
             max_complexity: 0,
-            num_tables: 0,
+            code_section_size: NumBytes::from(0),
         }
     }
 }

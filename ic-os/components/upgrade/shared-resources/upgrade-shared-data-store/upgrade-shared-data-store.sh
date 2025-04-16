@@ -8,6 +8,6 @@ set -e
 
 # Fix up ownership -- should be owned by the ic replica service user.
 USER=$(stat -c %U /var/lib/ic/data)
-if [ "${USER}" != replica ]; then
+if [ "${USER}" != ic-replica ]; then
     chown -R ic-replica /var/lib/ic/data
 fi

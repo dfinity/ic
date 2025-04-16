@@ -13,16 +13,16 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 /// A payload, that contains information needed during a regular round.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
-    pub dealings: dkg::Dealings,
+    pub dkg: dkg::DkgDataPayload,
     pub idkg: idkg::Payload,
 }
 
 /// The payload of a summary block.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
@@ -53,7 +53,7 @@ impl SummaryPayload {
 }
 
 /// Block payload is either summary or a data payload).
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum BlockPayload {
     /// A BlockPayload::Summary contains only a DKG Summary
@@ -67,10 +67,10 @@ impl BlockPayload {
     /// Return true if it is a normal block and empty
     pub fn is_empty(&self) -> bool {
         match self {
-            BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dealings.messages.is_empty() && data.idkg.is_none()
+            BlockPayload::Data(DataPayload { batch, dkg, idkg }) => {
+                batch.is_empty() && dkg.is_empty() && idkg.is_none()
             }
-            _ => false,
+            BlockPayload::Summary(_) => false,
         }
     }
 
@@ -133,12 +133,12 @@ impl BlockPayload {
     pub fn dkg_interval_start_height(&self) -> Height {
         match self {
             BlockPayload::Summary(summary) => summary.dkg.height,
-            BlockPayload::Data(data) => data.dealings.start_height,
+            BlockPayload::Data(data) => data.dkg.start_height,
         }
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PayloadType {
     Summary,
@@ -162,7 +162,7 @@ impl std::fmt::Display for PayloadType {
 /// pointer so that it is cheap to clone.
 ///
 /// It serializes to both the crypto hash and value of a `BlockPayload`.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct Payload {
     payload_type: PayloadType,
     // It is not crucial that Arc used here is unique, because the data referenced remains
@@ -244,9 +244,9 @@ impl From<dkg::Payload> for BlockPayload {
                 dkg: summary,
                 idkg: None,
             }),
-            dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
+            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings,
+                dkg,
                 idkg: idkg::Payload::default(),
             }),
         }

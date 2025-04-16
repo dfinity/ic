@@ -9,9 +9,10 @@ rust_library(
     crate_name = "ic_consensus_threshold_sig_system_test_utils",
     deps = [
         # Keep sorted.
+        "//packages/ic-vetkd-utils",
         "//rs/canister_client",
         "//rs/config",
-        "//rs/constants",
+        "//rs/limits",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/cmc",
         "//rs/nns/common",
@@ -33,8 +34,8 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:ed25519-dalek",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic_bls12_381",
         "@crate_index//:k256",
-        "@crate_index//:schnorr_fun",
         "@crate_index//:serde",
         "@crate_index//:sha2",
         "@crate_index//:slog",

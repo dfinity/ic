@@ -3,9 +3,13 @@ Rules for system-tests.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
+load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//bazel:mainnet-icos-images.bzl", "base_download_url")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -18,6 +22,42 @@ def _run_system_test(ctx):
         is_executable = True,
         content = """#!/bin/bash
             set -eEuo pipefail
+
+            # Resolve any RUN_SCRIPT_ variables
+
+            # RUN_SCRIPT_ICOS_IMAGES:
+            # For every ic-os image specified, first ensure it's in remote
+            # storage, then export its download URL and HASH as environment variables.
+            if [ -n "$RUN_SCRIPT_ICOS_IMAGES" ]; then
+              # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
+              # into an array
+              IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
+              for image in "${{icos_images[@]}}"; do
+                  # split "envvar:filepath"
+                  image_var_prefix=${{image%:*}}
+                  image_filename=${{image#*:}}
+
+                  # ensure the dep is uploaded
+                  image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename")
+                  echo "  -> $image_filename=$image_download_url" >&2
+
+                  # Since this is a CAS url, we assume the last URL path part is the sha256
+                  image_download_hash="${{image_download_url##*/}}"
+                  # set the environment variables for the test
+                  export "${{image_var_prefix}}_URL=$image_download_url"
+                  export "${{image_var_prefix}}_HASH=$image_download_hash"
+              done
+            fi
+
+            if [ -n "RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST" ]; then
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION="$(cat ${{ENV_DEPS__IC_VERSION_FILE}})-test"
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_URL="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL:-}}"
+                export ENV_DEPS__HOSTOS_UPDATE_IMG_SHA="${{ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH:-}}"
+            fi
+
+            # clean up the env for the test
+            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST
+
             # We export RUNFILES such that the from_location_specified_by_env_var() function in
             # rs/rust_canisters/canister_test/src/canister.rs can find canisters
             # relative to the $RUNFILES directory.
@@ -39,6 +79,7 @@ def _run_system_test(ctx):
     )
 
     env = dict(ctx.attr.env.items())
+    env_deps = ctx.attr.env_deps
 
     # Expand Make variables in env vars, with runtime_deps as targets
     for key, value in env.items():
@@ -46,22 +87,36 @@ def _run_system_test(ctx):
         if value.startswith("$"):
             env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
 
-    env = dict(env.items() + [
-        ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
-    ])
+    env |= {
+        "FARM_METADATA_PATH": ctx.info_file.short_path,
+    }
+
+    # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
+    # script, and not passed directly to the test.
+
+    # RUN_SCRIPT_ICOS_IMAGES:
+    # Have the run script resolve repo based ICOS images.
+    # The run script expects a map of enviromment variable prefixes to targets. e.g.
+    # RUN_SCRIPT_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
+    icos_images = ctx.attr.icos_images
+    env |= {
+        "RUN_SCRIPT_ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in icos_images.items()]),
+    }
+    env_deps = dict(env_deps, **icos_images)
+
+    env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
+
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
     if k8s:
         env["KUBECONFIG"] = ctx.file._k8sconfig.path
 
-    # version_file_path contains the "direct" path to the volatile status file.
-    # The wrapper script copies this file instead of receiving ing as bazel dependency to not invalidate the cache.
-    runtime_deps = [depset([ctx.file.version_file_path, ctx.file._k8sconfig])]
+    runtime_deps = [depset([ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
-    for t, e in ctx.attr.env_deps.items():
+    for e, t in env_deps.items():
         runtime_deps.append(t.files)
         env[e] = t.files.to_list()[0].short_path
 
@@ -71,7 +126,9 @@ def _run_system_test(ctx):
             runfiles = ctx.runfiles(
                 files = [
                     run_test_script_file,
+                    ctx.info_file,
                     ctx.executable.src,
+                    ctx.executable._upload_systest_dep,
                 ],
                 transitive_files = depset(
                     direct = [],
@@ -94,10 +151,11 @@ run_system_test = rule(
         "env": attr.string_dict(allow_empty = True),
         "_k8s": attr.label(default = "//rs/tests:k8s"),
         "_k8sconfig": attr.label(allow_single_file = True, default = "@kubeconfig//:kubeconfig.yaml"),
+        "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
         "runtime_deps": attr.label_list(allow_files = True),
-        "env_deps": attr.label_keyed_string_dict(allow_files = True),
+        "env_deps": attr.string_keyed_label_dict(allow_files = True),
+        "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
-        "version_file_path": attr.label(allow_single_file = True, default = "//bazel:version_file_path"),
     },
 )
 
@@ -122,7 +180,11 @@ def system_test(
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
+        uses_setupos_mainnet = False,
         uses_hostos_dev_test = False,
+        uses_hostos_mainnet_update_img = False,
+        uses_boundary_guestos = False,
+        use_empty_image = False,
         env = {},
         env_inherit = [],
         additional_colocate_tags = [],
@@ -154,6 +216,10 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
+      uses_hostos_mainnet_update_img: the test uses mainnet HostOS update image version marked in mainnet-icos-revisions.json.
+      uses_setupos_mainnet: the test uses mainnet SetupOS image version marked in mainnet-icos-revisions.json.
+      uses_boundary_guestos: the test uses ic-os/boundary-guestos/envs/dev:disk-img (will be also automatically added as dependency).
+      use_empty_image: the test uses the empty disk image: //rs/tests/nested:empty_disk_image.tar.zst (will be also automatically added as dependency)
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -168,58 +234,81 @@ def system_test(
       It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
 
+    # Convert env to a mutable dictionary
+    env = dict(env)
+
     if test_driver_target == None:
         bin_name = name + "_bin"
+        original_srcs = kwargs.pop("srcs", [])
         rust_binary(
             name = bin_name,
             testonly = True,
-            srcs = [name + ".rs"],
+            srcs = original_srcs + [name + ".rs"],
             **kwargs
         )
         test_driver_target = bin_name
 
-    # Automatically detect system tests that use guestos dev for back compatibility.
+    # Automatically detect system tests that use guestos dev & boundary node guestos for back compatibility.
     for _d in runtime_deps:
         if _d == GUESTOS_DEV_VERSION:
             uses_guestos_dev = True
             break
+    uses_boundary_guestos = uses_boundary_guestos or all([dep in runtime_deps for dep in BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS])
 
+    # Environment variable names to targets (targets are resolved)
     _env_deps = {}
 
     _guestos = "//ic-os/guestos/envs/dev:"
-    _hostos = "//ic-os/hostos/envs/dev:"
-    _setupos = "//ic-os/setupos/envs/dev:"
 
     # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-    _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
+    _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
+
+    icos_images = dict()
 
     if uses_guestos_dev:
-        _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
-        _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = _guestos + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = _guestos + "update-img.tar.zst"
 
     if uses_hostos_dev_test:
-        _env_deps[_hostos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
-        _env_deps[_hostos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256"
+        icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG_TEST"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
+
+    if uses_hostos_mainnet_update_img:
+        mainnet_hostos_version = mainnet_icos_versions["hostos"]["latest_release"]["version"]
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = mainnet_hostos_version
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = base_download_url(mainnet_hostos_version, "host-os", True, False) + "update-img.tar.zst"
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_SHA"] = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash"]
+    else:
+        env["RUN_SCRIPT_HOSTOS_UPDATE_IMG_TEST"] = "1"
+
+    if uses_setupos_mainnet:
+        # Note: SetupOS is still passed directly by path, as it needs some local processing.
+        _env_deps["ENV_DEPS__SETUPOS_IMG_PATH"] = "@mainnet_setupos_disk_image//file"
+
+        _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
+        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
 
     if uses_setupos_dev:
-        _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
-        _env_deps["//rs/ic_os/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
-        _env_deps["//rs/ic_os/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
+        # Note: SetupOS is still passed directly by path, as it needs some local processing.
+        _env_deps["ENV_DEPS__SETUPOS_IMG_PATH"] = "//ic-os/setupos/envs/dev:disk-img.tar.zst"
+
+        _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
+        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
 
     if uses_guestos_dev_test:
-        _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256"
+        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG_TEST"] = _guestos + "update-img-test.tar.zst"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
-        _env_deps[_guestos_malicous + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos_malicous + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256"
-        _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos_malicous + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256"
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG"] = _guestos_malicous + "disk-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG"] = _guestos_malicous + "update-img.tar.zst"
+
+    if uses_boundary_guestos:
+        icos_images["ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG"] = "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst"
+
+    if use_empty_image:
+        icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
 
     run_system_test(
         name = name,
@@ -227,6 +316,7 @@ def system_test(
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
         env = env,
+        icos_images = icos_images,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
@@ -252,9 +342,11 @@ def system_test(
     if colocated_test_driver_vm_forward_ssh_agent:
         env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
 
+    visibility = kwargs.get("visibility", ["//visibility:public"])
+
     run_system_test(
         name = name + "_colocate",
-        src = "//rs/tests/testing_verification:colocate_test_bin",
+        src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
         runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
             "//rs/tests:colocate_uvm_config_image",
@@ -263,12 +355,14 @@ def system_test(
         env_deps = _env_deps,
         env_inherit = env_inherit,
         env = env,
+        icos_images = icos_images,
         tags = tags + ["requires-network", "system_test"] +
                (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
                additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
+        visibility = visibility,
     )
     return struct(test_driver_target = test_driver_target)
 
@@ -294,6 +388,10 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
         name: the name of the system-tests.
         extra_head_nns_tags: extra tags assigned to the head_nns variant (Use `[]` to use the original tags).
         **kwargs: the arguments of the system-tests.
+
+    Returns:
+      This macro declares 2 bazel targets.
+      It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
     runtime_deps = kwargs.pop("runtime_deps", [])
     env = kwargs.pop("env", {})
@@ -306,14 +404,15 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     )
 
     original_tags = kwargs.pop("tags", [])
+    kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
-        test_driver_target = mainnet_nns_systest.test_driver_target,
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
+    return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
 def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
     """This macro creates bazel targets for uvm config images.
@@ -374,4 +473,53 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = tags,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
+    )
+
+def oci_tar(name, image, repo_tags = []):
+    """Create a tarball from an OCI image. The target is marked as 'manual'.
+
+    Args:
+      name: This name will be used for the tarball (must end with '.tar').
+      repo_tags: OCI tags for oci_load.
+      image: The OCI image to bundle.
+    """
+
+    if not name.endswith(".tar"):
+        fail("Expected tarname to end with '.tar': " + name)
+
+    basename = name.removesuffix(".tar")
+
+    name_image = basename + "_image"
+
+    # First load the image
+    oci_load(
+        name = name_image,
+        image = image,
+        repo_tags = repo_tags,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    # create the tarball
+    name_tarballdir = basename + "_tarballdir"
+    native.filegroup(
+        name = name_tarballdir,
+        srcs = [":" + name_image],
+        output_group = "tarball",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
+    )
+
+    # Copy the tarball out so we can reference the file by 'name'
+    copy_file(
+        name = basename + "_tar",
+        src = ":" + name_tarballdir,
+        out = name,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
     )

@@ -14,9 +14,10 @@ ic-sys = { path = "../../sys" }
 maplit = "1.0.2"
 
 [dev-dependencies]
-assert_cmd = "2.0.12"
+assert_cmd = { workspace = true }
 assert_matches = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
-predicates = "3.0.3"
+predicates = { workspace = true }
 rand = { workspace = true }
+regex = { workspace = true }
 tempfile = { workspace = true }

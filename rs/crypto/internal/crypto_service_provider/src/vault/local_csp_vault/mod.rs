@@ -13,6 +13,7 @@ mod tests;
 mod threshold_sig;
 mod tls;
 mod tschnorr;
+mod vetkd;
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
@@ -23,7 +24,9 @@ use crate::vault::api::ThresholdSchnorrCreateSigShareVaultError;
 use crate::{CspRwLock, KeyId};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_ecdsa::{CombinedCommitment, CommitmentOpening};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    CombinedCommitment, CommitmentOpening,
+};
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -70,7 +73,6 @@ use std::sync::Arc;
 /// only during node key generation and rotation).
 ///
 /// [1]: https://medium.com/digitalfrontiers/rust-dynamic-dispatching-deep-dive-236a5896e49b
-
 pub struct LocalCspVault<
     R: Rng + CryptoRng,
     S: SecretKeyStore,

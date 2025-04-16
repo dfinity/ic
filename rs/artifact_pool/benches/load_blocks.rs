@@ -4,7 +4,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_interfaces::consensus_pool::{
-    ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact,
+    ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact,
 };
 use ic_interfaces::p2p::consensus::MutablePool;
 use ic_interfaces::time_source::SysTimeSource;
@@ -14,10 +14,11 @@ use ic_test_utilities_types::{
     ids::{node_test_id, subnet_test_id},
     messages::SignedIngressBuilder,
 };
+use ic_types::consensus::dkg::DkgDataPayload;
 use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
-    consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
+    consensus::{Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
     time::UNIX_EPOCH,
     Height,
 };
@@ -51,7 +52,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
         .next()
         .unwrap();
     let parent = cup.content.block.as_ref();
-    let mut changeset = ChangeSet::new();
+    let mut changeset = Mutations::new();
     for i in 0..num {
         let mut block = Block::from_parent(parent);
         block.rank = Rank(i as u64);
@@ -65,9 +66,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(
-                    parent.payload.as_ref().dkg_interval_start_height(),
-                ),
+                dkg: DkgDataPayload::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
                 idkg: None,
             }),
         );
@@ -77,7 +76,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             timestamp: UNIX_EPOCH,
         }));
     }
-    pool.apply_changes(changeset);
+    pool.apply(changeset);
 }
 
 fn sum_block_heights(pool: &dyn ConsensusPool) -> u64 {

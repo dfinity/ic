@@ -20,6 +20,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
@@ -30,13 +31,6 @@ use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion,
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::{
-    common::check_ipv4_config,
-    do_update_node_directly::UpdateNodeDirectlyPayload,
-    node_management::{
-        do_add_node::AddNodePayload, do_update_node_ipv4_config_directly::IPv4Config,
-    },
-};
 use std::{
     net::IpAddr,
     sync::Arc,
@@ -88,14 +82,27 @@ impl NodeRegistration {
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
         // we use the given node operator private key to register the node.
-        let signer: Box<dyn Signer> = match node_config
-            .clone()
-            .registration
-            .node_operator_pem
-            .and_then(|path| NodeProviderSigner::new(path.as_path()))
-        {
-            Some(signer) => Box::new(signer),
-            None => Box::new(Hsm),
+        let signer: Box<dyn Signer> = match node_config.clone().registration.node_operator_pem {
+            Some(path) => match NodeProviderSigner::new(path.as_path()) {
+                Some(signer) => {
+                    UtilityCommand::notify_host(
+                        "Node operator private key found and signer successfully created.",
+                        1,
+                    );
+                    Box::new(signer)
+                }
+                None => {
+                    UtilityCommand::notify_host("Node operator private key found but could not be successfully read. Falling back to HSM.", 1);
+                    Box::new(Hsm)
+                }
+            },
+            None => {
+                UtilityCommand::notify_host(
+                    "Node operator private key not found. Falling back to HSM.",
+                    1,
+                );
+                Box::new(Hsm)
+            }
         };
         Self {
             log,
@@ -225,9 +232,17 @@ impl NodeRegistration {
             .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
-            // Unused section follows
-            p2p_flow_endpoints: Default::default(),
-            prometheus_metrics_endpoint: Default::default(),
+            node_reward_type: if self.node_config.registration.node_reward_type.as_deref()
+                == Some("")
+            {
+                None
+            } else {
+                self.node_config.registration.node_reward_type.clone()
+            },
+
+            // The following fields are unused.
+            p2p_flow_endpoints: Default::default(), // unused field
+            prometheus_metrics_endpoint: Default::default(), // unused field
         }
     }
 
@@ -548,7 +563,7 @@ pub(crate) fn is_time_to_rotate_in_subnet(
     let now = SystemTime::now();
     timestamps
         .iter()
-        .all(|ts| now.duration_since(*ts).map_or(false, |d| d >= gamma))
+        .all(|ts| now.duration_since(*ts).is_ok_and(|d| d >= gamma))
 }
 
 pub(crate) fn http_config_to_endpoint(
@@ -645,16 +660,10 @@ fn process_ipv4_config(
             ))
         })?;
 
-        let ipv4_config = IPv4Config {
-            ip_addr: node_ip_address.to_string(),
-            gateway_ip_addr: ipv4_config.public_gateway.clone(),
+        let ipv4_config = IPv4Config::try_new(
+            node_ip_address.to_string(),
+            ipv4_config.public_gateway.clone(),
             prefix_length,
-        };
-
-        check_ipv4_config(
-            ipv4_config.ip_addr.to_string(),
-            vec![ipv4_config.gateway_ip_addr.to_string()],
-            ipv4_config.prefix_length,
         )
         .map_err(|err| OrchestratorError::invalid_configuration_error(format!("{err}",)))?;
 

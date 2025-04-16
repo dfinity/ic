@@ -29,13 +29,13 @@ if [ ! -f "$ROSETTA_DB_NEW" ]; then
     exit 3
 fi
 
-last_block_to_check=$(sqlite3 "$ROSETTA_DB_OLD" 'select max(idx) from blocks')
+last_block_to_check=$(sqlite3 "$ROSETTA_DB_OLD" 'select max(block_idx) from blocks')
 
-QUERY="select hex(hash), hex(block), hex(parent_hash), idx, verified from blocks"
+QUERY="select hex(block_hash), hex(encoded_block), hex(parent_hash), block_idx, verified from blocks"
 
 diff \
     <(sqlite3 "$ROSETTA_DB_OLD" "$QUERY") \
-    <(sqlite3 "$ROSETTA_DB_NEW" "$QUERY where idx <= $last_block_to_check")
+    <(sqlite3 "$ROSETTA_DB_NEW" "$QUERY where block_idx <= $last_block_to_check")
 
 RES=$?
 

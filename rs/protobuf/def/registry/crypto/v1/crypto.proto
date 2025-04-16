@@ -27,6 +27,7 @@ enum AlgorithmId {
   ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1 = 17;
   ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340 = 18;
   ALGORITHM_ID_THRESHOLD_ED25519 = 19;
+  ALGORITHM_ID_VETKD = 20;
 }
 
 // A list of subnets that can sign with this ECDSA key.
@@ -55,34 +56,4 @@ message PublicKey {
 // DER-encoded X509 public key certificate
 message X509PublicKeyCert {
   bytes certificate_der = 1;
-}
-
-// Types of curves that can be used for ECDSA signatures.
-enum EcdsaCurve {
-  ECDSA_CURVE_UNSPECIFIED = 0;
-  ECDSA_CURVE_SECP256K1 = 1;
-}
-
-message EcdsaKeyId {
-  EcdsaCurve curve = 1;
-  string name = 2;
-}
-
-// Types of curves that can be used for Schnorr signatures.
-enum SchnorrAlgorithm {
-  SCHNORR_ALGORITHM_UNSPECIFIED = 0;
-  SCHNORR_ALGORITHM_BIP340SECP256K1 = 1;
-  SCHNORR_ALGORITHM_ED25519 = 2;
-}
-
-message SchnorrKeyId {
-  SchnorrAlgorithm algorithm = 1;
-  string name = 2;
-}
-
-message MasterPublicKeyId {
-  oneof key_id {
-    EcdsaKeyId ecdsa = 1;
-    SchnorrKeyId schnorr = 2;
-  }
 }

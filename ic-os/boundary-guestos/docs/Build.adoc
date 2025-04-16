@@ -16,7 +16,7 @@ The Ubuntu-based Boundary Node Guest OS is built by (equivalent to IC gues OS):
 The entire disk image is built using bazel:
 
 ----
-gitlab-ci/container/container-run.sh
+ci/container/container-run.sh
 bazel build //ic-os/boundary-guestos/envs/prod
 ----
 

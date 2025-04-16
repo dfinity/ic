@@ -9,8 +9,8 @@ use serde_json::json;
 // bazel run //rs/execution_environment/tools:icp_config -- --replica-version=<version> --output=<file-name>
 fn main() -> Result<()> {
     let args = parse_args();
-    let replica_version = args.value_of("replica-version").unwrap();
-    let output = args.value_of("output");
+    let replica_version = args.get_one::<String>("replica-version").unwrap();
+    let output = args.get_one::<String>("output");
 
     let json = serde_json::to_string_pretty(&icp_config_as_json(replica_version))?;
     match output {
@@ -33,13 +33,13 @@ fn parse_args() -> ArgMatches {
             Arg::new("replica-version")
                 .long("replica-version")
                 .required(true)
-                .takes_value(true)
+                .num_args(1)
                 .help("The replica version corresponding to the current build. For example: rc--2024-07-25_01-30"),
         ).arg(
             Arg::new("output")
                 .long("output")
                 .required(false)
-                .takes_value(true)
+                .num_args(1)
                 .help("The name of the output file. Use absolute path to avoid bazel working directory."),
         )
         .get_matches()
@@ -84,8 +84,8 @@ fn json_config(
     embedder: &ic_config::embedders::Config,
     execution: &ic_config::execution_environment::Config,
 ) -> serde_json::Value {
+    use ic_embedders::wasmtime_embedder::system_api::MULTIPLIER_MAX_SIZE_LOCAL_SUBNET;
     use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
-    use ic_system_api::MULTIPLIER_MAX_SIZE_LOCAL_SUBNET;
     use ic_types::messages::MAX_XNET_PAYLOAD_IN_BYTES;
     json!({
         "fees": serde_json::to_value(*cycles_account_manager).unwrap(),

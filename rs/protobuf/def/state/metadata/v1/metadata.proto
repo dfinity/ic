@@ -3,7 +3,6 @@ package state.metadata.v1;
 
 import "bitcoin/v1/bitcoin.proto";
 import "google/protobuf/wrappers.proto";
-import "registry/crypto/v1/crypto.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/canister_state_bits/v1/canister_state_bits.proto";
@@ -29,7 +28,7 @@ message SubnetTopology {
   registry.subnet.v1.SubnetFeatures subnet_features = 4;
   reserved 5;
   reserved "ecdsa_keys_held";
-  repeated registry.crypto.v1.MasterPublicKeyId idkg_keys_held = 6;
+  repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
 }
 
 message SubnetsEntry {
@@ -37,8 +36,8 @@ message SubnetsEntry {
   SubnetTopology subnet_topology = 2;
 }
 
-message IDkgKeyEntry {
-  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+message ChainKeySubnetEntry {
+  types.v1.MasterPublicKeyId key_id = 1;
   repeated types.v1.SubnetId subnet_ids = 2;
 }
 
@@ -51,7 +50,7 @@ message NetworkTopology {
   reserved "ecdsa_signing_subnets";
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
-  repeated IDkgKeyEntry idkg_signing_subnets = 8;
+  repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
 }
 
 message SetupInitialDkgContext {
@@ -70,19 +69,29 @@ message SetupInitialDkgContextTree {
 }
 
 message EcdsaArguments {
-  registry.crypto.v1.EcdsaKeyId key_id = 1;
+  types.v1.EcdsaKeyId key_id = 1;
   bytes message_hash = 2;
 }
 
 message SchnorrArguments {
-  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  types.v1.SchnorrKeyId key_id = 1;
   bytes message = 2;
+  optional bytes taproot_tree_root = 3;
+}
+
+message VetKdArguments {
+  types.v1.VetKdKeyId key_id = 1;
+  bytes input = 2;
+  bytes transport_public_key = 3;
+  types.v1.NiDkgId ni_dkg_id = 4;
+  uint64 height = 5;
 }
 
 message ThresholdArguments {
   oneof threshold_scheme {
     EcdsaArguments ecdsa = 1;
     SchnorrArguments schnorr = 2;
+    VetKdArguments vetkd = 3;
   }
 }
 
@@ -132,17 +141,18 @@ message CanisterHttpRequestContextTree {
   CanisterHttpRequestContext context = 2;
 }
 
-message IDkgDealingsContext {
+message ReshareChainKeyContext {
   state.queues.v1.Request request = 1;
-  registry.crypto.v1.MasterPublicKeyId key_id = 2;
+  types.v1.MasterPublicKeyId key_id = 2;
   repeated types.v1.NodeId nodes = 3;
   uint64 registry_version = 4;
   Time time = 5;
+  bytes target_id = 6;
 }
 
-message IDkgDealingsContextTree {
+message ReshareChainKeyContextTree {
   uint64 callback_id = 1;
-  IDkgDealingsContext context = 2;
+  ReshareChainKeyContext context = 2;
 }
 
 message BitcoinGetSuccessorsContext {
@@ -237,7 +247,7 @@ message SubnetCallContextManager {
   uint64 next_stop_canister_call_id = 14;
   repeated StopCanisterCallTree stop_canister_calls = 15;
   repeated RawRandContext raw_rand_contexts = 16;
-  repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
+  repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
 }
 
@@ -277,7 +287,7 @@ message ApiBoundaryNodeEntry {
 }
 
 message ThresholdSignatureAgreementsEntry {
-  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  types.v1.MasterPublicKeyId key_id = 1;
   uint64 count = 2;
 }
 

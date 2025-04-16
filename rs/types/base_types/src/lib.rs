@@ -14,7 +14,7 @@ mod principal_id;
 pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
 use ic_protobuf::state::canister_state_bits::v1::SnapshotId as pbSnapshot;
 pub use principal_id::{
-    PrincipalId, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
+    PrincipalId, PrincipalIdClass, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
     PrincipalIdError as PrincipalIdParseError,
 };
 
@@ -41,6 +41,34 @@ pub struct NumBytesTag;
 /// This type is primarily useful in the context of tracking the memory usage
 /// and allocation of a Canister.
 pub type NumBytes = AmountOf<NumBytesTag, u64>;
+
+/// A type representing an internal address.
+///
+/// This type is used to track pointer arithmetics in the context of
+/// the canister's memory management.
+#[derive(Copy, Clone)]
+pub struct InternalAddress(usize);
+
+impl InternalAddress {
+    pub fn new(value: usize) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> usize {
+        self.0
+    }
+    pub fn checked_add(self, rhs: Self) -> Result<InternalAddress, String> {
+        self.get()
+            .checked_add(rhs.get())
+            .map(InternalAddress::new)
+            .ok_or_else(|| "Invalid InternalAddress.".to_string())
+    }
+    pub fn checked_sub(self, rhs: Self) -> Result<InternalAddress, String> {
+        self.get()
+            .checked_sub(rhs.get())
+            .map(InternalAddress::new)
+            .ok_or_else(|| "Invalid InternalAddress.".to_string())
+    }
+}
 
 pub enum NumOsPagesTag {}
 /// A number of OS-sized pages.
@@ -108,7 +136,7 @@ impl From<CanisterIdError> for ProxyDecodeError {
 }
 
 /// Represents an error that can occur when constructing a [`SnapshotId`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SnapshotIdError {
     /// A [`SnapshotID`] with invalid length was given.
     InvalidLength(String),
@@ -127,7 +155,7 @@ impl fmt::Display for SnapshotIdError {
 
 /// A type representing a canister's snapshot ID.
 /// The ID is unique across all subnets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct SnapshotId {
     /// The length of the canister ID.
     len: usize,

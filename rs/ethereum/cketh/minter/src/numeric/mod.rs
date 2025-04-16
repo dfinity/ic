@@ -1,10 +1,13 @@
 //! Numeric types for Ethereum.
 
+mod range;
 #[cfg(test)]
 mod tests;
 
 use crate::checked_amount::CheckedAmountOf;
 use phantom_newtype::Id;
+
+pub use range::BlockRangeInclusive;
 
 pub enum WeiTag {}
 pub type Wei = CheckedAmountOf<WeiTag>;

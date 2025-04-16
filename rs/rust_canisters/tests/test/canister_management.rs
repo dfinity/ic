@@ -2,7 +2,9 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use canister_test::{local_test_e, Canister, Runtime, Wasm};
 use ic_error_types::ErrorCode;
-use ic_management_canister_types::{self as ic00, CanisterIdRecord, CanisterStatusResult, IC_00};
+use ic_management_canister_types_private::{
+    self as ic00, CanisterIdRecord, CanisterStatusResultV2, IC_00,
+};
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities::universal_canister::{
     wasm as universal_canister_argument_builder, CallArgs,
@@ -10,7 +12,7 @@ use ic_test_utilities::universal_canister::{
 use on_wire::bytes;
 
 async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
-    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
+    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
         .install(runtime)
         .bytes(Vec::new())
         .await
@@ -32,7 +34,7 @@ fn test_set_controller() {
         // aaaaa-aa"
         //
         // The anonymous user is not allowed to do a "canister_status"
-        let res: Result<CanisterStatusResult, String> = runtime
+        let res: Result<CanisterStatusResultV2, String> = runtime
             .get_management_canister_with_effective_canister_id(
                 universal_canister.canister_id().into(),
             )
@@ -59,7 +61,7 @@ fn test_set_controller() {
             .update_("update", bytes, arg)
             .await
             .unwrap();
-        let status = Decode!(&status_bytes, CanisterStatusResult).unwrap();
+        let status = Decode!(&status_bytes, CanisterStatusResultV2).unwrap();
         assert_eq!(status.controller(), universal_canister.canister_id().get());
 
         Ok(())

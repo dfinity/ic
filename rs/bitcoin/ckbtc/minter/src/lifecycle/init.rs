@@ -1,13 +1,13 @@
 use crate::lifecycle::upgrade::UpgradeArgs;
 pub use crate::state::Mode;
 use crate::state::{replace_state, CkBtcMinterState};
+use crate::Network;
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
-use ic_btc_interface::Network;
 use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
-pub const DEFAULT_KYT_FEE: u64 = 1000;
+pub const DEFAULT_CHECK_FEE: u64 = 1000;
 
 #[derive(CandidType, serde::Deserialize)]
 pub enum MinterArg {
@@ -15,42 +15,10 @@ pub enum MinterArg {
     Upgrade(Option<UpgradeArgs>),
 }
 
-// TODO: Use `ic_btc_interface::Network` directly.
-// The Bitcoin canister's network enum no longer has snake-case versions
-// (refer to [PR171](https://github.com/dfinity/bitcoin-canister/pull/171)),
-// instead it uses lower-case candid variants.
-// A temporary fix for ckbtc minter is to create a new enum with capital letter variants.
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
-pub enum BtcNetwork {
-    Mainnet,
-    Testnet,
-    Regtest,
-}
-
-impl From<BtcNetwork> for Network {
-    fn from(network: BtcNetwork) -> Self {
-        match network {
-            BtcNetwork::Mainnet => Network::Mainnet,
-            BtcNetwork::Testnet => Network::Testnet,
-            BtcNetwork::Regtest => Network::Regtest,
-        }
-    }
-}
-
-impl From<Network> for BtcNetwork {
-    fn from(network: Network) -> Self {
-        match network {
-            Network::Mainnet => BtcNetwork::Mainnet,
-            Network::Testnet => BtcNetwork::Testnet,
-            Network::Regtest => BtcNetwork::Regtest,
-        }
-    }
-}
-
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct InitArgs {
-    /// The bitcoin network that the minter will connect to
-    pub btc_network: BtcNetwork,
+    /// The Bitcoin network that the minter will connect to
+    pub btc_network: Network,
 
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
     /// a testing key for testnet and mainnet
@@ -75,14 +43,25 @@ pub struct InitArgs {
     #[serde(default)]
     pub mode: Mode,
 
-    /// The fee that the minter will pay for each KYT check.
+    /// The fee that the minter will pay for each Bitcoin check.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_fee: Option<u64>,
+
+    /// The fee that the minter will pay for each KYT check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use check_fee instead")]
     pub kyt_fee: Option<u64>,
 
-    /// The principal of the KYT canister.
+    /// The principal of the Bitcoin checker canister.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_checker_principal: Option<CanisterId>,
+
+    /// The principal of the kyt canister.
+    /// NOTE: this field is optional for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use btc_checker_principal instead")]
     pub kyt_principal: Option<CanisterId>,
 }
 

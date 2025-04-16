@@ -1,15 +1,17 @@
 use crate::{
-    fetch_canister_controllers_or_exit, get_identity, use_test_neuron_1_owner_identity,
+    fetch_canister_controllers, get_identity, use_test_neuron_1_owner_identity,
     MakeProposalResponse, NnsGovernanceCanister, SaveOriginalDfxIdentityAndRestoreOnExit,
 };
+use anyhow::{anyhow, bail, Context, Result};
 use clap::{ArgGroup, Parser};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal};
-use ic_sns_governance::pb::v1::governance::Mode;
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal,
+};
 use itertools::Itertools;
 use std::{
     collections::HashSet,
@@ -73,7 +75,7 @@ pub struct ProposeArgs {
     pub skip_confirmation: bool,
 }
 
-pub fn exec(args: ProposeArgs) {
+pub fn exec(args: ProposeArgs) -> Result<()> {
     let ProposeArgs {
         network,
         init_config_file,
@@ -87,20 +89,17 @@ pub fn exec(args: ProposeArgs) {
     let skip_confirmation = skip_confirmation || network == "local";
 
     // Step 0: Load configuration
-    let proposal = load_configuration_and_validate_or_exit(&network, &init_config_file);
+    let proposal = load_configuration_and_validate(&network, &init_config_file)?;
 
     // Step 1: Ensure the save-to file exists and is writeable if specified.
     // We do this check without writing the file to ensure the best chance of successfully
     // saving the data to a file after the Proposal is submitted.
     if let Some(save_to) = &save_to {
-        if let Err(err) = ensure_file_exists_and_is_writeable(save_to.as_path()) {
-            eprintln!("{}", err);
-            std::process::exit(1);
-        }
+        ensure_file_exists_and_is_writeable(save_to.as_path())?
     }
 
     // Step 2: Verify with the user that they want to proceed.
-    inform_user_of_sns_behavior(&proposal, skip_confirmation);
+    inform_user_of_sns_behavior(&proposal, skip_confirmation)?;
 
     // Step 2: Send the proposal.
     eprintln!("Loaded configuration.");
@@ -113,15 +112,9 @@ pub fn exec(args: ProposeArgs) {
     let proposer = if let Some(id) = neuron_id {
         NeuronIdOrSubaccount::NeuronId(NeuronId { id })
     } else if test_neuron_proposer {
-        if let Err(err) = use_test_neuron_1_owner_identity(&checkpoint) {
-            eprintln!(
-                "{}\n\
-                 \n\
-                 Failed to (import and) use test-neuron-1-owner dfx identity.",
-                err,
-            );
-            std::process::exit(1);
-        }
+        use_test_neuron_1_owner_identity(&checkpoint)
+            .context("Failed to (import and) use test-neuron-1-owner dfx identity")?;
+
         NeuronIdOrSubaccount::NeuronId(NeuronId {
             id: TEST_NEURON_1_ID,
         })
@@ -158,30 +151,42 @@ pub fn exec(args: ProposeArgs) {
 
             if let Some(save_to) = &save_to {
                 if let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id) {
-                    eprintln!("{}", err);
-                    std::process::exit(1);
+                    bail!("{}", err);
                 };
             }
         }
         err => {
-            println!("{:?}", err);
-            println!();
-            println!("💔 Something went wrong. Look up slightly for diagnostics.");
-            println!("Perhaps, share the above error with the community at");
-            println!("https://forum.dfinity.org/c/tokenization");
-            std::process::exit(1)
+            bail!(
+                "{err:?}\n\
+                \n\
+                💔 Something went wrong. Look up slightly for diagnostics.\n\
+                Perhaps, share the above error with the community at\n\
+                https://forum.dfinity.org/c/tokenization"
+            )
         }
     };
+
+    Ok(())
 }
 
-fn confirmation_messages(proposal: &Proposal) -> Vec<String> {
+fn functions_disallowed_in_pre_initialization_swap() -> Vec<&'static str> {
+    vec![
+        "ManageNervousSystemParameters",
+        "TransferSnsTreasuryFunds",
+        "MintSnsTokens",
+        "UpgradeSnsControlledCanister",
+        "RegisterDappCanisters",
+        "DeregisterDappCanisters",
+    ]
+}
+
+fn confirmation_messages(proposal: &Proposal) -> Result<Vec<String>> {
     let csns = match &proposal.action {
         Some(Action::CreateServiceNervousSystem(csns)) => csns,
         _ => {
-            eprintln!(
+            return Err(anyhow!(
                 "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
-            );
-            std::process::exit(1);
+            ));
         }
     };
     let fallback_controllers = csns
@@ -209,9 +214,9 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
         r#"A CreateServiceNervousSystem proposal will be submitted. If adopted, this proposal will create an SNS that controls no canisters."#.to_string()
     };
 
-    let disallowed_types = Mode::proposal_types_disallowed_in_pre_initialization_swap()
+    let disallowed_types = functions_disallowed_in_pre_initialization_swap()
         .into_iter()
-        .map(|t| format!("  - {}", t.name))
+        .map(|t| format!("  - {}", t))
         .join("\n");
     let allowed_proposals = format!(
         r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
@@ -220,23 +225,24 @@ Within this restricted mode, some proposal actions will not be allowed:
 Once the swap is completed, the SNS will be in normal mode and these proposal actions will become available again."#
     );
 
-    vec![dapp_canister_controllers, allowed_proposals]
+    Ok(vec![dapp_canister_controllers, allowed_proposals])
 }
 
-fn inform_user_of_sns_behavior(proposal: &Proposal, skip_confirmation: bool) {
-    let messages = confirmation_messages(proposal);
+fn inform_user_of_sns_behavior(proposal: &Proposal, skip_confirmation: bool) -> Result<()> {
+    let messages = confirmation_messages(proposal)?;
     for message in messages {
         println!();
         println!("{}", message);
-        confirm_understanding(skip_confirmation);
+        confirm_understanding(skip_confirmation)?;
     }
+    Ok(())
 }
 
-fn confirm_understanding(skip_confirmation: bool) {
+fn confirm_understanding(skip_confirmation: bool) -> Result<()> {
     use std::io::{self, Write};
 
     if skip_confirmation {
-        return;
+        return Ok(());
     }
 
     let mut input = String::new();
@@ -248,66 +254,63 @@ fn confirm_understanding(skip_confirmation: bool) {
             let input = input.trim().to_lowercase(); // Clean and normalize the input
             if input == "y" || input == "yes" {
                 println!("Confirmed.");
+                Ok(())
             } else {
-                println!("Exiting.");
-                std::process::exit(1); // Exit the program if the response is not affirmative
+                bail!("Exiting.")
             }
         }
         Err(error) => {
-            println!("Error reading input: {}", error);
-            std::process::exit(1); // Exit on input error
+            bail!("Error reading input: {}", error)
         }
     }
 }
 
-fn load_configuration_and_validate_or_exit(
+fn load_configuration_and_validate(
     network: &str,
     configuration_file_path: &PathBuf,
-) -> Proposal {
+) -> Result<Proposal> {
     // Read the file.
-    let init_config_file = std::fs::read_to_string(configuration_file_path).unwrap_or_else(|err| {
+    let init_config_file = std::fs::read_to_string(configuration_file_path).map_err(|err| {
         let current_dir = std::env::current_dir().expect("cannot read env::current_dir");
-        eprintln!(
+        anyhow!(
             "Unable to read the SNS configuration file {:?}:\n{}",
             current_dir.join(configuration_file_path),
             err,
-        );
-        std::process::exit(1);
-    });
+        )
+    })?;
 
     // Parse its contents.
     let init_config_file = serde_yaml::from_str::<
         crate::init_config_file::friendly::SnsConfigurationFile,
     >(&init_config_file)
-    .unwrap_or_else(|err| {
-        eprintln!(
+    .map_err(|err| {
+        anyhow!(
             "Unable to parse the SNS configuration file ({:?}):\n{}",
-            init_config_file, err,
-        );
-        std::process::exit(1);
-    });
+            init_config_file,
+            err,
+        )
+    })?;
     let base_path = match configuration_file_path.parent() {
         Some(ok) => ok,
         None => {
             // This shouldn't happen since we were already able to read from
             // configuration_file_path.
-            eprintln!(
+            bail!(
                 "Configuration file path ({:?}) has no parent.",
                 configuration_file_path,
             );
-            std::process::exit(1);
         }
     };
     let proposal = init_config_file
         .try_convert_to_nns_proposal(base_path)
-        .unwrap_or_else(|err| {
-            eprintln!(
+        .map_err(|err| {
+            anyhow!(
                 "Unable to parse the SNS configuration file. err = {:?}.\n\
                  init_config_file:\n{:#?}",
-                err, init_config_file,
-            );
-            std::process::exit(1);
-        });
+                err,
+                init_config_file,
+            )
+        })?;
 
     // Validate that NNS root is one of the controllers of all dapp canisters,
     // as listed in the configuration file.
@@ -315,43 +318,33 @@ fn load_configuration_and_validate_or_exit(
         Some(Action::CreateServiceNervousSystem(csns)) => csns
             .dapp_canisters
             .iter()
-            .map(|canister| {
-                let canister_id: PrincipalId = canister.id.unwrap_or_else(|| {
-                    eprintln!(
+            .map(|canister| -> Result<CanisterId> {
+                let canister_id: PrincipalId = canister.id.ok_or_else(|| {
+                    anyhow!(
                         "Internal error: Canister.id was found to be None while \
                         validating the CreateServiceNervousSystem.dapp_canisters \
                         field.",
-                    );
-                    std::process::exit(1);
-                });
+                    )
+                })?;
 
-                CanisterId::try_from(canister_id).unwrap_or_else(|err| {
-                    eprintln!(
-                        "{}\n\
-                     \n\
-                     Internal error: Unable to Convert PrincipalId ({}) to CanisterId.",
-                        err, canister_id,
-                    );
-                    std::process::exit(1);
-                })
+                CanisterId::try_from(canister_id)
+                    .map_err(|err| anyhow!("{err}"))
+                    .context(format!(
+                        "Internal error: Unable to Convert PrincipalId ({canister_id}) to CanisterId."
+                    ))
             })
-            .collect::<Vec<_>>(),
+            .collect::<Result<Vec<_>>>()?,
         _ => {
-            eprintln!(
+            return Err(anyhow!(
                 "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
-            );
-            std::process::exit(1);
+            ));
         }
     };
 
-    all_canisters_have_all_required_controllers(network, &canister_ids, &[ROOT_CANISTER_ID.get()])
-        .unwrap_or_else(|err| {
-            eprintln!("{}", err);
-            std::process::exit(1);
-        });
+    all_canisters_have_all_required_controllers(network, &canister_ids, &[ROOT_CANISTER_ID.get()])?;
 
     // Return as the result.
-    proposal
+    Ok(proposal)
 }
 
 struct CanistersWithMissingControllers {
@@ -387,7 +380,7 @@ fn all_canisters_have_all_required_controllers(
     network: &str,
     canister_ids: &[CanisterId],
     required_controllers: &[PrincipalId],
-) -> Result<(), CanistersWithMissingControllers> {
+) -> Result<()> {
     let required_controllers = HashSet::<_, std::collections::hash_map::RandomState>::from_iter(
         required_controllers.iter().cloned(),
     );
@@ -397,7 +390,7 @@ fn all_canisters_have_all_required_controllers(
         .filter(|canister_id| {
             let canister_id = PrincipalId::from(**canister_id);
             let controllers =
-                HashSet::from_iter(fetch_canister_controllers_or_exit(network, canister_id));
+                HashSet::from_iter(fetch_canister_controllers(network, canister_id).unwrap());
             let ok = controllers.is_superset(&required_controllers);
             !ok
         })
@@ -410,18 +403,23 @@ fn all_canisters_have_all_required_controllers(
     }
 
     let inspected_canister_count = canister_ids.len();
-    Err(CanistersWithMissingControllers {
-        inspected_canister_count,
-        defective_canister_ids,
-    })
+    Err(anyhow!(
+        "{}",
+        CanistersWithMissingControllers {
+            inspected_canister_count,
+            defective_canister_ids,
+        }
+    ))
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SaveToErrors {
     FileOpenFailed(PathBuf, String),
     FileWriteFailed(PathBuf, String),
     InvalidData(String),
 }
+
+impl std::error::Error for SaveToErrors {}
 
 impl Display for SaveToErrors {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -482,9 +480,9 @@ fn save_proposal_id_to_file(path: &Path, proposal_id: &ProposalId) -> Result<(),
 
 #[cfg(test)]
 mod test {
-    use crate::init_config_file::friendly::SnsConfigurationFile;
-
     use super::*;
+    use crate::init_config_file::friendly::SnsConfigurationFile;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn confirmation_messages_test() {
@@ -511,7 +509,7 @@ mod test {
             url: "https://example.com".to_string(),
         };
 
-        let observed_messages = confirmation_messages(&proposal);
+        let observed_messages = confirmation_messages(&proposal).unwrap();
         let expected_messages = vec![
             r#"A CreateServiceNervousSystem proposal will be submitted.
 If adopted, this proposal will create an SNS, which will control these canisters:
@@ -523,12 +521,12 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
   - 5zxxw-63ouu-faaaa-aaaap-4ai"#,
             r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
 Within this restricted mode, some proposal actions will not be allowed:
-  - Manage nervous system parameters
-  - Transfer SNS treasury funds
-  - Mint SNS tokens
-  - Upgrade SNS controlled canister
-  - Register dapp canisters
-  - Deregister Dapp Canisters
+  - ManageNervousSystemParameters
+  - TransferSnsTreasuryFunds
+  - MintSnsTokens
+  - UpgradeSnsControlledCanister
+  - RegisterDappCanisters
+  - DeregisterDappCanisters
 Once the swap is completed, the SNS will be in normal mode and these proposal actions will become available again."#,
         ];
         assert_eq!(observed_messages, expected_messages);
@@ -563,7 +561,7 @@ Once the swap is completed, the SNS will be in normal mode and these proposal ac
             url: "https://example.com".to_string(),
         };
 
-        let observed_message = &confirmation_messages(&proposal)[0];
+        let observed_message = &confirmation_messages(&proposal).unwrap()[0];
         let expected_message = r#"A CreateServiceNervousSystem proposal will be submitted. If adopted, this proposal will create an SNS that controls no canisters."#;
         assert_eq!(observed_message, expected_message);
     }

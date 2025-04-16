@@ -12,6 +12,7 @@ rust_library(
         # Keep sorted.
         "//rs/canister_client",
         "//rs/canister_client/sender",
+        "//rs/ledger_suite/icp:icp_ledger",
         "//rs/nervous_system/common",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/cmc",
@@ -20,10 +21,8 @@ rust_library(
         "//rs/nns/sns-wasm",
         "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
-        "//rs/rosetta-api/icp_ledger",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
-        "//rs/tests",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",

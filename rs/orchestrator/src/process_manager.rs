@@ -4,6 +4,7 @@ use nix::{
 };
 use slog::{debug, info, warn};
 use std::{
+    collections::HashMap,
     fmt::Debug,
     io::Result,
     sync::{Arc, Mutex},
@@ -33,6 +34,9 @@ pub(crate) trait Process {
 
     /// Return the arguments passed to the [`Process`]
     fn get_args(&self) -> &[String];
+
+    /// Return the env vars passed to the [`Process`]
+    fn get_env(&self) -> HashMap<String, String>;
 }
 
 /// A [`ProcessManager`] manages running a single versioned [`Process`]
@@ -151,6 +155,7 @@ impl<P: Process> ProcessManager<P> {
             );
             let child = std::process::Command::new(process.get_binary())
                 .args(process.get_args())
+                .envs(process.get_env())
                 .spawn()?;
             debug!(self.log, "Process started. Pid: {}", child.id());
             self.set_pid(Pid::from_raw(child.id() as i32));

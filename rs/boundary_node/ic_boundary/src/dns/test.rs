@@ -12,7 +12,7 @@ use crate::{
 // Check that resolver yields correct IPs
 #[tokio::test]
 async fn test_resolve() -> Result<(), Error> {
-    use hyper::client::connect::dns::Name;
+    use reqwest::dns::Name;
 
     let (reg, nodes, _) = create_fake_registry_client(4, 1, None);
     let reg = Arc::new(reg);

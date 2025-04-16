@@ -1,18 +1,21 @@
 #[cfg(test)]
 mod tests;
 
+use crate::canister::TargetCanister;
+use crate::git::ArgsHash;
 use candid::types::{Type, TypeInner};
 use candid::TypeEnv;
 use std::path::Path;
 
 const EMPTY_UPGRADE_ARGS: &str = "()";
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct UpgradeArgs {
     constructor_types: Vec<Type>,
     upgrade_args: String,
     encoded_upgrade_args: Vec<u8>,
-    candid_file_name: String,
+    args_sha256: ArgsHash,
+    candid_file_path: String,
 }
 
 impl UpgradeArgs {
@@ -20,15 +23,15 @@ impl UpgradeArgs {
         &self.encoded_upgrade_args
     }
 
-    pub fn upgrade_args_hex(&self) -> String {
-        hex::encode(&self.encoded_upgrade_args)
+    pub fn args_sha256_hex(&self) -> String {
+        self.args_sha256.to_string()
     }
 
     pub fn didc_encode_cmd(&self) -> String {
         if self.upgrade_args != EMPTY_UPGRADE_ARGS {
             format!(
                 "didc encode -d {} -t '{}' '{}'",
-                self.candid_file_name,
+                self.candid_file_path,
                 format_types(&self.constructor_types),
                 self.upgrade_args
             )
@@ -38,7 +41,11 @@ impl UpgradeArgs {
     }
 }
 
-pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F) -> UpgradeArgs {
+pub fn encode_upgrade_args<F: Into<String>>(
+    canister: &TargetCanister,
+    candid_file: &Path,
+    upgrade_args: F,
+) -> UpgradeArgs {
     let upgrade_args: String = upgrade_args.into();
     let (env, upgrade_types) = if upgrade_args != EMPTY_UPGRADE_ARGS {
         parse_constructor_args(candid_file)
@@ -49,16 +56,14 @@ pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F)
         .expect("fail to parse upgrade args")
         .to_bytes_with_types(&env, &upgrade_types)
         .expect("failed to encode");
-    let candid_file_name = candid_file
-        .file_name()
-        .expect("missing file name")
-        .to_string_lossy()
-        .to_string();
+    let args_sha256 = ArgsHash::sha256(&encoded_upgrade_args);
+    let repo_candid_file = canister.candid_file().to_string_lossy().to_string();
     UpgradeArgs {
         constructor_types: upgrade_types,
         upgrade_args,
         encoded_upgrade_args,
-        candid_file_name,
+        args_sha256,
+        candid_file_path: repo_candid_file,
     }
 }
 

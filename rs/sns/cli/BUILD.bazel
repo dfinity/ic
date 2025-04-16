@@ -3,46 +3,45 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library
 package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/candid_utils",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
     "//rs/nervous_system/proto",
+    "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/sns-wasm",
+    "//rs/sns/governance/api",
+    "//rs/sns/init",
     "//rs/sns/root",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:clap",
+    "@crate_index//:dfx-core",
+    "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-wasm",
     "@crate_index//:itertools",
     "@crate_index//:json-patch",
     "@crate_index//:pretty_assertions",
     "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
-]
-
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/governance",
-    "//rs/sns/init",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
-    "//rs/sns/governance:governance--test_feature",
-    "//rs/sns/init:init--test_feature",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -72,23 +71,6 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_library(
-    name = "cli--test_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = [
-            "**/*tests.rs",
-            "main.rs",
-        ],
-    ),
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_sns_cli",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.0.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
-)
-
 rust_binary(
     name = "sns",
     srcs = ["src/main.rs"],
@@ -96,17 +78,6 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
     deps = DEPENDENCIES + [":cli"],
-)
-
-rust_binary(
-    name = "sns--test_feature",
-    srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "sns",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.0.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":cli--test_feature"],
 )
 
 rust_test(
@@ -127,14 +98,13 @@ rust_test(
     crate_root = "src/lib.rs",
     data = [
         "test.png",
-        "test_sns_init_v1.yaml",
         "test_sns_init_v2.yaml",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_doc_test(

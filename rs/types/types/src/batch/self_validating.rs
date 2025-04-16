@@ -20,7 +20,7 @@ pub const MAX_BITCOIN_PAYLOAD_IN_BYTES: u64 =
     MAX_BITCOIN_BLOCK_IN_BYTES + BITCOIN_PAYLOAD_BUFFER_IN_BYTES;
 
 /// Payload that contains SelfValidating messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SelfValidatingPayload(pub(super) Vec<BitcoinAdapterResponse>);
 
@@ -35,7 +35,8 @@ impl SelfValidatingPayload {
 
     /// Returns true if the payload is empty
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        let SelfValidatingPayload(responses) = &self;
+        responses.is_empty()
     }
 }
 
@@ -61,6 +62,7 @@ impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
 
 impl CountBytes for SelfValidatingPayload {
     fn count_bytes(&self) -> usize {
-        self.0.iter().map(|x| x.count_bytes()).sum()
+        let SelfValidatingPayload(responses) = &self;
+        responses.iter().map(|x| x.count_bytes()).sum()
     }
 }

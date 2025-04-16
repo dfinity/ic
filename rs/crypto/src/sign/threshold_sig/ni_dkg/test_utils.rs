@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use crate::common::test_utils::CryptoRegistryRecord;
 use crate::sign::tests::{dealing_encryption_pk_record_with, REG_V1, REG_V2};
 use ic_crypto_internal_types::curves::bls12_381::G1Bytes;

@@ -1,0 +1,212 @@
+{% macro show_datetime_opt(ts) -%}
+    {% match ts %}
+        {%- when Some(time) -%}
+            {{ time|timestamp_to_datetime }}
+        {%- when None -%}
+    {% endmatch %}
+{%- endmacro %}
+
+{% macro btc_tx_link(txid) -%}
+    {% match config.btc_network() %}
+        {%- when crate::BtcNetwork::Mainnet -%}
+            <a href="https://live.blockcypher.com/btc/tx/{{txid}}"><code>{{txid}}</code></a>
+        {%- when crate::BtcNetwork::Testnet -%}
+            <a href="https://live.blockcypher.com/btc-testnet/tx/{{txid}}"><code>{{txid}}</code></a>
+        {%- when _ -%}
+            <code>{{txid}}</code>
+    {% endmatch %}
+{%- endmacro %}
+
+{% macro btc_address(addr) -%}
+    {% match addr %}
+        {%- when Some(addr) -%}
+            {% if crate::is_blocked(addr) %}
+                <code style="color: red">{{addr}}</code>
+            {% else %}
+                <code style="color: green">{{addr}}</code>
+            {% endif %}
+        {%- when None -%}
+        <code>N/A</code>
+    {% endmatch %}
+{%- endmacro %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Bitcoin Checker Canister Dashboard for ({{ config.btc_network() }})</title>
+    <style>
+        details {
+            margin-right: 1rem;
+            min-width: 20rem;
+        }
+
+        details[disabled] summary {
+            pointer-events: none;
+            user-select: none;
+        }
+
+        summary {
+            display: block;
+            padding-left: 1.5rem;
+            position: relative;
+            user-select: none;
+        }
+
+        .live > summary:before {
+            content: '';
+            border-width: .4rem;
+            border-style: solid;
+            border-color: transparent transparent transparent #000;
+            position: absolute;
+            top: 0.2rem;
+            left: 0.5rem;
+            transform: rotate(0);
+            transform-origin: .2rem 50%;
+            transition: .25s transform ease;
+        }
+
+        details[open] > summary:before {
+            transform: rotate(90deg);
+        }
+
+        details summary.live::-webkit-details-marker {
+            display:none;
+        }
+
+        details > ul {
+            margin: 0;
+            padding-top: 0.5em;
+            padding-left: 1.5rem;
+            list-style-type: none;
+            max-width: 20rem;
+        }
+
+        table {
+            border: solid;
+            text-align: left;
+            width: 100%;
+            border-width: thin;
+        }
+
+        h3 {
+            font-variant: small-caps;
+            margin-top: 30px;
+            margin-bottom: 5px;
+        }
+
+        table table {
+            font-size: small;
+        }
+
+        .background {
+            margin: 0;
+            padding: 0;
+        }
+
+        .content {
+            max-width: 100vw;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #eeeeee;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #ffffff;
+        }
+
+        td {
+            padding: 0.5em;
+            vertical-align: top;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background">
+        <div class="content">
+            <h2>Bitcoin Checker Canister Dashboard for ({{ config.btc_network() }})</h2>
+            <h3>Metadata</h3>
+            <table>
+                <tbody>
+                    <tr id="check-mode">
+                        <th>Check Mode</th>
+                        <td><code>{{ config.check_mode }}</code></td>
+                    </tr>
+                    <tr id="outcall-capacity">
+                        <th>Outcall Capacity</th>
+                        <td><code>{{ outcall_capacity }}</code></td>
+                    </tr>
+                    <tr id="cached-entries">
+                        <th>Number of cached entries</th>
+                        <td><code>{{ cached_entries }}</code></td>
+                    </tr>
+                   <tr id="latest-entry-time">
+                        <th>Latest entry initiated at</th>
+                        <td><code>{% call show_datetime_opt(latest_entry_time) %}</code></td>
+                    </tr>
+                    <tr id="oldest-entry-time">
+                        <th>Oldest entry initiated at</th>
+                        <td><code>{% call show_datetime_opt(oldest_entry_time) %}</code></td>
+                    </tr>
+                </tbody>
+            </table>
+            <h3 id="fetch-tx-status">Fetch Transaction Status</h3>
+            <table>
+                <thead>
+                    <th>Txid</th>
+                    <th>Initiated At</th>
+                    <th>Status</th>
+                </thead>
+                <tbody>
+                    {% for (txid, timestamp, status) in fetch_tx_status %}
+                    <tr>
+                        <td>{% call btc_tx_link(txid) %}</td>
+                        <td><code>{{ timestamp|timestamp_to_datetime }}</code></td>
+                        <td>
+                            {% if let Some(fetched) = status.fetched() %}
+                            <details {#+ #}
+                                     {% if !fetched.input_addresses.is_empty() %}
+                                     class="live"
+                                     {% else %}
+                                     disabled
+                                     {% endif %}
+                            ><summary>{{ status }}</summary>
+                                <ul>
+                                {% for address in fetched.input_addresses %}
+                                    <li>{% call btc_address(address) %}</li>
+                                {% endfor %}
+                                </ul>
+                            </details>
+                            {% else if let Some(error) = status.error() %}
+                            <details open disabled>
+                               <summary>{{ status }}</summary>
+                               {{ error }}
+                            </details>
+                            {% else %}
+                            <details open disabled><summary>{{ status }}</summary></details>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if cached_entries >= tx_table_page_size %}
+            <table style="border: none"><tbody><tr><td colspan="3" style="background: none; text-align: right">
+                Pages:
+                {% for page in 0..((cached_entries / tx_table_page_size) + 1) %}
+                    {% if page == tx_table_page_index %}
+                    &nbsp;{{ page }}
+                    {% else %}
+                    &nbsp;<a href='?page={{ page }}'>{{ page }}</a>
+                    {% endif %}
+                {% endfor %}
+            </td></tr></tbody></table>
+            {% endif %}
+        </div>
+    </div>
+    <body>
+</html>

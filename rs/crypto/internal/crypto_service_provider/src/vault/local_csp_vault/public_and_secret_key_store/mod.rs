@@ -150,7 +150,7 @@ fn compute_node_signing_key_id(
     }
     let csp_key = CspPublicKey::try_from(external_node_signing_public_key)
         .map_err(|err| ExternalPublicKeyError(Box::new(format!("{:?}", err))))?;
-    Ok(KeyId::try_from(&csp_key)?)
+    Ok(KeyId::from(&csp_key))
 }
 
 fn compute_committee_signing_key_id(
@@ -167,7 +167,7 @@ fn compute_committee_signing_key_id(
     ensure_committee_signing_key_pop_is_well_formed(external_committee_signing_public_key)?;
     let csp_key = CspPublicKey::try_from(external_committee_signing_public_key)
         .map_err(|err| ExternalPublicKeyError(Box::new(format!("{:?}", err))))?;
-    Ok(KeyId::try_from(&csp_key)?)
+    Ok(KeyId::from(&csp_key))
 }
 
 fn ensure_committee_signing_key_pop_is_well_formed(
@@ -249,10 +249,10 @@ fn compute_tls_certificate_key_id(
     )
     .map_err(|e| ExternalPublicKeyError(Box::new(format!("Malformed certificate: {:?}", e))))?;
 
-    Ok(KeyId::try_from(&public_key_cert)?)
+    Ok(KeyId::from(&public_key_cert))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct LocalNodePublicKeys {
     pub node_signing_public_key: Option<PublicKeyProto>,
     pub committee_signing_public_key: Option<PublicKeyProto>,

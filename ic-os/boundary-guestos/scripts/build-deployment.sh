@@ -43,7 +43,6 @@ Arguments:
        --nns_urls=                      specify a file that lists on each line a nns url of the form `http://[ip]:port` this file will override nns urls derived from input json file
        --replicas-ipv6=                 specify a file that lists on each line an ipv6 firewall rule to allow replicas of the form `ipv6-addr/prefix-length` (# comments and trailing whitespace will be stripped)
        --denylist=                      a deny list of canisters
-       --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
@@ -101,9 +100,6 @@ for argument in "${@}"; do
             ;;
         --denylist=*)
             DENY_LIST="${argument#*=}"
-            ;;
-        --prober-identity=*)
-            PROBER_IDENTITY="${argument#*=}"
             ;;
         --geolite2-country-db=*)
             GEOLITE2_COUNTRY_DB="${argument#*=}"
@@ -206,20 +202,18 @@ VALUES=$(echo ${CONFIG} \
     .ipv6_gateway,
     .ipv4_gateway,
     .ipv4_address,
-    .prober,
     .hostname,
     .subnet_type,
     .subnet_idx,
     .node_idx,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_address ipv6_gateway ipv4_gateway ipv4_address prober hostname subnet_type subnet_idx node_idx type; do
+while IFS=$'\1' read -r ipv6_address ipv6_gateway ipv4_gateway ipv4_address hostname subnet_type subnet_idx node_idx type; do
     eval "declare -A __RAW_NODE_$NODES=(
         ['ipv6_address']=$ipv6_address
         ['ipv6_gateway']=$ipv6_gateway
-	['ipv4_gateway']=$ipv4_gateway
+	    ['ipv4_gateway']=$ipv4_gateway
         ['ipv4_address']=$ipv4_address
-        ['prober']=$prober
         ['hostname']=$hostname
         ['subnet_type']=$subnet_type
         ['subnet_idx']=$subnet_idx
@@ -370,28 +364,6 @@ function generate_network_config() {
 
             cat "${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
             # IPv6 network configuration is obtained from the Router Advertisement.
-        fi
-    done
-}
-
-function generate_prober_config() {
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" == "boundary" ]]; then
-            local hostname=${NODE["hostname"]}
-            local subnet_idx=${NODE["subnet_idx"]}
-            local node_idx=${NODE["node_idx"]}
-            local prober=${NODE["prober"]}
-
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-
-            mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
-
-            # copy prober identity if enabled
-            if [[ -f "${PROBER_IDENTITY:-}" && "${prober:-}" == "true" ]]; then
-                echo "Using prober identity ${PROBER_IDENTITY}"
-                cp "${PROBER_IDENTITY}" "${CONFIG_DIR}/${NODE_PREFIX}/prober_identity.pem"
-            fi
         fi
     done
 }
@@ -678,7 +650,6 @@ function main() {
     create_tarball_structure
     generate_boundary_node_config
     generate_network_config
-    generate_prober_config
     copy_ssh_keys
     copy_certs
     copy_deny_list

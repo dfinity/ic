@@ -4,7 +4,7 @@ set -e
 
 # Start the GuestOS virtual machine.
 
-# Source the functions required for writing metrics
+source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
@@ -32,14 +32,12 @@ done
 # Set arguments if undefined
 CONFIG="${CONFIG:=/var/lib/libvirt/guestos.xml}"
 
-write_log() {
+write_tty1_log() {
     local message=$1
 
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
+    echo "${SCRIPT} ${message}" >/dev/tty1
 
-    logger -t ${SCRIPT} "${message}"
+    logger -t "${SCRIPT}" "${message}"
 }
 
 function define_guestos() {
@@ -50,8 +48,8 @@ function define_guestos() {
             "GuestOS virtual machine define state" \
             "gauge"
     else
-        virsh define ${CONFIG}
         write_log "Defining GuestOS virtual machine."
+        virsh define ${CONFIG}
         write_metric "hostos_guestos_service_define" \
             "1" \
             "GuestOS virtual machine define state" \
@@ -67,7 +65,50 @@ function start_guestos() {
             "GuestOS virtual machine start state" \
             "gauge"
     else
-        virsh start guestos
+        write_log "Starting GuestOS virtual machine."
+        # Attempt to start; if it fails, dump logs.
+        if ! virsh start guestos; then
+            # The sleep below gives QEMU time to clear the console so that
+            # error messages won't be immediately overwritten.
+            sleep 10
+
+            write_tty1_log "ERROR: Failed to start GuestOS virtual machine."
+
+            write_tty1_log "#################################################"
+            write_tty1_log "###      LOGGING GUESTOS.SERVICE LOGS...      ###"
+            write_tty1_log "#################################################"
+            journalctl -u guestos.service >/dev/tty1
+
+            write_tty1_log "#################################################"
+            write_tty1_log "###          TROUBLESHOOTING INFO...          ###"
+            write_tty1_log "#################################################"
+            host_ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS 2>/dev/null)"
+            write_tty1_log "Host IPv6 address: $host_ipv6_address"
+
+            if [ -f /var/log/libvirt/qemu/guestos-serial.log ]; then
+                write_tty1_log "#################################################"
+                write_tty1_log "###  LOGGING GUESTOS CONSOLE LOGS, IF ANY...  ###"
+                write_tty1_log "#################################################"
+                tail -n 30 /var/log/libvirt/qemu/guestos-serial.log | while IFS= read -r line; do
+                    write_tty1_log "$line"
+                done
+            else
+                write_tty1_log "No /var/log/libvirt/qemu/guestos-serial.log file found."
+            fi
+
+            write_tty1_log "Exiting start-guestos.sh so that systemd can restart guestos.service in 5 minutes."
+            exit 1
+        fi
+
+        sleep 10
+        write_tty1_log ""
+        write_tty1_log "#################################################"
+        write_tty1_log "GuestOS virtual machine launched"
+        write_tty1_log "IF ONBOARDING, please wait for up to 10 MINUTES for a 'Join request successful!' message"
+        host_ipv6_address="$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS 2>/dev/null)"
+        write_tty1_log "Host IPv6 address: $host_ipv6_address"
+        write_tty1_log "#################################################"
+
         write_log "Starting GuestOS virtual machine."
         write_metric "hostos_guestos_service_start" \
             "1" \
@@ -76,28 +117,10 @@ function start_guestos() {
     fi
 }
 
-function enable_guestos() {
-    if [ "$(virsh list --autostart | grep 'guestos')" ]; then
-        write_log "GuestOS virtual machine is already enabled."
-        write_metric "hostos_guestos_service_enable" \
-            "0" \
-            "GuestOS virtual machine enable state" \
-            "gauge"
-    else
-        virsh autostart guestos
-        write_log "Enabling GuestOS virtual machine."
-        write_metric "hostos_guestos_service_enable" \
-            "1" \
-            "GuestOS virtual machine enable state" \
-            "gauge"
-    fi
-}
-
 function main() {
     # Establish run order
     define_guestos
     start_guestos
-    enable_guestos
 }
 
 main

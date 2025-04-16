@@ -3,7 +3,7 @@ use ic_ethereum_types::Address;
 use serde::Serialize;
 
 /// Parameters of the [`eth_getTransactionCount`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_gettransactioncount) call.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(into = "(Address, BlockSpec)")]
 pub struct GetTransactionCountParams {
     /// The address for which the transaction count is requested.

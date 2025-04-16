@@ -1,8 +1,8 @@
 use candid::Decode;
+use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterId, Cycles, ErrorCode, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError, WasmResult};
+use ic_types::Cycles;
 use serde::Deserialize;
 
 /// This number should not exceed the length of the canister output queue,
@@ -18,11 +18,17 @@ pub fn test_canister_wasm() -> Vec<u8> {
     TEST_CANISTER_WASM.with(|wasm| wasm.clone())
 }
 
-pub fn setup() -> (StateMachine, CanisterId) {
-    let env = StateMachineBuilder::new()
+pub fn env() -> StateMachine {
+    StateMachineBuilder::new()
         .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
-        .build();
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
+        .build()
+}
+
+pub fn setup() -> (StateMachine, CanisterId) {
+    let env = env();
     let test_canister = env
         .install_canister_with_cycles(
             test_canister_wasm(),

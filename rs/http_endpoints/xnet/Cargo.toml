@@ -1,0 +1,45 @@
+[package]
+name = "ic-http-endpoints-xnet"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+axum = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+crossbeam-channel = { workspace = true }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-config = { path = "../../config" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
+ic-types = { path = "../../types/types" }
+prometheus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tower = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+bytes = { workspace = true }
+ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
+ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+maplit = "1.0.2"
+prost = { workspace = true }
+reqwest = { workspace = true }

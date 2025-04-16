@@ -3,6 +3,7 @@
 A collection of helper functions that parse and analyse proptest-regression
 files to help identify the issue with a regression.
 """
+
 import argparse
 import re
 
@@ -46,12 +47,10 @@ def shrink_decimal_array(data):
 
 
 def shrink_arrays(data):
-
     chunks = re.split(r"\[|\]", data)
     output = ""
 
     for chunk in chunks:
-
         if is_decimal_array(chunk):
             output += "["
             output += shrink_decimal_array(chunk)

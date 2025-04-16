@@ -7,7 +7,7 @@ IC-OS is an umbrella term for all the operating systems within the IC, including
 * SetupOS: Responsible for booting a new replica node and installing HostOS and GuestOS.
 * HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design to not perform any trusted capabilities.
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
-* Boundary-GuestOS: The operating system that runs on boundary nodes. It contains all the services necessary to fulfill the two main tasks of the boundary nodes: (1) route ICP API requests to a healthy replica of the right subnet (`ic-boundary`); and (2) translate HTTP requests into ICP API requests to allow direct access to dapps from the browser (`icx-proxy`).
+* Boundary-GuestOS: The operating system that runs on boundary nodes. It contains all the services necessary to fulfill the two main tasks of the boundary nodes: (1) route ICP API requests to a healthy replica of the right subnet (`ic-boundary`); and (2) translate HTTP requests into ICP API requests to allow direct access to dapps from the browser.
 
 == Managing IC-OS files
 
@@ -19,13 +19,13 @@ All the IC-OS images can be built though Bazel.
 
 === Environment setup
 
-Building IC-OS images locally requires environment configuration. The required packages are found in ic/gitlab-ci/container/Dockerfile.
+Building IC-OS images locally requires environment configuration. The required packages are found in ic/ci/container/Dockerfile.
 
 In addition to these packages, https://bazel.build/install[Bazel] must be installed.
 
 As an alternative, the following script can be used to build the images in a container with the correct environment already configured:
 
-    ./gitlab-ci/container/container-run.sh
+    ./ci/container/container-run.sh
 
 === Build targets
 
@@ -92,15 +92,6 @@ This means that some development and testing could be done on the docker image i
 === Injection of additional binaries
 
 As a caching optimization, additional IC services, configuration, scripts and binaries are added to the image late in the build process.
-
-== IC-OS Directory Organization
-
-* *components/*: This directory contains scripts and components that are copied to the target IC-OS.
-** For instructions on how to make changes to the OS, refer to the link:components/README.adoc#[components/ documentation]
-
-* *bootloader/*: This directory contains everything related to building EFI firmware and the GRUB bootloader image. 
-
-* *scripts/*: This directory contains build and utility scripts for the IC-OS.
 
 == Adding a new dependency to an IC-OS image
 

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
@@ -21,14 +21,14 @@ use url::Url;
 
 /// Sub-command to submit a proposal to create a new subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     #[allow(dead_code)]
     /// Obsolete. Does nothing. Exists for compatibility with legacy scripts.
     subnet_handler_id: Option<String>,
 
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    #[clap(name = "NODE_ID", num_args(1..), required = true)]
     /// The node IDs of the nodes that will be part of the new subnet.
     pub node_ids: Vec<PrincipalId>,
 
@@ -58,7 +58,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// propagation.
     pub initial_notary_delay_millis: Option<u64>,
 
-    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
+    #[clap(long)]
     /// ID of the Replica version to run.
     pub replica_version_id: Option<ReplicaVersion>,
 
@@ -128,11 +128,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
 
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     ssh_readonly_access: Vec<String>,
     /// The list of public keys whose owners have "backup" SSH access to nodes
     /// on the NNS subnet.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     ssh_backup_access: Vec<String>,
 
     /// The maximum number of canisters that are allowed to be created in this
@@ -285,7 +285,6 @@ impl ProposeToCreateSubnetCmd {
             chain_key_config,
 
             // Deprecated fields.
-            ecdsa_config: None,
             ingress_bytes_per_block_soft_cap: Default::default(),
             gossip_max_artifact_streams_per_peer: Default::default(),
             gossip_max_chunk_wait_ms: Default::default(),
@@ -310,7 +309,9 @@ impl ProposalPayload<do_create_subnet::CreateSubnetPayload> for ProposeToCreateS
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_types::PrincipalId;
 
     use super::*;

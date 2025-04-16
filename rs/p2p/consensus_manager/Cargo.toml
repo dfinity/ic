@@ -1,7 +1,10 @@
 [package]
 name = "ic-consensus-manager"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,8 +16,8 @@ ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-quic-transport = { path = "../quic_transport" }
 ic-protobuf = { path = "../../protobuf" }
+ic-quic-transport = { path = "../quic_transport" }
 ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }

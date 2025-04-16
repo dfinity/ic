@@ -10,7 +10,7 @@
   - [For CI/CD test executions](#for-cicd-test-executions)
 
 # What is a system test of the Internet Computer
-A system test is a test, which is conducted on a complete instance of the [Internet Computer](https://internetcomputer.org/how-it-works) (IC). IC under test may be comprised of multiple System- and/or Application-subnets. The subnet is formed by a collection of nodes, which replicate each others state and realize a four-layered architecture of the [Internet Computer Protocol](https://internetcomputer.org/how-it-works) (ICP). System-subnet is primarily aimed at hosting [NNS canisters](https://wiki.internetcomputer.org/wiki/NNS_Canisters), but can also host any other canisters, such as [Bitcoin](https://github.com/dfinity/bitcoin-canister) canister or [Internet Identity](https://github.com/dfinity/internet-identity) canister. The objective of the Application-subnets is to host users canisters, which can range from simple [counter](https://github.com/dfinity/examples/tree/master/wasm/counter) canisters to arbitrary complex ones. 
+A system test is a test, which is conducted on a complete instance of the [Internet Computer](https://internetcomputer.org/how-it-works) (IC). IC under test may be comprised of multiple System- and/or Application-subnets. The subnet is formed by a collection of nodes, which replicate each others state and realize a four-layered architecture of the [Internet Computer Protocol](https://internetcomputer.org/how-it-works) (ICP). System-subnet is primarily aimed at hosting [NNS canisters](https://wiki.internetcomputer.org/wiki/NNS_Canisters), but can also host any other canisters, such as [Bitcoin](https://github.com/dfinity/bitcoin-canister) canister or [Internet Identity](https://github.com/dfinity/internet-identity) canister. The objective of the Application-subnets is to host users canisters, which can range from simple [counter](https://github.com/dfinity/examples/tree/master/wasm/counter) canisters to arbitrary complex ones.
 
 An IC system test might include other components, such as unassigned nodes, boundary nodes, or nodes with some customized behavior. Customized nodes can, e.g., implement [workloads](https://github.com/dfinity/ic/blob/master/rs/tests/src/workload.rs), which dispatch query/update calls to canisters at desired rates.
 
@@ -22,24 +22,24 @@ In the current (transitional) period, system tests can co-exist in two flavours:
 ## Running a bazelified flavour of a system test
 [basic_health_test.rs](https://github.com/dfinity/ic/blob/master/rs/tests/bin/basic_health_test.rs) can serve as an example of a bazelified system test. Bazel [rule](https://bazel.build/extending/rules) needed for building the test target binary from the underlying Rust source code is defined in the [BUILD.bazel](https://github.com/dfinity/ic/blob/master/rs/tests/BUILD.bazel) file. In order to run this test with [Bazel](https://bazel.build/), first enter the docker container:
 ```
-/ic$ ./gitlab-ci/container/container-run.sh
+/ic$ ./ci/container/container-run.sh
 ```
 this container provides all the necessary environment setup for building and running Bazel targets.
 ### Via native Bazel commands
 Within the docker execute:
 ```
-devenv-container$ bazel test --config=systest //rs/tests/testing_verification:basic_health_test
+devenv-container$ bazel test --config=systest //rs/tests/idx:basic_health_test
 ```
 You can provide additional [flags](https://bazel.build/reference/command-line-reference#test) to the Bazel [test](https://bazel.build/reference/command-line-reference#test) command. For example, *--test_tmpdir* would be useful, if you want to keep test artifacts (logs, ssh keys, etc.) after the test execution has finished.
 ### Via `ict` command line tool
 Within the same docker container there is also an [ict](https://github.com/dfinity/ic/tree/master/rs/tests/ict) CLI at your disposal. This tool simplifies your interaction with bazelified system tests and abstracts away the underlying Bazel machinery. In order to run the same `basic_health_test` with the `ict` execute:
 ```
-devenv-container$ ict test //rs/tests/testing_verification:basic_health_test
+devenv-container$ ict test //rs/tests/idx:basic_health_test
 ```
 Upon this invocation `ict` launches the test and also displays the raw Bazel command, which is called under the hood:
 ```
-Raw Bazel command to be invoked: 
-$ bazel test //rs/tests/testing_verification:basic_health_test --config=systest --cache_test_results=no
+Raw Bazel command to be invoked:
+$ bazel test //rs/tests/idx:basic_health_test --config=systest --cache_test_results=no
 ```
 You can explore the functionality of the continuously developed `ict` tool by:
 ```
@@ -50,16 +50,16 @@ For example, you can list all existing system test targets via:
 devenv-container$ ict test list
 The following 60 system_test targets were found:
 //rs/tests/consensus:backup_manager_test
-//rs/tests/testing_verification:basic_health_test
+//rs/tests/idx:basic_health_test
 ...
 ```
 Had you misspelled the test target name, `ict` will help you with a fuzzy match proposal:
 ```
 devenv-container$ ict test almost_basic_test
-There was an error while executing CLI: 'No test target `almost_basic_test` was found: 
+There was an error while executing CLI: 'No test target `almost_basic_test` was found:
 Did you mean any of:
-//rs/tests/testing_verification:basic_health_test
-//rs/tests/financial_integrations/ckbtc:ckbtc_minter_basics_test
+//rs/tests/idx:basic_health_test
+//rs/tests/ckbtc:ckbtc_minter_basics_test
 ...
 ```
 ## Running a cargo-based (legacy) flavour of a system test
@@ -70,7 +70,7 @@ In order to launch `basic_health_test`, firstly enter the `nix-shell` environmen
 ```
 Secondly, specify GuestOS image (replica) version. For example, take the latest available one:
 ```
-[nix-shell:~/ic]$ export IC_VERSION_ID=$(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)
+[nix-shell:~/ic]$ export IC_VERSION_ID=$(./ci/src/artifacts/newest_sha_with_disk_image.sh master)
 ```
 Finally, execute `basic_health_test` (which resides in the `hourly` suite) via python [run-system-tests.py](https://github.com/dfinity/ic/blob/master/rs/tests/run-system-tests.py) script:
 ```

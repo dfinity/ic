@@ -3,13 +3,13 @@ use crate::{
     ChangeCanisterControllersResponse, ChangeCanisterControllersResult,
 };
 use async_trait::async_trait;
-use dfn_candid::candid_one;
-use dfn_core::call;
 use ic_base_types::PrincipalId;
+use ic_cdk::call;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
         CanisterStatusResult, CanisterStatusType, DefiniteCanisterSettings, LogVisibility,
+        QueryStats,
     },
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
@@ -44,12 +44,13 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         change_canister_controllers_request: ChangeCanisterControllersRequest,
     ) -> Result<ChangeCanisterControllersResponse, (Option<i32>, String)> {
         call(
-            ROOT_CANISTER_ID,
+            ROOT_CANISTER_ID.get().0,
             "change_canister_controllers",
-            candid_one,
-            change_canister_controllers_request,
+            (change_canister_controllers_request,),
         )
         .await
+        .map(|(response,): (ChangeCanisterControllersResponse,)| response)
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 
     async fn canister_status(
@@ -57,12 +58,13 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         canister_id_record: CanisterIdRecord,
     ) -> Result<CanisterStatusResult, (Option<i32>, String)> {
         call(
-            ROOT_CANISTER_ID,
+            ROOT_CANISTER_ID.get().0,
             "canister_status",
-            candid_one,
-            canister_id_record,
+            (canister_id_record,),
         )
         .await
+        .map(|(response,): (CanisterStatusResult,)| response)
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 }
 
@@ -72,13 +74,13 @@ pub struct SpyNnsRootCanisterClient {
     replies: Arc<Mutex<VecDeque<SpyNnsRootCanisterClientReply>>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SpyNnsRootCanisterClientCall {
     ChangeCanisterControllers(ChangeCanisterControllersRequest),
     CanisterStatus(CanisterIdRecord),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum SpyNnsRootCanisterClientReply {
     ChangeCanisterControllers(Result<ChangeCanisterControllersResponse, (Option<i32>, String)>),
@@ -220,10 +222,17 @@ impl SpyNnsRootCanisterClientReply {
                 reserved_cycles_limit: Some(candid::Nat::from(10_u32)),
                 wasm_memory_limit: Some(candid::Nat::from(11_u32)),
                 log_visibility: Some(LogVisibility::Controllers),
+                wasm_memory_threshold: Some(candid::Nat::from(6_u32)),
             },
             cycles: candid::Nat::from(42_u32),
             idle_cycles_burned_per_day: Some(candid::Nat::from(43_u32)),
             reserved_cycles: Some(candid::Nat::from(44_u32)),
+            query_stats: Some(QueryStats {
+                num_calls_total: Some(candid::Nat::from(45_u32)),
+                num_instructions_total: Some(candid::Nat::from(46_u32)),
+                request_payload_bytes_total: Some(candid::Nat::from(47_u32)),
+                response_payload_bytes_total: Some(candid::Nat::from(48_u32)),
+            }),
         }))
     }
 

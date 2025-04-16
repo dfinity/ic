@@ -3,22 +3,24 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
-use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, dkg, idkg};
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_certification::CertifierImpl;
+use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, DkgKeyManager};
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_test_utilities::{
     crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
-use ic_test_utilities_consensus::{make_genesis, IDkgStatsNoOp};
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, make_genesis, IDkgStatsNoOp};
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
@@ -30,8 +32,10 @@ use ic_types::{
     crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     CryptoHashOfState, Height,
 };
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex, RwLock},
+    time::Duration,
+};
 use tokio::sync::watch;
 
 /// Test that the batches that Consensus produces contain expected batch
@@ -58,6 +62,9 @@ fn consensus_produces_expected_batches() {
 
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let query_stats_payload_builder = Arc::new(query_stats_payload_builder);
+
+        let vetkd_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let vetkd_payload_builder = Arc::new(vetkd_payload_builder);
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
@@ -115,7 +122,16 @@ fn consensus_produces_expected_batches() {
                     .build(),
             )],
         );
-        let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
+        let cup_contents = registry_client
+            .get_cup_contents(subnet_id, registry_client.get_latest_version())
+            .expect("Failed to retreive the DKG transcripts from registry");
+        let summary = get_dkg_summary_from_cup_contents(
+            cup_contents.value.expect("Missing CUP contents"),
+            replica_config.subnet_id,
+            &*registry_client,
+            cup_contents.version,
+        )
+        .expect("Failed to get DKG summary from CUP contents");
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
@@ -126,12 +142,6 @@ fn consensus_produces_expected_batches() {
             time_source.clone(),
         )));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
-        let membership = Membership::new(
-            consensus_cache.clone(),
-            registry_client.clone(),
-            replica_config.subnet_id,
-        );
-        let membership = Arc::new(membership);
         let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
             metrics_registry.clone(),
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -141,28 +151,31 @@ fn consensus_produces_expected_batches() {
 
         let (dummy_watcher, _) = watch::channel(Height::from(0));
 
-        let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
+        let consensus = ic_consensus::consensus::ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
-            Arc::clone(&membership) as Arc<_>,
+            consensus_cache.clone(),
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&ingress_selector) as Arc<_>,
             Arc::clone(&xnet_payload_builder) as Arc<_>,
             Arc::clone(&self_validating_payload_builder) as Arc<_>,
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
+            vetkd_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&time_source) as Arc<_>,
+            0,
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
-            0,
         );
-        let dkg = dkg::DkgImpl::new(
+        let consensus_bouncer =
+            ic_consensus::consensus::ConsensusBouncer::new(&metrics_registry, router.clone());
+        let dkg = ic_consensus_dkg::DkgImpl::new(
             replica_config.node_id,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&consensus_cache),
@@ -170,7 +183,7 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         );
-        let idkg = idkg::IDkgImpl::new(
+        let idkg = ic_consensus_idkg::IDkgImpl::new(
             replica_config.node_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -194,7 +207,7 @@ fn consensus_produces_expected_batches() {
             replica_config.node_id,
             pool_config,
             Box::new(consensus),
-            consensus_gossip,
+            consensus_bouncer,
             dkg,
             Box::new(idkg),
             Box::new(certifier),
@@ -205,20 +218,23 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(INITIAL_NOTARY_DELAY);
         driver.step(); // this stops before notary timeout expires after making 2nd block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(INITIAL_NOTARY_DELAY);
         driver.step(); // this stops before notary timeout expires after making 3rd block
 
+        let backlog_delay_millis = 2000;
         // Make a few more batches past the summary.
-        for _ in 0..=DKG_INTERVAL_LENGTH {
-            time_source.advance_time(Duration::from_millis(2000));
+        for i in 0..=DKG_INTERVAL_LENGTH {
+            time_source.advance_time(
+                INITIAL_NOTARY_DELAY + Duration::from_millis((i + 2) * backlog_delay_millis),
+            );
             driver.step();
         }
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
-        // Plus 2 initial driver steps.
-        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 2);
+        // Plus 3 initial driver steps.
+        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 3);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
         let first_batch_summary = batches[0].batch_summary.clone().unwrap();
         assert_eq!(

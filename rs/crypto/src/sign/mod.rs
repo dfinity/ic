@@ -1,7 +1,5 @@
 use super::*;
 
-use crate::sign::basic_sig::BasicSigVerifierInternal;
-use crate::sign::basic_sig::BasicSignerInternal;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
@@ -37,7 +35,9 @@ use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
-pub use threshold_sig::ThresholdSigDataStoreImpl;
+pub(crate) use basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
+pub(crate) use threshold_sig::lazily_calculated_public_key_from_store;
+pub use threshold_sig::{ThresholdSigDataStore, ThresholdSigDataStoreImpl};
 
 mod basic_sig;
 mod canister_threshold_sig;
@@ -196,7 +196,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch(
-            &self.csp,
+            self.vault.as_ref(),
             self.registry_client.as_ref(),
             signature,
             message,
@@ -443,7 +443,11 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
 impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentImpl<C> {
     // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
     // ThresholdSigDataNotFoundError>
-    fn sign_threshold(&self, message: &T, dkg_id: NiDkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+    fn sign_threshold(
+        &self,
+        message: &T,
+        dkg_id: &NiDkgId,
+    ) -> CryptoResult<ThresholdSigShareOf<T>> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -484,7 +488,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         &self,
         signature: &ThresholdSigShareOf<T>,
         message: &T,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         signer: NodeId,
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);
@@ -527,7 +531,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
     fn combine_threshold_sig_shares(
         &self,
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -567,7 +571,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         &self,
         signature: &CombinedThresholdSigOf<T>,
         message: &T,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;

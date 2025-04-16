@@ -10,7 +10,7 @@ use p256::{
         generic_array::{typenum::Unsigned, GenericArray},
         Curve,
     },
-    NistP256,
+    AffinePoint, NistP256, Scalar,
 };
 use rand::{CryptoRng, RngCore};
 use zeroize::ZeroizeOnDrop;
@@ -33,6 +33,138 @@ lazy_static::lazy_static! {
 
     /// See RFC 5759 section 3.2
     static ref SECP256R1_OID: simple_asn1::OID = simple_asn1::oid!(1, 2, 840, 10045, 3, 1, 7);
+}
+
+/// A component of a derivation path
+#[derive(Clone, Debug)]
+pub struct DerivationIndex(pub Vec<u8>);
+
+/// Derivation Path
+///
+/// A derivation path is simply a sequence of DerivationIndex
+#[derive(Clone, Debug)]
+pub struct DerivationPath {
+    path: Vec<DerivationIndex>,
+}
+
+impl DerivationPath {
+    /// Create a BIP32-style derivation path
+    ///
+    /// See SLIP-10 <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
+    /// for details of derivation paths
+    pub fn new_bip32(bip32: &[u32]) -> Self {
+        let mut path = Vec::with_capacity(bip32.len());
+        for n in bip32 {
+            path.push(DerivationIndex(n.to_be_bytes().to_vec()));
+        }
+        Self::new(path)
+    }
+
+    /// Create a free-form derivation path
+    pub fn new(path: Vec<DerivationIndex>) -> Self {
+        Self { path }
+    }
+
+    /// Create a path from a canister ID and a user provided path
+    pub fn from_canister_id_and_path(canister_id: &[u8], path: &[Vec<u8>]) -> Self {
+        let mut vpath = Vec::with_capacity(1 + path.len());
+        vpath.push(DerivationIndex(canister_id.to_vec()));
+
+        for n in path {
+            vpath.push(DerivationIndex(n.to_vec()));
+        }
+        Self::new(vpath)
+    }
+
+    /// Return the length of this path
+    pub fn len(&self) -> usize {
+        self.path.len()
+    }
+
+    /// Return if this path is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Return the components of the derivation path
+    pub fn path(&self) -> &[DerivationIndex] {
+        &self.path
+    }
+
+    fn ckd(idx: &[u8], input: &[u8], chain_code: &[u8; 32]) -> ([u8; 32], Scalar) {
+        use hmac::{Hmac, Mac};
+        use p256::elliptic_curve::ops::Reduce;
+        use sha2::Sha512;
+
+        let mut hmac = Hmac::<Sha512>::new_from_slice(chain_code)
+            .expect("HMAC-SHA-512 should accept 256 bit key");
+
+        hmac.update(input);
+        hmac.update(idx);
+
+        let hmac_output: [u8; 64] = hmac.finalize().into_bytes().into();
+
+        let fb = p256::FieldBytes::from_slice(&hmac_output[..32]);
+        let next_offset = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb);
+        let next_chain_key: [u8; 32] = hmac_output[32..].to_vec().try_into().expect("Correct size");
+
+        // If iL >= order, try again with the "next" index as described in SLIP-10
+        if next_offset.to_bytes().to_vec() != hmac_output[..32] {
+            let mut next_input = [0u8; 33];
+            next_input[0] = 0x01;
+            next_input[1..].copy_from_slice(&next_chain_key);
+            Self::ckd(idx, &next_input, chain_code)
+        } else {
+            (next_chain_key, next_offset)
+        }
+    }
+
+    fn ckd_pub(
+        idx: &[u8],
+        pt: AffinePoint,
+        chain_code: &[u8; 32],
+    ) -> ([u8; 32], Scalar, AffinePoint) {
+        use p256::elliptic_curve::{group::GroupEncoding, ops::MulByGenerator};
+        use p256::ProjectivePoint;
+
+        let mut ckd_input = pt.to_bytes();
+
+        let pt: ProjectivePoint = pt.into();
+
+        loop {
+            let (next_chain_code, next_offset) = Self::ckd(idx, &ckd_input, chain_code);
+
+            let next_pt = (pt + ProjectivePoint::mul_by_generator(&next_offset)).to_affine();
+
+            // If the new key is not infinity, we're done: return the new key
+            if !bool::from(next_pt.is_identity()) {
+                return (next_chain_code, next_offset, next_pt);
+            }
+
+            // Otherwise set up the next input as defined by SLIP-0010
+            ckd_input[0] = 0x01;
+            ckd_input[1..].copy_from_slice(&next_chain_code);
+        }
+    }
+
+    fn derive_offset(
+        &self,
+        pt: AffinePoint,
+        chain_code: &[u8; 32],
+    ) -> (AffinePoint, Scalar, [u8; 32]) {
+        let mut offset = Scalar::ZERO;
+        let mut pt = pt;
+        let mut chain_code = *chain_code;
+
+        for idx in self.path() {
+            let (next_chain_code, next_offset, next_pt) = Self::ckd_pub(&idx.0, pt, &chain_code);
+            chain_code = next_chain_code;
+            pt = next_pt;
+            offset = offset.add(&next_offset);
+        }
+
+        (pt, offset, chain_code)
+    }
 }
 
 const PEM_HEADER_PKCS8: &str = "PRIVATE KEY";
@@ -305,10 +437,49 @@ impl PrivateKey {
         let key = self.key.verifying_key();
         PublicKey { key: *key }
     }
+
+    /// Derive a private key from this private key using a derivation path
+    ///
+    /// As long as each index of the derivation path is a 4-byte input with the highest
+    /// bit cleared, this derivation scheme matches SLIP-10
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    /// and chain code
+    ///
+    /// As long as each index of the derivation path is a 4-byte input with the highest
+    /// bit cleared, this derivation scheme matches SLIP-10
+    ///
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (Self, [u8; 32]) {
+        use p256::NonZeroScalar;
+
+        let public_key: AffinePoint = *self.key.verifying_key().as_affine();
+        let (_pt, offset, derived_chain_code) =
+            derivation_path.derive_offset(public_key, chain_code);
+
+        let derived_scalar = self.key.as_nonzero_scalar().as_ref().add(&offset);
+
+        let nz_ds =
+            NonZeroScalar::new(derived_scalar).expect("Derivation always produces non-zero sum");
+
+        let derived_key = Self {
+            key: p256::ecdsa::SigningKey::from(nz_ds),
+        };
+
+        (derived_key, derived_chain_code)
+    }
 }
 
 /// An ECDSA public key
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
     key: p256::ecdsa::VerifyingKey,
 }
@@ -398,5 +569,33 @@ impl PublicKey {
         };
 
         self.key.verify_prehash(digest, &signature).is_ok()
+    }
+
+    /// Derive a public key from this public key using a derivation path
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a public key from this public key using a derivation path
+    /// and chain code
+    ///
+    /// This derivation matches SLIP-10
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (Self, [u8; 32]) {
+        let public_key: AffinePoint = *self.key.as_affine();
+        let (pt, _offset, chain_code) = derivation_path.derive_offset(public_key, chain_code);
+
+        let derived_key = Self {
+            key: p256::ecdsa::VerifyingKey::from(
+                p256::PublicKey::from_affine(pt).expect("Derived point is valid"),
+            ),
+        };
+
+        (derived_key, chain_code)
     }
 }

@@ -1,0 +1,167 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test")
+load("ledger_canisters.bzl", "LEDGER_CANISTER_DATA", "LEDGER_CANISTER_RUSTC_ENV", "rust_ledger_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+[
+    rust_library(
+        name = "ledger" + name_suffix,
+        srcs = [
+            "src/lib.rs",
+            "src/tests.rs",
+        ],
+        compile_data = [
+            "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
+        ],
+        crate_features = features,
+        crate_name = "ledger_canister",
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
+        rustc_env = {
+            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz)",
+        },
+        version = "0.9.0",
+        deps = [
+            # Keep sorted.
+            "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/crypto/sha2",
+            "//rs/ledger_suite/common/ledger_canister_core",
+            "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icp:icp_ledger",
+            "//rs/ledger_suite/icrc1",
+            "//rs/limits",
+            "//rs/types/base_types",
+            "@crate_index//:candid",
+            "@crate_index//:hex",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-stable-structures",
+            "@crate_index//:intmap",
+            "@crate_index//:lazy_static",
+            "@crate_index//:minicbor",
+            "@crate_index//:num-traits",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+            "@crate_index//:serde_cbor",
+        ],
+    )
+    for (name_suffix, features) in [
+        ("", []),
+        (
+            "_next_version",
+            ["next-ledger-version"],
+        ),
+        (
+            "_prev_version",
+            ["prev-ledger-version"],
+        ),
+    ]
+]
+
+rust_test(
+    name = "ledger_test",
+    compile_data = [
+        "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
+    ],
+    crate = ":ledger",
+    data = [
+        "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
+    ],
+    rustc_env = {
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz)",
+    },
+    deps = ["@crate_index//:proptest"],
+)
+
+rust_ledger_canister(name = "ledger-canister-wasm")
+
+rust_ledger_canister(
+    name = "ledger-canister-wasm-allowance-getter",
+    crate_features = ["icp-allowance-getter"],
+)
+
+rust_ledger_canister(
+    name = "ledger-canister-wasm-notify-method",
+    crate_features = ["notify-method"],
+)
+
+rust_ledger_canister(
+    name = "ledger-canister-wasm-next-version",
+    extra_deps = [":ledger_next_version"],
+)
+
+rust_ledger_canister(
+    name = "ledger-canister-wasm-prev-version",
+    extra_deps = [":ledger_prev_version"],
+)
+
+rust_test(
+    name = "ledger_canister_unit_test",
+    compile_data = LEDGER_CANISTER_DATA,
+    crate = ":_wasm_ledger-canister-wasm",
+    data = LEDGER_CANISTER_DATA + ["//rs/ledger_suite/icp:ledger_archive.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/ledger",
+    },
+    rustc_env = LEDGER_CANISTER_RUSTC_ENV,
+    deps = ["@crate_index//:candid_parser"],
+)
+
+rust_ic_test(
+    name = "ledger_canister_test",
+    timeout = "long",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":ledger-canister-wasm",
+        ":ledger-canister-wasm-allowance-getter",
+        ":ledger-canister-wasm-next-version",
+        ":ledger-canister-wasm-prev-version",
+        "@mainnet_icp_ledger_canister//file",
+    ],
+    env = {
+        "RUST_TEST_THREADS": "4",
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/ledger",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
+        "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
+        "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
+        "LEDGER_CANISTER_PREV_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-prev-version)",
+    },
+    tags = ["cpu:4"],
+    deps = [
+        # Keep sorted.
+        ":ledger",
+        "//packages/ic-error-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1",
+        "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde_bytes",
+    ],
+)
+
+# Deploys the ledger canister to a running local replica.
+sh_binary(
+    name = "dfx_deploy",
+    srcs = ["scripts/dfx_deploy.sh"],
+    data = [
+        "dfx.json",
+        ":ledger-canister-wasm",
+        "//rs/ledger_suite/icp:ledger.did",
+    ],
+    visibility = ["//visibility:public"],
+)

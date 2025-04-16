@@ -2,7 +2,6 @@
 Utilities for building IC replica and canisters.
 """
 
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
@@ -106,57 +105,6 @@ mcopy = rule(
     },
 )
 
-def _sha256sum2url_impl(ctx):
-    """
-    Returns cas url pointing to the artifact with checksum specified.
-
-    Waits for the artifact to be published before returning url.
-    """
-    out = ctx.actions.declare_file(ctx.label.name)
-    timeout = ctx.attr.timeout_value[BuildSettingInfo].value
-    ctx.actions.run(
-        executable = "timeout",
-        arguments = [timeout, ctx.executable._sha256sum2url_sh.path],
-        inputs = [ctx.file.src],
-        outputs = [out],
-        tools = [ctx.executable._sha256sum2url_sh],
-        env = {
-            "SHASUMFILE": ctx.file.src.path,
-            "OUT": out.path,
-        },
-    )
-    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
-
-_sha256sum2url = rule(
-    implementation = _sha256sum2url_impl,
-    attrs = {
-        "src": attr.label(allow_single_file = True),
-        "_sha256sum2url_sh": attr.label(executable = True, cfg = "exec", default = "//bazel:sha256sum2url_sh"),
-        "timeout_value": attr.label(default = "//bazel:timeout_value"),
-    },
-)
-
-def sha256sum2url(name, src, tags = [], **kwargs):
-    """
-    Returns cas url pointing to the artifact which checksum is returned by src.
-
-    The rule waits until the cache will return http/200 for this artifact.
-    The rule adds "requires-network" as it needs to talk to bazel cache and "manual" to only be performed
-    when its result is requested (directly or by another rule) to not wait when not required.
-
-    Args:
-        name:     the name of the rule
-        src:      the label that returns the file with sha256 checksum of requested artifact.
-        tags:     additional tags.
-        **kwargs: the rest of arguments to be passed to the underlying rule.
-    """
-    _sha256sum2url(
-        name = name,
-        src = src,
-        tags = tags + ["requires-network", "manual"],
-        **kwargs
-    )
-
 # Binaries needed for testing with canister_sandbox
 _SANDBOX_DATA = [
     "//rs/canister_sandbox",
@@ -256,7 +204,7 @@ def rust_ic_test(env = {}, data = [], **kwargs):
         **kwargs
     )
 
-def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
+def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **kwargs):
     """A rule for defining a rust benchmark.
 
     Args:
@@ -264,6 +212,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
       env: additional environment variables to pass to the benchmark binary.
       data: data dependencies required to run the benchmark.
       pin_cpu: pins the benchmark process to a single CPU if set `True`.
+      with_test: generates name + '_test' target to test that the benchmark work.
       **kwargs: see docs for `rust_binary`.
     """
 
@@ -297,6 +246,17 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
         data = data + [":" + binary_name_publish],
         tags = kwargs.get("tags", []) + ["rust_bench"],
     )
+
+    # To test that the benchmarks work.
+    if with_test:
+        native.sh_test(
+            name = name + "_test",
+            testonly = True,
+            env = env,
+            srcs = [":" + binary_name_publish],
+            data = data,
+            tags = kwargs.get("tags", None),
+        )
 
 def rust_ic_bench(env = {}, data = [], **kwargs):
     """A rule for defining a rust benchmark.
@@ -420,3 +380,43 @@ symlink_dirs = rule(
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },
 )
+
+def _write_info_file_var_impl(ctx):
+    """Helper rule that creates a file with the content of the provided var from the info file."""
+
+    output = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.run_shell(
+        command = """
+            grep <{info_file} -e '{varname}' \\
+                    | cut -d' ' -f2 > {out}""".format(varname = ctx.attr.varname, info_file = ctx.info_file.path, out = output.path),
+        inputs = [ctx.info_file],
+        outputs = [output],
+    )
+    return [DefaultInfo(files = depset([output]))]
+
+write_info_file_var = rule(
+    implementation = _write_info_file_var_impl,
+    attrs = {
+        "varname": attr.string(mandatory = True),
+    },
+)
+
+def file_size_check(
+        name,
+        max_file_size):
+    """
+    A check to make sure the given file is below the specified size.
+
+    Args:
+      name: Name of the file.
+      max_file_size: Max accepted size in bytes.
+    """
+    native.sh_test(
+        name = "%s_size_test" % name,
+        srcs = ["//bazel:file_size_test.sh"],
+        data = [name],
+        env = {
+            "FILE": "$(rootpath %s)" % name,
+            "MAX_SIZE": str(max_file_size),
+        },
+    )

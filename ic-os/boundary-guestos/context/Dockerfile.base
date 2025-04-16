@@ -16,42 +16,18 @@ ARG CROWDSEC_BOUNCER_VERSION=1.0.14
 ARG CROWDSEC_BOUNCER_SHA=c99919c6ecc69904249ff71b32ea791ce2eec32e5a9e8d4c9c6554131a4fb331
 
 # Vector version to install
-ARG VECTOR_VERSION=0.36.0
-ARG VECTOR_SHA=1e7c8d47768a8286c0de517aeb6d7b12e85d91d11c2d282583827c92b83083cf
+ARG VECTOR_VERSION=0.41.1
+ARG VECTOR_SHA=a4fe30ec0e9ef959bac8b6de013a28e22890f6e5a5afd00d42ef7affaf432442
 
 # Node exporter version to install
-ARG NODE_EXPORTER_VERSION=1.8.1
-ARG NODE_EXPORTER_SHA=fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011
+ARG NODE_EXPORTER_VERSION=1.8.2
+ARG NODE_EXPORTER_SHA=6809dd0b3ec45fd6e992c19071d6b5253aed3ead7bf0686885a51d85c6643c66
 
 #
-# First build stage: download software, build and verify it (such that it
-# does not change under our noses).
+# - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
+# - Install and cache upstream packages from built-in Ubuntu repositories
 #
-FROM ubuntu:20.04 AS download
-
-USER root:root
-
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    ca-certificates \
-    curl \
-    pkg-config \
-    libffi-dev \
-    libssl-dev \
-    ssl-cert \
-    rustc \
-    cargo \
-    perl \
-    git \
-    autoconf \
-    make \
-    automake \
-    g++ \
-    gcc \
-    uuid-dev
-
-WORKDIR /tmp
+FROM ubuntu:24.04
 
 ARG CROWDSEC_BOUNCER_VERSION
 ARG CROWDSEC_BOUNCER_SHA
@@ -60,42 +36,12 @@ ARG VECTOR_SHA
 ARG NODE_EXPORTER_VERSION
 ARG NODE_EXPORTER_SHA
 
-# Download and verify vector
-RUN \
-    curl -L -O https://packages.timber.io/vector/${VECTOR_VERSION}/vector_${VECTOR_VERSION}-1_amd64.deb && \
-    echo "${VECTOR_SHA}  vector_${VECTOR_VERSION}-1_amd64.deb" | shasum -c
-
-# Download and verify node_exporter
-RUN \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz && \
-    echo "${NODE_EXPORTER_SHA}  node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz" | shasum -c
-
-# Download and verify crowdsec bouncer
-RUN \
-    curl -L -O https://github.com/blind-oracle/cs-firewall-bouncer/releases/download/v${CROWDSEC_BOUNCER_VERSION}/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
-    echo "${CROWDSEC_BOUNCER_SHA}  crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb" | shasum -c
-
-#
-# Second build stage:
-# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
-# - Install and cache upstream packages from built-in Ubuntu repositories
-# - Copy downloaded archives from first build stage into the target image
-#
-FROM ubuntu:20.04
-
 USER root:root
 
 ENV TZ=UTC
 ENV SOURCE_DATE_EPOCH=0
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# Preparation and install of packages for nginx
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install gnupg 
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
-
-RUN echo "deb http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list && \
-    echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
 
 RUN \
     apt-get update && \
@@ -113,55 +59,62 @@ RUN \
         gettext-base \
         haveged \
         initramfs-tools \
-        inotify-tools \
         iproute2 \
         iputils-ping \
-        isc-dhcp-client \
         less \
-        libffi-dev \
-        liblmdb0 \
-        libssl-dev \
-        linux-image-virtual-hwe-20.04 \
+        linux-image-virtual-hwe-24.04 \
         logrotate \
         lshw \
         lvm2 \
+        nano \
         net-tools \
         netbase \
         nftables \
-        nginx=1.25.4-1~focal \
-        opensc \
-        openssh-client openssh-server \
+        openssh-client \
+        openssh-server \
         parted \
-        pciutils \
-        pcsc-tools pcscd \
-        policycoreutils \
-        python \
-        python3-dev \
         rsync \
         ssl-cert \
         sudo \
-        systemd systemd-sysv systemd-journal-remote \
+        systemd \
+        systemd-sysv \
+        systemd-journal-remote \
+        systemd-resolved \
+        tcpdump \
+        traceroute \
+        mtr-tiny \
         udev \
         usbutils \
         vim \
         zstd
 
+WORKDIR /tmp
+
+# Download and verify vector
+RUN \
+    curl -L -O https://packages.timber.io/vector/${VECTOR_VERSION}/vector_${VECTOR_VERSION}-1_amd64.deb && \
+    echo "${VECTOR_SHA}  vector_${VECTOR_VERSION}-1_amd64.deb" | sha256sum -c
+
+# Download and verify node_exporter
+RUN \
+    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz && \
+    echo "${NODE_EXPORTER_SHA}  node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz" | sha256sum -c
+
+# Download and verify crowdsec bouncer
+RUN \
+    curl -L -O https://github.com/blind-oracle/cs-firewall-bouncer/releases/download/v${CROWDSEC_BOUNCER_VERSION}/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
+    echo "${CROWDSEC_BOUNCER_SHA}  crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb" | sha256sum -c
+
 # Install vector
-ARG VECTOR_VERSION
-COPY --from=download /tmp/vector_${VECTOR_VERSION}-1_amd64.deb /tmp/vector_${VECTOR_VERSION}-1_amd64.deb
 RUN dpkg -i --force-confold /tmp/vector_${VECTOR_VERSION}-1_amd64.deb && \
     rm /tmp/vector_${VECTOR_VERSION}-1_amd64.deb
 
 # Install node_exporter
-ARG NODE_EXPORTER_VERSION
-COPY --from=download /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
 
 # Install crowdsec bouncer
-ARG CROWDSEC_BOUNCER_VERSION
-COPY --from=download /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb
 RUN dpkg -i --force-confold /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
     rm /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb

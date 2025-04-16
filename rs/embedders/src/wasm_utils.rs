@@ -10,11 +10,13 @@ use ic_replicated_state::{
     EmbedderCache, NumWasmPages, PageIndex,
 };
 use ic_sys::{PageBytes, PAGE_SIZE};
-use ic_types::{methods::WasmMethod, NumInstructions};
+use ic_types::{methods::WasmMethod, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 
-use self::{instrumentation::instrument, validation::validate_wasm_binary};
+use self::{
+    instrumentation::instrument, validation::has_wasm64_memory, validation::validate_wasm_binary,
+};
 use crate::wasmtime_embedder::StoreData;
 use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
 use wasmtime::InstancePre;
@@ -24,7 +26,7 @@ pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
 
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
     pub imports_call_cycles_add: bool,
@@ -35,21 +37,21 @@ pub struct WasmImportsDetails {
     pub imports_mint_cycles: bool,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
 pub struct Complexity(pub u64);
 
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Eq, PartialEq, Debug, Default)]
 pub struct WasmValidationDetails {
     pub imports_details: WasmImportsDetails,
-    pub num_tables: usize,
     pub wasm_metadata: WasmMetadata,
     pub largest_function_instruction_count: NumInstructions,
     pub max_complexity: Complexity,
+    pub code_section_size: NumBytes,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 struct Segment {
     offset: usize,
     #[serde(with = "serde_bytes")]
@@ -57,7 +59,7 @@ struct Segment {
 }
 
 /// Vector of heap data chunks with their offsets.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct Segments(Vec<Segment>);
 
 impl FromIterator<(usize, Vec<u8>)> for Segments {
@@ -134,6 +136,9 @@ impl Segments {
             // them into a map page_num -> page. Whenever we map a chunk into its page,
             // we simply copy its bytes to the right place inside the page.
             .fold(HashMap::new(), |mut acc, (offset, bytes)| {
+                if bytes.is_empty() {
+                    return acc;
+                }
                 let page_num = offset / PAGE_SIZE;
                 let list = acc
                     .entry(PageIndex::new(page_num as u64))
@@ -147,7 +152,7 @@ impl Segments {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 enum SystemApiFunc {
     StableGrow,
     Stable64Grow,
@@ -202,15 +207,20 @@ fn validate_and_instrument(
     config: &EmbeddersConfig,
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
     let (wasm_validation_details, module) = validate_wasm_binary(wasm, config)?;
+    // Instrumentation bytemap depends on the Wasm memory size, so for larger heaps we need
+    // to pass in the corresponding Wasm64 heap memory size.
+    let max_wasm_memory_size = if has_wasm64_memory(&module) {
+        config.max_wasm64_memory_size
+    } else {
+        config.max_wasm_memory_size
+    };
     let instrumentation_output = instrument(
         module,
         config.cost_to_compile_wasm_instruction,
         config.feature_flags.write_barrier,
-        config.feature_flags.wasm_native_stable_memory,
         config.metering_type,
-        config.subnet_type,
         config.dirty_page_overhead,
-        config.max_wasm_memory_size,
+        max_wasm_memory_size,
         config.max_stable_memory_size,
     )?;
     Ok((wasm_validation_details, instrumentation_output))
@@ -237,17 +247,26 @@ fn compile_inner(
     let instance_pre = embedder.pre_instantiate(&module)?;
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
-    let num_tables = wasm_validation_details.num_tables;
     let max_complexity = wasm_validation_details.max_complexity.0;
-    let serialized_module =
-        SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
+    let code_section_size = wasm_validation_details.code_section_size;
+
+    let is_wasm64 = module
+        .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
+        .is_some_and(|export| export.memory().is_some_and(|mem| mem.is_64()));
+
+    let serialized_module = SerializedModule::new(
+        &module,
+        instrumentation_output,
+        wasm_validation_details,
+        is_wasm64,
+    )?;
     Ok((
         instance_pre,
         CompilationResult {
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),
             max_complexity,
-            num_tables,
+            code_section_size,
         },
         serialized_module,
     ))

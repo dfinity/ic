@@ -20,6 +20,29 @@ For more information on the onboarding and installation process, as well as the 
 
 To build a SetupOS image, refer to the link:../README.adoc[IC-OS README]
 
+=== Running SetupOS interactively via Bazel
+
+This requires QEMU with qemu-system and qemu-kvm installed on the machine.  It only works in the 'dev' environment set up by Bazel.  Additionally, it's only likely to work within the CI container (run 'ci/container/container-run.sh' within the IC repo).
+
+Bazel can be used to boot a local VM with a GuestOS like this:
+
+    bazel run //ic-os/setupos/envs/dev:interactive-install
+
+In a VM or container without KVM support (the target above will tell you very loudly if that's your case), use:
+
+    bazel run //ic-os/setupos/envs/dev:interactive-install-no-kvm
+
+Both these targets will allocate a (sparse) 'vda' attached to the virtual machine as the first disk, while the SetupOS gets attached as the second disk ('vdb').  The system initially boots from the second disk, because the first disk is effectively zeroed out.  Installation then proceeds, with an interactive console available for debugging.  Once SetupOS installation finishes successfully, the system will reboot to the installed operating system.  The system will then remain there at the login prompt, until you log in and power it off.
+
+It is also possible to **debug and inspect** SetupOS interactively, without triggering installation:
+
+    bazel run //ic-os/setupos/envs/dev:interactive-debug
+    # The variant
+    #   //ic-os/setupos/envs/dev:interactive-debug-no-kvm
+    # is also available for those who do not have KVM acceleration available.
+
+In this mode, the installer does not run, and SetupOS can be inspected interactively as if freshly booted in a physical machine.  Of course, the installation target disk 'vda' is attached in this case too, should you want to proceed with the installation by hand.  Hit ENTER on the console to activate the root prompt.
+
 == Under the hood: Installation
 
 The SetupOS installation is initiated by the systemd service unit file `setupos.service`. This service is of type idle, which means the installation is triggered only after every other unit has either completed or started.
@@ -30,18 +53,18 @@ The installation process consists of multiple Shell and Python scripts, which ar
 
 The sequence of the scripts is defined in the main installation script, `setupos.sh`. The order of execution is as follows:
 
-  hardware.sh  # Verifies the system's hardware components
-  network.sh   # Tests network connectivity and reachability of the NNS
-  disk.sh      # Purges existing LVM configurations and partitions
-  hostos.sh    # Installs and configures the HostOS operating system
-  guestos.sh   # Installs and configures the GuestOS operating system
-  devices.sh   # Handles the HSM
+  check-hardware.sh        # Verifies the system's hardware components
+  check-network.sh         # Tests network connectivity and reachability of the NNS
+  setup-disk.sh            # Purges existing LVM configurations and partitions
+  install-hostos.sh        # Installs and configures the HostOS operating system
+  install-guestos.sh       # Installs and configures the GuestOS operating system
+  setup-hostos-config.sh   # Sets up the HostOS config partition
 
 == Node Providers, Node Technicians, and Node Operators
 
 * *Node Provider*: An entity that purchases and owns the node hardware. Node Providers are rewarded for their node's useful work.
-* *Node Technician*: These are the 'hired hands' or 'remote hands' employed by the Node Providers to maintain and manage the node. They do not necessarily own the hardware, but are responsible for its operation. Note that a single node will often have more than one Node Technician—the Node Technician can be thought of as the individual currently operating the node, so this role can cycle among several parties.
-** Note: While it is possible, it is uncommon for a Node Provider to also act as their own Node Technician.
+* *Node Technician*: Node Technicians are responsible for the physical installation, maintenance, and repair of the node. These are typically 'hired hands' or 'remote hands' employed by the Node Providers to maintain and manage the node. A single node may have more than one Node Technician — the Node Technician can be thought of as the individual currently operating the node, so this role can cycle among several parties. The information about the Node Technician is currently not stored in the NNS.
+** Note: It is possible that a Node Provider and Node Technician are the same entity.
 * *Node Operator*:
 ** The term "Node Operator" refers not to a specific individual or group, but to:
 *** A specific record within the NNS registry—the *Node Operator record*, and to:

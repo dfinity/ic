@@ -16,7 +16,7 @@ pub struct DfxCommandContext {
     wallet_wasm: Option<PathBuf>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum FrontendType {
     SvelteKit,
     Vanilla,
@@ -50,7 +50,7 @@ impl BackendType {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BackendType {
     Motoko,
     Rust,

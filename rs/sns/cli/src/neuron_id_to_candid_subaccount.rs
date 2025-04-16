@@ -1,8 +1,8 @@
-use std::str::FromStr;
-
-use candid::IDLValue;
+use anyhow::{bail, Result};
+use candid_utils::printing;
 use clap::Parser;
-use ic_sns_governance::pb::v1::NeuronId;
+use ic_sns_governance_api::pb::v1::NeuronId;
+use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub struct ParsedSnsNeuron(pub NeuronId);
@@ -27,18 +27,19 @@ pub struct NeuronIdToCandidSubaccountArgs {
     pub escaped: bool,
 }
 
-pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<String, String> {
-    let subaccount = args
-        .neuron_id
-        .0
-        .subaccount()
-        .map_err(|e| e.error_message)?
-        .to_vec();
+pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<String> {
+    let subaccount = args.neuron_id.0.id.to_vec();
+
+    // Subaccounts are arbitrary 32-byte values.
+    if subaccount.len() != 32 {
+        bail!(format!(
+            "Invalid subaccount, expected 32 bytes, got {} bytes.",
+            subaccount.len()
+        ));
+    }
 
     // We'll convert it to a candid string.
-    let idl = IDLValue::try_from_candid_type(&subaccount)
-        .unwrap()
-        .to_string();
+    let idl = printing::pretty(&subaccount).unwrap();
 
     if args.escaped {
         Ok(idl.replace('\\', "\\\\").replace('\"', "\\\""))
@@ -47,8 +48,9 @@ pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<S
     }
 }
 
-pub fn exec(args: NeuronIdToCandidSubaccountArgs) {
-    println!("{}", neuron_id_to_subaccount(args).unwrap());
+pub fn exec(args: NeuronIdToCandidSubaccountArgs) -> Result<()> {
+    println!("{}", neuron_id_to_subaccount(args)?);
+    Ok(())
 }
 
 #[test]
@@ -90,7 +92,7 @@ fn test_neuron_id_to_subaccount_escaped() {
 #[test]
 fn test_neuron_id_to_subaccount_fail() {
     let neuron_id = ParsedSnsNeuron::from_str(
-        "9f5f9fda77a03e7177126d0be8c99e931a5381731d00da53ede363140e1be5", // two characters too short
+        "9f5f9fda77a03e7177126d0be8c99e931a5381731d00da53ede363140e1be5", // one character too short
     )
     .unwrap()
     .0;
@@ -99,7 +101,10 @@ fn test_neuron_id_to_subaccount_fail() {
         neuron_id: ParsedSnsNeuron(neuron_id),
         escaped: false,
     };
-    let error = neuron_id_to_subaccount(args).unwrap_err();
+    let error = neuron_id_to_subaccount(args).unwrap_err().to_string();
 
-    assert!(error.contains("could not convert slice to array"));
+    assert_eq!(
+        error,
+        "Invalid subaccount, expected 32 bytes, got 31 bytes."
+    );
 }

@@ -4,7 +4,7 @@ set -e
 
 # Monitor the GuestOS virtual machine.
 
-# Source the functions required for writing metrics
+source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
@@ -28,16 +28,6 @@ Arguments:
     esac
 done
 
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
-
 function monitor_guestos() {
     if [ ! "$(virsh list --all | grep 'guestos')" ]; then
         write_log "ERROR: GuestOS virtual machine is not defined."
@@ -54,11 +44,13 @@ function monitor_guestos() {
             "GuestOS virtual machine state" \
             "gauge"
     else
-        write_log "GuestOS virtual machine is not running."
+        write_log "GuestOS virtual machine is not running, attempting to start."
         write_metric "hostos_guestos_state" \
             "2" \
             "GuestOS virtual machine state" \
             "gauge"
+
+        virsh start guestos
     fi
 }
 

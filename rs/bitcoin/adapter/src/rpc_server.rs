@@ -1,26 +1,30 @@
 use crate::{
-    config::{Config, IncomingSource},
+    blockchainstate::BlockchainState,
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
-    AdapterState, GetSuccessorsHandler, TransactionManagerRequest,
+    BlockchainManagerRequest, Config, GetSuccessorsHandler, IncomingSource,
+    TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
-use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
+use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
-use tokio::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use tokio::sync::mpsc;
+use tokio::sync::watch;
 use tonic::{transport::Server, Request, Response, Status};
 
 struct BtcServiceImpl {
-    adapter_state: AdapterState,
+    last_received_tx: watch::Sender<Option<Instant>>,
     get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: Sender<TransactionManagerRequest>,
+    transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     logger: ReplicaLogger,
     metrics: ServiceMetrics,
 }
@@ -52,11 +56,8 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
     type Error = Status;
     fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
-        for block in response.blocks.iter() {
-            let mut encoded_block = vec![];
-            block
-                .consensus_encode(&mut encoded_block)
-                .map_err(|_| Status::unknown("Failed to encode block!"))?;
+        for block in response.blocks {
+            let encoded_block = Arc::unwrap_or_clone(block);
             blocks.push(encoded_block);
         }
 
@@ -83,7 +84,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_GET_SUCCESSOR])
             .start_timer();
-        self.adapter_state.received_now();
+        let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
@@ -108,7 +109,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_SEND_TRANSACTION])
             .start_timer();
-        self.adapter_state.received_now();
+        let _ = self.last_received_tx.send(Some(Instant::now()));
         let transaction = request.into_inner().transaction;
         self.transaction_manager_tx
             .send(TransactionManagerRequest::SendTransaction(transaction))
@@ -120,42 +121,55 @@ impl BtcService for BtcServiceImpl {
     }
 }
 
-/// Spawns in a separate Tokio task the BTC adapter gRPC service.
+/// Blocks until the server binds to the socket
 pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
-    adapter_state: AdapterState,
-    get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: Sender<TransactionManagerRequest>,
+    last_received_tx: watch::Sender<Option<Instant>>,
+    blockchain_state: Arc<Mutex<BlockchainState>>,
+    blockchain_manager_tx: mpsc::Sender<BlockchainManagerRequest>,
+    transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) {
+    let get_successors_handler = GetSuccessorsHandler::new(
+        &config,
+        // The get successor handler should be low latency, and instead of not sharing state and
+        // offloading the computation to an event loop here we directly access the shared state.
+        blockchain_state,
+        blockchain_manager_tx,
+        metrics_registry,
+    );
+
     let btc_adapter_impl = BtcServiceImpl {
-        adapter_state,
+        last_received_tx,
         get_successors_handler,
         transaction_manager_tx,
         logger,
         metrics: ServiceMetrics::new(metrics_registry),
     };
-    tokio::spawn(async move {
-        match config.incoming_source {
-            IncomingSource::Path(uds_path) => {
-                Server::builder()
-                    .add_service(BtcServiceServer::new(btc_adapter_impl))
-                    .serve_with_incoming(incoming_from_path(uds_path))
-                    .await
-                    .expect("gRPC server crashed");
-            }
-            IncomingSource::Systemd => {
-                Server::builder()
-                    .add_service(BtcServiceServer::new(btc_adapter_impl))
-                    // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
-                    // Additionally this function is only called once here.
-                    // Systemd Socket config: ic-btc-<testnet,mainnet>-adapter.socket
-                    // Systemd Service config: ic-btc-<testnet,mainnet>-adapter.service
-                    .serve_with_incoming(unsafe { incoming_from_first_systemd_socket() })
-                    .await
-                    .expect("gRPC server crashed");
-            }
-        };
-    });
+
+    match config.incoming_source {
+        IncomingSource::Path(uds_path) => {
+            let incoming = incoming_from_path(uds_path);
+            let server_fut = Server::builder()
+                .add_service(BtcServiceServer::new(btc_adapter_impl))
+                .serve_with_incoming(incoming);
+            tokio::spawn(async move {
+                server_fut.await.expect("gRPC server crashed");
+            });
+        }
+        IncomingSource::Systemd => {
+            let incoming = unsafe { incoming_from_nth_systemd_socket(1) };
+            let server_fut = Server::builder()
+                .add_service(BtcServiceServer::new(btc_adapter_impl))
+                // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
+                // Additionally this function is only called once here.
+                // Systemd Socket config: ic-btc-<testnet,mainnet>-adapter.socket
+                // Systemd Service config: ic-btc-<testnet,mainnet>-adapter.service
+                .serve_with_incoming(incoming);
+            tokio::spawn(async move {
+                server_fut.await.expect("gRPC server crashed");
+            });
+        }
+    };
 }

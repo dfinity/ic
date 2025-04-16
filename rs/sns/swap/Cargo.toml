@@ -23,14 +23,16 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-metrics-encoder = "1"
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
@@ -41,14 +43,14 @@ ic-sns-governance = { path = "../governance" }
 ic-utils = { path = "../../utils" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.
 # ic-sns-root = { path = "../root" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
 prost = { workspace = true }
-rust_decimal = "1.25"
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 
@@ -58,16 +60,16 @@ build-info-build = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-proptest = "1.0"
-pretty_assertions = { workspace = true }
+futures = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-futures = { workspace = true }
+pretty_assertions = { workspace = true }
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-test = "0.4.2"
+tokio-test = { workspace = true }
 
 [features]
 test = [

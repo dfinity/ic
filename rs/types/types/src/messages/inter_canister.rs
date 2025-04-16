@@ -1,14 +1,18 @@
 use crate::{
-    ingress::WasmResult, time::CoarseTime, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+    ingress::WasmResult,
+    time::{CoarseTime, UNIX_EPOCH},
+    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -16,6 +20,8 @@ use ic_protobuf::{
     types::v1 as pb_types,
 };
 use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -49,7 +55,7 @@ pub enum CallContextIdTag {}
 /// Identifies an incoming call.
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
@@ -57,6 +63,12 @@ pub struct RequestMetadata {
     /// The block time (on the respective subnet) at the start of the call at the
     /// root of the call tree that this request is part of.
     call_tree_start_time: Time,
+}
+
+impl Default for RequestMetadata {
+    fn default() -> Self {
+        Self::new(0, UNIX_EPOCH)
+    }
 }
 
 impl RequestMetadata {
@@ -88,7 +100,7 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
@@ -97,8 +109,9 @@ pub struct Request {
     pub payment: Cycles,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
+    #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
 }
@@ -124,6 +137,12 @@ impl Request {
     pub fn payload_size_bytes(&self) -> NumBytes {
         let bytes = self.method_name.len() + self.method_payload.len();
         NumBytes::from(bytes as u64)
+    }
+
+    /// Returns `true` if this is the request of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
     }
 
     /// Helper function to extract the effective canister id from the payload.
@@ -201,6 +220,30 @@ impl Request {
                     Err(_) => None,
                 }
             }
+            Ok(Method::ReadCanisterSnapshotMetadata) => {
+                match ReadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ReadCanisterSnapshotData) => {
+                match ReadCanisterSnapshotDataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotMetadata) => {
+                match UploadCanisterSnapshotMetadataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::UploadCanisterSnapshotData) => {
+                match UploadCanisterSnapshotDataArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
@@ -208,8 +251,11 @@ impl Request {
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
             | Ok(Method::ComputeInitialIDkgDealings)
+            | Ok(Method::ReshareChainKey)
             | Ok(Method::SchnorrPublicKey)
             | Ok(Method::SignWithSchnorr)
+            | Ok(Method::VetKdPublicKey)
+            | Ok(Method::VetKdDeriveKey)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinGetBlockHeaders)
@@ -217,7 +263,8 @@ impl Request {
             | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)
             | Ok(Method::BitcoinGetCurrentFeePercentiles)
-            | Ok(Method::NodeMetricsHistory) => {
+            | Ok(Method::NodeMetricsHistory)
+            | Ok(Method::SubnetInfo) => {
                 // No effective canister id.
                 None
             }
@@ -256,7 +303,7 @@ impl std::fmt::Debug for Request {
 }
 
 /// The context attached when an inter-canister message is rejected.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RejectContext {
     code: RejectCode,
@@ -309,6 +356,18 @@ impl RejectContext {
         &self.message
     }
 
+    /// For use in tests.
+    /// Assert that the rejection has the given code and containing the given string.
+    pub fn assert_contains(&self, code: RejectCode, message: &str) {
+        assert_eq!(self.code, code);
+        assert!(
+            self.message.contains(message),
+            "Unable to match rejection message {} with expected {}",
+            self.message,
+            message
+        );
+    }
+
     /// Returns the size of this `RejectContext` in bytes.
     fn size_bytes(&self) -> NumBytes {
         let size = std::mem::size_of::<RejectCode>() + self.message.len();
@@ -326,7 +385,7 @@ impl From<UserError> for RejectContext {
 }
 
 /// A union of all possible message payloads.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum Payload {
     /// Opaque payload data of the current message.
@@ -337,6 +396,16 @@ pub enum Payload {
 }
 
 impl Payload {
+    /// For use in tests.
+    /// Assert that the payload is a rejection with the given code and
+    /// containing the given string.
+    pub fn assert_contains_reject(&self, code: RejectCode, message: &str) {
+        match self {
+            Self::Reject(err) => err.assert_contains(code, message),
+            Self::Data(_) => panic!("Expected a rejection, but got a valid response."),
+        }
+    }
+
     /// Returns the size of this `Payload` in bytes.
     fn size_bytes(&self) -> NumBytes {
         match self {
@@ -409,13 +478,14 @@ impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
 }
 
 /// Canister-to-canister response message.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,
     pub originator_reply_callback: CallbackId,
     pub refund: Cycles,
+    #[validate_eq(Ignore)]
     pub response_payload: Payload,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
@@ -425,6 +495,12 @@ impl Response {
     /// Returns the size in bytes of this `Response`'s payload.
     pub fn payload_size_bytes(&self) -> NumBytes {
         self.response_payload.size_bytes()
+    }
+
+    /// Returns `true` if this is the response of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
     }
 }
 
@@ -460,11 +536,25 @@ impl Hash for Response {
 ///
 /// The underlying request / response is wrapped within an `Arc`, for cheap
 /// cloning.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum RequestOrResponse {
     Request(Arc<Request>),
     Response(Arc<Response>),
+}
+
+impl ValidateEq for RequestOrResponse {
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        match (self, rhs) {
+            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
+                l.validate_eq(r)
+            }
+            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
+                l.validate_eq(r)
+            }
+            _ => Err("RequestOrResponse enum mismatch".to_string()),
+        }
+    }
 }
 
 impl RequestOrResponse {
@@ -563,10 +653,8 @@ impl From<Response> for RequestOrResponse {
 impl From<&RequestMetadata> for pb_queues::RequestMetadata {
     fn from(metadata: &RequestMetadata) -> Self {
         Self {
-            call_tree_depth: Some(metadata.call_tree_depth),
-            call_tree_start_time_nanos: Some(
-                metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
-            ),
+            call_tree_depth: metadata.call_tree_depth,
+            call_tree_start_time_nanos: metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
             call_subtree_deadline_nanos: None,
         }
     }
@@ -582,7 +670,7 @@ impl From<&Request> for pb_queues::Request {
             method_name: req.method_name.clone(),
             method_payload: req.method_payload.clone(),
             cycles_payment: Some((req.payment).into()),
-            metadata: req.metadata.as_ref().map(From::from),
+            metadata: Some((&req.metadata).into()),
             deadline_seconds: req.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -591,9 +679,9 @@ impl From<&Request> for pb_queues::Request {
 impl From<pb_queues::RequestMetadata> for RequestMetadata {
     fn from(metadata: pb_queues::RequestMetadata) -> Self {
         Self {
-            call_tree_depth: metadata.call_tree_depth.unwrap_or(0),
+            call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time: Time::from_nanos_since_unix_epoch(
-                metadata.call_tree_start_time_nanos.unwrap_or(0),
+                metadata.call_tree_start_time_nanos,
             ),
         }
     }
@@ -618,7 +706,7 @@ impl TryFrom<pb_queues::Request> for Request {
             payment,
             method_name: req.method_name,
             method_payload: req.method_payload,
-            metadata: req.metadata.map(From::from),
+            metadata: req.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(req.deadline_seconds),
         })
     }

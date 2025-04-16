@@ -21,7 +21,9 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord},
+    node::v1::{
+        ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord, NodeRewardType,
+    },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -30,8 +32,7 @@ use ic_types::{
     consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
     RegistryVersion, SubnetId,
 };
-use std::net::SocketAddr;
-use std::os::unix::fs::PermissionsExt;
+use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 
 const CRYPTO_DIR: &str = "crypto";
 const STATE_DIR: &str = "state";
@@ -243,7 +244,7 @@ impl InitializedNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
     /// Node index
@@ -279,7 +280,7 @@ impl Display for Node {
 }
 
 /// Structured definition of a node provided by the `--node` flag.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
@@ -303,6 +304,14 @@ pub struct NodeConfiguration {
     /// directory chosen by ic-prep.
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
+
+    /// The domain name of the node
+    #[serde(skip_serializing, skip_deserializing)]
+    pub domain: Option<String>,
+
+    /// The type of rewards that the node operator wants to receive for the node.
+    /// E.g. "type3.1" or "type1" or similar from the node reward table in the NNS.
+    pub node_reward_type: Option<String>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -320,12 +329,17 @@ impl From<NodeConfiguration> for pbNodeRecord {
                 .node_operator_principal_id
                 .map(|id| id.to_vec())
                 .unwrap_or_default(),
+            domain: node_configuration.domain,
+            node_reward_type: node_configuration
+                .node_reward_type
+                .map(NodeRewardType::from)
+                .map(|t| t as i32),
             ..Default::default()
         }
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum InitializeNodeError {
     #[error("could not create node path: {path}: {source}")]
     CreateNodePathFailed { path: String, source: io::Error },
@@ -377,7 +391,7 @@ impl NodeConfiguration {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
 pub struct NodeSecretKeyStore {
     pub node_id: NodeId,
     pub node_pks: ValidNodePublicKeys,
@@ -426,8 +440,7 @@ impl NodeSecretKeyStore {
 mod node_configuration {
     use super::*;
     use pretty_assertions::assert_eq;
-    use std::net::SocketAddr;
-    use std::str::FromStr;
+    use std::{net::SocketAddr, str::FromStr};
 
     #[test]
     fn into_proto_http() {
@@ -436,6 +449,8 @@ mod node_configuration {
             public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
+            domain: None,
+            node_reward_type: None,
         };
 
         let got = pbNodeRecord::from(node_configuration);
@@ -454,6 +469,7 @@ mod node_configuration {
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_reward_type: None,
         };
 
         assert_eq!(got, want);

@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
+use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {
     version_id: String,
 }
@@ -38,7 +39,7 @@ impl Default for ReplicaVersion {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct DefaultVersionAlreadySetError;
 
 impl std::fmt::Display for ReplicaVersion {
@@ -70,6 +71,14 @@ fn is_valid_version_symbol(c: char) -> bool {
     matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-')
 }
 
+impl FromStr for ReplicaVersion {
+    type Err = ReplicaVersionParseError;
+
+    fn from_str(version_str: &str) -> Result<Self, Self::Err> {
+        ReplicaVersion::try_from(version_str)
+    }
+}
+
 impl TryFrom<&str> for ReplicaVersion {
     type Error = ReplicaVersionParseError;
 
@@ -92,7 +101,7 @@ impl TryFrom<String> for ReplicaVersion {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ReplicaVersionParseError(pub(crate) String);
 
 impl fmt::Display for ReplicaVersionParseError {

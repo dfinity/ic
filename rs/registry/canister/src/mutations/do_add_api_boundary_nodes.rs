@@ -12,7 +12,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use super::common::check_replica_version_is_blessed;
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct AddApiBoundaryNodesPayload {
     pub node_ids: Vec<NodeId>,
     pub version: String,
@@ -522,13 +522,21 @@ mod tests {
         ]);
 
         // Create a valid proposal payload
-        let node_ids = node_ids_and_dkg_pks.keys().cloned().collect();
+        let mut node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
 
         let payload = AddApiBoundaryNodesPayload {
-            node_ids,
+            node_ids: node_ids.clone(),
             version: "version".into(),
         };
 
         registry.do_add_api_boundary_nodes(payload);
+
+        let mut api_bns = registry
+            .get_api_boundary_node_ids()
+            .expect("couldn't get API nodes");
+        api_bns.sort();
+        node_ids.sort();
+
+        assert_eq!(node_ids, api_bns);
     }
 }

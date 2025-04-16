@@ -1,13 +1,13 @@
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::events::{Event as CandidEvent, EventPayload, UnsignedTransaction};
 use crate::erc20::CkErc20Token;
-use crate::eth_logs::{ReceivedErc20Event, ReceivedEthEvent};
+use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
 use crate::state::audit::{replay_events_internal, Event};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest, Subaccount,
+    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest,
 };
 use crate::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
@@ -31,7 +31,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(698_140_999_426_625_854_528_u128)
+        Wei::from(973_769_498_742_712_741_454_u128)
     );
 }
 
@@ -46,7 +46,7 @@ async fn should_replay_events_for_sepolia() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Sepolia);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(29_749_130_254_874_558_434_938_u128)
+        Wei::from(23_921_238_021_909_121_554_717_u128)
     );
 }
 
@@ -249,6 +249,7 @@ impl GetEventsFile {
                     from_address,
                     value,
                     principal,
+                    subaccount,
                 } => ET::AcceptedDeposit(ReceivedEthEvent {
                     transaction_hash: transaction_hash.parse().unwrap(),
                     block_number: block_number.try_into().unwrap(),
@@ -256,6 +257,7 @@ impl GetEventsFile {
                     from_address: from_address.parse().unwrap(),
                     value: value.try_into().unwrap(),
                     principal,
+                    subaccount: subaccount.and_then(LedgerSubaccount::from_bytes),
                 }),
                 EventPayload::AcceptedErc20Deposit {
                     transaction_hash,
@@ -265,6 +267,7 @@ impl GetEventsFile {
                     value,
                     principal,
                     erc20_contract_address,
+                    subaccount,
                 } => ET::AcceptedErc20Deposit(ReceivedErc20Event {
                     transaction_hash: transaction_hash.parse().unwrap(),
                     block_number: block_number.try_into().unwrap(),
@@ -273,6 +276,7 @@ impl GetEventsFile {
                     value: value.try_into().unwrap(),
                     principal,
                     erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                    subaccount: subaccount.and_then(LedgerSubaccount::from_bytes),
                 }),
                 EventPayload::InvalidDeposit {
                     event_source,
@@ -306,7 +310,7 @@ impl GetEventsFile {
                     destination: destination.parse().unwrap(),
                     ledger_burn_index: map_nat(ledger_burn_index),
                     from,
-                    from_subaccount: from_subaccount.map(Subaccount),
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
                 }),
                 EventPayload::CreatedTransaction {
@@ -417,7 +421,7 @@ impl GetEventsFile {
                     ckerc20_ledger_id,
                     ckerc20_ledger_burn_index: map_nat(ckerc20_ledger_burn_index),
                     from,
-                    from_subaccount: from_subaccount.map(Subaccount),
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
                 }),
                 EventPayload::FailedErc20WithdrawalRequest {
@@ -429,7 +433,7 @@ impl GetEventsFile {
                     ledger_burn_index: map_nat(withdrawal_id),
                     reimbursed_amount: reimbursed_amount.try_into().unwrap(),
                     to,
-                    to_subaccount: to_subaccount.map(Subaccount),
+                    to_subaccount: to_subaccount.and_then(LedgerSubaccount::from_bytes),
                     transaction_hash: None,
                 }),
                 EventPayload::MintedCkErc20 {
@@ -449,6 +453,11 @@ impl GetEventsFile {
                 EventPayload::QuarantinedReimbursement { index } => ET::QuarantinedReimbursement {
                     index: map_reimbursement_index(index),
                 },
+                EventPayload::SyncedDepositWithSubaccountToBlock { block_number } => {
+                    ET::SyncedDepositWithSubaccountToBlock {
+                        block_number: block_number.try_into().unwrap(),
+                    }
+                }
             },
         }
     }
@@ -531,7 +540,7 @@ impl GetEventsFile {
             Decode!(&raw_result, GetEventsResult).unwrap()
         }
 
-        #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+        #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
         pub struct GetEventsArg {
             pub start: u64,
             pub length: u64,

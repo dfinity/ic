@@ -1,0 +1,7 @@
+[package]
+name = "ic-nervous-system-linear-map"
+version = "0.0.1"
+edition = { workspace = true }
+
+[dependencies]
+rust_decimal = "1.36.0"

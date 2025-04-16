@@ -8,16 +8,17 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-consensus-certification = { path = "../consensus/certification" }
+ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
-ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
@@ -41,7 +42,7 @@ ic-registry-transport = { path = "../registry/transport" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
-icp-ledger = { path = "../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../ledger_suite/icp" }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -54,6 +55,7 @@ tower = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 

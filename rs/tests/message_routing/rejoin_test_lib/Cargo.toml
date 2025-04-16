@@ -1,0 +1,21 @@
+[package]
+name = "rejoin-test-lib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+chrono = { workspace = true }
+futures = { workspace = true }
+ic-system-test-driver = { path = "../../driver" }
+slog = { workspace = true }
+tokio = { workspace = true }
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+
+[lib]
+name = "rejoin_test_lib"
+path = "rejoin_test_lib.rs"

@@ -5,13 +5,16 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
+use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
+    list_neurons::NeuronSubaccount,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{
         Command as CommandResponse, {self},
@@ -26,12 +29,12 @@ use ic_nns_test_utils::{
         list_neurons, list_neurons_by_principal, nns_add_hot_key, nns_claim_or_refresh_neuron,
         nns_disburse_neuron, nns_governance_get_full_neuron, nns_governance_get_neuron_info,
         nns_join_community_fund, nns_leave_community_fund, nns_remove_hot_key,
-        nns_send_icp_to_claim_or_refresh_neuron, setup_nns_canisters,
+        nns_send_icp_to_claim_or_refresh_neuron, nns_start_dissolving, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {
@@ -453,19 +456,25 @@ fn test_claim_neuron() {
     assert!(created_timestamp_seconds > 0);
     assert_eq!(
         full_neuron.dissolve_state,
-        Some(DissolveState::WhenDissolvedTimestampSeconds(
-            created_timestamp_seconds
+        Some(DissolveState::DissolveDelaySeconds(
+            INITIAL_NEURON_DISSOLVE_DELAY
         ))
     );
-    assert_eq!(full_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(
+        full_neuron.aging_since_timestamp_seconds,
+        created_timestamp_seconds
+    );
     assert_eq!(full_neuron.cached_neuron_stake_e8s, 1_000_000_000);
 
     // Step 3.2: Inspect the claimed neuron as neuron info.
     let neuron_info =
         nns_governance_get_neuron_info(&state_machine, PrincipalId::new_anonymous(), neuron_id.id)
             .unwrap();
-    assert_eq!(neuron_info.state, NeuronState::Dissolved as i32);
-    assert_eq!(neuron_info.dissolve_delay_seconds, 0);
+    assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
+    assert_eq!(
+        neuron_info.dissolve_delay_seconds,
+        INITIAL_NEURON_DISSOLVE_DELAY
+    );
     assert_eq!(neuron_info.age_seconds, 0);
     assert_eq!(neuron_info.stake_e8s, 1_000_000_000);
 }
@@ -498,6 +507,7 @@ fn test_list_neurons() {
         1,
     );
     let neuron_id_1 = nns_claim_or_refresh_neuron(&state_machine, principal_1, 1);
+
     nns_send_icp_to_claim_or_refresh_neuron(
         &state_machine,
         principal_1,
@@ -505,6 +515,7 @@ fn test_list_neurons() {
         2,
     );
     let neuron_id_2 = nns_claim_or_refresh_neuron(&state_machine, principal_1, 2);
+
     nns_send_icp_to_claim_or_refresh_neuron(
         &state_machine,
         principal_2,
@@ -514,7 +525,24 @@ fn test_list_neurons() {
     let neuron_id_3 = nns_claim_or_refresh_neuron(&state_machine, principal_2, 3);
 
     // Step 1.3: disburse neuron 2 so that it's empty.
-    nns_disburse_neuron(&state_machine, principal_1, neuron_id_2, 200_000_000, None);
+    nns_start_dissolving(&state_machine, principal_1, neuron_id_2)
+        .expect("Failed to start dissolving neuron");
+    state_machine.advance_time(Duration::from_secs(INITIAL_NEURON_DISSOLVE_DELAY + 1));
+    state_machine.tick();
+    let disburse_result = nns_disburse_neuron(
+        &state_machine,
+        principal_1,
+        neuron_id_2,
+        Some(200_000_000),
+        None,
+    );
+
+    match disburse_result {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::Disburse(_)),
+        } => (),
+        disburse_result => panic!("Failed to disburse neuron: {:#?}", disburse_result),
+    }
 
     // Step 2: test listing neurons by ids with an anonymous principal.
     let list_neurons_response = list_neurons(
@@ -525,6 +553,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: Some(false),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -539,6 +570,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);
@@ -553,6 +587,9 @@ fn test_list_neurons() {
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(false),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![]), // Should be equivalent to None
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 1);
@@ -566,8 +603,33 @@ fn test_list_neurons() {
         ListNeurons {
             neuron_ids: vec![neuron_id_3.id],
             include_neurons_readable_by_caller: true,
-            include_empty_neurons_readable_by_caller: None,
+            include_empty_neurons_readable_by_caller: Some(true),
             include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![]),
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 3);
+    assert_eq!(list_neurons_response.full_neurons.len(), 2);
+
+    // Step 6: Same but specify neuron 3 by subaccount.
+    // empty neurons, also specifying neuron 3 which the caller does not control.
+
+    let subaccount = compute_neuron_staking_subaccount_bytes(principal_2, 3);
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        principal_1,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
+            include_public_neurons_in_full_neurons: None,
+            page_number: None,
+            page_size: None,
+            neuron_subaccounts: Some(vec![NeuronSubaccount {
+                subaccount: subaccount.to_vec(),
+            }]),
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);

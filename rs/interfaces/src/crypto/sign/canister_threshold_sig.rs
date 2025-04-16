@@ -531,7 +531,6 @@ pub trait IDkgProtocol {
 /// The threshold signing protocol is non-interactive, which means that the nodes participating
 /// to the protocol only need to compute a signature share and publish it. Shares can then be
 /// publicly verified by anybody and combined into a single ECDSA signature.
-
 pub trait ThresholdEcdsaSigner {
     /// Create a threshold ECDSA signature share.
     ///
@@ -586,6 +585,8 @@ pub trait ThresholdEcdsaSigVerifier {
     ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
 
     /// Combine the given threshold ECDSA signature shares into a conventional ECDSA signature.
+    ///
+    /// All of the signature shares must have been generated with respect to the same ThresholdEcdsaSigInputs
     ///
     /// The signature is returned as raw bytes.
     ///
@@ -686,6 +687,8 @@ pub trait ThresholdSchnorrSigVerifier {
     ) -> Result<(), ThresholdSchnorrVerifySigShareError>;
 
     /// Combine the given threshold Schnorr signature shares into a conventional Schnorr signature.
+    ///
+    /// All of the signature shares must have been generated with respect to the same ThresholdSchnorrSigInputs
     ///
     /// The signature is returned as raw bytes.
     ///

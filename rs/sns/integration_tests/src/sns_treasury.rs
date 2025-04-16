@@ -8,7 +8,10 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
@@ -120,7 +123,7 @@ fn new_treasury_scenario(
         .unwrap();
     state_machine.set_time(start_time);
 
-    let first_sns_canister_id = 11;
+    let first_sns_canister_id = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 1;
     let governance = CanisterId::from(first_sns_canister_id + 1);
 
     let sns_treasury_account_nns = Account {
@@ -220,6 +223,10 @@ fn new_treasury_scenario(
         root_canister_id: _,
         index_canister_id: _,
     } = sns_test_canister_ids;
+
+    // Make sure at least one Swap periodic tasks is executed.
+    state_machine.advance_time(std::time::Duration::from_secs(100));
+    state_machine.tick();
 
     participate_in_swap(
         state_machine,

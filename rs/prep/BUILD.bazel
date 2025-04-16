@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
-    "//rs/constants",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/test_utils/ni-dkg",
@@ -13,6 +12,7 @@ DEPENDENCIES = [
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -30,7 +30,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:fs_extra",
     "@crate_index//:json5",
     "@crate_index//:maplit",

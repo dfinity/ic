@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -8,8 +8,7 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    extra_head_nns_tags = ["manual"],  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
@@ -17,8 +16,12 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test_nns(
@@ -26,16 +29,19 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
         "system_test_hotfix",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test_nns(
@@ -43,16 +49,19 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test_nns(
@@ -60,8 +69,7 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         #TODO: enable k8s when there's enough capacity
         # "k8s",
@@ -69,8 +77,12 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(
@@ -78,26 +90,33 @@ system_test(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/common:systest_message_routing_common",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test_nns(
     name = "xnet_compatibility",
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    } | MAINNET_ENV,
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
-        "system_test_nightly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
@@ -105,7 +124,15 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         XNET_TEST_CANISTER_RUNTIME_DEPS +
-        GRAFANA_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+        GRAFANA_RUNTIME_DEPS,
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )

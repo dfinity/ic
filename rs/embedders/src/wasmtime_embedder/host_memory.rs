@@ -15,9 +15,11 @@ use libc::MAP_FAILED;
 use libc::{mmap, munmap};
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
 use wasmtime::{LinearMemory, MemoryType};
-use wasmtime_environ::{WASM32_MAX_SIZE, WASM_PAGE_SIZE};
+use wasmtime_environ::WASM32_MAX_SIZE;
 
 use crate::MIN_GUARD_REGION_SIZE;
+
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 pub fn round_up_to_page_size(size: usize, page_size: usize) -> usize {
     (size + (page_size - 1)) & !(page_size - 1)
@@ -27,7 +29,7 @@ fn is_multiple_of_page_size(size: usize) -> bool {
     size == round_up_to_page_size(size, PAGE_SIZE)
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Hash)]
 pub(crate) struct MemoryStart(pub(crate) usize);
 
 pub(crate) struct MemoryPageSize(Arc<AtomicUsize>);
@@ -185,11 +187,6 @@ impl MmapMemory {
     fn as_ptr(&self) -> *mut c_void {
         self.wasm_memory
     }
-
-    fn wasm_accessible(&self) -> std::ops::Range<usize> {
-        let start = self.wasm_memory as usize;
-        start..start + self.size_in_bytes
-    }
 }
 
 impl Drop for MmapMemory {
@@ -229,8 +226,8 @@ unsafe impl LinearMemory for WasmtimeMemory {
         convert_pages_to_bytes(self.used.load(Ordering::SeqCst))
     }
 
-    fn maximum_byte_size(&self) -> Option<usize> {
-        Some(convert_pages_to_bytes(self.max_size_in_pages))
+    fn byte_capacity(&self) -> usize {
+        convert_pages_to_bytes(self.max_size_in_pages)
     }
 
     fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
@@ -261,9 +258,5 @@ unsafe impl LinearMemory for WasmtimeMemory {
 
     fn as_ptr(&self) -> *mut u8 {
         self.mem.as_ptr() as *mut _
-    }
-
-    fn wasm_accessible(&self) -> std::ops::Range<usize> {
-        self.mem.wasm_accessible()
     }
 }

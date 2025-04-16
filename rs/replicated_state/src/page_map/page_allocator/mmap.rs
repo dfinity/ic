@@ -30,7 +30,7 @@ const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
 
 const MIN_PAGES_TO_FREE: usize = 10000;
 // The start address of a page.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct PagePtr(*mut u8);
 
 // SAFETY: All shared pages are immutable.
@@ -262,11 +262,11 @@ impl PageAllocatorInner {
     // See the comments of the corresponding method in `PageAllocator`.
     pub fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
     where
-        I: IntoIterator<Item = (PageIndex, &'a Page)>,
+        I: IntoIterator<Item = (&'a PageIndex, &'a Page)>,
     {
         let pages: Vec<_> = page_delta
             .into_iter()
-            .map(|(page_index, page)| MmapPageSerialization {
+            .map(|(&page_index, page)| MmapPageSerialization {
                 page_index,
                 file_offset: page.0.offset,
                 validation: page.0.validation,
@@ -429,7 +429,7 @@ impl AllocationArea {
 /// due to multiple page allocators in the sandbox process sharing the same
 /// backing file.
 /// See `PageAllocatorRegistry`.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct PageAllocatorId(usize);
 
 impl Default for PageAllocatorId {
@@ -445,7 +445,7 @@ impl Default for PageAllocatorId {
 // Indicates whether the backing file is owned by the current allocator or
 // another allocator. The owner is responsible for freeing the physical memory
 // of dropped pages by punching holes in the backing file.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 enum BackingFileOwner {
     CurrentAllocator,
     AnotherAllocator,
@@ -629,7 +629,7 @@ impl MmapBasedPageAllocatorCore {
                         MmapAdvise::MADV_HUGEPAGE,
                     )
                 }.unwrap_or_else(|err| {
-                    // We don't need to panic, madvise failing is not a problem, 
+                    // We don't need to panic, madvise failing is not a problem,
                     // it will only mean that we are not using huge pages.
                     println!(
                     "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",

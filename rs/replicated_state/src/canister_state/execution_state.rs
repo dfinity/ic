@@ -1,20 +1,18 @@
-use super::SessionNonce;
 use crate::hash::ic_hashtree_leaf_hash;
 use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_state_bits::v1 as pb,
-};
+use ic_management_canister_types_private::Global;
+use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{SystemMethod, WasmMethod},
     CountBytes, ExecutionRound, NumBytes,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
 use std::mem::size_of_val;
 use std::{
     collections::BTreeSet,
@@ -56,95 +54,10 @@ impl std::fmt::Debug for EmbedderCache {
     }
 }
 
-/// An enum representing the possible values of a global variable.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Global {
-    I32(i32),
-    I64(i64),
-    F32(f32),
-    F64(f64),
-    V128(u128),
-}
-
-impl Global {
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            Global::I32(_) => "i32",
-            Global::I64(_) => "i64",
-            Global::F32(_) => "f32",
-            Global::F64(_) => "f64",
-            Global::V128(_) => "v128",
-        }
-    }
-}
-
-impl Hash for Global {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let bytes = match self {
-            Global::I32(val) => val.to_le_bytes().to_vec(),
-            Global::I64(val) => val.to_le_bytes().to_vec(),
-            Global::F32(val) => val.to_le_bytes().to_vec(),
-            Global::F64(val) => val.to_le_bytes().to_vec(),
-            Global::V128(val) => val.to_le_bytes().to_vec(),
-        };
-        bytes.hash(state)
-    }
-}
-
-impl PartialEq<Global> for Global {
-    fn eq(&self, other: &Global) -> bool {
-        match (self, other) {
-            (Global::I32(val), Global::I32(other_val)) => val == other_val,
-            (Global::I64(val), Global::I64(other_val)) => val == other_val,
-            (Global::F32(val), Global::F32(other_val)) => val == other_val,
-            (Global::F64(val), Global::F64(other_val)) => val == other_val,
-            (Global::V128(val), Global::V128(other_val)) => val == other_val,
-            _ => false,
-        }
-    }
-}
-
-impl From<&Global> for pb::Global {
-    fn from(item: &Global) -> Self {
-        match item {
-            Global::I32(value) => Self {
-                global: Some(pb::global::Global::I32(*value)),
-            },
-            Global::I64(value) => Self {
-                global: Some(pb::global::Global::I64(*value)),
-            },
-            Global::F32(value) => Self {
-                global: Some(pb::global::Global::F32(*value)),
-            },
-            Global::F64(value) => Self {
-                global: Some(pb::global::Global::F64(*value)),
-            },
-            Global::V128(value) => Self {
-                global: Some(pb::global::Global::V128(value.to_le_bytes().to_vec())),
-            },
-        }
-    }
-}
-
-impl TryFrom<pb::Global> for Global {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::Global) -> Result<Self, Self::Error> {
-        match try_from_option_field(value.global, "Global::global")? {
-            pb::global::Global::I32(value) => Ok(Self::I32(value)),
-            pb::global::Global::I64(value) => Ok(Self::I64(value)),
-            pb::global::Global::F32(value) => Ok(Self::F32(value)),
-            pb::global::Global::F64(value) => Ok(Self::F64(value)),
-            pb::global::Global::V128(value) => Ok(Self::V128(u128::from_le_bytes(
-                value.as_slice().try_into().unwrap(),
-            ))),
-        }
-    }
-}
-
 /// A set of the functions that a Wasm module exports.
 ///
 /// Arc is used to make cheap clones of this during snapshots.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExportedFunctions {
     /// Since the value is only shared when taking a snapshot, there is no
     /// problem with serializing this field.
@@ -226,15 +139,17 @@ impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
 }
 
 /// Represent a wasm binary.
-#[derive(Debug)]
+#[derive(Debug, ValidateEq)]
 pub struct WasmBinary {
     /// The raw canister module provided by the user. Remains immutable after
     /// creating a WasmBinary object.
+    #[validate_eq(CompareWithValidateEq)]
     pub binary: CanisterModule,
 
     /// Cached compiled representation of the binary. Lower layers will assign
     /// to this field to create a compiled representation of the wasm, and
     /// ensure that this happens only once.
+    #[validate_eq(Ignore)]
     pub embedder_cache: Arc<std::sync::Mutex<Option<EmbedderCache>>>,
 }
 
@@ -252,9 +167,10 @@ impl WasmBinary {
 }
 
 /// Represents a canister's wasm or stable memory.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, ValidateEq)]
 pub struct Memory {
     /// The contents of this memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -265,6 +181,7 @@ pub struct Memory {
 
     /// Contains either a handle to the execution state in the sandbox process
     /// or information that is necessary to constructs the state remotely.
+    #[validate_eq(Ignore)]
     pub sandbox_memory: Arc<Mutex<SandboxMemory>>,
 }
 
@@ -370,7 +287,7 @@ impl SandboxMemoryHandle {
 }
 
 /// Next scheduled method: round-robin across GlobalTimer; Heartbeat; and Message.
-#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumIter)]
 pub enum NextScheduledMethod {
     #[default]
     GlobalTimer = 1,
@@ -425,18 +342,12 @@ impl NextScheduledMethod {
 /// persist `ExecutionState`.
 // Do ***NOT*** derive PartialEq, Eq, Serialization or
 // Deserialization for `ExecutionState`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ValidateEq)]
 pub struct ExecutionState {
     /// The path where Canister memory is located. Needs to be stored in
     /// ExecutionState in order to perform the exec system call.
+    #[validate_eq(Ignore)]
     pub canister_root: std::path::PathBuf,
-
-    /// Session state Nonce. If occupied, runtime is already
-    /// processing this execution state. This is being used to refer
-    /// to mutated `MappedState` and globals that reside in the
-    /// sandbox execution process (and not necessarily in memory) and
-    /// enable continuations.
-    pub session_nonce: Option<SessionNonce>,
 
     /// The wasm executable associated with this state. It represented here as
     /// a reference-counted object such that:
@@ -446,22 +357,28 @@ pub struct ExecutionState {
     ///
     /// The latter property ensures that compilation for queries is cached
     /// properly when loading a state from checkpoint.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_binary: Arc<WasmBinary>,
 
     /// The persistent heap of the module. The size of this memory is expected
     /// to fit in a `u32`.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: Memory,
 
     /// The canister stable memory which is persisted across canister upgrades.
+    #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: Memory,
 
     /// The state of exported globals. Internal globals are not accessible.
+    #[validate_eq(Ignore)]
     pub exported_globals: Vec<Global>,
 
     /// A set of the functions that a Wasm module exports.
+    #[validate_eq(Ignore)]
     pub exports: ExportedFunctions,
 
     /// Metadata extracted from the Wasm module.
+    #[validate_eq(Ignore)]
     pub metadata: WasmMetadata,
 
     /// Round number at which canister executed
@@ -470,6 +387,9 @@ pub struct ExecutionState {
 
     /// Round-robin across canister method types.
     pub next_scheduled_method: NextScheduledMethod,
+
+    /// Checks if execution is in Wasm64 mode.
+    pub wasm_execution_mode: WasmExecutionMode,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -481,7 +401,6 @@ impl PartialEq for ExecutionState {
         // an error. Hence pointing to appropriate change here.
         let ExecutionState {
             canister_root: _,
-            session_nonce: _,
             wasm_binary,
             wasm_memory,
             stable_memory,
@@ -490,6 +409,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            wasm_execution_mode,
         } = rhs;
 
         (
@@ -501,6 +421,7 @@ impl PartialEq for ExecutionState {
             &self.metadata,
             &self.last_executed_round,
             &self.next_scheduled_method,
+            &self.wasm_execution_mode,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -510,6 +431,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            wasm_execution_mode,
         )
     }
 }
@@ -518,6 +440,9 @@ impl ExecutionState {
     /// Initializes a new execution state for a canister.
     /// The state will be created with empty stable memory, but may have wasm
     /// memory from data sections in the wasm module.
+    /// The state will be created with last_executed_round = 0, a
+    /// default next_scheduled_method, and wasm_execution_mode = WasmExecutionMode::Wasm32.
+    /// Be sure to change these if needed.
     pub fn new(
         canister_root: PathBuf,
         wasm_binary: Arc<WasmBinary>,
@@ -529,7 +454,6 @@ impl ExecutionState {
     ) -> Self {
         Self {
             canister_root,
-            session_nonce: None,
             wasm_binary,
             exports,
             wasm_memory,
@@ -538,6 +462,7 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
+            wasm_execution_mode: WasmExecutionMode::Wasm32,
         }
     }
 
@@ -546,18 +471,43 @@ impl ExecutionState {
         self.exports.has_method(method)
     }
 
-    /// Returns the memory currently used by the `ExecutionState`.
-    pub fn memory_usage(&self) -> NumBytes {
-        // We use 8 bytes per global.
-        let globals_size_bytes = 8 * self.exported_globals.len() as u64;
-        let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
+    /// Returns the Wasm memory currently used by the `ExecutionState`.
+    pub fn wasm_memory_usage(&self) -> NumBytes {
         num_bytes_try_from(self.wasm_memory.size)
             .expect("could not convert from wasm memory number of pages to bytes")
-            + num_bytes_try_from(self.stable_memory.size)
-                .expect("could not convert from stable memory number of pages to bytes")
-            + NumBytes::from(globals_size_bytes)
-            + NumBytes::from(wasm_binary_size_bytes)
-            + self.metadata.memory_usage()
+    }
+
+    /// Returns the stable memory currently used by the `ExecutionState`.
+    pub fn stable_memory_usage(&self) -> NumBytes {
+        num_bytes_try_from(self.stable_memory.size)
+            .expect("could not convert from stable memory number of pages to bytes")
+    }
+
+    // Returns the global memory currently used by the `ExecutionState`.
+    pub fn global_memory_usage(&self) -> NumBytes {
+        // We use 8 bytes per global.
+        let globals_size_bytes = 8 * self.exported_globals.len() as u64;
+        NumBytes::from(globals_size_bytes)
+    }
+
+    // Returns the memory size of the Wasm binary currently used by the `ExecutionState`.
+    pub fn wasm_binary_memory_usage(&self) -> NumBytes {
+        let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
+        NumBytes::from(wasm_binary_size_bytes)
+    }
+
+    // Returns the memory size of the custom sections currently used by the `ExecutionState`.
+    pub fn custom_sections_memory_size(&self) -> NumBytes {
+        self.metadata.memory_usage()
+    }
+
+    /// Returns the memory currently used by the `ExecutionState`.
+    pub fn memory_usage(&self) -> NumBytes {
+        self.wasm_memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
+            + self.custom_sections_memory_size()
     }
 
     /// Returns the number of global variables in the Wasm module.
@@ -576,7 +526,7 @@ impl ExecutionState {
 
 /// An enum that represents the possible visibility levels a custom section
 /// defined in the wasm module can have.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter, serde::Deserialize, serde::Serialize)]
 pub enum CustomSectionType {
     Public = 1,
     Private = 2,
@@ -606,7 +556,7 @@ impl TryFrom<pb::CustomSectionType> for CustomSectionType {
 }
 
 /// Represents the data a custom section holds.
-#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub struct CustomSection {
     visibility: CustomSectionType,
     content: Vec<u8>,
@@ -674,7 +624,7 @@ impl TryFrom<pb::WasmCustomSection> for CustomSection {
 }
 
 /// A struct that holds all the custom sections exported by the Wasm module.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmMetadata {
     /// Arc is used to make cheap clones of this during snapshots.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
@@ -776,6 +726,35 @@ impl TryFrom<pb::WasmMetadata> for WasmMetadata {
     }
 }
 
+/// Keeps track of how a canister is executing.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum WasmExecutionMode {
+    Wasm32,
+    Wasm64,
+}
+
+impl WasmExecutionMode {
+    pub fn is_wasm64(&self) -> bool {
+        match self {
+            WasmExecutionMode::Wasm32 => false,
+            WasmExecutionMode::Wasm64 => true,
+        }
+    }
+    pub fn from_is_wasm64(is_wasm64: bool) -> Self {
+        if is_wasm64 {
+            WasmExecutionMode::Wasm64
+        } else {
+            WasmExecutionMode::Wasm32
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        match self {
+            WasmExecutionMode::Wasm32 => "wasm32",
+            WasmExecutionMode::Wasm64 => "wasm64",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -783,6 +762,13 @@ mod tests {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
     use std::collections::BTreeSet;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn global_exhaustive() {
+        for global in ic_management_canister_types_private::Global::iter() {
+            let _other: Global = global;
+        }
+    }
 
     #[test]
     fn test_next_scheduled_method() {

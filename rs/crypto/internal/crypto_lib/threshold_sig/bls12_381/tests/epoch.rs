@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
 use proptest::prelude::*;
 use rand::SeedableRng;

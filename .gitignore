@@ -86,11 +86,9 @@ dev-root-ca.crt
 cpp/**/infogetty
 cpp/**/infogetty.o
 cpp/**/network_info.o
-cpp/**/prestorecon
-cpp/**/prestorecon.o
 
 # Various build artifacts
-artifacts
+/artifacts
 **/build
 **/build-tmp
 **/build-out
@@ -106,11 +104,6 @@ artifacts
 **/bin/state-tool
 **/bin/vsock_agent
 **/bin/sandbox_launcher
-**/bin/boundary-node-prober
-**/bin/ic-balance-exporter
-
-# Boundary node prober binary
-boundary-node-prober
 
 # Python pip file
 *Pipfile*
@@ -120,8 +113,10 @@ boundary-node-prober
 bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
-bazel-timestamp.txt
 user.bazelrc
+
+# Bazel profile
+profile.json
 
 # Visual Studio Code
 .vscode

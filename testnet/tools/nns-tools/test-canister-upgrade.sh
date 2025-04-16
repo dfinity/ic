@@ -8,7 +8,7 @@ help() {
     print_green "
 Usage: $0 <CANISTER_NAME> <VERSION> (<CANDID_ARGS> <NNS_URL> <NEURON_ID>)
   CANISTER_NAME: Human readable canister name (from rs/nns/canister_ids.json)
-  VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on gitlab commit list have assets)
+  VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on GitHub commit list have assets)
   CANDID_ARGS: Candid args to encode to include in the request.  Use empty string
    to skip if manually passing NNS_URL and NEURON_ID
   NNS_URL: The url to the subnet running the NNS in your testnet.

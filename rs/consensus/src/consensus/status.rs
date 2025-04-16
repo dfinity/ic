@@ -6,7 +6,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{Height, ReplicaVersion, SubnetId};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Status {
     /// The Consensus is running normally.
     Running,
@@ -52,7 +52,7 @@ pub fn get_status(
     Some(Status::Running)
 }
 
-fn should_halt(
+pub fn should_halt(
     height: Height,
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,

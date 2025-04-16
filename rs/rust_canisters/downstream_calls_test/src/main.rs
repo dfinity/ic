@@ -1,4 +1,4 @@
-use candid::{candid_method, Decode, Encode};
+use candid::{Decode, Encode};
 use downstream_calls_test::{CallOrResponse, State};
 use ic_cdk::api::call::call_raw;
 use ic_cdk_macros::update;
@@ -27,7 +27,6 @@ fn main() {}
 ///
 /// See `test_linear_sequence_call_tree_depth` and `test_multiple_branches_call_tree_depth` in
 /// 'rs/messaging/tests/call_tree_tests.rs' for examples on how to use this canister.
-#[candid_method(update)]
 #[update]
 async fn reply_or_defer(mut state: State) -> State {
     loop {

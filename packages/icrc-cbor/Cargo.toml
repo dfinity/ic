@@ -1,0 +1,25 @@
+[package]
+name = "icrc-cbor"
+version = "0.1.0"
+description = "Cbor encoders and decoders commonly used by the ICRC ledger types."
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ethnum = { workspace = true, optional = true }
+minicbor = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[features]
+default = []
+u256 = ["dep:ethnum"]

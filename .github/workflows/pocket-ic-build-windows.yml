@@ -1,0 +1,27 @@
+name: 'PocketIC library build on Windows'
+on:
+  pull_request:
+    paths:
+      - packages/pocket-ic/**
+  push:
+    branches:
+      - master
+# runs for the same workflow are cancelled on PRs but not on master
+# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  pocket_ic_library_build_windows:
+    name: 'PocketIC library build on Windows'
+    runs-on: windows-2022
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'cargo clippy'
+        run: |
+          cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+      - name: 'cargo build'
+        run: |
+          cargo build --release --locked -p pocket-ic
+          cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown

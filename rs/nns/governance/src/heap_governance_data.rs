@@ -1,7 +1,5 @@
 use crate::pb::v1::{
-    governance::{
-        FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, Migrations, NeuronInFlightCommand,
-    },
+    governance::{GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
     neuron::Followees,
     Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
@@ -31,7 +29,6 @@ pub struct HeapGovernanceData {
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,
     pub making_sns_proposal: Option<MakingSnsProposal>,
-    pub migrations: Option<Migrations>,
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
 }
@@ -84,17 +81,20 @@ impl From<XdrConversionRate> for XdrConversionRatePb {
     }
 }
 
+/// Converts a vector of u8s to array of length 32, which is the length needed for our rng seed.
+/// If the array is the wrong size, this returns an error.
+fn vec_to_array(v: Vec<u8>) -> Result<[u8; 32], String> {
+    <[u8; 32]>::try_from(v).map_err(|v| format!("Expected 32 bytes, got {}", v.len()))
+}
+
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because
 /// we have a dedicated struct NeuronStore owning the heap neurons.
 /// Does not guarantee round-trip equivalence between this and
 /// reassemble_governance_proto if the proto has fields that are None, as they might be filled in by default values.
+#[allow(clippy::type_complexity)]
 pub fn split_governance_proto(
     governance_proto: GovernanceProto,
-) -> (
-    BTreeMap<u64, Neuron>,
-    HashMap<i32, FollowersMap>,
-    HeapGovernanceData,
-) {
+) -> (BTreeMap<u64, Neuron>, HeapGovernanceData, Option<[u8; 32]>) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
     //   **DATA LOSS**
@@ -119,10 +119,9 @@ pub fn split_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
-        topic_followee_index,
         xdr_conversion_rate,
         restore_aging_summary,
+        rng_seed,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
@@ -136,9 +135,12 @@ pub fn split_governance_proto(
             panic!("Deserialization failed for XdrConversionRate: {}", err);
         });
 
+    let rng_seed = rng_seed
+        .map(|seed| vec_to_array(seed).ok())
+        .and_then(|seed| seed);
+
     (
         neurons,
-        topic_followee_index,
         HeapGovernanceData {
             proposals,
             to_claim_transfers,
@@ -157,10 +159,10 @@ pub fn split_governance_proto(
             maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons,
             making_sns_proposal,
-            migrations,
             xdr_conversion_rate,
             restore_aging_summary,
         },
+        rng_seed,
     )
 }
 
@@ -168,8 +170,8 @@ pub fn split_governance_proto(
 /// it can be serialized into UPGRADES_MEMORY.
 pub fn reassemble_governance_proto(
     neurons: BTreeMap<u64, Neuron>,
-    topic_followee_index: HashMap<i32, FollowersMap>,
     heap_governance_proto: HeapGovernanceData,
+    rng_seed: Option<[u8; 32]>,
 ) -> GovernanceProto {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
@@ -194,7 +196,6 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
         xdr_conversion_rate,
         restore_aging_summary,
     } = heap_governance_proto;
@@ -222,10 +223,9 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
-        migrations,
-        topic_followee_index,
         xdr_conversion_rate: Some(xdr_conversion_rate),
         restore_aging_summary,
+        rng_seed: rng_seed.map(|seed| seed.to_vec()),
     }
 }
 
@@ -233,9 +233,8 @@ pub fn reassemble_governance_proto(
 mod tests {
     use super::*;
 
-    use crate::pb::v1::{governance::followers_map::Followers, Neuron, ProposalData};
+    use crate::pb::v1::{Neuron, ProposalData};
 
-    use ic_nns_common::pb::v1::NeuronId;
     use maplit::{btreemap, hashmap};
 
     // The members are chosen to be the simplest form that's not their default().
@@ -263,21 +262,12 @@ mod tests {
             maturity_modulation_last_updated_at_timestamp_seconds: Some(7),
             spawning_neurons: Some(true),
             making_sns_proposal: Some(MakingSnsProposal::default()),
-            migrations: Some(Migrations::default()),
-            topic_followee_index: hashmap! {
-                1 => FollowersMap {
-                    followers_map: hashmap! {
-                        2 => Followers {
-                            followers: vec![NeuronId { id: 3 }],
-                        },
-                    },
-                }
-            },
             xdr_conversion_rate: Some(XdrConversionRatePb {
                 timestamp_seconds: Some(1),
                 xdr_permyriad_per_icp: Some(50_000),
             }),
             restore_aging_summary: None,
+            rng_seed: Some(vec![1u8; 32]),
         }
     }
 
@@ -285,11 +275,11 @@ mod tests {
     fn split_and_reassemble_equal() {
         let governance_proto = simple_governance_proto();
 
-        let (heap_neurons, topic_followee_index, heap_governance_data) =
+        let (heap_neurons, heap_governance_data, rng_seed) =
             split_governance_proto(governance_proto.clone());
 
         let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
+            reassemble_governance_proto(heap_neurons, heap_governance_data, rng_seed);
 
         assert_eq!(reassembled_governance_proto, governance_proto);
     }
@@ -301,10 +291,10 @@ mod tests {
             ..simple_governance_proto()
         };
 
-        let (heap_neurons, topic_followee_index, heap_governance_data) =
+        let (heap_neurons, heap_governance_data, rng_seed) =
             split_governance_proto(governance_proto.clone());
         let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
+            reassemble_governance_proto(heap_neurons, heap_governance_data, rng_seed);
 
         assert_eq!(
             reassembled_governance_proto,
@@ -322,7 +312,7 @@ mod tests {
             ..GovernanceProto::default()
         };
         // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-        let (_, _, heap_governance_proto) = split_governance_proto(governance_proto);
+        let (_, heap_governance_proto, _) = split_governance_proto(governance_proto);
         assert_eq!(
             heap_governance_proto.neuron_management_voting_period_seconds,
             48 * 60 * 60

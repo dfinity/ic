@@ -1,8 +1,10 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{
+    corrupt_dealing, ComplaintCorrupter,
+};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
@@ -21,11 +23,13 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, SchnorrPreSignatureTranscript,
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare, ThresholdSchnorrCombinedSignature,
+    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
 };
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, Signed};
+use ic_types::crypto::{
+    AlgorithmId, BasicSig, BasicSigOf, ExtendedDerivationPath, KeyPurpose, Signed,
+};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
@@ -759,7 +763,7 @@ pub mod node {
         }
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
     pub struct Nodes {
         nodes: BTreeSet<Node>,
     }
@@ -817,7 +821,7 @@ pub mod node {
         pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             &'a self,
             idkg_receivers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
@@ -825,7 +829,7 @@ pub mod node {
         pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
             &'a self,
             idkg_dealers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             self.iter()
                 .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
@@ -834,7 +838,7 @@ pub mod node {
             &'a self,
             minimum_size: usize,
             rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             assert!(
                 minimum_size <= self.len(),
                 "Requested a random subset with at least {} elements but there are only {} elements",
@@ -849,7 +853,7 @@ pub mod node {
             &'a self,
             size: usize,
             rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &'a Node> + 'a {
             assert!(
                 size <= self.len(),
                 "Requested a random subset with {} elements but there are only {} elements",
@@ -863,7 +867,7 @@ pub mod node {
             &'a self,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_receivers(idkg_receivers)
                 .choose(rng)
                 .expect("empty receivers")
@@ -874,7 +878,7 @@ pub mod node {
             exclusion: &Node,
             idkg_receivers: T,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_receivers(idkg_receivers)
                 .filter(|node| *node != exclusion)
                 .choose(rng)
@@ -885,7 +889,7 @@ pub mod node {
             &'a self,
             params: &'a IDkgTranscriptParams,
             rng: &mut R,
-        ) -> &Node {
+        ) -> &'a Node {
             self.filter_by_dealers(params)
                 .choose(rng)
                 .expect("empty dealers")
@@ -1485,7 +1489,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
         .build()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
 pub enum IDkgMode {
     RandomUnmasked,
     Random,
@@ -1531,7 +1535,7 @@ impl IDkgMode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct IDkgModeTestContext {
     mode: IDkgMode,
     dealers: IDkgDealers,
@@ -1870,7 +1874,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
         .build_with_signature(transcript_params, basic_signer, signer_id))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CorruptSignedIDkgDealingError {
     SerializationError(String),
     FailedToCorruptDealing(String),
@@ -1944,6 +1948,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     key_transcript: &IDkgTranscript,
     message: &[u8],
     nonce: Randomness,
+    taproot_tree_root: Option<&[u8]>,
     derivation_path: &ExtendedDerivationPath,
     alg: AlgorithmId,
     rng: &mut R,
@@ -1959,6 +1964,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     ThresholdSchnorrSigInputs::new(
         derivation_path,
         message,
+        taproot_tree_root,
         nonce,
         presig,
         key_transcript.clone(),
@@ -2462,6 +2468,7 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
 pub struct ThresholdSchnorrSigInputsBuilder {
     derivation_path: ExtendedDerivationPath,
     message: Vec<u8>,
+    taproot_tree_root: Option<Vec<u8>>,
     nonce: Randomness,
     presig_transcript: SchnorrPreSignatureTranscript,
     key_transcript: IDkgTranscript,
@@ -2472,6 +2479,7 @@ impl ThresholdSchnorrSigInputsBuilder {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
+            self.taproot_tree_root.as_deref(),
             self.nonce,
             self.presig_transcript,
             self.key_transcript,
@@ -2497,6 +2505,7 @@ impl IntoBuilder for ThresholdSchnorrSigInputs {
         ThresholdSchnorrSigInputsBuilder {
             derivation_path: self.derivation_path().clone(),
             message: Vec::from(self.message()),
+            taproot_tree_root: self.taproot_tree_root().map(Vec::from),
             nonce: *self.nonce(),
             presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
@@ -2798,7 +2807,7 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
                 .expect("failed to deserialize internal dealing");
 
         let corrupted_internal_dealing =
-            ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing(
+            ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing(
                 &internal_dealing,
                 &[receiver_index],
                 Seed::from_rng(rng),
@@ -2878,10 +2887,8 @@ pub mod ecdsa {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdEcdsaSigInputs,
-    };
-    use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
     use rand::distributions::uniform::SampleRange;
@@ -2934,10 +2941,8 @@ pub mod schnorr {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdSchnorrSigInputs,
-    };
-    use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
     use rand::distributions::uniform::SampleRange;
@@ -2971,6 +2976,21 @@ pub mod schnorr {
         rng.fill_bytes(&mut message);
         let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
+        let taproot_tree_root = {
+            if alg == AlgorithmId::ThresholdSchnorrBip340 {
+                let choose = rng.gen::<u8>();
+                if choose <= 128 {
+                    None
+                } else if choose <= 192 {
+                    Some(vec![])
+                } else {
+                    Some(rng.gen::<[u8; 32]>().to_vec())
+                }
+            } else {
+                None
+            }
+        };
+
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let tsig_inputs = generate_tschnorr_protocol_inputs(
             &env,
@@ -2979,6 +2999,7 @@ pub mod schnorr {
             &key_transcript,
             &message,
             seed,
+            taproot_tree_root.as_deref(),
             &derivation_path,
             alg,
             rng,

@@ -1,5 +1,4 @@
 use ic_base_types::NumBytes;
-use ic_constants::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::{
@@ -11,8 +10,9 @@ use ic_interfaces::{
         LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
     },
 };
+use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{debug, error, trace, ReplicaLogger};
-use ic_management_canister_types::CanisterStatusType;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
@@ -107,8 +107,10 @@ pub(crate) trait ValidSetRule: Send {
     fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>);
 }
 
-pub(crate) struct ValidSetRuleImpl {
-    ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+pub(crate) struct ValidSetRuleImpl<
+    IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>,
+> {
+    ingress_history_writer: Arc<IngressHistoryWriter_>,
     ingress_history_max_messages: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
@@ -116,9 +118,11 @@ pub(crate) struct ValidSetRuleImpl {
     log: ReplicaLogger,
 }
 
-impl ValidSetRuleImpl {
+impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
+    ValidSetRuleImpl<IngressHistoryWriter_>
+{
     pub(crate) fn new(
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        ingress_history_writer: Arc<IngressHistoryWriter_>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
@@ -195,7 +199,7 @@ impl ValidSetRuleImpl {
 
     /// Checks whether the given message has already been inducted.
     fn is_duplicate(&self, state: &ReplicatedState, msg: &SignedIngressContent) -> bool {
-        state.get_ingress_status(&msg.id()) != IngressStatus::Unknown
+        state.get_ingress_status(&msg.id()) != &IngressStatus::Unknown
     }
 
     /// Records the result of inducting an ingress message.
@@ -327,7 +331,9 @@ impl ValidSetRuleImpl {
     }
 }
 
-impl ValidSetRule for ValidSetRuleImpl {
+impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> ValidSetRule
+    for ValidSetRuleImpl<IngressHistoryWriter_>
+{
     fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngressContent>) {
         let subnet_size = state
             .metadata

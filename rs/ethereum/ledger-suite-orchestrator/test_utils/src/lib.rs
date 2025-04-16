@@ -1,30 +1,27 @@
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
-use crate::metrics::MetricsAssert;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::management_canister::main::CanisterStatusResponse;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds,
-    OrchestratorArg, OrchestratorInfo, UpgradeArg,
+    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, InstalledLedgerSuite,
+    LedgerInitArg, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
-use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
+use ic_management_canister_types_private::{
+    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
+    Payload,
 };
-use ic_state_machine_tests::{
-    CanisterStatusResultV2, Cycles, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
-use ic_test_utilities_load_wasm::load_wasm;
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
+use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
-pub mod arbitrary;
 pub mod flow;
-pub mod metrics;
 pub mod universal_canister;
 
 const MAX_TICKS: usize = 10;
@@ -123,6 +120,7 @@ impl LedgerSuiteOrchestrator {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
+                manage_ledger_suites: None,
             },
         ))
     }
@@ -184,6 +182,22 @@ impl LedgerSuiteOrchestrator {
             &OrchestratorArg::AddErc20Arg(params.clone()),
         );
         AddErc20TokenFlow { setup, params }
+    }
+
+    pub fn manage_installed_canisters(
+        self,
+        manage_installed_canister: Vec<InstalledLedgerSuite>,
+    ) -> Self {
+        self.upgrade_ledger_suite_orchestrator_expecting_ok(&OrchestratorArg::UpgradeArg(
+            UpgradeArg {
+                git_commit_hash: None,
+                ledger_compressed_wasm_hash: None,
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: None,
+                cycles_management: None,
+                manage_ledger_suites: Some(manage_installed_canister),
+            },
+        ))
     }
 
     pub fn upgrade_ledger_suite_orchestrator(
@@ -289,9 +303,54 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
-    pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+    pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
+        MetricsAssert::from_http_query(self)
+    }
+
+    pub fn wait_for<T, E, F>(&self, f: F) -> T
+    where
+        F: Fn() -> Result<T, E>,
+        E: std::fmt::Debug,
+    {
+        let mut last_error = None;
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+            match f() {
+                Ok(t) => return t,
+                Err(e) => {
+                    last_error = Some(e);
+                }
+            }
+        }
+        panic!(
+            "Failed to get result after {} ticks: {:?}",
+            MAX_TICKS, last_error
+        );
+    }
+
+    pub fn wait_for_canister_to_be_installed_and_running(&self, canister_id: Principal) {
+        let canister_id = PrincipalId(canister_id).try_into().unwrap();
+        self.wait_for(|| {
+            let ledger_status = self.canister_status_of(canister_id);
+            if ledger_status.status() == CanisterStatusType::Running
+                && ledger_status.module_hash().is_some()
+            {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Canister {} is not ready {:?}",
+                    canister_id, ledger_status
+                ))
+            }
+        });
+    }
+}
+
+impl CanisterHttpQuery<UserError> for LedgerSuiteOrchestrator {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.as_ref()
+            .query(self.ledger_suite_orchestrator_id, "http_request", request)
+            .map(assert_reply)
     }
 }
 
@@ -311,51 +370,38 @@ pub fn new_state_machine() -> StateMachine {
 }
 
 pub fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
-    load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_suite_orchestrator",
-        &[],
-    )
+    let wasm_path = std::env::var("LEDGER_SUITE_ORCHESTRATOR_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
 }
 
 pub fn ledger_suite_orchestrator_get_blocks_disabled_wasm() -> Vec<u8> {
-    load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_suite_orchestrator_get_blocks_disabled",
-        &[],
-    )
+    let wasm_path =
+        std::env::var("LEDGER_SUITE_ORCHESTRATOR_GET_BLOCKS_DISABLED_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
 }
 
 pub fn ledger_wasm() -> LedgerWasm {
-    LedgerWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    LedgerWasm::from(wasm)
 }
 
 fn ledger_get_blocks_disabled_wasm() -> LedgerWasm {
-    LedgerWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_canister_get_blocks_disabled",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_CANISTER_GET_BLOCKS_DISABLED_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    LedgerWasm::from(wasm)
 }
 
 pub fn index_wasm() -> IndexWasm {
-    IndexWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "index_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("INDEX_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    IndexWasm::from(wasm)
 }
 
 fn archive_wasm() -> ArchiveWasm {
-    ArchiveWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_archive_node_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    ArchiveWasm::from(wasm)
 }
 
 fn is_gzipped_blob(blob: &[u8]) -> bool {
@@ -413,6 +459,23 @@ pub fn usdt_erc20_contract() -> Erc20Contract {
     Erc20Contract {
         chain_id: Nat::from(1_u8),
         address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
+    }
+}
+
+pub fn cketh_installed_canisters() -> InstalledLedgerSuite {
+    InstalledLedgerSuite {
+        token_symbol: "ckETH".to_string(),
+        ledger: InstalledCanister {
+            canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
+            installed_wasm_hash: "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"
+                .to_string(),
+        },
+        index: InstalledCanister {
+            canister_id: "s3zol-vqaaa-aaaar-qacpa-cai".parse().unwrap(),
+            installed_wasm_hash: "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a"
+                .to_string(),
+        },
+        archives: Some(vec!["xob7s-iqaaa-aaaar-qacra-cai".parse().unwrap()]),
     }
 }
 

@@ -4,11 +4,11 @@ use crate::{
 };
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
-use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
+use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, ChangeSet, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction, Mutations, ValidatedConsensusArtifact},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -82,13 +82,13 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutablePool<ConsensusMessage, ChangeSet = ChangeSet>,
+    pool: &mut dyn MutablePool<ConsensusMessage, Mutations = Mutations>,
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {
     let file = &cup_file_name(backup_dir, height);
     if let Some(cup) = read_cup_file(file) {
-        pool.apply_changes(
+        pool.apply(
             ChangeAction::AddToValidated(ValidatedConsensusArtifact {
                 msg: cup.into_message(),
                 timestamp: UNIX_EPOCH,

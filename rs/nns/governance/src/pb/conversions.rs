@@ -1,5 +1,8 @@
 use crate::pb::v1 as pb;
+use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api::pb::v1 as pb_api;
+
+use crate::pb::proposal_conversions::convert_proposal;
 
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
@@ -50,43 +53,6 @@ impl From<pb_api::BallotInfo> for pb::BallotInfo {
     }
 }
 
-impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
-    fn from(item: pb::NeuronInfo) -> Self {
-        Self {
-            retrieved_at_timestamp_seconds: item.retrieved_at_timestamp_seconds,
-            state: item.state,
-            age_seconds: item.age_seconds,
-            dissolve_delay_seconds: item.dissolve_delay_seconds,
-            recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
-            voting_power: item.voting_power,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            stake_e8s: item.stake_e8s,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            known_neuron_data: item.known_neuron_data.map(|x| x.into()),
-            neuron_type: item.neuron_type,
-            visibility: item.visibility,
-        }
-    }
-}
-impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
-    fn from(item: pb_api::NeuronInfo) -> Self {
-        Self {
-            retrieved_at_timestamp_seconds: item.retrieved_at_timestamp_seconds,
-            state: item.state,
-            age_seconds: item.age_seconds,
-            dissolve_delay_seconds: item.dissolve_delay_seconds,
-            recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
-            voting_power: item.voting_power,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            stake_e8s: item.stake_e8s,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            known_neuron_data: item.known_neuron_data.map(|x| x.into()),
-            neuron_type: item.neuron_type,
-            visibility: item.visibility,
-        }
-    }
-}
-
 impl From<pb::NeuronStakeTransfer> for pb_api::NeuronStakeTransfer {
     fn from(item: pb::NeuronStakeTransfer) -> Self {
         Self {
@@ -114,38 +80,6 @@ impl From<pb_api::NeuronStakeTransfer> for pb::NeuronStakeTransfer {
     }
 }
 
-impl From<pb::Neuron> for pb_api::Neuron {
-    fn from(item: pb::Neuron) -> Self {
-        Self {
-            id: item.id,
-            account: item.account,
-            controller: item.controller,
-            hot_keys: item.hot_keys,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            followees: item
-                .followees
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            recent_ballots: item.recent_ballots.into_iter().map(|x| x.into()).collect(),
-            kyc_verified: item.kyc_verified,
-            transfer: item.transfer.map(|x| x.into()),
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            known_neuron_data: item.known_neuron_data.map(|x| x.into()),
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-        }
-    }
-}
 impl From<pb_api::Neuron> for pb::Neuron {
     fn from(item: pb_api::Neuron) -> Self {
         Self {
@@ -175,6 +109,11 @@ impl From<pb_api::Neuron> for pb::Neuron {
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
+            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            // This field is internal only and should not be read from API types.
+            recent_ballots_next_entry_index: None,
+            // TODO(NNS1-3607): Expose this field in the API.
+            maturity_disbursements_in_progress: vec![],
         }
     }
 }
@@ -235,76 +174,6 @@ impl From<pb_api::Visibility> for pb::Visibility {
             pb_api::Visibility::Unspecified => pb::Visibility::Unspecified,
             pb_api::Visibility::Private => pb::Visibility::Private,
             pb_api::Visibility::Public => pb::Visibility::Public,
-        }
-    }
-}
-
-impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
-    fn from(item: pb::AbridgedNeuron) -> Self {
-        Self {
-            account: item.account,
-            controller: item.controller,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            kyc_verified: item.kyc_verified,
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-        }
-    }
-}
-impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
-    fn from(item: pb_api::AbridgedNeuron) -> Self {
-        Self {
-            account: item.account,
-            controller: item.controller,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            kyc_verified: item.kyc_verified,
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-        }
-    }
-}
-
-impl From<pb::abridged_neuron::DissolveState> for pb_api::abridged_neuron::DissolveState {
-    fn from(item: pb::abridged_neuron::DissolveState) -> Self {
-        match item {
-            pb::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v) => {
-                pb_api::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb::abridged_neuron::DissolveState::DissolveDelaySeconds(v) => {
-                pb_api::abridged_neuron::DissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<pb_api::abridged_neuron::DissolveState> for pb::abridged_neuron::DissolveState {
-    fn from(item: pb_api::abridged_neuron::DissolveState) -> Self {
-        match item {
-            pb_api::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v) => {
-                pb::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb_api::abridged_neuron::DissolveState::DissolveDelaySeconds(v) => {
-                pb::abridged_neuron::DissolveState::DissolveDelaySeconds(v)
-            }
         }
     }
 }
@@ -535,16 +404,6 @@ impl From<pb_api::SetSnsTokenSwapOpenTimeWindow> for pb::SetSnsTokenSwapOpenTime
     }
 }
 
-impl From<pb::Proposal> for pb_api::Proposal {
-    fn from(item: pb::Proposal) -> Self {
-        Self {
-            title: item.title,
-            summary: item.summary,
-            url: item.url,
-            action: item.action.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::Proposal> for pb::Proposal {
     fn from(item: pb_api::Proposal) -> Self {
         Self {
@@ -555,57 +414,17 @@ impl From<pb_api::Proposal> for pb::Proposal {
         }
     }
 }
-
-impl From<pb::proposal::Action> for pb_api::proposal::Action {
-    fn from(item: pb::proposal::Action) -> Self {
-        match item {
-            pb::proposal::Action::ManageNeuron(v) => {
-                pb_api::proposal::Action::ManageNeuron(Box::new((*v).into()))
-            }
-            pb::proposal::Action::ManageNetworkEconomics(v) => {
-                pb_api::proposal::Action::ManageNetworkEconomics(v.into())
-            }
-            pb::proposal::Action::Motion(v) => pb_api::proposal::Action::Motion(v.into()),
-            pb::proposal::Action::ExecuteNnsFunction(v) => {
-                pb_api::proposal::Action::ExecuteNnsFunction(v.into())
-            }
-            pb::proposal::Action::ApproveGenesisKyc(v) => {
-                pb_api::proposal::Action::ApproveGenesisKyc(v.into())
-            }
-            pb::proposal::Action::AddOrRemoveNodeProvider(v) => {
-                pb_api::proposal::Action::AddOrRemoveNodeProvider(v.into())
-            }
-            pb::proposal::Action::RewardNodeProvider(v) => {
-                pb_api::proposal::Action::RewardNodeProvider(v.into())
-            }
-            pb::proposal::Action::SetDefaultFollowees(v) => {
-                pb_api::proposal::Action::SetDefaultFollowees(v.into())
-            }
-            pb::proposal::Action::RewardNodeProviders(v) => {
-                pb_api::proposal::Action::RewardNodeProviders(v.into())
-            }
-            pb::proposal::Action::RegisterKnownNeuron(v) => {
-                pb_api::proposal::Action::RegisterKnownNeuron(v.into())
-            }
-            pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
-                pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
-            }
-            pb::proposal::Action::OpenSnsTokenSwap(v) => {
-                pb_api::proposal::Action::OpenSnsTokenSwap(v.into())
-            }
-            pb::proposal::Action::CreateServiceNervousSystem(v) => {
-                pb_api::proposal::Action::CreateServiceNervousSystem(v.into())
-            }
-            pb::proposal::Action::InstallCode(v) => pb_api::proposal::Action::InstallCode(v.into()),
-            pb::proposal::Action::StopOrStartCanister(v) => {
-                pb_api::proposal::Action::StopOrStartCanister(v.into())
-            }
-            pb::proposal::Action::UpdateCanisterSettings(v) => {
-                pb_api::proposal::Action::UpdateCanisterSettings(v.into())
-            }
+impl From<pb_api::MakeProposalRequest> for pb::Proposal {
+    fn from(item: pb_api::MakeProposalRequest) -> Self {
+        Self {
+            title: item.title,
+            summary: item.summary,
+            url: item.url,
+            action: item.action.map(|x| x.into()),
         }
     }
 }
+
 impl From<pb_api::proposal::Action> for pb::proposal::Action {
     fn from(item: pb_api::proposal::Action) -> Self {
         match item {
@@ -656,6 +475,49 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
         }
     }
 }
+impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
+    fn from(item: pb_api::ProposalActionRequest) -> Self {
+        match item {
+            pb_api::ProposalActionRequest::ManageNeuron(v) => {
+                pb::proposal::Action::ManageNeuron(Box::new((*v).into()))
+            }
+            pb_api::ProposalActionRequest::ManageNetworkEconomics(v) => {
+                pb::proposal::Action::ManageNetworkEconomics(v.into())
+            }
+            pb_api::ProposalActionRequest::Motion(v) => pb::proposal::Action::Motion(v.into()),
+            pb_api::ProposalActionRequest::ExecuteNnsFunction(v) => {
+                pb::proposal::Action::ExecuteNnsFunction(v.into())
+            }
+            pb_api::ProposalActionRequest::ApproveGenesisKyc(v) => {
+                pb::proposal::Action::ApproveGenesisKyc(v.into())
+            }
+            pb_api::ProposalActionRequest::AddOrRemoveNodeProvider(v) => {
+                pb::proposal::Action::AddOrRemoveNodeProvider(v.into())
+            }
+            pb_api::ProposalActionRequest::RewardNodeProvider(v) => {
+                pb::proposal::Action::RewardNodeProvider(v.into())
+            }
+            pb_api::ProposalActionRequest::RewardNodeProviders(v) => {
+                pb::proposal::Action::RewardNodeProviders(v.into())
+            }
+            pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
+                pb::proposal::Action::RegisterKnownNeuron(v.into())
+            }
+            pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
+                pb::proposal::Action::CreateServiceNervousSystem(v.into())
+            }
+            pb_api::ProposalActionRequest::InstallCode(v) => {
+                pb::proposal::Action::InstallCode(v.into())
+            }
+            pb_api::ProposalActionRequest::StopOrStartCanister(v) => {
+                pb::proposal::Action::StopOrStartCanister(v.into())
+            }
+            pb_api::ProposalActionRequest::UpdateCanisterSettings(v) => {
+                pb::proposal::Action::UpdateCanisterSettings(v.into())
+            }
+        }
+    }
+}
 
 impl From<pb::Empty> for pb_api::Empty {
     fn from(_: pb::Empty) -> Self {
@@ -679,6 +541,15 @@ impl From<pb::ManageNeuron> for pb_api::ManageNeuron {
 }
 impl From<pb_api::ManageNeuron> for pb::ManageNeuron {
     fn from(item: pb_api::ManageNeuron) -> Self {
+        Self {
+            id: item.id,
+            neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
+            command: item.command.map(|x| x.into()),
+        }
+    }
+}
+impl From<pb_api::ManageNeuronRequest> for pb::ManageNeuron {
+    fn from(item: pb_api::ManageNeuronRequest) -> Self {
         Self {
             id: item.id,
             neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
@@ -1026,6 +897,16 @@ impl From<pb_api::manage_neuron::StakeMaturity> for pb::manage_neuron::StakeMatu
     }
 }
 
+impl From<pb::manage_neuron::RefreshVotingPower> for pb_api::manage_neuron::RefreshVotingPower {
+    fn from(_item: pb::manage_neuron::RefreshVotingPower) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron::RefreshVotingPower> for pb::manage_neuron::RefreshVotingPower {
+    fn from(_item: pb_api::manage_neuron::RefreshVotingPower) -> Self {
+        Self {}
+    }
+}
 impl From<pb::manage_neuron::DisburseToNeuron> for pb_api::manage_neuron::DisburseToNeuron {
     fn from(item: pb::manage_neuron::DisburseToNeuron) -> Self {
         Self {
@@ -1094,6 +975,23 @@ impl From<pb_api::manage_neuron::ClaimOrRefresh> for pb::manage_neuron::ClaimOrR
     fn from(item: pb_api::manage_neuron::ClaimOrRefresh) -> Self {
         Self {
             by: item.by.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::manage_neuron::DisburseMaturity> for pb_api::manage_neuron::DisburseMaturity {
+    fn from(item: pb::manage_neuron::DisburseMaturity) -> Self {
+        Self {
+            percentage_to_disburse: item.percentage_to_disburse,
+            to_account: item.to_account.map(|x| x.into()),
+        }
+    }
+}
+impl From<pb_api::manage_neuron::DisburseMaturity> for pb::manage_neuron::DisburseMaturity {
+    fn from(item: pb_api::manage_neuron::DisburseMaturity) -> Self {
+        Self {
+            percentage_to_disburse: item.percentage_to_disburse,
+            to_account: item.to_account.map(|x| x.into()),
         }
     }
 }
@@ -1189,7 +1087,7 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
                 pb_api::manage_neuron::Command::Follow(v.into())
             }
             pb::manage_neuron::Command::MakeProposal(v) => {
-                pb_api::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
+                pb_api::manage_neuron::Command::MakeProposal(Box::new(convert_proposal(&v, false)))
             }
             pb::manage_neuron::Command::RegisterVote(v) => {
                 pb_api::manage_neuron::Command::RegisterVote(v.into())
@@ -1207,6 +1105,12 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::Merge(v) => pb_api::manage_neuron::Command::Merge(v.into()),
             pb::manage_neuron::Command::StakeMaturity(v) => {
                 pb_api::manage_neuron::Command::StakeMaturity(v.into())
+            }
+            pb::manage_neuron::Command::RefreshVotingPower(v) => {
+                pb_api::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
+            pb::manage_neuron::Command::DisburseMaturity(v) => {
+                pb_api::manage_neuron::Command::DisburseMaturity(v.into())
             }
         }
     }
@@ -1244,339 +1148,59 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             pb_api::manage_neuron::Command::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
+            pb_api::manage_neuron::Command::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
+            pb_api::manage_neuron::Command::DisburseMaturity(v) => {
+                pb::manage_neuron::Command::DisburseMaturity(v.into())
+            }
         }
     }
 }
-
-impl From<pb::ManageNeuronResponse> for pb_api::ManageNeuronResponse {
-    fn from(item: pb::ManageNeuronResponse) -> Self {
-        Self {
-            command: item.command.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::ManageNeuronResponse> for pb::ManageNeuronResponse {
-    fn from(item: pb_api::ManageNeuronResponse) -> Self {
-        Self {
-            command: item.command.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::ConfigureResponse>
-    for pb_api::manage_neuron_response::ConfigureResponse
-{
-    fn from(_: pb::manage_neuron_response::ConfigureResponse) -> Self {
-        Self {}
-    }
-}
-impl From<pb_api::manage_neuron_response::ConfigureResponse>
-    for pb::manage_neuron_response::ConfigureResponse
-{
-    fn from(_: pb_api::manage_neuron_response::ConfigureResponse) -> Self {
-        Self {}
-    }
-}
-
-impl From<pb::manage_neuron_response::DisburseResponse>
-    for pb_api::manage_neuron_response::DisburseResponse
-{
-    fn from(item: pb::manage_neuron_response::DisburseResponse) -> Self {
-        Self {
-            transfer_block_height: item.transfer_block_height,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::DisburseResponse>
-    for pb::manage_neuron_response::DisburseResponse
-{
-    fn from(item: pb_api::manage_neuron_response::DisburseResponse) -> Self {
-        Self {
-            transfer_block_height: item.transfer_block_height,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::SpawnResponse>
-    for pb_api::manage_neuron_response::SpawnResponse
-{
-    fn from(item: pb::manage_neuron_response::SpawnResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::SpawnResponse>
-    for pb::manage_neuron_response::SpawnResponse
-{
-    fn from(item: pb_api::manage_neuron_response::SpawnResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::MergeMaturityResponse>
-    for pb_api::manage_neuron_response::MergeMaturityResponse
-{
-    fn from(item: pb::manage_neuron_response::MergeMaturityResponse) -> Self {
-        Self {
-            merged_maturity_e8s: item.merged_maturity_e8s,
-            new_stake_e8s: item.new_stake_e8s,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::MergeMaturityResponse>
-    for pb::manage_neuron_response::MergeMaturityResponse
-{
-    fn from(item: pb_api::manage_neuron_response::MergeMaturityResponse) -> Self {
-        Self {
-            merged_maturity_e8s: item.merged_maturity_e8s,
-            new_stake_e8s: item.new_stake_e8s,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::StakeMaturityResponse>
-    for pb_api::manage_neuron_response::StakeMaturityResponse
-{
-    fn from(item: pb::manage_neuron_response::StakeMaturityResponse) -> Self {
-        Self {
-            maturity_e8s: item.maturity_e8s,
-            staked_maturity_e8s: item.staked_maturity_e8s,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::StakeMaturityResponse>
-    for pb::manage_neuron_response::StakeMaturityResponse
-{
-    fn from(item: pb_api::manage_neuron_response::StakeMaturityResponse) -> Self {
-        Self {
-            maturity_e8s: item.maturity_e8s,
-            staked_maturity_e8s: item.staked_maturity_e8s,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::FollowResponse>
-    for pb_api::manage_neuron_response::FollowResponse
-{
-    fn from(_: pb::manage_neuron_response::FollowResponse) -> Self {
-        Self {}
-    }
-}
-impl From<pb_api::manage_neuron_response::FollowResponse>
-    for pb::manage_neuron_response::FollowResponse
-{
-    fn from(_: pb_api::manage_neuron_response::FollowResponse) -> Self {
-        Self {}
-    }
-}
-
-impl From<pb::manage_neuron_response::MakeProposalResponse>
-    for pb_api::manage_neuron_response::MakeProposalResponse
-{
-    fn from(item: pb::manage_neuron_response::MakeProposalResponse) -> Self {
-        Self {
-            proposal_id: item.proposal_id,
-            message: item.message,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::MakeProposalResponse>
-    for pb::manage_neuron_response::MakeProposalResponse
-{
-    fn from(item: pb_api::manage_neuron_response::MakeProposalResponse) -> Self {
-        Self {
-            proposal_id: item.proposal_id,
-            message: item.message,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::RegisterVoteResponse>
-    for pb_api::manage_neuron_response::RegisterVoteResponse
-{
-    fn from(_: pb::manage_neuron_response::RegisterVoteResponse) -> Self {
-        Self {}
-    }
-}
-impl From<pb_api::manage_neuron_response::RegisterVoteResponse>
-    for pb::manage_neuron_response::RegisterVoteResponse
-{
-    fn from(_: pb_api::manage_neuron_response::RegisterVoteResponse) -> Self {
-        Self {}
-    }
-}
-
-impl From<pb::manage_neuron_response::SplitResponse>
-    for pb_api::manage_neuron_response::SplitResponse
-{
-    fn from(item: pb::manage_neuron_response::SplitResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::SplitResponse>
-    for pb::manage_neuron_response::SplitResponse
-{
-    fn from(item: pb_api::manage_neuron_response::SplitResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::MergeResponse>
-    for pb_api::manage_neuron_response::MergeResponse
-{
-    fn from(item: pb::manage_neuron_response::MergeResponse) -> Self {
-        Self {
-            source_neuron: item.source_neuron.map(|x| x.into()),
-            target_neuron: item.target_neuron.map(|x| x.into()),
-            source_neuron_info: item.source_neuron_info.map(|x| x.into()),
-            target_neuron_info: item.target_neuron_info.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::MergeResponse>
-    for pb::manage_neuron_response::MergeResponse
-{
-    fn from(item: pb_api::manage_neuron_response::MergeResponse) -> Self {
-        Self {
-            source_neuron: item.source_neuron.map(|x| x.into()),
-            target_neuron: item.target_neuron.map(|x| x.into()),
-            source_neuron_info: item.source_neuron_info.map(|x| x.into()),
-            target_neuron_info: item.target_neuron_info.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::DisburseToNeuronResponse>
-    for pb_api::manage_neuron_response::DisburseToNeuronResponse
-{
-    fn from(item: pb::manage_neuron_response::DisburseToNeuronResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::DisburseToNeuronResponse>
-    for pb::manage_neuron_response::DisburseToNeuronResponse
-{
-    fn from(item: pb_api::manage_neuron_response::DisburseToNeuronResponse) -> Self {
-        Self {
-            created_neuron_id: item.created_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::ClaimOrRefreshResponse>
-    for pb_api::manage_neuron_response::ClaimOrRefreshResponse
-{
-    fn from(item: pb::manage_neuron_response::ClaimOrRefreshResponse) -> Self {
-        Self {
-            refreshed_neuron_id: item.refreshed_neuron_id,
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::ClaimOrRefreshResponse>
-    for pb::manage_neuron_response::ClaimOrRefreshResponse
-{
-    fn from(item: pb_api::manage_neuron_response::ClaimOrRefreshResponse) -> Self {
-        Self {
-            refreshed_neuron_id: item.refreshed_neuron_id,
-        }
-    }
-}
-
-impl From<pb::manage_neuron_response::Command> for pb_api::manage_neuron_response::Command {
-    fn from(item: pb::manage_neuron_response::Command) -> Self {
+impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
+    fn from(item: pb_api::ManageNeuronCommandRequest) -> Self {
         match item {
-            pb::manage_neuron_response::Command::Error(v) => {
-                pb_api::manage_neuron_response::Command::Error(v.into())
+            pb_api::ManageNeuronCommandRequest::Configure(v) => {
+                pb::manage_neuron::Command::Configure(v.into())
             }
-            pb::manage_neuron_response::Command::Configure(v) => {
-                pb_api::manage_neuron_response::Command::Configure(v.into())
+            pb_api::ManageNeuronCommandRequest::Disburse(v) => {
+                pb::manage_neuron::Command::Disburse(v.into())
             }
-            pb::manage_neuron_response::Command::Disburse(v) => {
-                pb_api::manage_neuron_response::Command::Disburse(v.into())
+            pb_api::ManageNeuronCommandRequest::Spawn(v) => {
+                pb::manage_neuron::Command::Spawn(v.into())
             }
-            pb::manage_neuron_response::Command::Spawn(v) => {
-                pb_api::manage_neuron_response::Command::Spawn(v.into())
+            pb_api::ManageNeuronCommandRequest::Follow(v) => {
+                pb::manage_neuron::Command::Follow(v.into())
             }
-            pb::manage_neuron_response::Command::Follow(v) => {
-                pb_api::manage_neuron_response::Command::Follow(v.into())
+            pb_api::ManageNeuronCommandRequest::MakeProposal(v) => {
+                pb::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
             }
-            pb::manage_neuron_response::Command::MakeProposal(v) => {
-                pb_api::manage_neuron_response::Command::MakeProposal(v.into())
+            pb_api::ManageNeuronCommandRequest::RegisterVote(v) => {
+                pb::manage_neuron::Command::RegisterVote(v.into())
             }
-            pb::manage_neuron_response::Command::RegisterVote(v) => {
-                pb_api::manage_neuron_response::Command::RegisterVote(v.into())
+            pb_api::ManageNeuronCommandRequest::Split(v) => {
+                pb::manage_neuron::Command::Split(v.into())
             }
-            pb::manage_neuron_response::Command::Split(v) => {
-                pb_api::manage_neuron_response::Command::Split(v.into())
+            pb_api::ManageNeuronCommandRequest::DisburseToNeuron(v) => {
+                pb::manage_neuron::Command::DisburseToNeuron(v.into())
             }
-            pb::manage_neuron_response::Command::DisburseToNeuron(v) => {
-                pb_api::manage_neuron_response::Command::DisburseToNeuron(v.into())
+            pb_api::ManageNeuronCommandRequest::ClaimOrRefresh(v) => {
+                pb::manage_neuron::Command::ClaimOrRefresh(v.into())
             }
-            pb::manage_neuron_response::Command::ClaimOrRefresh(v) => {
-                pb_api::manage_neuron_response::Command::ClaimOrRefresh(v.into())
+            pb_api::ManageNeuronCommandRequest::MergeMaturity(v) => {
+                pb::manage_neuron::Command::MergeMaturity(v.into())
             }
-            pb::manage_neuron_response::Command::MergeMaturity(v) => {
-                pb_api::manage_neuron_response::Command::MergeMaturity(v.into())
+            pb_api::ManageNeuronCommandRequest::Merge(v) => {
+                pb::manage_neuron::Command::Merge(v.into())
             }
-            pb::manage_neuron_response::Command::Merge(v) => {
-                pb_api::manage_neuron_response::Command::Merge(v.into())
+            pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
+                pb::manage_neuron::Command::StakeMaturity(v.into())
             }
-            pb::manage_neuron_response::Command::StakeMaturity(v) => {
-                pb_api::manage_neuron_response::Command::StakeMaturity(v.into())
+            pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
             }
-        }
-    }
-}
-impl From<pb_api::manage_neuron_response::Command> for pb::manage_neuron_response::Command {
-    fn from(item: pb_api::manage_neuron_response::Command) -> Self {
-        match item {
-            pb_api::manage_neuron_response::Command::Error(v) => {
-                pb::manage_neuron_response::Command::Error(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Configure(v) => {
-                pb::manage_neuron_response::Command::Configure(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Disburse(v) => {
-                pb::manage_neuron_response::Command::Disburse(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Spawn(v) => {
-                pb::manage_neuron_response::Command::Spawn(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Follow(v) => {
-                pb::manage_neuron_response::Command::Follow(v.into())
-            }
-            pb_api::manage_neuron_response::Command::MakeProposal(v) => {
-                pb::manage_neuron_response::Command::MakeProposal(v.into())
-            }
-            pb_api::manage_neuron_response::Command::RegisterVote(v) => {
-                pb::manage_neuron_response::Command::RegisterVote(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Split(v) => {
-                pb::manage_neuron_response::Command::Split(v.into())
-            }
-            pb_api::manage_neuron_response::Command::DisburseToNeuron(v) => {
-                pb::manage_neuron_response::Command::DisburseToNeuron(v.into())
-            }
-            pb_api::manage_neuron_response::Command::ClaimOrRefresh(v) => {
-                pb::manage_neuron_response::Command::ClaimOrRefresh(v.into())
-            }
-            pb_api::manage_neuron_response::Command::MergeMaturity(v) => {
-                pb::manage_neuron_response::Command::MergeMaturity(v.into())
-            }
-            pb_api::manage_neuron_response::Command::Merge(v) => {
-                pb::manage_neuron_response::Command::Merge(v.into())
-            }
-            pb_api::manage_neuron_response::Command::StakeMaturity(v) => {
-                pb::manage_neuron_response::Command::StakeMaturity(v.into())
+            pb_api::ManageNeuronCommandRequest::DisburseMaturity(v) => {
+                pb::manage_neuron::Command::DisburseMaturity(v.into())
             }
         }
     }
@@ -1768,7 +1392,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             id: item.id,
             proposer: item.proposer,
             reject_cost_e8s: item.reject_cost_e8s,
-            proposal: item.proposal.map(|x| x.into()),
+            proposal: item.proposal.map(|x| convert_proposal(&x, false)),
             proposal_timestamp_seconds: item.proposal_timestamp_seconds,
             ballots: item
                 .ballots
@@ -1784,10 +1408,10 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -1813,10 +1437,10 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -2034,7 +1658,6 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
     for pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion
 {
     fn from(item: pb::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
-        #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
@@ -2042,7 +1665,6 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             is_capped: item.is_capped,
             controller: item.controller,
             hotkeys: item.hotkeys,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -2058,7 +1680,6 @@ impl From<pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             is_capped: item.is_capped,
             controller: item.controller,
             hotkeys: item.hotkeys,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -2252,61 +1873,6 @@ impl From<pb_api::WaitForQuietState> for pb::WaitForQuietState {
     }
 }
 
-impl From<pb::ProposalInfo> for pb_api::ProposalInfo {
-    fn from(item: pb::ProposalInfo) -> Self {
-        Self {
-            id: item.id,
-            proposer: item.proposer,
-            reject_cost_e8s: item.reject_cost_e8s,
-            proposal: item.proposal.map(|x| x.into()),
-            proposal_timestamp_seconds: item.proposal_timestamp_seconds,
-            ballots: item
-                .ballots
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            latest_tally: item.latest_tally.map(|x| x.into()),
-            decided_timestamp_seconds: item.decided_timestamp_seconds,
-            executed_timestamp_seconds: item.executed_timestamp_seconds,
-            failed_timestamp_seconds: item.failed_timestamp_seconds,
-            failure_reason: item.failure_reason.map(|x| x.into()),
-            reward_event_round: item.reward_event_round,
-            topic: item.topic,
-            status: item.status,
-            reward_status: item.reward_status,
-            deadline_timestamp_seconds: item.deadline_timestamp_seconds,
-            derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
-    fn from(item: pb_api::ProposalInfo) -> Self {
-        Self {
-            id: item.id,
-            proposer: item.proposer,
-            reject_cost_e8s: item.reject_cost_e8s,
-            proposal: item.proposal.map(|x| x.into()),
-            proposal_timestamp_seconds: item.proposal_timestamp_seconds,
-            ballots: item
-                .ballots
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            latest_tally: item.latest_tally.map(|x| x.into()),
-            decided_timestamp_seconds: item.decided_timestamp_seconds,
-            executed_timestamp_seconds: item.executed_timestamp_seconds,
-            failed_timestamp_seconds: item.failed_timestamp_seconds,
-            failure_reason: item.failure_reason.map(|x| x.into()),
-            reward_event_round: item.reward_event_round,
-            topic: item.topic,
-            status: item.status,
-            reward_status: item.reward_status,
-            deadline_timestamp_seconds: item.deadline_timestamp_seconds,
-            derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
-        }
-    }
-}
-
 impl From<pb::NetworkEconomics> for pb_api::NetworkEconomics {
     fn from(item: pb::NetworkEconomics) -> Self {
         Self {
@@ -2319,9 +1885,11 @@ impl From<pb::NetworkEconomics> for pb_api::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
         }
     }
 }
+
 impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
     fn from(item: pb_api::NetworkEconomics) -> Self {
         Self {
@@ -2334,6 +1902,31 @@ impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
+    fn from(item: pb_api::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
+            neuron_minimum_dissolve_delay_to_vote_seconds: item
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
+        }
+    }
+}
+
+impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
+    fn from(item: pb::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
+            neuron_minimum_dissolve_delay_to_vote_seconds: item
+                .neuron_minimum_dissolve_delay_to_vote_seconds,
         }
     }
 }
@@ -2787,9 +2380,9 @@ impl From<pb::InstallCode> for pb_api::InstallCode {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
-            wasm_module: item.wasm_module,
-            arg: item.arg,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
+            wasm_module_hash: item.wasm_module_hash,
+            arg_hash: item.arg_hash,
         }
     }
 }
@@ -2798,9 +2391,44 @@ impl From<pb_api::InstallCode> for pb::InstallCode {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
+            skip_stopping_before_installing: item.skip_stopping_before_installing,
+            // Note: the api->internal conversion here only happens when decoding from protobuf in
+            // canister_init.
+            wasm_module: None,
+            arg: None,
+            wasm_module_hash: item.wasm_module_hash,
+            arg_hash: item.arg_hash,
+        }
+    }
+}
+impl From<pb_api::InstallCodeRequest> for pb::InstallCode {
+    fn from(item: pb_api::InstallCodeRequest) -> Self {
+        let wasm_module_hash = item
+            .wasm_module
+            .as_ref()
+            .map(|wasm_module| Sha256::hash(wasm_module).to_vec());
+        let arg_hash = match item.arg.as_ref() {
+            Some(arg) => {
+                // We could calculate the hash of an empty arg, but it would be confusing for the
+                // proposal reviewers, since the arg_hash is the only thing they can see, and it would
+                // not be obvious that the arg is empty.
+                if arg.is_empty() {
+                    Some(vec![])
+                } else {
+                    Some(Sha256::hash(arg).to_vec())
+                }
+            }
+            None => Some(vec![]),
+        };
+
+        Self {
+            canister_id: item.canister_id,
+            install_mode: item.install_mode,
             wasm_module: item.wasm_module,
             arg: item.arg,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
+            wasm_module_hash,
+            arg_hash,
         }
     }
 }
@@ -2925,6 +2553,7 @@ impl From<pb::update_canister_settings::CanisterSettings>
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -2940,6 +2569,7 @@ impl From<pb_api::update_canister_settings::CanisterSettings>
             freezing_threshold: item.freezing_threshold,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -3000,62 +2630,6 @@ impl From<pb_api::update_canister_settings::LogVisibility>
     }
 }
 
-impl From<pb::Governance> for pb_api::Governance {
-    fn from(item: pb::Governance) -> Self {
-        Self {
-            neurons: item
-                .neurons
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            proposals: item
-                .proposals
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            to_claim_transfers: item
-                .to_claim_transfers
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
-            wait_for_quiet_threshold_seconds: item.wait_for_quiet_threshold_seconds,
-            economics: item.economics.map(|x| x.into()),
-            latest_reward_event: item.latest_reward_event.map(|x| x.into()),
-            in_flight_commands: item
-                .in_flight_commands
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            genesis_timestamp_seconds: item.genesis_timestamp_seconds,
-            node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
-            default_followees: item
-                .default_followees
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            short_voting_period_seconds: item.short_voting_period_seconds,
-            neuron_management_voting_period_seconds: item.neuron_management_voting_period_seconds,
-            metrics: item.metrics.map(|x| x.into()),
-            most_recent_monthly_node_provider_rewards: item
-                .most_recent_monthly_node_provider_rewards
-                .map(|x| x.into()),
-            cached_daily_maturity_modulation_basis_points: item
-                .cached_daily_maturity_modulation_basis_points,
-            maturity_modulation_last_updated_at_timestamp_seconds: item
-                .maturity_modulation_last_updated_at_timestamp_seconds,
-            spawning_neurons: item.spawning_neurons,
-            making_sns_proposal: item.making_sns_proposal.map(|x| x.into()),
-            migrations: item.migrations.map(|x| x.into()),
-            topic_followee_index: item
-                .topic_followee_index
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
-            restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::Governance> for pb::Governance {
     fn from(item: pb_api::Governance) -> Self {
         Self {
@@ -3101,14 +2675,10 @@ impl From<pb_api::Governance> for pb::Governance {
                 .maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons: item.spawning_neurons,
             making_sns_proposal: item.making_sns_proposal.map(|x| x.into()),
-            migrations: item.migrations.map(|x| x.into()),
-            topic_followee_index: item
-                .topic_followee_index
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
+            // This is not intended to be initialized from outside of canister.
+            rng_seed: None,
         }
     }
 }
@@ -3272,6 +2842,12 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }
@@ -3329,6 +2905,12 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }
@@ -3339,15 +2921,24 @@ impl From<pb::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }
@@ -3357,176 +2948,34 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }
 
-impl From<pb::governance::MakingSnsProposal> for pb_api::governance::MakingSnsProposal {
-    fn from(item: pb::governance::MakingSnsProposal) -> Self {
-        Self {
-            proposer_id: item.proposer_id,
-            caller: item.caller,
-            proposal: item.proposal.map(|x| x.into()),
-        }
-    }
-}
 impl From<pb_api::governance::MakingSnsProposal> for pb::governance::MakingSnsProposal {
     fn from(item: pb_api::governance::MakingSnsProposal) -> Self {
         Self {
             proposer_id: item.proposer_id,
             caller: item.caller,
             proposal: item.proposal.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::governance::Migration> for pb_api::governance::Migration {
-    fn from(item: pb::governance::Migration) -> Self {
-        Self {
-            status: item.status,
-            failure_reason: item.failure_reason,
-            progress: item.progress.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::governance::Migration> for pb::governance::Migration {
-    fn from(item: pb_api::governance::Migration) -> Self {
-        Self {
-            status: item.status,
-            failure_reason: item.failure_reason,
-            progress: item.progress.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::governance::migration::MigrationStatus>
-    for pb_api::governance::migration::MigrationStatus
-{
-    fn from(item: pb::governance::migration::MigrationStatus) -> Self {
-        match item {
-            pb::governance::migration::MigrationStatus::Unspecified => {
-                pb_api::governance::migration::MigrationStatus::Unspecified
-            }
-            pb::governance::migration::MigrationStatus::InProgress => {
-                pb_api::governance::migration::MigrationStatus::InProgress
-            }
-            pb::governance::migration::MigrationStatus::Succeeded => {
-                pb_api::governance::migration::MigrationStatus::Succeeded
-            }
-            pb::governance::migration::MigrationStatus::Failed => {
-                pb_api::governance::migration::MigrationStatus::Failed
-            }
-        }
-    }
-}
-impl From<pb_api::governance::migration::MigrationStatus>
-    for pb::governance::migration::MigrationStatus
-{
-    fn from(item: pb_api::governance::migration::MigrationStatus) -> Self {
-        match item {
-            pb_api::governance::migration::MigrationStatus::Unspecified => {
-                pb::governance::migration::MigrationStatus::Unspecified
-            }
-            pb_api::governance::migration::MigrationStatus::InProgress => {
-                pb::governance::migration::MigrationStatus::InProgress
-            }
-            pb_api::governance::migration::MigrationStatus::Succeeded => {
-                pb::governance::migration::MigrationStatus::Succeeded
-            }
-            pb_api::governance::migration::MigrationStatus::Failed => {
-                pb::governance::migration::MigrationStatus::Failed
-            }
-        }
-    }
-}
-
-impl From<pb::governance::migration::Progress> for pb_api::governance::migration::Progress {
-    fn from(item: pb::governance::migration::Progress) -> Self {
-        match item {
-            pb::governance::migration::Progress::LastNeuronId(v) => {
-                pb_api::governance::migration::Progress::LastNeuronId(v)
-            }
-        }
-    }
-}
-impl From<pb_api::governance::migration::Progress> for pb::governance::migration::Progress {
-    fn from(item: pb_api::governance::migration::Progress) -> Self {
-        match item {
-            pb_api::governance::migration::Progress::LastNeuronId(v) => {
-                pb::governance::migration::Progress::LastNeuronId(v)
-            }
-        }
-    }
-}
-
-impl From<pb::governance::Migrations> for pb_api::governance::Migrations {
-    fn from(item: pb::governance::Migrations) -> Self {
-        Self {
-            neuron_indexes_migration: item.neuron_indexes_migration.map(|x| x.into()),
-            copy_inactive_neurons_to_stable_memory_migration: item
-                .copy_inactive_neurons_to_stable_memory_migration
-                .map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::governance::Migrations> for pb::governance::Migrations {
-    fn from(item: pb_api::governance::Migrations) -> Self {
-        Self {
-            neuron_indexes_migration: item.neuron_indexes_migration.map(|x| x.into()),
-            copy_inactive_neurons_to_stable_memory_migration: item
-                .copy_inactive_neurons_to_stable_memory_migration
-                .map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::governance::FollowersMap> for pb_api::governance::FollowersMap {
-    fn from(item: pb::governance::FollowersMap) -> Self {
-        Self {
-            followers_map: item
-                .followers_map
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-impl From<pb_api::governance::FollowersMap> for pb::governance::FollowersMap {
-    fn from(item: pb_api::governance::FollowersMap) -> Self {
-        Self {
-            followers_map: item
-                .followers_map
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-
-impl From<pb::governance::followers_map::Followers>
-    for pb_api::governance::followers_map::Followers
-{
-    fn from(item: pb::governance::followers_map::Followers) -> Self {
-        Self {
-            followers: item.followers,
-        }
-    }
-}
-impl From<pb_api::governance::followers_map::Followers>
-    for pb::governance::followers_map::Followers
-{
-    fn from(item: pb_api::governance::followers_map::Followers) -> Self {
-        Self {
-            followers: item.followers,
         }
     }
 }
@@ -3575,67 +3024,6 @@ impl From<pb_api::ListProposalInfo> for pb::ListProposalInfo {
     }
 }
 
-impl From<pb::ListProposalInfoResponse> for pb_api::ListProposalInfoResponse {
-    fn from(item: pb::ListProposalInfoResponse) -> Self {
-        Self {
-            proposal_info: item.proposal_info.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-impl From<pb_api::ListProposalInfoResponse> for pb::ListProposalInfoResponse {
-    fn from(item: pb_api::ListProposalInfoResponse) -> Self {
-        Self {
-            proposal_info: item.proposal_info.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-
-impl From<pb::ListNeurons> for pb_api::ListNeurons {
-    fn from(item: pb::ListNeurons) -> Self {
-        Self {
-            neuron_ids: item.neuron_ids,
-            include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
-            include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
-            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-        }
-    }
-}
-impl From<pb_api::ListNeurons> for pb::ListNeurons {
-    fn from(item: pb_api::ListNeurons) -> Self {
-        Self {
-            neuron_ids: item.neuron_ids,
-            include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
-            include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
-            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
-        }
-    }
-}
-
-impl From<pb::ListNeuronsResponse> for pb_api::ListNeuronsResponse {
-    fn from(item: pb::ListNeuronsResponse) -> Self {
-        Self {
-            neuron_infos: item
-                .neuron_infos
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-impl From<pb_api::ListNeuronsResponse> for pb::ListNeuronsResponse {
-    fn from(item: pb_api::ListNeuronsResponse) -> Self {
-        Self {
-            neuron_infos: item
-                .neuron_infos
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            full_neurons: item.full_neurons.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-
 impl From<pb::ListKnownNeuronsResponse> for pb_api::ListKnownNeuronsResponse {
     fn from(item: pb::ListKnownNeuronsResponse) -> Self {
         Self {
@@ -3662,71 +3050,6 @@ impl From<pb_api::ListNodeProvidersResponse> for pb::ListNodeProvidersResponse {
     fn from(item: pb_api::ListNodeProvidersResponse) -> Self {
         Self {
             node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
-        }
-    }
-}
-
-impl From<pb::ClaimOrRefreshNeuronFromAccount> for pb_api::ClaimOrRefreshNeuronFromAccount {
-    fn from(item: pb::ClaimOrRefreshNeuronFromAccount) -> Self {
-        Self {
-            controller: item.controller,
-            memo: item.memo,
-        }
-    }
-}
-impl From<pb_api::ClaimOrRefreshNeuronFromAccount> for pb::ClaimOrRefreshNeuronFromAccount {
-    fn from(item: pb_api::ClaimOrRefreshNeuronFromAccount) -> Self {
-        Self {
-            controller: item.controller,
-            memo: item.memo,
-        }
-    }
-}
-
-impl From<pb::ClaimOrRefreshNeuronFromAccountResponse>
-    for pb_api::ClaimOrRefreshNeuronFromAccountResponse
-{
-    fn from(item: pb::ClaimOrRefreshNeuronFromAccountResponse) -> Self {
-        Self {
-            result: item.result.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::ClaimOrRefreshNeuronFromAccountResponse>
-    for pb::ClaimOrRefreshNeuronFromAccountResponse
-{
-    fn from(item: pb_api::ClaimOrRefreshNeuronFromAccountResponse) -> Self {
-        Self {
-            result: item.result.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::claim_or_refresh_neuron_from_account_response::Result>
-    for pb_api::claim_or_refresh_neuron_from_account_response::Result
-{
-    fn from(item: pb::claim_or_refresh_neuron_from_account_response::Result) -> Self {
-        match item {
-            pb::claim_or_refresh_neuron_from_account_response::Result::Error(v) => {
-                pb_api::claim_or_refresh_neuron_from_account_response::Result::Error(v.into())
-            }
-            pb::claim_or_refresh_neuron_from_account_response::Result::NeuronId(v) => {
-                pb_api::claim_or_refresh_neuron_from_account_response::Result::NeuronId(v)
-            }
-        }
-    }
-}
-impl From<pb_api::claim_or_refresh_neuron_from_account_response::Result>
-    for pb::claim_or_refresh_neuron_from_account_response::Result
-{
-    fn from(item: pb_api::claim_or_refresh_neuron_from_account_response::Result) -> Self {
-        match item {
-            pb_api::claim_or_refresh_neuron_from_account_response::Result::Error(v) => {
-                pb::claim_or_refresh_neuron_from_account_response::Result::Error(v.into())
-            }
-            pb_api::claim_or_refresh_neuron_from_account_response::Result::NeuronId(v) => {
-                pb::claim_or_refresh_neuron_from_account_response::Result::NeuronId(v)
-            }
         }
     }
 }
@@ -3960,7 +3283,6 @@ impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             controller: item.controller,
             hotkeys: item.hotkeys,
             is_capped: item.is_capped,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -3975,7 +3297,6 @@ impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             controller: item.controller,
             hotkeys: item.hotkeys,
             is_capped: item.is_capped,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -4333,6 +3654,23 @@ impl From<pb_api::restore_aging_summary::NeuronGroupType>
             pb_api::restore_aging_summary::NeuronGroupType::StakeSameAgingSame => {
                 pb::restore_aging_summary::NeuronGroupType::StakeSameAgingSame
             }
+        }
+    }
+}
+
+impl From<pb::Account> for pb_api::Account {
+    fn from(item: pb::Account) -> Self {
+        Self {
+            owner: item.owner,
+            subaccount: item.subaccount.map(|x| x.subaccount),
+        }
+    }
+}
+impl From<pb_api::Account> for pb::Account {
+    fn from(item: pb_api::Account) -> Self {
+        Self {
+            owner: item.owner,
+            subaccount: item.subaccount.map(|x| pb::Subaccount { subaccount: x }),
         }
     }
 }
@@ -4696,6 +4034,14 @@ impl From<pb_api::ProposalRewardStatus> for pb::ProposalRewardStatus {
             pb_api::ProposalRewardStatus::ReadyToSettle => pb::ProposalRewardStatus::ReadyToSettle,
             pb_api::ProposalRewardStatus::Settled => pb::ProposalRewardStatus::Settled,
             pb_api::ProposalRewardStatus::Ineligible => pb::ProposalRewardStatus::Ineligible,
+        }
+    }
+}
+
+impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
+    fn from(value: ic_nns_governance_api::test_api::TimeWarp) -> Self {
+        Self {
+            delta_s: value.delta_s,
         }
     }
 }

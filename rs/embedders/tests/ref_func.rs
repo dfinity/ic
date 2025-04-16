@@ -1,6 +1,7 @@
 //! Test to validate that all existing function references are properly updated
 //! after instrumentation.
 
+use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
@@ -13,7 +14,7 @@ fn run_go_export(wat: &str) {
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::from(0_u128),

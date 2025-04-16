@@ -47,25 +47,23 @@ const ADVERT_BROADCAST_INTERVAL: Duration = Duration::from_secs(5);
 const ADVERT_BROADCAST_TIMEOUT: Duration =
     ADVERT_BROADCAST_INTERVAL.saturating_sub(Duration::from_secs(2));
 
-pub fn build_axum_router<T: 'static>(
-    state_sync: Arc<dyn StateSyncClient<Message = T>>,
-    log: ReplicaLogger,
+pub fn build_state_sync_manager<T: Send + 'static>(
+    log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-) -> (
-    Router,
-    tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
-) {
+    rt_handle: &tokio::runtime::Handle,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
+) -> (Router, StateSyncManager<T>) {
     let metrics = StateSyncManagerHandlerMetrics::new(metrics_registry);
     let shared_chunk_state = Arc::new(StateSyncChunkHandler::new(
         log.clone(),
-        state_sync,
+        state_sync.clone(),
         metrics.clone(),
     ));
 
-    let (tx, rx) = tokio::sync::mpsc::channel(20);
-    let advert_handler_state = Arc::new(StateSyncAdvertHandler::new(log, tx));
+    let (advert_sender, advert_receiver) = tokio::sync::mpsc::channel(20);
+    let advert_handler_state = Arc::new(StateSyncAdvertHandler::new(log.clone(), advert_sender));
 
-    let app = Router::new()
+    let router = Router::new()
         .route(STATE_SYNC_CHUNK_PATH, any(state_sync_chunk_handler))
         .with_state(shared_chunk_state)
         .route(
@@ -74,45 +72,37 @@ pub fn build_axum_router<T: 'static>(
         )
         .with_state(advert_handler_state);
 
-    (app, rx)
-}
-
-pub fn start_state_sync_manager<T: Send + 'static>(
-    log: &ReplicaLogger,
-    metrics: &MetricsRegistry,
-    rt: &Handle,
-    transport: Arc<dyn Transport>,
-    state_sync: Arc<dyn StateSyncClient<Message = T>>,
-    advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
-) -> Shutdown {
-    let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics);
+    let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics_registry);
     let manager = StateSyncManager {
         log: log.clone(),
-        rt: rt.clone(),
+        rt: rt_handle.clone(),
         metrics: state_sync_manager_metrics,
-        transport,
         state_sync,
         advert_receiver,
         ongoing_state_sync: None,
     };
-    Shutdown::spawn_on_with_cancellation(
-        |cancellation: CancellationToken| manager.run(cancellation),
-        rt,
-    )
+    (router, manager)
 }
 
-struct StateSyncManager<T> {
+pub struct StateSyncManager<T> {
     log: ReplicaLogger,
     rt: Handle,
     metrics: StateSyncManagerMetrics,
-    transport: Arc<dyn Transport>,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
     ongoing_state_sync: Option<OngoingStateSyncHandle>,
 }
 
 impl<T: 'static + Send> StateSyncManager<T> {
-    async fn run(mut self, cancellation: CancellationToken) {
+    pub fn start(self, transport: Arc<dyn Transport>) -> Shutdown {
+        let rt_handle = self.rt.clone();
+        Shutdown::spawn_on_with_cancellation(
+            |cancellation: CancellationToken| self.run(cancellation, transport),
+            &rt_handle,
+        )
+    }
+
+    async fn run(mut self, cancellation: CancellationToken, transport: Arc<dyn Transport>) {
         let mut interval = tokio::time::interval(ADVERT_BROADCAST_INTERVAL);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut advertise_task = JoinSet::new();
@@ -127,7 +117,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                         Self::send_state_adverts(
                             self.rt.clone(),
                             self.state_sync.clone(),
-                            self.transport.clone(),
+                            transport.clone(),
                             self.metrics.clone(),
                             cancellation.clone(),
                         ),
@@ -135,18 +125,23 @@ impl<T: 'static + Send> StateSyncManager<T> {
                     );
                 },
                 Some((advert, peer_id)) = self.advert_receiver.recv() =>{
-                    self.handle_advert(advert, peer_id).await;
+                    self.handle_advert(advert, peer_id, transport.clone()).await;
                 }
                 Some(_) = advertise_task.join_next() => {}
             }
         }
         while advertise_task.join_next().await.is_some() {}
         if let Some(ongoing_state_sync) = self.ongoing_state_sync.take() {
-            ongoing_state_sync.shutdown.shutdown().await;
+            let _ = ongoing_state_sync.shutdown.shutdown().await;
         }
     }
 
-    async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
+    async fn handle_advert(
+        &mut self,
+        artifact_id: StateSyncArtifactId,
+        peer_id: NodeId,
+        transport: Arc<dyn Transport>,
+    ) {
         self.metrics.adverts_received_total.inc();
         // Remove ongoing state sync if finished or try to add peer if ongoing.
         if let Some(ongoing) = &mut self.ongoing_state_sync {
@@ -184,7 +179,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 self.metrics.ongoing_state_sync_metrics.clone(),
                 Arc::new(Mutex::new(chunkable)),
                 artifact_id.clone(),
-                self.transport.clone(),
+                transport,
             );
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing
@@ -238,7 +233,8 @@ impl<T: 'static + Send> StateSyncManager<T> {
                     select! {
                         _ = tokio::time::timeout(
                             ADVERT_BROADCAST_TIMEOUT,
-                            transport_c.push(&peer_id, request)) => {}
+                            // TODO: NET-1748
+                            transport_c.rpc(&peer_id, request)) => {}
                         () = cancellation_c.cancelled() => {}
                     }
                 });
@@ -292,7 +288,6 @@ mod tests {
                 }
                 Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .extension(NODE_1)
                     .body(compress_empty_bytes())
                     .unwrap())
             });
@@ -330,14 +325,17 @@ mod tests {
             };
 
             let (handler_tx, handler_rx) = tokio::sync::mpsc::channel(100);
-            start_state_sync_manager(
-                &log,
-                &MetricsRegistry::default(),
-                rt.handle(),
-                Arc::new(t) as Arc<_>,
-                Arc::new(s) as Arc<_>,
-                handler_rx,
-            );
+            let metrics = StateSyncManagerMetrics::new(&MetricsRegistry::default());
+
+            let manager = StateSyncManager {
+                log: log.clone(),
+                advert_receiver: handler_rx,
+                ongoing_state_sync: None,
+                metrics,
+                state_sync: Arc::new(s) as Arc<_>,
+                rt: rt.handle().clone(),
+            };
+            let _ = manager.start(Arc::new(t) as Arc<_>);
             rt.block_on(async move {
                 handler_tx.send((id, NODE_1)).await.unwrap();
                 handler_tx.send((old_id, NODE_2)).await.unwrap();

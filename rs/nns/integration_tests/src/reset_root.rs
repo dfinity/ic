@@ -1,10 +1,11 @@
-use dfn_candid::candid_one;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::proposals::proposal_submission::create_external_update_proposal_candid;
-use ic_nns_governance_api::pb::v1::{manage_neuron_response::Command, NnsFunction};
+use ic_nns_governance_api::{
+    pb::v1::{manage_neuron_response::Command, NnsFunction},
+    proposal_submission_helpers::create_external_update_proposal_candid,
+};
 use ic_nns_test_utils::{
     common::{build_root_wasm, modify_wasm_bytes, NnsInitPayloadsBuilder},
     governance::HardResetNnsRootToVersionPayload,
@@ -21,7 +22,11 @@ fn test_reset_root_with_governance_proposal() {
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // First, see what the canister hash is for root
-    let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
+    let root_status = state_machine
+        .canister_status_as(LIFELINE_CANISTER_ID.into(), ROOT_CANISTER_ID)
+        .unwrap()
+        .unwrap();
+    let root_version = root_status.module_hash().unwrap();
 
     // Execute proposal
     let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);
@@ -62,11 +67,13 @@ fn test_reset_root_with_governance_proposal() {
 
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
+    let root_status = state_machine
+        .canister_status_as(LIFELINE_CANISTER_ID.into(), ROOT_CANISTER_ID)
+        .unwrap()
+        .unwrap();
+    let root_version: [u8; 32] = root_status.module_hash().unwrap().try_into().unwrap();
     // Assert the root canister was upgraded
-    assert_eq!(
-        new_root_version,
-        state_machine.module_hash(ROOT_CANISTER_ID).unwrap()
-    );
+    assert_eq!(new_root_version, root_version);
 }
 
 #[test]
@@ -76,7 +83,11 @@ fn test_other_controllers_cannot_reset_root() {
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // First, see what the canister hash is for root
-    let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
+    let root_status = state_machine
+        .canister_status_as(LIFELINE_CANISTER_ID.into(), ROOT_CANISTER_ID)
+        .unwrap()
+        .unwrap();
+    let root_version = root_status.module_hash().unwrap();
 
     // Execute proposal
     let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);
@@ -94,13 +105,12 @@ fn test_other_controllers_cannot_reset_root() {
         &state_machine,
         LIFELINE_CANISTER_ID,
         "hard_reset_root_to_version",
-        candid_one,
         payload,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
     );
 
     assert!(response.is_err());
     assert!(response.unwrap_err().contains(
-        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister called `ic0.trap` with message: assertion failed at lifeline.mo",
+        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister called `ic0.trap` with message: 'assertion failed at lifeline.mo",
     ));
 }

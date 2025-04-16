@@ -69,6 +69,7 @@ use tokio::{
         watch,
     },
 };
+use tokio_util::sync::CancellationToken;
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -194,7 +195,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(1),
-        idkg_signing_subnets: Default::default(),
+        chain_key_enabled_subnets: Default::default(),
         bitcoin_mainnet_canister_id: None,
         bitcoin_testnet_canister_id: None,
     };
@@ -427,7 +428,7 @@ impl HttpEndpointBuilder {
     }
 
     pub fn with_delegation_from_nns(mut self, delegation_from_nns: CertificateDelegation) -> Self {
-        self.delegation_from_nns.replace(delegation_from_nns);
+        self.delegation_from_nns = Some(delegation_from_nns);
         self
     }
 
@@ -456,6 +457,8 @@ impl HttpEndpointBuilder {
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
+        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) =
+            watch::channel(self.delegation_from_nns);
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
@@ -492,11 +495,12 @@ impl HttpEndpointBuilder {
             self.consensus_cache,
             SubnetType::Application,
             MaliciousFlags::default(),
-            self.delegation_from_nns,
+            nns_delegation_watcher_rx,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,
             terminal_state_ingress_messages_rx,
+            CancellationToken::new(),
         );
 
         HttpEndpointHandles {
@@ -578,13 +582,13 @@ pub mod test_agent {
             .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Copy, Clone, Debug)]
     pub enum Call {
         V2,
         V3,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     pub struct IngressMessage {
         canister_id: PrincipalId,
         effective_canister_id: PrincipalId,

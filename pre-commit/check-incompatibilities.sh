@@ -2,16 +2,26 @@
 
 set -eExuo pipefail
 
-if [[ -n "$(git rev-parse -q --verify MERGE_HEAD)" ]]; then
-    echo "Currently merging, skipping buf checks"
+if [ "${CI_OVERRIDE_BUF_BREAKING:-false}" = "true" ]; then
+    echo "Skipping buf-breaking check because override requested."
     exit 0
 fi
 
-echo "Fetch the $MERGE_BRANCH branch"
-git fetch origin $MERGE_BRANCH:$MERGE_BRANCH
-MERGE_BASE=$(git merge-base HEAD $MERGE_BRANCH)
+MERGE_BASE=${MERGE_BASE_SHA:-HEAD}
 
-buf build -o current.bin
-buf build ".git#ref=$MERGE_BASE" -o against.bin
+BUF="$(readlink "$buf_path")"
+CONF="$(readlink "$buf_config")"
+REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
 
-buf breaking current.bin --against against.bin --config=buf.yaml
+tempdir=$(mktemp -d)
+against="$tempdir/against.bin"
+current="$tempdir/current.bin"
+
+trap "rm -rf '$tempdir'" EXIT
+
+cd "$REPO_PATH"
+
+"$BUF" build -o "$current"
+"$BUF" build ".git#ref=$MERGE_BASE" -o "$against"
+
+"$BUF" breaking "$current" --against "$against" --config="$CONF"

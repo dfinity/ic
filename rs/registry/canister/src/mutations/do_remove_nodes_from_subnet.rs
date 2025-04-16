@@ -53,7 +53,7 @@ impl Registry {
 }
 
 /// The payload of a proposal to remove a Node from a Subnet
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RemoveNodesFromSubnetPayload {
     /// The list of Node IDs that will be removed from their subnet
     pub node_ids: Vec<NodeId>,

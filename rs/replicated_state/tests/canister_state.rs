@@ -78,7 +78,7 @@ impl CanisterFixture {
     fn push_input(
         &mut self,
         msg: RequestOrResponse,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let mut subnet_available_memory = i64::MAX / 2;
         self.canister_state.push_input(
             msg,
@@ -117,16 +117,16 @@ impl CanisterFixture {
 #[test]
 fn running_canister_accepts_requests() {
     let mut fixture = CanisterFixture::running();
-    fixture.push_input(default_input_request()).unwrap();
+    assert!(fixture.push_input(default_input_request()).unwrap());
 }
 
 #[test]
 fn running_canister_accepts_responses() {
     let mut fixture = CanisterFixture::running();
     let callback_id = fixture.with_input_slot_reservation();
-    fixture
+    assert!(fixture
         .push_input(default_input_response(callback_id))
-        .unwrap();
+        .unwrap());
 }
 
 #[test]
@@ -145,9 +145,9 @@ fn stopping_canister_rejects_requests() {
 fn stopping_canister_accepts_responses() {
     let mut fixture = CanisterFixture::stopping();
     let callback_id = fixture.with_input_slot_reservation();
-    fixture
+    assert!(fixture
         .push_input(default_input_response(callback_id))
-        .unwrap();
+        .unwrap());
 }
 
 #[test]
@@ -243,15 +243,15 @@ fn validate_responses_against_callback_details() {
 
     // Creating valid response from canister C to this canister.
     // Pushing the response in this canister's input queue is successful.
-    fixture
+    assert!(fixture
         .push_input(input_response_from(canister_c_id, callback_id_2))
-        .unwrap();
+        .unwrap());
 
     // Creating valid response from canister B to this canister.
     // Pushing the response in this canister's input queue is successful.
-    fixture
+    assert!(fixture
         .push_input(input_response_from(canister_b_id, callback_id_1))
-        .unwrap();
+        .unwrap());
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn validate_response_fails_with_mismatching_deadline() {
     fn try_push_input(
         callback_deadline: CoarseTime,
         response_deadline: CoarseTime,
-    ) -> Result<(), StateError> {
+    ) -> Result<bool, StateError> {
         let mut fixture = CanisterFixture::running();
 
         // Register a callback with the given `callback_deadline`.
@@ -305,8 +305,8 @@ fn validate_response_fails_with_mismatching_deadline() {
     }
 
     // Can enqueue response with matching deadline.
-    assert_eq!(Ok(()), try_push_input(NO_DEADLINE, NO_DEADLINE));
-    assert_eq!(Ok(()), try_push_input(DEADLINE_1, DEADLINE_1));
+    assert!(try_push_input(NO_DEADLINE, NO_DEADLINE).unwrap());
+    assert!(try_push_input(DEADLINE_1, DEADLINE_1).unwrap());
 
     // But enqueuing mismatching deadlines (best-effort vs guaranteed response; or
     //different best-effort deadlines) fails.

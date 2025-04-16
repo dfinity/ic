@@ -3,11 +3,12 @@ syntax = "proto3";
 package ic_sns_root.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 // All essential state of an SNS root canister.
 //
 // When canister_init is called in the SNS root canister, it is expected that a
-// serialized version of this was passed via ic_management_canister_types::InstallCodeArgs::args,
+// serialized version of this was passed via ic_management_canister_types_private::InstallCodeArgs::args,
 // which can be retrieved by the canister via ic_cdk::api::call::arg_data().
 message SnsRootCanister {
   // Required.
@@ -33,10 +34,6 @@ message SnsRootCanister {
   // CanisterIds of the archives of the SNS Ledger blocks.
   repeated ic_base_types.pb.v1.PrincipalId archive_canister_ids = 5;
 
-  // The timestamp of the latest poll for archives of the ledger canister,
-  // in seconds since the Unix epoch.
-  optional uint64 latest_ledger_archive_poll_timestamp_seconds = 6;
-
   // Required.
   //
   // The SNS Index canister ID
@@ -45,6 +42,14 @@ message SnsRootCanister {
   // True if the SNS is running in testflight mode. Then additional
   // controllers beyond SNS root are allowed when registering a dapp.
   bool testflight = 8;
+
+  reserved "updated_framework_canisters_memory_limit";
+  reserved 9;
+  reserved "latest_ledger_archive_poll_timestamp_seconds";
+  reserved 6;
+
+  // Information about the timers that perform periodic tasks of this Root canister.
+  optional ic_nervous_system.pb.v1.Timers timers = 10;
 }
 
 message RegisterDappCanisterRequest {
@@ -123,6 +128,7 @@ message ManageDappCanisterSettingsRequest {
   optional uint64 reserved_cycles_limit = 5;
   optional LogVisibility log_visibility = 6;
   optional uint64 wasm_memory_limit = 7;
+  optional uint64 wasm_memory_threshold = 8;
 }
 
 message ManageDappCanisterSettingsResponse {

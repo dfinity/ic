@@ -23,7 +23,7 @@ pub const CHUNK_MAX: Chunk = CHUNK_MIN + (CHUNK_SIZE as Chunk) - 1;
 pub(crate) const MESSAGE_BYTES: usize = Scalar::BYTES;
 
 /// NUM_CHUNKS is simply the number of chunks needed to hold a message
-pub const NUM_CHUNKS: usize = (MESSAGE_BYTES + CHUNK_BYTES - 1) / CHUNK_BYTES;
+pub const NUM_CHUNKS: usize = MESSAGE_BYTES.div_ceil(CHUNK_BYTES);
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct PlaintextChunks {

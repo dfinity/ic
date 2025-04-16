@@ -151,7 +151,7 @@ impl<H: HmacHashFunction> Hmac<H> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub enum HkdfError {
     RequestedOutputTooLong,
 }
@@ -181,7 +181,7 @@ pub fn hkdf<H: HmacHashFunction>(
 
     // Step 2. HKDF-Expand(PRK, info, L) -> OKM
 
-    let blocks = (output_len + H::OUTPUT_LENGTH - 1) / H::OUTPUT_LENGTH;
+    let blocks = output_len.div_ceil(H::OUTPUT_LENGTH);
 
     let mut prev_t: Option<Vec<u8>> = None;
 

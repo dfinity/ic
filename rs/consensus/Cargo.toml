@@ -8,18 +8,23 @@ documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../config" }
+ic-consensus-certification = { path = "./certification" }
+ic-consensus-idkg = { path = "./idkg" }
+ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
+ic-consensus-vetkd = { path = "./vetkd" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
@@ -27,14 +32,13 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
+num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -44,7 +48,7 @@ ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
 ic-consensus = { path = ".", features = ["malicious_code"] }
 ic-consensus-mocks = { path = "./mocks" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
@@ -68,14 +72,17 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
 proptest = { workspace = true }
 prost = { workspace = true }
+rstest = { workspace = true }
 serde_cbor = { workspace = true }
 slog-async = { workspace = true }
 slog-envlogger = "2.2.0"
 slog-term = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [[bench]]
 name = "validate_payload"
@@ -83,5 +90,5 @@ harness = false
 
 [features]
 default = []
-malicious_code = []
+malicious_code = ["ic-consensus-idkg/malicious_code"]
 proptest = []

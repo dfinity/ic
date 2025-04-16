@@ -1,0 +1,10 @@
+[Unit]
+Description=Update HostOS Configuration
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/config update-hostos-config
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

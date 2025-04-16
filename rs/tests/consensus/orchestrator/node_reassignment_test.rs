@@ -26,6 +26,7 @@ Coverage::
 end::catalog[] */
 
 use anyhow::Result;
+use ic_consensus_system_test_utils::node::{assert_node_is_assigned, assert_node_is_unassigned};
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, can_read_msg_with_retries, install_nns_and_check_progress, store_message,
 };
@@ -129,6 +130,9 @@ fn test(env: TestEnv) {
     // Unassign 2 NNS nodes using remove_nodes_from_subnet operation
     node3.await_status_is_healthy().unwrap();
     node4.await_status_is_healthy().unwrap();
+    // Assert nodes are assigned before they are removed
+    assert_node_is_assigned(&node1, log);
+    assert_node_is_assigned(&node2, log);
     let node_ids: Vec<_> = vec![node1.node_id, node2.node_id];
     block_on(remove_nodes_via_endpoint(node3.get_public_url(), &node_ids)).unwrap();
     info!(log, "Removed node ids {:?} from the NNS subnet", node_ids);
@@ -136,6 +140,8 @@ fn test(env: TestEnv) {
     // Wait until the nodes become unassigned.
     node1.await_status_is_unavailable().unwrap();
     node2.await_status_is_unavailable().unwrap();
+    assert_node_is_unassigned(&node1, log);
+    assert_node_is_unassigned(&node2, log);
 
     block_on(add_nodes_to_subnet(
         node3.get_public_url(),
@@ -234,6 +240,9 @@ fn test(env: TestEnv) {
     // APP: [node3, node4, <original-app-subnet-nodes>]
     node1.await_status_is_healthy().unwrap();
     node2.await_status_is_healthy().unwrap();
+    // Assert nodes are assigned before the are removed
+    assert_node_is_assigned(&node1, log);
+    assert_node_is_assigned(&node2, log);
     let nns_subnet_id = topo_snapshot.root_subnet().subnet_id;
     let app_subnet_id = app_subnet.subnet_id;
     let node_ids_remove: Vec<_> = vec![node1.node_id, node2.node_id];
@@ -254,6 +263,12 @@ fn test(env: TestEnv) {
     // Wait until the nodes become unassigned.
     node1.await_status_is_unavailable().unwrap();
     node2.await_status_is_unavailable().unwrap();
+    assert_node_is_unassigned(&node1, log);
+    assert_node_is_unassigned(&node2, log);
+
+    // Assert nodes are assigned before the are removed
+    assert_node_is_assigned(&node3, log);
+    assert_node_is_assigned(&node4, log);
 
     // Next, add node1 and node2 to the NNS subnet, and remove node3 and node4 at the same time
     let node_ids_add: Vec<_> = vec![node1.node_id, node2.node_id];
@@ -278,6 +293,8 @@ fn test(env: TestEnv) {
     node2.await_status_is_healthy().unwrap();
     node3.await_status_is_unavailable().unwrap();
     node4.await_status_is_unavailable().unwrap();
+    assert_node_is_unassigned(&node3, log);
+    assert_node_is_unassigned(&node4, log);
     assert!(can_read_msg_with_retries(
         log,
         &node1.get_public_url(),

@@ -10,10 +10,10 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }

@@ -1,8 +1,9 @@
+use std::borrow::Cow;
 use std::ops::Range;
 
 use wasmparser::{
-    BinaryReaderError, Export, GlobalType, Import, MemoryType, Operator, Parser, Payload, RefType,
-    SubType, TableType, ValType,
+    BinaryReaderError, Export, GlobalType, Import, MemoryType, Name, Operator, Parser, Payload,
+    RefType, SubType, Subsections, TableType, ValType,
 };
 
 mod convert;
@@ -44,7 +45,7 @@ pub struct DataSegment<'a> {
 }
 
 /// The kind of data segment.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum DataSegmentKind<'a> {
     /// The data segment is passive.
     Passive,
@@ -62,7 +63,7 @@ pub struct Global<'a> {
     pub init_expr: Operator<'a>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum Error {
     BinaryReaderError(BinaryReaderError),
     UnknownVersion(u32),
@@ -91,6 +92,7 @@ pub enum Error {
     InvalidMemoryReservedByte {
         func_range: Range<usize>,
     },
+    UnknownInstruction,
 }
 
 impl From<BinaryReaderError> for Error {
@@ -152,6 +154,9 @@ impl std::fmt::Display for Error {
             Error::InvalidMemoryReservedByte { func_range } => {
                 write!(f, "Found a `memory.*` instruction with an invalid reserved byte in function at {:?}", func_range)
             }
+            Error::UnknownInstruction => {
+                write!(f, "Fonud an unknown instruction")
+            }
         }
     }
 }
@@ -173,6 +178,7 @@ pub struct Module<'a> {
     pub elements: Vec<(ElementKind<'a>, ElementItems<'a>)>,
     pub code_sections: Vec<Body<'a>>,
     pub custom_sections: Vec<(&'a str, &'a [u8])>,
+    pub name_section: Option<NameSection<'a>>,
 }
 
 impl<'a> Module<'a> {
@@ -192,6 +198,7 @@ impl<'a> Module<'a> {
         let mut start = None;
         let mut data_section_count = None;
         let mut custom_sections = vec![];
+        let mut name_section = None;
         for payload in parser.parse_all(wasm) {
             let payload = payload?;
             match payload {
@@ -289,8 +296,9 @@ impl<'a> Module<'a> {
                     }
                     if !enable_multi_memory
                         && instructions.iter().any(|i| match i {
-                            Operator::MemoryGrow { mem_byte, .. }
-                            | Operator::MemorySize { mem_byte, .. } => *mem_byte != 0x00,
+                            Operator::MemoryGrow { mem } | Operator::MemorySize { mem } => {
+                                mem.to_le_bytes()[0] != 0
+                            }
                             _ => false,
                         })
                     {
@@ -304,8 +312,14 @@ impl<'a> Module<'a> {
                     });
                 }
                 Payload::CustomSection(custom_section_reader) => {
-                    custom_sections
-                        .push((custom_section_reader.name(), custom_section_reader.data()));
+                    if let wasmparser::KnownCustom::Name(subsection) =
+                        custom_section_reader.as_known()
+                    {
+                        name_section = Some(NameSection::parse(subsection)?);
+                    } else {
+                        custom_sections
+                            .push((custom_section_reader.name(), custom_section_reader.data()));
+                    }
                 }
                 Payload::Version {
                     num,
@@ -324,13 +338,13 @@ impl<'a> Module<'a> {
                 Payload::TagSection(_)
                 | Payload::ModuleSection {
                     parser: _,
-                    range: _,
+                    unchecked_range: _,
                 }
                 | Payload::InstanceSection(_)
                 | Payload::CoreTypeSection(_)
                 | Payload::ComponentSection {
                     parser: _,
-                    range: _,
+                    unchecked_range: _,
                 }
                 | Payload::ComponentInstanceSection(_)
                 | Payload::ComponentAliasSection(_)
@@ -339,7 +353,8 @@ impl<'a> Module<'a> {
                 | Payload::ComponentStartSection { start: _, range: _ }
                 | Payload::ComponentImportSection(_)
                 | Payload::ComponentExportSection(_)
-                | Payload::End(_) => {}
+                | Payload::End(_)
+                | _ => {}
             }
         }
         if code_section_count != code_sections.len() || code_section_count != functions.len() {
@@ -371,6 +386,7 @@ impl<'a> Module<'a> {
             code_sections,
             data,
             custom_sections,
+            name_section,
         })
     }
 
@@ -380,11 +396,13 @@ impl<'a> Module<'a> {
         if !self.types.is_empty() {
             let mut types = wasm_encoder::TypeSection::new();
             for subtype in self.types {
-                types.subtype(
-                    &wasm_encoder::SubType::try_from(subtype.clone()).map_err(|()| {
-                        Error::ConversionError(format!("Failed to convert type: {:?}", subtype))
-                    })?,
-                );
+                types
+                    .ty()
+                    .subtype(&wasm_encoder::SubType::try_from(subtype.clone()).map_err(
+                        |_err| {
+                            Error::ConversionError(format!("Failed to convert type: {:?}", subtype))
+                        },
+                    )?);
             }
             module.section(&types);
         }
@@ -395,7 +413,7 @@ impl<'a> Module<'a> {
                 imports.import(
                     import.module,
                     import.name,
-                    wasm_encoder::EntityType::try_from(import.ty).map_err(|()| {
+                    wasm_encoder::EntityType::try_from(import.ty).map_err(|_err| {
                         Error::ConversionError(format!("Failed to convert type: {:?}", import.ty))
                     })?,
                 );
@@ -414,7 +432,7 @@ impl<'a> Module<'a> {
         if !self.tables.is_empty() {
             let mut tables = wasm_encoder::TableSection::new();
             for (table_ty, init) in self.tables {
-                let table_ty = wasm_encoder::TableType::try_from(table_ty).map_err(|()| {
+                let table_ty = wasm_encoder::TableType::try_from(table_ty).map_err(|_err| {
                     Error::ConversionError(format!("Failed to convert type: {:?}", table_ty))
                 })?;
                 match init {
@@ -438,7 +456,7 @@ impl<'a> Module<'a> {
             let mut globals = wasm_encoder::GlobalSection::new();
             for global in self.globals {
                 globals.global(
-                    wasm_encoder::GlobalType::try_from(global.ty).map_err(|()| {
+                    wasm_encoder::GlobalType::try_from(global.ty).map_err(|_err| {
                         Error::ConversionError(format!("Failed to convert type: {:?}", global.ty))
                     })?,
                     &internal_to_encoder::const_expr(&global.init_expr)?,
@@ -470,7 +488,7 @@ impl<'a> Module<'a> {
                 temp_const_exprs.clear();
                 let element_items = match &items {
                     crate::ElementItems::Functions(funcs) => {
-                        wasm_encoder::Elements::Functions(funcs)
+                        wasm_encoder::Elements::Functions(Cow::Borrowed(funcs))
                     }
                     crate::ElementItems::ConstExprs { ty, exprs } => {
                         temp_const_exprs.reserve(exprs.len());
@@ -478,10 +496,10 @@ impl<'a> Module<'a> {
                             temp_const_exprs.push(internal_to_encoder::const_expr(e)?);
                         }
                         wasm_encoder::Elements::Expressions(
-                            wasm_encoder::RefType::try_from(*ty).map_err(|()| {
+                            wasm_encoder::RefType::try_from(*ty).map_err(|_err| {
                                 Error::ConversionError(format!("Failed to convert type: {:?}", ty))
                             })?,
-                            &temp_const_exprs,
+                            Cow::Borrowed(&temp_const_exprs),
                         )
                     }
                 };
@@ -526,7 +544,7 @@ impl<'a> Module<'a> {
                 for (c, t) in locals {
                     converted_locals.push((
                         c,
-                        wasm_encoder::ValType::try_from(t).map_err(|()| {
+                        wasm_encoder::ValType::try_from(t).map_err(|_err| {
                             Error::ConversionError(format!("Falied to convert type: {:?}", t))
                         })?,
                     ));
@@ -567,6 +585,10 @@ impl<'a> Module<'a> {
             module.section(&data);
         }
 
+        if let Some(name_section) = self.name_section {
+            name_section.encode(&mut module);
+        }
+
         for (name, data) in self.custom_sections {
             module.section(&wasm_encoder::CustomSection {
                 name: std::borrow::Cow::Borrowed(name),
@@ -575,5 +597,129 @@ impl<'a> Module<'a> {
         }
 
         Ok(module.finish())
+    }
+}
+
+pub struct NameSection<'a> {
+    pub function_names: Vec<(u32, &'a str)>,
+    pub type_names: Vec<(u32, &'a str)>,
+    pub memory_names: Vec<(u32, &'a str)>,
+    pub global_names: Vec<(u32, &'a str)>,
+    pub table_names: Vec<(u32, &'a str)>,
+    pub local_names: Vec<(u32, Vec<(u32, &'a str)>)>,
+    pub label_names: Vec<(u32, Vec<(u32, &'a str)>)>,
+}
+
+impl<'a> NameSection<'a> {
+    fn parse(name_section: Subsections<'a, Name<'a>>) -> Result<Self, Error> {
+        fn add_names<'a>(
+            name_map: wasmparser::SectionLimited<'a, wasmparser::Naming<'a>>,
+            values: &mut Vec<(u32, &'a str)>,
+        ) -> Result<(), Error> {
+            for naming in name_map.into_iter() {
+                let naming = naming?;
+                values.push((naming.index, naming.name));
+            }
+            Ok(())
+        }
+
+        fn add_indirect_names<'a>(
+            indirect_name_map: wasmparser::SectionLimited<'a, wasmparser::IndirectNaming<'a>>,
+            values: &mut Vec<(u32, Vec<(u32, &'a str)>)>,
+        ) -> Result<(), Error> {
+            for indirect in indirect_name_map.into_iter() {
+                let indirect = indirect?;
+                let mut names = vec![];
+                add_names(indirect.names, &mut names)?;
+                values.push((indirect.index, names));
+            }
+            Ok(())
+        }
+
+        let mut function_names = vec![];
+        let mut type_names = vec![];
+        let mut memory_names = vec![];
+        let mut global_names = vec![];
+        let mut table_names = vec![];
+        let mut local_names = vec![];
+        let mut label_names = vec![];
+        for subsection_reader in name_section.into_iter() {
+            match subsection_reader? {
+                Name::Function(name_map) => add_names(name_map, &mut function_names)?,
+                Name::Type(name_map) => add_names(name_map, &mut type_names)?,
+                Name::Memory(name_map) => add_names(name_map, &mut memory_names)?,
+                Name::Global(name_map) => add_names(name_map, &mut global_names)?,
+                Name::Table(name_map) => add_names(name_map, &mut table_names)?,
+                Name::Local(indirect_name_map) => {
+                    add_indirect_names(indirect_name_map, &mut local_names)?
+                }
+                Name::Label(indirect_name_map) => {
+                    add_indirect_names(indirect_name_map, &mut label_names)?
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Self {
+            function_names,
+            type_names,
+            memory_names,
+            global_names,
+            table_names,
+            local_names,
+            label_names,
+        })
+    }
+
+    fn encode(self, module: &mut wasm_encoder::Module) {
+        fn make_name_map(values: &[(u32, &str)]) -> wasm_encoder::NameMap {
+            let mut result = wasm_encoder::NameMap::new();
+            for (index, name) in values {
+                result.append(*index, name);
+            }
+            result
+        }
+
+        fn make_indirect_name_map(
+            values: &[(u32, Vec<(u32, &str)>)],
+        ) -> wasm_encoder::IndirectNameMap {
+            let mut result = wasm_encoder::IndirectNameMap::new();
+            for (index, names) in values {
+                result.append(*index, &make_name_map(names));
+            }
+            result
+        }
+
+        let mut name_section = wasm_encoder::NameSection::new();
+
+        if !self.function_names.is_empty() {
+            name_section.functions(&make_name_map(&self.function_names));
+        }
+
+        if !self.type_names.is_empty() {
+            name_section.types(&make_name_map(&self.type_names));
+        }
+
+        if !self.memory_names.is_empty() {
+            name_section.memories(&make_name_map(&self.memory_names));
+        }
+
+        if !self.global_names.is_empty() {
+            name_section.globals(&make_name_map(&self.global_names));
+        }
+
+        if !self.table_names.is_empty() {
+            name_section.tables(&make_name_map(&self.table_names));
+        }
+
+        if !self.local_names.is_empty() {
+            name_section.locals(&make_indirect_name_map(&self.local_names));
+        }
+
+        if !self.label_names.is_empty() {
+            name_section.labels(&make_indirect_name_map(&self.label_names));
+        }
+
+        module.section(&name_section);
     }
 }

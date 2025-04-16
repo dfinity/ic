@@ -16,6 +16,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
 use ic_types::consensus::idkg::{
     IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
+    VetKdKeyShare,
 };
 use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
@@ -23,7 +24,7 @@ use ic_types::{
     batch::BatchPayload,
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
-        dkg,
+        dkg::{self, DkgDataPayload},
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
             SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
@@ -144,7 +145,7 @@ pub(crate) trait PoolArtifact: Sized {
 }
 
 /// A unique representation for each type of supported message.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, AsRefStr, FromRepr)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, AsRefStr, FromRepr)]
 #[repr(u8)]
 pub(crate) enum TypeKey {
     // Consensus messages
@@ -169,6 +170,7 @@ pub(crate) enum TypeKey {
     IDkgDealingSupport,
     EcdsaSigShare,
     SchnorrSigShare,
+    VetKdKeyShare,
     IDkgComplaint,
     IDkgOpening,
 }
@@ -307,7 +309,7 @@ where
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub(crate) struct HeightKey([u8; 8]);
 
 impl AsRef<[u8]> for HeightKey {
@@ -339,7 +341,7 @@ impl From<HeightKey> for Height {
 
 /// DB Meta info about each message type is their min and max height
 /// (inclusive).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct Meta {
     min: HeightKey,
     max: HeightKey,
@@ -1037,7 +1039,7 @@ impl PoolArtifact for ConsensusMessage {
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
-                        dealings: dkg::Dealings::new_empty(start_height),
+                        dkg: DkgDataPayload::new_empty(start_height),
                         idkg: None,
                     }),
                 }),
@@ -1189,6 +1191,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     let type_key = match artifact_type {
                         PurgeableArtifactType::NotarizationShare => TypeKey::NotarizationShare,
                         PurgeableArtifactType::FinalizationShare => TypeKey::FinalizationShare,
+                        PurgeableArtifactType::EquivocationProof => TypeKey::EquivocationProof,
                     };
 
                     purged.extend(
@@ -1623,6 +1626,9 @@ impl From<IDkgMessageId> for IDkgIdKey {
             IDkgArtifactId::SchnorrSigShare(_, data) => {
                 pb::SigShareIdData::from(data.get()).encode_to_vec()
             }
+            IDkgArtifactId::VetKdKeyShare(_, data) => {
+                pb::SigShareIdData::from(data.get()).encode_to_vec()
+            }
             IDkgArtifactId::Complaint(_, data) => {
                 pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
             }
@@ -1689,6 +1695,10 @@ fn deser_idkg_message_id(
             SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
         ),
         IDkgMessageType::SchnorrSigShare => IDkgArtifactId::SchnorrSigShare(
+            IDkgPrefixOf::new(prefix),
+            SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::VetKdKeyShare => IDkgArtifactId::VetKdKeyShare(
             IDkgPrefixOf::new(prefix),
             SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
         ),
@@ -1981,6 +1991,7 @@ impl PersistentIDkgPoolSection {
             IDkgMessageType::DealingSupport => TypeKey::IDkgDealingSupport,
             IDkgMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
             IDkgMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
+            IDkgMessageType::VetKdKeyShare => TypeKey::VetKdKeyShare,
             IDkgMessageType::Complaint => TypeKey::IDkgComplaint,
             IDkgMessageType::Opening => TypeKey::IDkgOpening,
         }
@@ -2057,9 +2068,23 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         message_db.iter(Some(prefix))
     }
 
+    fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
+        message_db.iter(None)
+    }
+
+    fn vetkd_key_shares_by_prefix(
+        &self,
+        prefix: IDkgPrefixOf<VetKdKeyShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
+        message_db.iter(Some(prefix))
+    }
+
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
         let ecdsa_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
         let schnorr_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
+        let vetkd_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
         Box::new(
             ecdsa_db
                 .iter(None)
@@ -2068,6 +2093,11 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
                     schnorr_db
                         .iter(None)
                         .map(|(id, share)| (id, SigShare::Schnorr(share))),
+                )
+                .chain(
+                    vetkd_db
+                        .iter(None)
+                        .map(|(id, share)| (id, SigShare::VetKd(share))),
                 ),
         )
     }

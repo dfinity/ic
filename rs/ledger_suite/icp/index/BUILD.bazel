@@ -1,0 +1,109 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1/index-ng",
+    "//rs/rust_canisters/canister_log",
+    "//rs/rust_canisters/http_types",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:num-traits",
+    "@crate_index//:scopeguard",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ledger_suite/icp/test_utils",
+    "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+    "//rs/rosetta-api/icp/test_utils",
+    "//rs/state_machine_tests",
+    "//rs/test_utilities/load_wasm",
+    "@crate_index//:candid_parser",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
+]
+
+rust_library(
+    name = "ic-icp-index",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "ic_icp_index",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "ic-icp-index-canister",
+    srcs = ["src/main.rs"],
+    compile_data = [":index.did"],
+    crate_name = "ic_icp_index_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        "INDEX_DID_PATH": "$(location :index.did)",
+    },
+    service_file = ":index.did",
+    deps = [
+        # Keep sorted.
+        ":ic-icp-index",
+    ] + DEPENDENCIES,
+)
+
+rust_test(
+    name = "ic-icp-index-crate-test",
+    crate = ":ic-icp-index",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "ic_icp_index_canister_test",
+    crate = ":_wasm_ic-icp-index-canister",
+    data = [
+        ":index.did",
+        "//rs/ledger_suite/icp:ledger.did",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
+    },
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "ic_icp_index_test",
+    timeout = "long",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":ic-icp-index-canister.wasm.gz",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    ],
+    env = {
+        "RUST_TEST_THREADS": "4",
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
+        "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm.gz)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
+    },
+    tags = ["cpu:4"],
+    deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

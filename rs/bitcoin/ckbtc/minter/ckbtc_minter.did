@@ -27,6 +27,14 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
   reserved_cycles_limit : nat;
+  log_visibility: LogVisibility;
+  wasm_memory_limit : nat;
+};
+
+type LogVisibility = variant {
+    controllers;
+    public;
+    allowed_viewers : vec principal;
 };
 
 type RetrieveBtcArgs = record {
@@ -92,17 +100,15 @@ type RetrieveBtcOk = record {
 // The result of an [update_balance] call.
 type UtxoStatus = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
-    // the KYT fees. This state is final, retrying [update_balance] call will
-    // have no effect on this UTXO.
+    // the check fees.
     ValueTooSmall : Utxo;
-    // The KYT provider considered this UTXO to be tainted. This UTXO state is
-    // final, retrying [update_balance] call will have no effect on this UTXO.
+    // The Bitcoin checker considered this UTXO to be tainted.
     Tainted : Utxo;
-    // The UTXO passed the KYT check, but the minter failed to mint ckBTC
+    // The UTXO passed the Bitcoin check, but the minter failed to mint ckBTC
     // because the Ledger was unavailable. Retrying the [update_balance] call
     // should eventually advance the UTXO to the [Minted] state.
     Checked : Utxo;
-    // The UTXO passed the KYT check, and ckBTC has been minted.
+    // The UTXO passed the Bitcoin check, and ckBTC has been minted.
     Minted : record {
         block_index : nat64;
         minted_amount : nat64;
@@ -117,12 +123,22 @@ type PendingUtxo = record {
     confirmations: nat32;
 };
 
+// Number of nanoseconds since the Unix Epoch
+type Timestamp = nat64;
+
+type SuspendedUtxo = record {
+    utxo : Utxo;
+    reason : SuspendedReason;
+    earliest_retry: Timestamp;
+};
+
 type UpdateBalanceError = variant {
     // There are no new UTXOs to process.
     NoNewUtxos : record {
         current_confirmations: opt nat32;
         required_confirmations: nat32;
         pending_utxos: opt vec PendingUtxo;
+        suspended_utxos: opt vec SuspendedUtxo;
     };
     // The minter is already processing another update balance request for the caller.
     AlreadyProcessing;
@@ -181,10 +197,16 @@ type InitArgs = record {
     /// The minter's operation mode.
     mode : Mode;
 
-    /// The fee paid per check by the KYT canister.
+    /// The fee paid per Bitcoin check.
+    check_fee : opt nat64;
+
+    /// The fee paid per check by the KYT canister (deprecated, use check_fee instead).
     kyt_fee : opt nat64;
 
-    /// The canister id of the KYT canister.
+    /// The canister id of the Bitcoin checker canister.
+    btc_checker_principal: opt principal;
+
+    /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
     kyt_principal: opt principal;
 };
 
@@ -204,11 +226,17 @@ type UpgradeArgs = record {
     /// If set, overrides the current minter's operation mode.
     mode : opt Mode;
 
-    /// The fee per check by the KYT canister.
+    /// The fee per Bitcoin check.
+    check_fee : opt nat64;
+
+    /// The fee paid per check by the KYT canister (deprecated, use check_fee instead).
     kyt_fee : opt nat64;
 
-    /// The principal of the KYT canister.
-    kyt_principal : opt principal;
+    /// The principal of the Bitcoin checker canister.
+    btc_checker_principal : opt principal;
+
+    /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
+    kyt_principal: opt principal;
 };
 
 type RetrieveBtcStatus = variant {
@@ -278,7 +306,7 @@ type RetrieveBtcStatusV2 = variant {
     // transaction for this request.  The payload contains the
     // identifier of the transaction on the Bitcoin network.
     Confirmed : record { txid : blob };
-    /// The retrieve bitcoin request has been reimbursed.
+    /// The retrieve Bitcoin request has been reimbursed.
     Reimbursed : ReimbursedDeposit;
     /// The minter will try to reimburse this transaction.
     WillReimburse : ReimbursementRequest;
@@ -300,7 +328,10 @@ type BitcoinAddress = variant {
 
 type MinterInfo = record {
     min_confirmations : nat32;
+    // This amount is based on the `retrieve_btc_min_amount` setting during canister
+    // initialization or upgrades, but may vary according to current network fees.
     retrieve_btc_min_amount : nat64;
+    // The same as `check_fee`, but the old name is kept here to be backward compatible.
     kyt_fee : nat64;
 };
 
@@ -312,7 +343,20 @@ type ReimbursementReason = variant {
     };
 };
 
-type Event = variant {
+type SuspendedReason = variant {
+    // The minter ignored this UTXO because UTXO's value is too small to pay
+    // the check fees.
+    ValueTooSmall;
+    // The Bitcoin checker considered this UTXO to be tainted.
+    Quarantined;
+};
+
+type Event = record {
+    timestamp : opt nat64;
+    payload : EventType;
+};
+
+type EventType = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
     received_utxos : record { to_account : Account; mint_txid : opt nat64; utxos : vec Utxo };
@@ -352,7 +396,16 @@ type Event = variant {
         clean : bool;
         kyt_provider : opt principal;
     };
+    checked_utxo_v2 : record {
+        utxo : Utxo;
+        account : Account;
+    };
+    checked_utxo_mint_unknown : record {
+        utxo : Utxo;
+        account : Account;
+    };
     ignored_utxo : record { utxo: Utxo; };
+    suspended_utxo : record { utxo: Utxo; account: Account; reason: SuspendedReason };
     retrieve_btc_kyt_failed : record {
         address : text;
         amount : nat64;
@@ -378,11 +431,12 @@ type MinterArg = variant {
 service : (minter_arg : MinterArg) -> {
     // Section "Convert BTC to ckBTC" {{{
 
-    // Returns the bitcoin address to which the owner should send BTC
+    // Returns the Bitcoin address to which the owner should send BTC
     // before converting the amount to ckBTC using the [update_balance]
     // endpoint.
     //
     // If the owner is not set, it defaults to the caller's principal.
+    // The resolved owner must be a non-anonymous principal.
     get_btc_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
 
     // Returns UTXOs of the given account known by the minter (with no
@@ -453,7 +507,7 @@ service : (minter_arg : MinterArg) -> {
 
     /// Returns the status of a withdrawal request request using the RetrieveBtcStatusV2 type.
     retrieve_btc_status_v2 : (record { block_index : nat64 }) -> (RetrieveBtcStatusV2) query;
-    
+
     // Returns the withdrawal statues by account.
     //
     // # Note

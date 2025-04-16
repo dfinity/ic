@@ -10,13 +10,14 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
-use ic_crypto_ecdsa_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
+use ic_secp256k1::PublicKey;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use std::fmt::{Display, Formatter};
@@ -24,6 +25,7 @@ use strum_macros::EnumIter;
 use transactions::EthTransactions;
 
 pub mod audit;
+pub mod eth_logs_scraping;
 pub mod event;
 pub mod transactions;
 
@@ -34,7 +36,7 @@ thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MintedEvent {
     pub deposit_event: ReceivedEvent,
     pub mint_block_index: LedgerMintIndex,
@@ -48,19 +50,16 @@ impl MintedEvent {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub cketh_ledger_id: Principal,
-    pub eth_helper_contract_address: Option<Address>,
-    pub erc20_helper_contract_address: Option<Address>,
+    pub log_scrapings: LogScrapings,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
     pub first_scraped_block_number: BlockNumber,
-    pub last_scraped_block_number: BlockNumber,
-    pub last_erc20_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
@@ -103,7 +102,7 @@ pub struct State {
     pub ckerc20_tokens: DedupMultiKeyMap<Principal, Address, CkTokenSymbol>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidStateError {
     InvalidTransactionNonce(String),
     InvalidEcdsaKeyName(String),
@@ -115,7 +114,7 @@ pub enum InvalidStateError {
     InvalidLastErc20ScrapedBlockNumber(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum InvalidEventReason {
     /// Deposit is invalid and was never minted.
     /// This is most likely due to a user error (e.g., user's IC principal cannot be decoded)
@@ -152,15 +151,6 @@ impl State {
         if self.cketh_ledger_id == Principal::anonymous() {
             return Err(InvalidStateError::InvalidLedgerId(
                 "ledger_id cannot be the anonymous principal".to_string(),
-            ));
-        }
-        if self
-            .eth_helper_contract_address
-            .iter()
-            .any(|address| address == &Address::ZERO)
-        {
-            return Err(InvalidStateError::InvalidEthereumContractAddress(
-                "eth_helper_contract_address cannot be the zero address".to_string(),
             ));
         }
         if self.cketh_minimum_withdrawal_amount == Wei::ZERO {
@@ -393,13 +383,6 @@ impl State {
         }
     }
 
-    pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
-        let address = self
-            .eth_helper_contract_address
-            .expect("BUG: Missing eth_helper_contract_address");
-        self.record_skipped_block_for_contract(address, block_number)
-    }
-
     pub fn record_skipped_block_for_contract(
         &mut self,
         contract_address: Address,
@@ -478,6 +461,8 @@ impl State {
             erc20_helper_contract_address,
             last_erc20_scraped_block_number,
             evm_rpc_id,
+            deposit_with_subaccount_helper_contract_address,
+            last_deposit_with_subaccount_scraped_block_number,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -494,19 +479,53 @@ impl State {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
                 InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
             })?;
-            self.eth_helper_contract_address = Some(eth_helper_contract_address);
+            self.log_scrapings
+                .set_contract_address(
+                    LogScrapingId::EthDepositWithoutSubaccount,
+                    eth_helper_contract_address,
+                )
+                .map_err(|e| {
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                })?;
         }
         if let Some(address) = erc20_helper_contract_address {
             let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
                 InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
             })?;
-            self.erc20_helper_contract_address = Some(erc20_helper_contract_address);
+            self.log_scrapings
+                .set_contract_address(
+                    LogScrapingId::Erc20DepositWithoutSubaccount,
+                    erc20_helper_contract_address,
+                )
+                .map_err(|e| {
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                })?;
         }
         if let Some(block_number) = last_erc20_scraped_block_number {
-            self.last_erc20_scraped_block_number =
+            self.log_scrapings.set_last_scraped_block_number(
+                LogScrapingId::Erc20DepositWithoutSubaccount,
                 BlockNumber::try_from(block_number).map_err(|e| {
                     InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
+                })?,
+            );
+        }
+        if let Some(address) = deposit_with_subaccount_helper_contract_address {
+            let address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
+            })?;
+            self.log_scrapings
+                .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address)
+                .map_err(|e| {
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
                 })?;
+        }
+        if let Some(block_number) = last_deposit_with_subaccount_scraped_block_number {
+            self.log_scrapings.set_last_scraped_block_number(
+                LogScrapingId::EthOrErc20DepositWithSubaccount,
+                BlockNumber::try_from(block_number).map_err(|e| {
+                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
+                })?,
+            );
         }
         if let Some(block_height) = ethereum_block_height {
             self.ethereum_block_height = block_height.into();
@@ -515,7 +534,11 @@ impl State {
             self.ledger_suite_orchestrator_id = Some(orchestrator_id);
         }
         if let Some(evm_id) = evm_rpc_id {
-            self.evm_rpc_id = Some(evm_id);
+            if evm_id == Principal::management_canister() {
+                self.evm_rpc_id = None;
+            } else {
+                self.evm_rpc_id = Some(evm_id);
+            }
         }
         self.validate_config()
     }
@@ -534,10 +557,7 @@ impl State {
         ensure_eq!(self.ethereum_network, other.ethereum_network);
         ensure_eq!(self.cketh_ledger_id, other.cketh_ledger_id);
         ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
-        ensure_eq!(
-            self.eth_helper_contract_address,
-            other.eth_helper_contract_address
-        );
+        ensure_eq!(self.log_scrapings, other.log_scrapings);
         ensure_eq!(
             self.cketh_minimum_withdrawal_amount,
             other.cketh_minimum_withdrawal_amount
@@ -545,10 +565,6 @@ impl State {
         ensure_eq!(
             self.first_scraped_block_number,
             other.first_scraped_block_number
-        );
-        ensure_eq!(
-            self.last_scraped_block_number,
-            other.last_scraped_block_number
         );
         ensure_eq!(self.ethereum_block_height, other.ethereum_block_height);
         ensure_eq!(self.events_to_mint, other.events_to_mint);
@@ -641,7 +657,7 @@ pub async fn minter_address() -> Address {
     ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key().await)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EthBalance {
     /// Amount of ETH controlled by the minter's address via tECDSA.
     /// Note that invalid deposits are not accounted for and so this value
@@ -723,7 +739,7 @@ impl EthBalance {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct Erc20Balances {
     balance_by_erc20_contract: BTreeMap<Address, Erc20Value>,
 }
@@ -773,7 +789,7 @@ impl Erc20Balances {
     }
 }
 
-#[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
 pub enum TaskType {
     Mint,
     RetrieveEth,

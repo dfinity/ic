@@ -300,11 +300,6 @@ impl Transport for PeerTransport {
         }
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
-        let _ = self.rpc(peer_id, request).await?;
-        Ok(())
-    }
-
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
         self.global
             .peers

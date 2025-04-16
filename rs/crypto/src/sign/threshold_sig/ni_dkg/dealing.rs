@@ -104,7 +104,6 @@ mod creation {
     ) -> Result<CspNiDkgDealing, DkgCreateDealingError> {
         Ok(ni_dkg_csp_client.create_dealing(
             AlgorithmId::NiDkg_Groth20_Bls12_381,
-            config.dkg_id(),
             dealer_index_in_dealers_or_panic(config.dealers(), *self_node_id),
             config.threshold().get(),
             epoch(config.registry_version()),
@@ -162,7 +161,6 @@ mod verification {
         if let Some(transcript) = config.resharing_transcript() {
             Ok(ni_dkg_csp_client.verify_resharing_dealing(
                 AlgorithmId::NiDkg_Groth20_Bls12_381,
-                config.dkg_id(),
                 index_in_resharing_committee_or_panic(dealer, &transcript.committee),
                 config.threshold().get(),
                 epoch,
@@ -173,7 +171,6 @@ mod verification {
         } else {
             Ok(ni_dkg_csp_client.verify_dealing(
                 AlgorithmId::NiDkg_Groth20_Bls12_381,
-                config.dkg_id(),
                 dealer_index_in_dealers_or_panic(config.dealers(), *dealer),
                 config.threshold().get(),
                 epoch,

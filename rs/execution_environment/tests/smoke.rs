@@ -1,5 +1,5 @@
 use candid::{decode_one, encode_args, CandidType};
-use ic_management_canister_types::{EmptyBlob, Payload};
+use ic_management_canister_types_private::{EmptyBlob, Payload};
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use serde::Deserialize;
 
@@ -14,7 +14,15 @@ const COPYING_GC: &[u8] = include_bytes!("test-data/copying-gc.wasm.gz");
 const SHA256: &[u8] = include_bytes!("test-data/sha256.wasm");
 
 // https://github.com/dfinity/examples/tree/master/rust/image-classification
-const IMAGE_CLASSIFICATION: &[u8] = include_bytes!("test-data/image-classification.wasm.gz");
+fn image_classification_canister_wasm() -> Vec<u8> {
+    let image_classification_canister_wasm_path =
+        std::env::var("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH")
+            .expect("Please ensure that this Bazel test target correctly specifies env and data.");
+
+    let wasm_path = std::path::PathBuf::from(image_classification_canister_wasm_path);
+
+    std::fs::read(&wasm_path).expect("Failed to read WASM file")
+}
 
 #[test]
 fn qr() {
@@ -67,18 +75,18 @@ fn sha256() {
     assert_eq!(reply, WasmResult::Reply(EmptyBlob.encode()));
 }
 
-#[derive(CandidType, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 struct Classification {
     label: String,
     score: f32,
 }
 
-#[derive(CandidType, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 struct ClassificationError {
     message: String,
 }
 
-#[derive(CandidType, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 enum ClassificationResult {
     Ok(Vec<Classification>),
     Err(ClassificationError),
@@ -89,7 +97,7 @@ fn image_classification() {
     let env = StateMachine::new();
     let image_classification = env
         .install_canister(
-            IMAGE_CLASSIFICATION.to_vec(),
+            image_classification_canister_wasm(),
             encode_args(()).unwrap(),
             None,
         )

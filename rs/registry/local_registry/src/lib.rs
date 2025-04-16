@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 //! Access a local store through the standard `RegistryClient` trait. Hides the
 //! complexities of syncing the local store with the NNS registry behind a
 //! simple function call. Control over when the synchronization happens is left
@@ -239,7 +240,7 @@ impl RegistryClient for LocalRegistry {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 struct RootSubnetInfo {
     registry_version: RegistryVersion,
     urls_and_pubkey: (Vec<Url>, ThresholdSigPublicKey),
@@ -265,7 +266,7 @@ fn registry_result_to_local_registry_error<T>(
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum LocalRegistryError {
     #[error("The provided registry is at version 0 (empty)")]
     EmptyRegistry,
@@ -296,9 +297,8 @@ mod tests {
 
     use super::*;
     use ic_registry_client_helpers::subnet::SubnetListRegistry;
-    use ic_registry_local_store::compact_delta_to_changelog;
+    use ic_test_utilities_registry::get_mainnet_delta_00_6d_c1;
     use ic_types::PrincipalId;
-    use tempfile::TempDir;
 
     const DEFAULT_QUERY_TIMEOUT: Duration = Duration::from_millis(500);
 
@@ -330,21 +330,6 @@ mod tests {
             .into_iter()
             .collect::<HashSet<_>>();
         assert_eq!(root_subnet_node_ids.len(), 37);
-    }
-
-    fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
-        let tempdir = TempDir::new().unwrap();
-        let store = LocalStoreImpl::new(tempdir.path());
-        let changelog =
-            compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-                .expect("")
-                .1;
-
-        for (v, changelog_entry) in changelog.into_iter().enumerate() {
-            let v = RegistryVersion::from((v + 1) as u64);
-            store.store(v, changelog_entry).unwrap();
-        }
-        (tempdir, store)
     }
 
     fn expected_root_subnet_id() -> SubnetId {

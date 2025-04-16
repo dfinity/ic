@@ -1,5 +1,4 @@
 use canister_test::Project;
-use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_nns_test_utils::state_test_helpers::{
     create_canister, state_machine_builder_for_nns_tests, update_with_sender,
@@ -20,7 +19,6 @@ fn test_canister_playground() {
         &state_machine,
         playground_id,
         "test",
-        candid_one,
         (),
         PrincipalId::new_anonymous(),
     )

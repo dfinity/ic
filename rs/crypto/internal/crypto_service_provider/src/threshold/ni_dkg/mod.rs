@@ -26,7 +26,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_logger::debug;
 use ic_types::crypto::error::{KeyNotFoundError, MalformedDataError};
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::{BTreeMap, BTreeSet};
@@ -81,7 +80,6 @@ impl NiDkgCspClient for Csp {
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -130,7 +128,6 @@ impl NiDkgCspClient for Csp {
     fn verify_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -139,7 +136,6 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgVerifyDealingError> {
         static_api::verify_dealing(
             algorithm_id,
-            dkg_id,
             dealer_index,
             threshold,
             epoch,
@@ -152,7 +148,6 @@ impl NiDkgCspClient for Csp {
     fn verify_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -162,7 +157,6 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgVerifyReshareDealingError> {
         static_api::verify_resharing_dealing(
             algorithm_id,
-            dkg_id,
             dealer_resharing_index,
             threshold,
             epoch,
@@ -213,7 +207,6 @@ impl NiDkgCspClient for Csp {
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         epoch: Epoch,
         csp_transcript: CspNiDkgTranscript,
         receiver_index: NodeIndex,
@@ -313,7 +306,7 @@ fn dkg_dealing_encryption_key_id<T: PublicKeyStoreCspVault + ?Sized>(
     Ok(KeyId::from(&pk))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 enum DkgDealingEncryptionKeyIdRetrievalError {
     /// Missing DKG dealing encryption key
     KeyNotFound,
@@ -337,7 +330,6 @@ pub mod static_api {
     /// Verifies a CSP dealing
     pub fn verify_dealing(
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -368,7 +360,6 @@ pub mod static_api {
     #[allow(clippy::too_many_arguments)]
     pub fn verify_resharing_dealing(
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,

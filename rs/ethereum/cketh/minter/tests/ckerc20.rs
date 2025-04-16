@@ -10,24 +10,31 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPING_ETH_LOGS_INTERVAL};
-use ic_cketh_test_utils::ckerc20::{CkErc20DepositParams, CkErc20Setup, Erc20Token, ONE_USDC};
-use ic_cketh_test_utils::flow::DepositParams;
+use ic_cketh_test_utils::ckerc20::{
+    CkErc20Setup, DepositCkErc20, DepositCkErc20Params, DepositCkErc20WithSubaccountParams,
+    Erc20Token, ONE_USDC,
+};
+use ic_cketh_test_utils::flow::{
+    DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams,
+};
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
-    block_response, empty_logs, multi_logs_for_single_transaction, Erc20LogEntry,
+    block_response, empty_logs, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_USER_SUBACCOUNT,
+    DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, EFFECTIVE_GAS_PRICE,
+    ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS, GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
-use ic_state_machine_tests::ErrorCode;
-use ic_state_machine_tests::{CanisterStatusType, WasmResult};
+use ic_management_canister_types_private::CanisterStatusType;
+use ic_state_machine_tests::{ErrorCode, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
@@ -141,7 +148,7 @@ mod withdraw_erc20 {
     use super::*;
     use ic_base_types::PrincipalId;
     use ic_cketh_minter::endpoints::ckerc20::{
-        LedgerError, RetrieveErc20Request, WithdrawErc20Error,
+        LedgerError, RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
     };
     use ic_cketh_minter::endpoints::events::{
         TransactionReceipt, TransactionStatus, UnsignedTransaction,
@@ -157,15 +164,14 @@ mod withdraw_erc20 {
     };
     use ic_cketh_test_utils::flow::{
         double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
-        increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
-        ProcessWithdrawalParams,
+        increment_max_priority_fee_per_gas, DepositCkEthParams, DepositParams,
+        FeeHistoryProcessWithdrawal, ProcessWithdrawalParams,
     };
-    use ic_cketh_test_utils::mock::JsonRpcProvider;
     use ic_cketh_test_utils::response::{
         decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
     };
     use ic_cketh_test_utils::{
-        CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
+        JsonRpcProvider, CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
     };
@@ -313,9 +319,9 @@ mod withdraw_erc20 {
         let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
 
         ckerc20
-            .deposit_cketh(DepositParams {
+            .deposit_cketh(DepositCkEthParams {
                 amount: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE + CKETH_TRANSFER_FEE - 1,
-                ..DepositParams::default()
+                ..Default::default()
             })
             .call_cketh_ledger_approve_minter(
                 caller,
@@ -627,42 +633,54 @@ mod withdraw_erc20 {
 
     #[test]
     fn should_withdraw_ckusdc() {
-        fn test(transaction_status: TransactionStatus) {
-            let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        fn test<T: Into<DepositCkErc20>>(
+            ckerc20: CkErc20Setup,
+            deposit_params: T,
+            ckerc20_withdrawal_amount: u64,
+            transaction_status: TransactionStatus,
+        ) {
             let minter = ckerc20.cketh.minter_id;
-            let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-            let caller = ckerc20.caller();
+            let deposit_params = deposit_params.into();
+            let cketh_deposit_params = deposit_params
+                .cketh_deposit()
+                .expect("missing ckETH deposit params");
+            let cketh_account = cketh_deposit_params.recipient();
+            let ckerc20_account = deposit_params.recipient();
+            assert_eq!(cketh_account.owner, ckerc20_account.owner);
             let ckerc20_tx_fee = DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE;
 
             let ckerc20 = ckerc20
-                .deposit_cketh_and_ckerc20(
-                    EXPECTED_BALANCE,
-                    TWO_USDC + CKERC20_TRANSFER_FEE,
-                    ckusdc.clone(),
-                    caller,
-                )
+                .deposit(deposit_params.clone())
                 .expect_mint()
-                .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
-                .call_ckerc20_ledger_approve_minter(
-                    ckusdc.ledger_canister_id,
-                    caller,
-                    TWO_USDC,
-                    None,
+                .call_cketh_ledger_approve_minter(
+                    cketh_account.owner,
+                    ckerc20_tx_fee,
+                    cketh_account.subaccount,
                 )
-                .call_minter_withdraw_erc20(
-                    caller,
-                    TWO_USDC,
-                    ckusdc.ledger_canister_id,
-                    DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+                .call_ckerc20_ledger_approve_minter(
+                    deposit_params.token().ledger_canister_id,
+                    ckerc20_account.owner,
+                    ckerc20_withdrawal_amount,
+                    ckerc20_account.subaccount,
+                )
+                .call_minter_withdraw_erc20_with(
+                    ckerc20_account.owner,
+                    WithdrawErc20Arg {
+                        amount: ckerc20_withdrawal_amount.into(),
+                        ckerc20_ledger_id: deposit_params.token().ledger_canister_id,
+                        recipient: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                        from_cketh_subaccount: cketh_account.subaccount,
+                        from_ckerc20_subaccount: ckerc20_account.subaccount,
+                    },
                 )
                 .expect_refresh_gas_fee_estimate(identity)
                 .expect_withdrawal_request_accepted();
 
             assert_eq!(
-                ckerc20
-                    .setup
-                    .erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
-                TWO_USDC + CKERC20_TRANSFER_FEE
+                ckerc20.setup.erc20_balance_from_get_minter_info(
+                    &deposit_params.token().erc20_contract_address
+                ),
+                deposit_params.ckerc20_amount()
             );
             let time = ckerc20.setup.env.get_time().as_nanos_since_unix_epoch();
 
@@ -692,17 +710,14 @@ mod withdraw_erc20 {
             .call_cketh_ledger_get_transaction(cketh_block_index.clone())
             .expect_burn(Burn {
                 amount: ckerc20_tx_fee.into(),
-                from: Account {
-                    owner: caller,
-                    subaccount: None,
-                },
+                from: cketh_account,
                 spender: Some(Account {
                     owner: minter.into(),
                     subaccount: None,
                 }),
                 memo: Some(Memo::from(BurnMemo::Erc20GasFee {
                     ckerc20_token_symbol: "ckUSDC".parse().unwrap(),
-                    ckerc20_withdrawal_amount: TWO_USDC.into(),
+                    ckerc20_withdrawal_amount: ckerc20_withdrawal_amount.into(),
                     to_address: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS
                         .parse()
                         .unwrap(),
@@ -710,15 +725,12 @@ mod withdraw_erc20 {
                 created_at_time: None,
             })
             .call_ckerc20_ledger_get_transaction(
-                ckusdc.ledger_canister_id,
+                deposit_params.token().ledger_canister_id,
                 ckerc20_block_index.clone(),
             )
             .expect_burn(Burn {
-                amount: TWO_USDC.into(),
-                from: Account {
-                    owner: caller,
-                    subaccount: None,
-                },
+                amount: ckerc20_withdrawal_amount.into(),
+                from: ckerc20_account,
                 spender: Some(Account {
                     owner: minter.into(),
                     subaccount: None,
@@ -733,21 +745,25 @@ mod withdraw_erc20 {
             });
 
             let expected_cketh_balance_after_withdrawal =
-                Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE - ckerc20_tx_fee);
+                Nat::from(cketh_deposit_params.amount() - CKETH_TRANSFER_FEE - ckerc20_tx_fee);
             assert_eq!(
-                ckerc20.cketh.balance_of(caller),
+                ckerc20.cketh.balance_of(cketh_account),
                 expected_cketh_balance_after_withdrawal
             );
             let expected_ckerc20_balance_after_withdrawal = Nat::from(0_u8);
             assert_eq!(
-                ckerc20.balance_of_ledger(ckusdc.ledger_canister_id, caller),
+                ckerc20
+                    .balance_of_ledger(deposit_params.token().ledger_canister_id, ckerc20_account),
                 expected_ckerc20_balance_after_withdrawal
             );
             assert_eq!(
-                ckerc20.erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
+                ckerc20.erc20_balance_from_get_minter_info(
+                    &deposit_params.token().erc20_contract_address
+                ),
                 match transaction_status {
-                    TransactionStatus::Success => CKERC20_TRANSFER_FEE,
-                    TransactionStatus::Failure => TWO_USDC + CKERC20_TRANSFER_FEE,
+                    TransactionStatus::Success =>
+                        deposit_params.ckerc20_amount() - ckerc20_withdrawal_amount,
+                    TransactionStatus::Failure => deposit_params.ckerc20_amount(),
                 }
             );
 
@@ -758,14 +774,17 @@ mod withdraw_erc20 {
                 .assert_has_unique_events_in_order(&vec![
                     EventPayload::AcceptedErc20WithdrawalRequest {
                         max_transaction_fee: ckerc20_tx_fee.into(),
-                        withdrawal_amount: TWO_USDC.into(),
-                        erc20_contract_address: ckusdc.erc20_contract_address.clone(),
+                        withdrawal_amount: ckerc20_withdrawal_amount.into(),
+                        erc20_contract_address: deposit_params
+                            .token()
+                            .erc20_contract_address
+                            .clone(),
                         destination: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
                         cketh_ledger_burn_index: cketh_block_index.clone(),
-                        ckerc20_ledger_id: ckusdc.ledger_canister_id,
+                        ckerc20_ledger_id: deposit_params.token().ledger_canister_id,
                         ckerc20_ledger_burn_index: ckerc20_block_index.clone(),
-                        from: caller,
-                        from_subaccount: None,
+                        from: ckerc20_account.owner,
+                        from_subaccount: ckerc20_account.subaccount,
                         created_at: time,
                     },
                     EventPayload::CreatedTransaction {
@@ -776,13 +795,13 @@ mod withdraw_erc20 {
                             max_priority_fee_per_gas: 1_500_000_000_u64.into(),
                             max_fee_per_gas: estimated_max_fee_per_gas.clone(),
                             gas_limit: estimated_gas_limit.clone(),
-                            destination: ckusdc.erc20_contract_address,
+                            destination: deposit_params.token().erc20_contract_address.clone(),
                             value: 0_u8.into(),
                             data: ByteBuf::from(erc20_transfer_data(
                                 &DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS
                                     .parse()
                                     .unwrap(),
-                                &TWO_USDC.into(),
+                                &ckerc20_withdrawal_amount.into(),
                             )),
                             access_list: vec![],
                         },
@@ -808,7 +827,7 @@ mod withdraw_erc20 {
             ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
             let cketh_balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
                 ckerc20.cketh_ledger_id(),
-                caller,
+                cketh_account,
                 &expected_cketh_balance_after_withdrawal,
             );
             assert_eq!(
@@ -818,11 +837,14 @@ mod withdraw_erc20 {
 
             if transaction_status == TransactionStatus::Failure {
                 let ckerc20_balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
-                    ckusdc.ledger_canister_id,
-                    caller,
+                    deposit_params.token().ledger_canister_id,
+                    ckerc20_account,
                     &expected_ckerc20_balance_after_withdrawal,
                 );
-                assert_eq!(ckerc20_balance_after_reimbursement, Nat::from(TWO_USDC));
+                assert_eq!(
+                    ckerc20_balance_after_reimbursement,
+                    Nat::from(ckerc20_withdrawal_amount)
+                );
                 ckerc20
                     .check_events()
                     .assert_has_unique_events_in_order(&vec![
@@ -830,20 +852,20 @@ mod withdraw_erc20 {
                             withdrawal_id: cketh_block_index.clone(),
                             burn_in_block: ckerc20_block_index.clone(),
                             reimbursed_in_block: Nat::from(3_u8),
-                            ledger_id: ckusdc.ledger_canister_id,
-                            reimbursed_amount: TWO_USDC.into(),
+                            ledger_id: deposit_params.token().ledger_canister_id,
+                            reimbursed_amount: ckerc20_withdrawal_amount.into(),
                             transaction_hash: Some(
                                 DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                             ),
                         },
                     ])
-                    .call_ckerc20_ledger_get_transaction(ckusdc.ledger_canister_id, 3_u8)
+                    .call_ckerc20_ledger_get_transaction(
+                        deposit_params.token().ledger_canister_id,
+                        3_u8,
+                    )
                     .expect_mint(Mint {
-                        amount: TWO_USDC.into(),
-                        to: Account {
-                            owner: caller,
-                            subaccount: None,
-                        },
+                        amount: ckerc20_withdrawal_amount.into(),
+                        to: ckerc20_account,
                         memo: Some(Memo::from(MintMemo::ReimburseTransaction {
                             withdrawal_id: ckerc20_block_index.0.to_u64().unwrap(),
                             tx_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.parse().unwrap(),
@@ -853,8 +875,53 @@ mod withdraw_erc20 {
             }
         }
 
-        test(TransactionStatus::Success);
-        test(TransactionStatus::Failure);
+        for tx_status in [TransactionStatus::Success, TransactionStatus::Failure] {
+            let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+            let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+            test(
+                ckerc20,
+                DepositCkErc20Params {
+                    cketh_deposit: Some(DepositParams::from(DepositCkEthParams {
+                        amount: EXPECTED_BALANCE,
+                        ..Default::default()
+                    })),
+                    ..DepositCkErc20Params::new(TWO_USDC + CKERC20_TRANSFER_FEE, ckusdc)
+                },
+                TWO_USDC,
+                tx_status.clone(),
+            );
+
+            let ckerc20 = CkErc20Setup::default()
+                .add_supported_erc20_tokens()
+                .add_support_for_subaccount();
+            let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+            let caller = ckerc20.caller();
+            let cketh_subaccount = Some(DEFAULT_USER_SUBACCOUNT);
+            let ckusdc_subaccount = Some([43; 32]);
+            assert_ne!(cketh_subaccount, ckusdc_subaccount);
+
+            test(
+                ckerc20,
+                DepositCkErc20WithSubaccountParams {
+                    cketh_deposit: Some(DepositParams::from(DepositCkEthWithSubaccountParams {
+                        recipient: caller,
+                        recipient_subaccount: cketh_subaccount,
+                        amount: EXPECTED_BALANCE,
+                        ..Default::default()
+                    })),
+                    ..DepositCkErc20WithSubaccountParams::new(
+                        TWO_USDC + CKERC20_TRANSFER_FEE,
+                        ckusdc.clone(),
+                        Account {
+                            owner: caller,
+                            subaccount: ckusdc_subaccount,
+                        },
+                    )
+                },
+                TWO_USDC,
+                tx_status,
+            );
+        }
     }
 
     #[test]
@@ -1173,19 +1240,19 @@ mod withdraw_erc20 {
             .start_processing_withdrawals()
             .retrieve_fee_history(move |mock| {
                 mock.modify_response(
-                    JsonRpcProvider::Ankr,
+                    JsonRpcProvider::Provider1,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740742_u64.into()
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::PublicNode,
+                    JsonRpcProvider::Provider2,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740743_u64.into()
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::LlamaNodes,
+                    JsonRpcProvider::Provider3,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740744_u64.into()
                     },
@@ -1257,69 +1324,147 @@ mod withdraw_erc20 {
 fn should_deposit_ckerc20() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-    let caller: Principal = ckerc20.caller();
+    test_deposit_ckerc20(ckerc20, DepositCkErc20Params::new(ONE_USDC, ckusdc));
 
-    ckerc20
-        .deposit_ckerc20(ONE_USDC, ckusdc.clone(), caller)
-        .expect_mint()
-        .call_ckerc20_ledger_get_transaction(ckusdc.ledger_canister_id, 0_u8)
-        .expect_mint(Mint {
-            amount: Nat::from(ONE_USDC),
-            to: Account {
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_support_for_subaccount();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+    test_deposit_ckerc20(
+        ckerc20,
+        DepositCkErc20WithSubaccountParams::new(
+            ONE_USDC,
+            ckusdc,
+            Account {
                 owner: caller,
-                subaccount: None,
+                subaccount: Some(DEFAULT_USER_SUBACCOUNT),
             },
-            memo: Some(Memo::from(MintMemo::Convert {
-                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-                tx_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-                log_index: DEFAULT_ERC20_DEPOSIT_LOG_INDEX.into(),
-            })),
-            created_at_time: None,
-        });
+        ),
+    );
+
+    fn test_deposit_ckerc20<T: Into<DepositCkErc20>>(ckerc20: CkErc20Setup, params: T) {
+        let params = params.into();
+
+        ckerc20
+            .deposit(params.clone())
+            .expect_mint()
+            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
+            .expect_mint(Mint {
+                amount: Nat::from(params.ckerc20_amount()),
+                to: params.recipient(),
+                memo: Some(Memo::from(MintMemo::Convert {
+                    from_address: *params.from_address(),
+                    tx_hash: params.transaction_data().transaction_hash.parse().unwrap(),
+                    log_index: params.transaction_data().log_index.into(),
+                })),
+                created_at_time: None,
+            });
+    }
 }
 
 #[test]
 fn should_deposit_cketh_and_ckerc20() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-    let caller = ckerc20.caller();
+    test_deposit_cketh_and_ckerc20(
+        ckerc20,
+        DepositCkErc20Params {
+            cketh_deposit: Some(DepositParams::from(DepositCkEthParams {
+                amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
+                ..Default::default()
+            })),
+            ..DepositCkErc20Params::new(ONE_USDC, ckusdc)
+        },
+    );
 
-    ckerc20
-        .deposit_cketh_and_ckerc20(
-            CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
-            ONE_USDC,
-            ckusdc.clone(),
-            caller,
-        )
-        .expect_mint()
-        .call_cketh_ledger_get_transaction(0_u8)
-        .expect_mint(Mint {
-            amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
-            to: Account {
-                owner: caller,
-                subaccount: None,
-            },
-            memo: Some(Memo::from(MintMemo::Convert {
-                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-                log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_support_for_subaccount();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+    let ckusdc_subaccount = Some([43; 32]);
+    test_deposit_cketh_and_ckerc20(
+        ckerc20,
+        DepositCkErc20WithSubaccountParams {
+            cketh_deposit: Some(DepositParams::from(DepositCkEthParams {
+                recipient: caller,
+                ..Default::default()
             })),
-            created_at_time: None,
-        })
-        .call_ckerc20_ledger_get_transaction(ckusdc.ledger_canister_id, 0_u8)
-        .expect_mint(Mint {
-            amount: ONE_USDC.into(),
-            to: Account {
-                owner: caller,
-                subaccount: None,
-            },
-            memo: Some(Memo::from(MintMemo::Convert {
-                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-                tx_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-                log_index: DEFAULT_ERC20_DEPOSIT_LOG_INDEX.into(),
+            ..DepositCkErc20WithSubaccountParams::new(
+                ONE_USDC,
+                ckusdc.clone(),
+                Account {
+                    owner: caller,
+                    subaccount: ckusdc_subaccount,
+                },
+            )
+        },
+    );
+
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_support_for_subaccount();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+    let cketh_subaccount = Some(DEFAULT_USER_SUBACCOUNT);
+    let ckusdc_subaccount = Some([43; 32]);
+    assert_ne!(cketh_subaccount, ckusdc_subaccount);
+    test_deposit_cketh_and_ckerc20(
+        ckerc20,
+        DepositCkErc20WithSubaccountParams {
+            cketh_deposit: Some(DepositParams::from(DepositCkEthWithSubaccountParams {
+                recipient: caller,
+                recipient_subaccount: cketh_subaccount,
+                ..Default::default()
             })),
-            created_at_time: None,
-        });
+            ..DepositCkErc20WithSubaccountParams::new(
+                ONE_USDC,
+                ckusdc.clone(),
+                Account {
+                    owner: caller,
+                    subaccount: ckusdc_subaccount,
+                },
+            )
+        },
+    );
+
+    fn test_deposit_cketh_and_ckerc20<T: Into<DepositCkErc20>>(ckerc20: CkErc20Setup, params: T) {
+        let params = params.into();
+        let cketh_params = params
+            .cketh_deposit()
+            .expect("missing ckETH deposit params");
+
+        ckerc20
+            .deposit(params.clone())
+            .expect_mint()
+            .call_cketh_ledger_get_transaction(0_u8)
+            .expect_mint(Mint {
+                amount: Nat::from(cketh_params.amount()),
+                to: cketh_params.recipient(),
+                memo: Some(Memo::from(MintMemo::Convert {
+                    from_address: *cketh_params.from_address(),
+                    tx_hash: cketh_params
+                        .transaction_data()
+                        .transaction_hash
+                        .parse()
+                        .unwrap(),
+                    log_index: cketh_params.transaction_data().log_index.into(),
+                })),
+                created_at_time: None,
+            })
+            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
+            .expect_mint(Mint {
+                amount: Nat::from(params.ckerc20_amount()),
+                to: params.recipient(),
+                memo: Some(Memo::from(MintMemo::Convert {
+                    from_address: *params.from_address(),
+                    tx_hash: params.transaction_data().transaction_hash.parse().unwrap(),
+                    log_index: params.transaction_data().log_index.into(),
+                })),
+                created_at_time: None,
+            });
+    }
 }
 
 #[test]
@@ -1356,6 +1501,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
                 from_address: format_ethereum_address_to_eip_55(DEFAULT_DEPOSIT_FROM_ADDRESS),
                 value: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
                 principal: caller,
+                subaccount: None,
             },
             EventPayload::AcceptedErc20Deposit {
                 transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
@@ -1365,6 +1511,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
                 value: ONE_USDC.into(),
                 principal: caller,
                 erc20_contract_address: ckusdc.erc20_contract_address.clone(),
+                subaccount: None,
             },
         ])
         .check_events()
@@ -1429,9 +1576,9 @@ fn should_block_deposit_from_blocked_address() {
         .unwrap();
 
     ckerc20
-        .deposit(CkErc20DepositParams {
+        .deposit(DepositCkErc20Params {
             from_address: from_address_blocked,
-            ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
+            ..DepositCkErc20Params::new(ONE_USDC, ckusdc)
         })
         .expect_no_mint()
         .check_events()
@@ -1451,12 +1598,10 @@ fn should_block_deposit_from_corrupted_principal() {
     let invalid_principal = "0x0a01f79d0000000000fe01000000000000000000000000000000000000000001";
 
     ckerc20
-        .deposit(CkErc20DepositParams {
-            override_erc20_log_entry: Box::new(|mut entry: Erc20LogEntry| {
-                entry.encoded_principal = invalid_principal.to_string();
-                entry
-            }),
-            ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
+        .deposit(DepositCkErc20Params::new(ONE_USDC, ckusdc))
+        .with_override_erc20_log_entry(|mut entry| {
+            entry.topics[3] = invalid_principal.parse().unwrap();
+            entry
         })
         .expect_no_mint()
         .check_events()
@@ -1481,13 +1626,13 @@ fn should_fail_to_mint_from_unsupported_erc20_contract_address() {
         .contains(&unsupported_erc20_address));
 
     ckerc20
-        .deposit(CkErc20DepositParams {
-            override_erc20_log_entry: Box::new(move |mut entry: Erc20LogEntry| {
-                entry.erc20_contract_address = unsupported_erc20_address;
-                entry
-            }),
-            ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
-        })
+        .deposit(DepositCkErc20Params::new(
+            ONE_USDC,
+            CkErc20Token {
+                erc20_contract_address: unsupported_erc20_address.to_string(),
+                ..ckusdc.clone()
+            },
+        ))
         .expect_no_mint()
         .check_events()
         .assert_has_no_event_satisfying(|event| {
@@ -1537,6 +1682,7 @@ fn should_retrieve_minter_info() {
             erc20_helper_contract_address: Some(format_ethereum_address_to_eip_55(
                 ERC20_HELPER_CONTRACT_ADDRESS
             )),
+            deposit_with_subaccount_helper_contract_address: None,
             supported_ckerc20_tokens: Some(supported_ckerc20_tokens),
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
@@ -1546,9 +1692,52 @@ fn should_retrieve_minter_info() {
             erc20_balances: Some(erc20_balances),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            last_deposit_with_subaccount_scraped_block_number: Some(
+                LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
+            ),
             cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
+            evm_rpc_id: ckerc20.cketh.evm_rpc_id.map(Principal::from),
         }
     );
+}
+
+// If a contract needs to be changed, the contract ABI must be preserved,
+// otherwise this will be a breaking change for clients (e.g. front-ends).
+#[test]
+#[allow(deprecated)]
+fn should_not_change_address_of_other_contracts_when_adding_new_contract() {
+    let ckerc20 = CkErc20Setup::default();
+    let info_at_start = ckerc20.cketh.get_minter_info();
+    assert_eq!(
+        info_at_start,
+        MinterInfo {
+            smart_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
+            eth_helper_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
+            erc20_helper_contract_address: Some(format_ethereum_address_to_eip_55(
+                ERC20_HELPER_CONTRACT_ADDRESS
+            )),
+            ..info_at_start.clone()
+        }
+    );
+
+    let ckerc20 = ckerc20.add_support_for_subaccount();
+
+    assert_eq!(
+        ckerc20.get_minter_info(),
+        MinterInfo {
+            deposit_with_subaccount_helper_contract_address: Some(
+                format_ethereum_address_to_eip_55(DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS)
+            ),
+            last_deposit_with_subaccount_scraped_block_number: Some(
+                LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
+            ),
+            ..info_at_start
+        }
+    )
 }
 
 #[test]
@@ -1759,13 +1948,7 @@ fn should_skip_single_block_containing_too_many_events() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let erc20_topics = ckerc20.supported_erc20_contract_address_topics();
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-    let deposit = CkErc20DepositParams {
-        from_address: "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
-            .parse()
-            .unwrap(),
-        ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
-    }
-    .erc20_log_entry();
+    let deposit = DepositCkErc20Params::new(ONE_USDC, ckusdc).to_log_entry();
     // around 680 bytes per log
     // we need at least 3085 logs to reach the 2MB limit
     let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_100);

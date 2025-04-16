@@ -30,6 +30,6 @@ rust_library(
 
 rust_test(
     name = "fake_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

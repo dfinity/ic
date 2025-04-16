@@ -1,12 +1,18 @@
+// This allow(dead_code) is necessary because some parts of this file
+// are not used in canbench-rs, but are used elsewhere.  Otherwise we get annoying clippy warnings.
+#![allow(dead_code)]
+use crate::governance::RandomnessGenerator;
 use crate::{
-    governance::{Environment, HeapGrowthPotential},
+    governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError, E8};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::{NervousSystemError, E8};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
@@ -44,7 +50,7 @@ lazy_static! {
     pub static ref TARGET_SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(435106);
     pub static ref OPEN_SNS_TOKEN_SWAP: OpenSnsTokenSwap = OpenSnsTokenSwap {
         target_swap_canister_id: Some((*TARGET_SWAP_CANISTER_ID).into()),
-        params: Some(TEST_SWAP_PARAMS.clone()),
+        params: Some(TEST_SWAP_PARAMS),
         community_fund_investment_e8s: Some(500),
     };
     pub static ref SWAP_INIT: sns_swap_pb::Init = sns_swap_pb::Init {
@@ -105,12 +111,12 @@ impl IcpLedger for StubIcpLedger {
 pub(crate) struct StubCMC {}
 #[async_trait]
 impl CMC for StubCMC {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExpectedCallCanisterMethodCallArguments {
     target: CanisterId,
     method_name: String,
@@ -128,6 +134,33 @@ impl ExpectedCallCanisterMethodCallArguments {
             method_name: method_name.to_string(),
             request,
         }
+    }
+}
+
+pub(crate) struct MockRandomness {
+    seed: Option<[u8; 32]>,
+}
+impl MockRandomness {
+    pub fn new() -> MockRandomness {
+        MockRandomness { seed: None }
+    }
+}
+
+impl RandomnessGenerator for MockRandomness {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        todo!()
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        todo!()
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.seed = Some(seed);
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.seed
     }
 }
 
@@ -157,6 +190,14 @@ impl MockEnvironment {
                 expected_call_responses,
             ))),
             now: Arc::new(Mutex::new(now)),
+        }
+    }
+
+    pub fn now_setter(&self) -> impl Fn(u64) {
+        let arc = self.now.clone();
+        move |new_now| {
+            let mut now = arc.lock().unwrap();
+            *now = new_now;
         }
     }
 }
@@ -193,14 +234,6 @@ impl Environment for MockEnvironment {
         *self.now.lock().unwrap()
     }
 
-    fn random_u64(&mut self) -> u64 {
-        unimplemented!();
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        unimplemented!();
-    }
-
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
@@ -214,7 +247,7 @@ impl Environment for MockEnvironment {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,
@@ -296,4 +329,10 @@ impl Environment for MockEnvironment {
 
         result
     }
+}
+
+/// Useful for avoiding errors related to index corruption that happens when neurons
+/// share subaccounts.
+pub fn test_subaccount_for_neuron_id(neuron_id: u64) -> Vec<u8> {
+    [vec![0; 24], neuron_id.to_be_bytes().to_vec()].concat()
 }

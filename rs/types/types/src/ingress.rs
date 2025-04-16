@@ -1,7 +1,7 @@
 //! Ingress types.
 
 use crate::artifact::IngressMessageId;
-use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
+use crate::{CanisterId, MemoryDiskBytes, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::{convert::TryFrom, fmt};
 
 /// The inner state of an ingress message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum IngressState {
     /// The message was successfully inducted into the input queue of
     /// the receiver and should eventually execute.
@@ -56,7 +56,7 @@ impl IngressState {
 }
 
 /// The status of an ingress message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum IngressStatus {
     /// The system has knowledge of this message, its status is
     /// described by state
@@ -107,8 +107,8 @@ impl IngressStatus {
     pub fn payload_bytes(&self) -> usize {
         match self {
             IngressStatus::Known { state, .. } => match state {
-                IngressState::Completed(result) => result.count_bytes(),
-                IngressState::Failed(error) => error.description().as_bytes().len(),
+                IngressState::Completed(result) => result.memory_bytes(),
+                IngressState::Failed(error) => error.description().len(),
                 _ => 0,
             },
             IngressStatus::Unknown => 0,
@@ -141,7 +141,7 @@ impl IngressStatus {
 }
 
 /// A list of hashsets that implements IngressSetQuery.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct IngressSets {
     hash_sets: Vec<Arc<HashSet<IngressMessageId>>>,
     min_block_time: Time,
@@ -166,7 +166,7 @@ impl IngressSets {
 
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
-#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case
@@ -176,12 +176,16 @@ pub enum WasmResult {
     Reject(String),
 }
 
-impl CountBytes for WasmResult {
-    fn count_bytes(&self) -> usize {
+impl MemoryDiskBytes for WasmResult {
+    fn memory_bytes(&self) -> usize {
         match self {
             WasmResult::Reply(bytes) => bytes.len(),
-            WasmResult::Reject(string) => string.as_bytes().len(),
+            WasmResult::Reject(string) => string.len(),
         }
+    }
+
+    fn disk_bytes(&self) -> usize {
+        0
     }
 }
 
@@ -191,6 +195,20 @@ impl WasmResult {
         match self {
             WasmResult::Reply(bytes) => bytes,
             WasmResult::Reject(string) => string.as_bytes().to_vec(),
+        }
+    }
+
+    /// For use in tests.
+    /// Asserts that the result is a rejection containing the given message.
+    pub fn assert_contains_reject(&self, message: &str) {
+        match self {
+            Self::Reject(s) => {
+                assert!(
+                    s.contains(message),
+                    "Unable to match reject message {s} with expected {message}"
+                )
+            }
+            _ => panic!("Expected reject"),
         }
     }
 }

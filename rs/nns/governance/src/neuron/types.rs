@@ -6,25 +6,54 @@ use crate::{
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
+        self as pb,
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
         governance_error::ErrorType,
         manage_neuron::{configure::Operation, Configure},
         neuron::{DissolveState as NeuronDissolveState, Followees},
-        AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
-        Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Visibility, Vote,
+        AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData, MaturityDisbursement,
+        Neuron as NeuronProto, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Vote,
+        VotingPowerEconomics,
     },
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_governance_api::pb::v1::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
-use std::collections::{BTreeSet, HashMap};
+use rust_decimal::{Decimal, RoundingStrategy};
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::Duration,
+};
 
-/// A neuron type internal to the governance crate. Currently, this type is identical to the
-/// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
+// It might make sense for Private to be the default; however, the default of
+// pb::Visibility is Unspecified. Therefore, instead of doing things such as
+// unwrap_or_default, just be explicit (e.g. unwrap_or(Visibility::Private)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum Visibility {
+    Private = pb::Visibility::Private as i32,
+    Public = pb::Visibility::Public as i32,
+}
+
+impl TryFrom<i32> for Visibility {
+    type Error = String;
+
+    fn try_from(src: i32) -> Result<Visibility, String> {
+        if src == Visibility::Private as i32 {
+            Ok(Visibility::Private)
+        } else if src == Visibility::Public as i32 {
+            Ok(Visibility::Public)
+        } else {
+            Err(format!("Invalid visibility code: {:?}.", src,))
+        }
+    }
+}
+
+/// A neuron type internal to the governance crate. Gradually, this type will evolve
 /// towards having all private fields while exposing methods for mutations, which allows it to hold
 /// invariants.
 #[derive(Clone, Debug, PartialEq)]
@@ -105,14 +134,27 @@ pub struct Neuron {
     /// a proposal to open an SNS token swap is executed, maturity from this neuron
     /// will be used to participate in the SNS token swap.
     pub joined_community_fund_timestamp_seconds: Option<u64>,
-    /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
-    pub known_neuron_data: Option<KnownNeuronData>,
     /// The type of the Neuron. See \[NeuronType\] for a description
     /// of the different states.
     pub neuron_type: Option<i32>,
     /// How much unprivileged principals (i.e. is neither controller, nor
     /// hotkey) can see about this neuron.
-    visibility: Option<Visibility>,
+    visibility: Visibility,
+    /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
+    known_neuron_data: Option<KnownNeuronData>,
+    /// The last time that voting power was "refreshed". There are two ways to
+    /// refresh the voting power of a neuron: set following, or vote directly.
+    /// When this becomes > 6 months ago, the amount of voting power that this
+    /// neuron can exercise decreases linearly down to 0 over the course of 1
+    /// month. After that, following is cleared, except for ManageNeuron
+    /// proposals.
+    voting_power_refreshed_timestamp_seconds: u64,
+    /// This field is used to store the index of the most recent ballot in the
+    /// `recent_ballots` circular buffer. This is used to optimize insertions
+    /// into stable memory, to avoid rewriting all the data.
+    pub recent_ballots_next_entry_index: Option<usize>,
+    /// The maturity disbursements that are in progress for this neuron.
+    pub maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 }
 
 impl Neuron {
@@ -144,9 +186,23 @@ impl Neuron {
     /// When we turn on enforcement of private neurons, this will only return
     /// Public or Private, not None. When that happens, we should define another
     /// Visibility that does NOT have Unspecified.
-    pub fn visibility(&self) -> Option<Visibility> {
+    ///
+    /// See also set_visibility.
+    pub fn visibility(&self) -> Visibility {
+        // Log (and in non-release builds, also panic) if inconsistent.
+        let inconsistent =
+            self.known_neuron_data.is_some() && (self.visibility != Visibility::Public);
+        if inconsistent {
+            println!(
+                "{}WARNING: Neuron is inconsistent. In release builds, it will be treated \
+                 as Public. Otherwise, the next statement is a panic. Neuron: {:#?}",
+                LOG_PREFIX, self,
+            );
+            debug_assert!(false);
+        }
+
         if self.known_neuron_data.is_some() {
-            return Some(Visibility::Public);
+            return Visibility::Public;
         }
 
         self.visibility
@@ -239,6 +295,43 @@ impl Neuron {
             > 0
     }
 
+    /// How much sway this neuron has when it casts its vote on proposals.
+    pub fn deciding_voting_power(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        // Main inputs to main calculation.
+
+        let adjustment_factor: Decimal = {
+            let time_since_last_refreshed = Duration::from_secs(
+                now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
+            );
+
+            voting_power_economics
+                .deciding_voting_power_adjustment_factor(time_since_last_refreshed)
+        };
+
+        let potential_voting_power = self.potential_voting_power(now_seconds);
+
+        // Main calculation.
+        let result = adjustment_factor * Decimal::from(potential_voting_power);
+
+        // Convert (back) to u64. The particular type of rounding used here does
+        // not matter to us very much, because we are not for example
+        // apportioning (where rounding down is best), nor anything like that.
+        let result = result.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
+        u64::try_from(result).unwrap_or_else(|err| {
+            // Log and fall back to potential voting power. Assuming
+            // adjustment_factor is in [0, 1], I see no way this can happen.
+            println!(
+                "{}ERROR: Unable to convert deciding voting power {} * {} back to u64: {:?}",
+                LOG_PREFIX, adjustment_factor, potential_voting_power, err,
+            );
+            potential_voting_power
+        })
+    }
+
     /// Return the voting power of this neuron.
     ///
     /// The voting power is the stake of the neuron modified by a
@@ -246,7 +339,7 @@ impl Neuron {
     /// the maximum bonus of 100% received at an 8 year dissolve
     /// delay. The voting power is further modified by the age of
     /// the neuron giving up to 25% bonus after four years.
-    pub fn voting_power(&self, now_seconds: u64) -> u64 {
+    pub fn potential_voting_power(&self, now_seconds: u64) -> u64 {
         // We compute the stake adjustments in u128.
         let stake = self.stake_e8s() as u128;
         // Dissolve delay is capped to eight years, but we cap it
@@ -271,6 +364,23 @@ impl Neuron {
         // u64::MAX divided by 2.5, the voting power may actually not
         // fit in a u64.
         std::cmp::min(ad_stake, u64::MAX as u128) as u64
+    }
+
+    /// Get the recent ballots, with most recent ballots first
+    pub(crate) fn sorted_recent_ballots(&self) -> Vec<BallotInfo> {
+        if let Some(index) = self.recent_ballots_next_entry_index {
+            // We store ballots in a circular buffer with oldest first, so we need to reverse
+            // this as well as rearrange it before returning it.
+            let recent_ballots = &self.recent_ballots;
+            recent_ballots[index..]
+                .iter()
+                .chain(recent_ballots[..index].iter())
+                .rev()
+                .cloned()
+                .collect()
+        } else {
+            self.recent_ballots.clone()
+        }
     }
 
     /// Given the specified `ballots`: determine how this neuron would
@@ -333,6 +443,7 @@ impl Neuron {
     /// Register that this neuron has cast a ballot for a
     /// proposal. Don't include votes on "real time" topics (such as
     /// setting the ICP/SDR exchange rate).
+    /// TODO(NNS1-3479) delete this method after all neurons are migrated to stable memory
     pub(crate) fn register_recent_ballot(
         &mut self,
         topic: Topic,
@@ -344,20 +455,73 @@ impl Neuron {
         if topic == Topic::ExchangeRate {
             return;
         }
+
+        // Data migration for updating the recent ballots so we can use a circular buffer here.
+        let next_entry_index = if let Some(index) = self.recent_ballots_next_entry_index {
+            index
+        } else {
+            self.recent_ballots.reverse();
+            self.recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS
+        };
+
         let ballot_info = BallotInfo {
             proposal_id: Some(*proposal_id),
             vote: vote as i32,
         };
-        // We would really like to have a circular buffer here. As
-        // we're dealing with a simple vector, we insert at the
-        // beginning and remove at the end once we have reached
-        // the maximum number of votes to keep track of.
-        self.recent_ballots.insert(0, ballot_info);
-        // Pop and discard elements from the end until we reach
-        // the maximum allowed length of the vector.
-        while self.recent_ballots.len() > MAX_NEURON_RECENT_BALLOTS {
-            self.recent_ballots.pop();
+
+        // Vector is full
+        if self.recent_ballots.len() >= MAX_NEURON_RECENT_BALLOTS {
+            self.recent_ballots[next_entry_index] = ballot_info;
+        } else {
+            self.recent_ballots.push(ballot_info);
         }
+        // Advance the index
+        self.recent_ballots_next_entry_index =
+            Some((next_entry_index + 1) % MAX_NEURON_RECENT_BALLOTS);
+    }
+
+    pub(crate) fn refresh_voting_power(&mut self, now_seconds: u64) {
+        self.voting_power_refreshed_timestamp_seconds = now_seconds;
+    }
+
+    pub(crate) fn ready_to_spawn(&self, now_seconds: u64) -> bool {
+        self.spawn_at_timestamp_seconds
+            .is_some_and(|spawn_at_timestamp_seconds| now_seconds >= spawn_at_timestamp_seconds)
+    }
+
+    /// Returns the number of followee neuron IDs that were removed.
+    ///
+    /// If the neuron refreshed recently, no followee neuron IDs are removed
+    /// (and returns 0).
+    pub(crate) fn prune_following(
+        &mut self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        let is_fresh = self.voting_power_refreshed_timestamp_seconds
+            >= now_seconds
+                - voting_power_economics.get_start_reducing_voting_power_after_seconds()
+                - voting_power_economics.get_clear_following_after_seconds();
+        if is_fresh {
+            return 0;
+        }
+
+        let mut result = 0_usize;
+        for (topic, followees) in &self.followees {
+            if *topic == Topic::NeuronManagement as i32 {
+                continue;
+            }
+            result = result.saturating_add(followees.followees.len());
+        }
+
+        // Clear all following except ManageNeuron.
+        self.followees
+            .retain(|topic, _| *topic == Topic::NeuronManagement as i32);
+
+        // If this panics, that means we somehow have around 2^64 (or more)
+        // followees, which is not only disallowed, but just way more than we
+        // would ever be able to hold in memory.
+        u64::try_from(result).unwrap()
     }
 
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
@@ -490,22 +654,38 @@ impl Neuron {
         }
     }
 
-    /// Err is returned is in the following cases:
+    /// Err is returned when self is a known neuron, but Private is passed.
     ///
-    ///     1. visibility is invalid.
-    ///
-    ///     2. This neuron is known.
+    /// See also the visibility getter method.
     fn set_visibility(&mut self, visibility: Option<i32>) -> Result<(), GovernanceError> {
-        // Reject visibility == None;
+        // Validate input.
+
+        // Must be explicit. (Parameter is of type Option because caller is
+        // doing a giant match, and we want handling each case to be as simple
+        // as possible, ideally, just one method call.)
         let Some(visibility) = visibility else {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
-                "Visibility was not specified.".to_string(),
+                "No visibility specified.".to_string(),
             ));
         };
 
-        // Known neurons are not allowed to set their visibility.
+        // Visibility must be one of the codes.
+        let visibility = Visibility::try_from(visibility)
+            .map_err(|err| GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!(
+                    "Tried to set the visibility of neuron {:?} to {}, but that is not a valid value: {}",
+                    self.id, visibility, err,
+                ),
+            ))?;
+
+        // Enforce: known neurons are public.
         if self.known_neuron_data.is_some() {
+            if visibility == Visibility::Public {
+                return Ok(());
+            }
+
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Setting the visibility of known neurons is not allowed \
@@ -513,27 +693,9 @@ impl Neuron {
             ));
         }
 
-        // Convert from i32 to enum.
-        let visibility = Visibility::try_from(visibility).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!("{} is an invalid visibility: {:?}", visibility, err),
-            )
-        })?;
+        // All requirements met.
+        self.visibility = visibility;
 
-        // Reject unspecified.
-        match visibility {
-            Visibility::Unspecified => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "A neuron's visibility cannot be set to unspecified.".to_string(),
-                ))
-            }
-            Visibility::Public | Visibility::Private => (),
-        }
-
-        // Everything looks good.
-        self.visibility = Some(visibility);
         Ok(())
     }
 
@@ -565,6 +727,10 @@ impl Neuron {
 
     pub fn is_dissolved(&self, now_seconds: u64) -> bool {
         self.dissolve_delay_seconds(now_seconds) == 0
+    }
+
+    pub fn maturity_disbursements_in_progress(&self) -> &[MaturityDisbursement] {
+        &self.maturity_disbursements_in_progress
     }
 
     fn is_authorized_to_configure_or_err(
@@ -707,21 +873,53 @@ impl Neuron {
     }
 
     /// Get the 'public' information associated with this neuron.
-    pub fn get_neuron_info(&self, now_seconds: u64) -> NeuronInfo {
-        // TODO(NNS1-3076): Enforce visibility.
+    pub fn get_neuron_info(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+        requester: PrincipalId,
+    ) -> NeuronInfo {
+        let mut recent_ballots = vec![];
+        let mut joined_community_fund_timestamp_seconds = None;
+
+        let show_full =
+            self.visibility() == Visibility::Public || self.is_hotkey_or_controller(&requester);
+        if show_full {
+            let mut additional_recent_ballots = self
+                .sorted_recent_ballots()
+                .into_iter()
+                .map(api::BallotInfo::from)
+                .collect();
+            recent_ballots.append(&mut additional_recent_ballots);
+
+            joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
+        }
+
+        let visibility = Some(self.visibility() as i32);
+        let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
+        let potential_voting_power = self.potential_voting_power(now_seconds);
+
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
             age_seconds: self.age_seconds(now_seconds),
             dissolve_delay_seconds: self.dissolve_delay_seconds(now_seconds),
-            recent_ballots: self.recent_ballots.clone(),
-            voting_power: self.voting_power(now_seconds),
+            recent_ballots,
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
-            joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
-            known_neuron_data: self.known_neuron_data.clone(),
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data: self
+                .known_neuron_data
+                .clone()
+                .map(api::KnownNeuronData::from),
             neuron_type: self.neuron_type,
-            visibility: self.visibility.map(|visibility| visibility as i32),
+            visibility,
+            voting_power_refreshed_timestamp_seconds: Some(
+                self.voting_power_refreshed_timestamp_seconds,
+            ),
+            deciding_voting_power: Some(deciding_voting_power),
+            potential_voting_power: Some(potential_voting_power),
+            voting_power: potential_voting_power,
         }
     }
 
@@ -844,7 +1042,8 @@ impl Neuron {
 
         // 3.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
         // Thus, we can evaluate whether that happened sufficiently long ago.
-        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * ONE_DAY_SECONDS;
+        let max_dissolved_at_timestamp_seconds_to_be_inactive =
+            now.saturating_sub(2 * 7 * ONE_DAY_SECONDS);
         if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
             return false;
         }
@@ -888,6 +1087,10 @@ impl Neuron {
             .dissolved_at_timestamp_seconds()
     }
 
+    pub fn voting_power_refreshed_timestamp_seconds(&self) -> u64 {
+        self.voting_power_refreshed_timestamp_seconds
+    }
+
     pub fn subtract_staked_maturity(&mut self, amount_e8s: u64) {
         let new_staked_maturity_e8s = self
             .staked_maturity_e8s_equivalent
@@ -911,10 +1114,51 @@ impl Neuron {
             Some(new_staked_maturity_e8s)
         };
     }
+
+    pub fn known_neuron_data(&self) -> Option<&KnownNeuronData> {
+        self.known_neuron_data.as_ref()
+    }
+
+    /// In addition to what the name says, this also sets visibility to Public.
+    //
+    /// See also set_visibiliy, as well as the getters for known_neuron_data and
+    /// visibility.
+    pub fn set_known_neuron_data(&mut self, new_known_neuron_data: KnownNeuronData) {
+        self.visibility = Visibility::Public;
+        self.known_neuron_data = Some(new_known_neuron_data);
+    }
+
+    /// Does NOT touch visiblity. If you want to go private, call set_visibility
+    /// after calling this.
+    #[cfg(test)] // This can be used in production, but so far, it is not needed.
+    pub(crate) fn clear_known_neuron_data(&mut self) {
+        self.known_neuron_data = None;
+    }
+
+    pub fn add_maturity_disbursement_in_progress(
+        &mut self,
+        maturity_disbursement: MaturityDisbursement,
+    ) {
+        self.maturity_disbursements_in_progress
+            .push(maturity_disbursement);
+    }
+
+    /// Pops the first maturity disbursement in progress.
+    #[cfg(test)]
+    pub fn pop_maturity_disbursement_in_progress(&mut self) -> Option<MaturityDisbursement> {
+        if self.maturity_disbursements_in_progress.is_empty() {
+            None
+        } else {
+            // This is safe because we know that the vector is not empty.
+            Some(self.maturity_disbursements_in_progress.remove(0))
+        }
+    }
 }
 
 impl From<Neuron> for NeuronProto {
-    fn from(neuron: Neuron) -> Self {
+    fn from(neuron: Neuron) -> NeuronProto {
+        let visibility = Some(neuron.visibility() as i32);
+
         let Neuron {
             id,
             subaccount,
@@ -936,7 +1180,10 @@ impl From<Neuron> for NeuronProto {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
-            visibility,
+            visibility: _,
+            voting_power_refreshed_timestamp_seconds,
+            recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         } = neuron;
 
         let id = Some(id);
@@ -946,7 +1193,9 @@ impl From<Neuron> for NeuronProto {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
-        let visibility = visibility.map(|visibility| visibility as i32);
+        let voting_power_refreshed_timestamp_seconds =
+            Some(voting_power_refreshed_timestamp_seconds);
+        let recent_ballots_next_entry_index = recent_ballots_next_entry_index.map(|x| x as u32);
 
         NeuronProto {
             id,
@@ -971,6 +1220,9 @@ impl From<Neuron> for NeuronProto {
             known_neuron_data,
             neuron_type,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         }
     }
 }
@@ -1002,6 +1254,9 @@ impl TryFrom<NeuronProto> for Neuron {
             known_neuron_data,
             neuron_type,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         } = proto;
 
         let id = id.ok_or("Neuron ID is missing")?;
@@ -1012,15 +1267,50 @@ impl TryFrom<NeuronProto> for Neuron {
             dissolve_state,
             aging_since_timestamp_seconds,
         })?;
-        let visibility = match visibility {
-            None => None,
-            Some(visibility) => Some(Visibility::try_from(visibility).map_err(|err| {
-                format!(
-                    "Failed to interpret visibility of neuron {:?}: {:?}",
-                    id, err,
-                )
-            })?),
+
+        // Log (and if non-release build, also panic) if there is an
+        // inconsistency between known_neuron_data and visibility.
+        //
+        // In release builds, the return value still ends up being Public (see
+        // the next chunk). I.e. known_neuron_data trumps when there is an
+        // inconsistency.
+        {
+            let inconsistent = known_neuron_data.is_some()
+                && ![None, Some(Visibility::Public as i32)].contains(&visibility);
+            if inconsistent {
+                println!(
+                    "{}WARNING: Neuron {:?} is a known neuron, but its visibility ({:?}) is \
+                     not set accordingly. It will be treated as public.",
+                    LOG_PREFIX, id, visibility,
+                );
+                debug_assert!(false);
+            }
+        }
+
+        let visibility = if known_neuron_data.is_some() {
+            // Put a hard stop against visibility being inconsistent vs. known_neuron_data.
+            Visibility::Public
+        } else {
+            // Convert (if visibility is Some), or default to Private.
+            visibility
+                .and_then(|code| {
+                    Visibility::try_from(code)
+                        .inspect_err(|err| {
+                            println!(
+                                "{}ERROR: The visibility of neuron {:?} was set to {}, \
+                                 which is invalid (reason: {}). Assuming private.",
+                                LOG_PREFIX, id, code, err,
+                            );
+                        })
+                        .ok()
+                })
+                .unwrap_or(Visibility::Private)
         };
+
+        let voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds
+            .unwrap_or(DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS);
+
+        let recent_ballots_next_entry_index = recent_ballots_next_entry_index.map(|x| x as usize);
 
         Ok(Neuron {
             id,
@@ -1044,7 +1334,117 @@ impl TryFrom<NeuronProto> for Neuron {
             known_neuron_data,
             neuron_type,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         })
+    }
+}
+
+impl TryFrom<api::Neuron> for Neuron {
+    type Error = String;
+
+    fn try_from(neuron: api::Neuron) -> Result<Self, Self::Error> {
+        let neuron = NeuronProto::from(neuron);
+        Neuron::try_from(neuron)
+    }
+}
+
+impl Neuron {
+    pub fn into_api(
+        self,
+        now_seconds: u64,
+        voting_power_economics: &VotingPowerEconomics,
+    ) -> api::Neuron {
+        let visibility = Some(self.visibility() as i32);
+        let deciding_voting_power =
+            Some(self.deciding_voting_power(voting_power_economics, now_seconds));
+        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+        let recent_ballots = self.sorted_recent_ballots();
+
+        let Neuron {
+            id,
+            subaccount,
+            controller,
+            dissolve_state_and_age,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots: _,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
+            voting_power_refreshed_timestamp_seconds,
+            maturity_disbursements_in_progress: _,
+
+            // Not used.
+            visibility: _,
+            recent_ballots_next_entry_index: _,
+        } = self;
+
+        let id = Some(id);
+        let controller = Some(controller);
+        let account = subaccount.to_vec();
+        let StoredDissolveStateAndAge {
+            dissolve_state,
+            aging_since_timestamp_seconds,
+        } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
+        let voting_power_refreshed_timestamp_seconds =
+            Some(voting_power_refreshed_timestamp_seconds);
+
+        // Conversions of the form foo.map(api::Foo::from).
+        let recent_ballots = recent_ballots
+            .into_iter()
+            .map(api::BallotInfo::from)
+            .collect();
+        let transfer = transfer.map(api::NeuronStakeTransfer::from);
+        let known_neuron_data = known_neuron_data.map(api::KnownNeuronData::from);
+
+        // Almost the same as above, with the only minor difference being that
+        // Foo is in some inner (sub)module within api, not directly within api.
+        let dissolve_state = dissolve_state.map(api::neuron::DissolveState::from);
+
+        let followees = followees
+            .into_iter()
+            .map(|(topic_id, followees)| (topic_id, api::neuron::Followees::from(followees)))
+            .collect();
+        api::Neuron {
+            id,
+            account,
+            controller,
+            dissolve_state,
+            aging_since_timestamp_seconds,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
+            visibility,
+            voting_power_refreshed_timestamp_seconds,
+
+            potential_voting_power,
+            deciding_voting_power,
+        }
     }
 }
 
@@ -1104,6 +1504,7 @@ pub struct DecomposedNeuron {
     pub hot_keys: Vec<PrincipalId>,
     pub recent_ballots: Vec<BallotInfo>,
     pub followees: HashMap</* topic ID */ i32, Followees>,
+    pub maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 
     // Singletons
     pub known_neuron_data: Option<KnownNeuronData>,
@@ -1136,6 +1537,9 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             known_neuron_data,
             neuron_type,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            recent_ballots_next_entry_index,
+            maturity_disbursements_in_progress,
         } = source;
 
         let account = subaccount.to_vec();
@@ -1145,7 +1549,9 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
         let dissolve_state = dissolve_state.map(AbridgedNeuronDissolveState::from);
-        let visibility = visibility.map(|visibility| visibility as i32);
+        let visibility = Some(visibility as i32);
+        let voting_power_refreshed_timestamp_seconds =
+            Some(voting_power_refreshed_timestamp_seconds);
 
         let main = AbridgedNeuron {
             account,
@@ -1164,6 +1570,16 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             neuron_type,
             dissolve_state,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            // Conversion to u32 is safe because the value cannot be very large.  If it overflowed
+            // u32 max, we would have spent 68GB on recent ballots for this single neuron.
+            recent_ballots_next_entry_index: recent_ballots_next_entry_index
+                .map(|x| {
+                    u32::try_from(x).map_err(|e| NeuronStoreError::InvalidData {
+                        reason: format!("Failed to convert recent_ballots_next_entry_index: {}", e),
+                    })
+                })
+                .transpose()?,
         };
 
         Ok(Self {
@@ -1174,6 +1590,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             // Singletons
             known_neuron_data,
@@ -1191,6 +1608,7 @@ impl From<DecomposedNeuron> for Neuron {
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             known_neuron_data,
             transfer,
@@ -1213,6 +1631,8 @@ impl From<DecomposedNeuron> for Neuron {
             neuron_type,
             dissolve_state,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            recent_ballots_next_entry_index,
         } = main;
 
         let subaccount =
@@ -1223,7 +1643,34 @@ impl From<DecomposedNeuron> for Neuron {
             aging_since_timestamp_seconds,
         })
         .expect("Neuron dissolve state and age is invalid");
-        let visibility = visibility.and_then(|visibility| Visibility::try_from(visibility).ok());
+        let visibility = match visibility {
+            None => Visibility::Private,
+            Some(visibility) => Visibility::try_from(visibility)
+                // Log (and in non-release builds, also panic) on conversion
+                // failure.
+                .inspect_err(|err| {
+                    println!(
+                        "{}ERROR: The visibility of neuron {:?} was set to {}, \
+                         which is invalid (reason: {}). Assuming private.",
+                        LOG_PREFIX, id, visibility, err
+                    );
+                    debug_assert!(false);
+                })
+                // In release builds, sweep conversion problems under the rug,
+                // i.e. pretend like the input neuron was private.
+                .unwrap_or(Visibility::Private),
+        };
+        // known_neuron_data trumps visibility. (In non-release builds, this is
+        // moot, because inconsistency would have already caused a panic a few
+        // lines ago.)
+        let visibility = if known_neuron_data.is_some() {
+            Visibility::Public
+        } else {
+            visibility
+        };
+
+        let voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds
+            .unwrap_or(DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS);
 
         Neuron {
             id,
@@ -1247,6 +1694,10 @@ impl From<DecomposedNeuron> for Neuron {
             known_neuron_data,
             neuron_type,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            // usize is always at least u32, so this is safe.
+            recent_ballots_next_entry_index: recent_ballots_next_entry_index.map(|x| x as usize),
+            maturity_disbursements_in_progress,
         }
     }
 }
@@ -1254,7 +1705,7 @@ impl From<DecomposedNeuron> for Neuron {
 /// Builder of a neuron before it gets added into NeuronStore. This allows us to construct a neuron
 /// with private fields. Only fields that are possible to be set at creation time are defined in the
 /// builder.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct NeuronBuilder {
     // Required fields.
     id: NeuronId,
@@ -1274,19 +1725,24 @@ pub struct NeuronBuilder {
     not_for_profit: bool,
     joined_community_fund_timestamp_seconds: Option<u64>,
     neuron_type: Option<i32>,
-    visibility: Option<Visibility>,
+    visibility: Visibility,
+    voting_power_refreshed_timestamp_seconds: u64,
 
     // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
     #[cfg(test)]
     neuron_fees_e8s: u64,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     recent_ballots: Vec<BallotInfo>,
+    #[cfg(any(test, feature = "canbench-rs"))]
+    recent_ballots_next_entry_index: Option<usize>,
     #[cfg(test)]
     transfer: Option<NeuronStakeTransfer>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     staked_maturity_e8s_equivalent: Option<u64>,
     #[cfg(test)]
     known_neuron_data: Option<KnownNeuronData>,
+    #[cfg(test)]
+    maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
 }
 
 impl NeuronBuilder {
@@ -1314,18 +1770,23 @@ impl NeuronBuilder {
             not_for_profit: false,
             joined_community_fund_timestamp_seconds: None,
             neuron_type: None,
-            visibility: None,
+            visibility: Visibility::Private,
+            voting_power_refreshed_timestamp_seconds: created_timestamp_seconds,
 
             #[cfg(test)]
             neuron_fees_e8s: 0,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots: Vec::new(),
+            #[cfg(any(test, feature = "canbench-rs"))]
+            recent_ballots_next_entry_index: Some(0),
             #[cfg(test)]
             transfer: None,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent: None,
             #[cfg(test)]
             known_neuron_data: None,
+            #[cfg(test)]
+            maturity_disbursements_in_progress: Vec::new(),
         }
     }
 
@@ -1409,9 +1870,12 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
+        let recent_ballots_next_entry_index =
+            Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
         self.recent_ballots = recent_ballots;
+        self.recent_ballots_next_entry_index = recent_ballots_next_entry_index;
         self
     }
 
@@ -1421,7 +1885,7 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_staked_maturity_e8s_equivalent(
         mut self,
         staked_maturity_e8s_equivalent: u64,
@@ -1433,12 +1897,22 @@ impl NeuronBuilder {
     #[cfg(test)]
     pub fn with_known_neuron_data(mut self, known_neuron_data: Option<KnownNeuronData>) -> Self {
         self.known_neuron_data = known_neuron_data;
+        self.visibility = Visibility::Public;
         self
     }
 
     #[cfg(test)] // To satisfy clippy. Feel free to use in production code.
-    pub fn with_visibility(mut self, visibility: Option<Visibility>) -> Self {
+    pub fn with_visibility(mut self, visibility: Visibility) -> Self {
         self.visibility = visibility;
+        self
+    }
+
+    #[cfg(test)] // To satisfy clippy. Feel free to use in production code.
+    pub fn with_voting_power_refreshed_timestamp_seconds(
+        mut self,
+        voting_power_refreshed_timestamp_seconds: u64,
+    ) -> Self {
+        self.voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds;
         self
     }
 
@@ -1461,15 +1935,20 @@ impl NeuronBuilder {
             neuron_type,
             #[cfg(test)]
             neuron_fees_e8s,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots,
+            #[cfg(any(test, feature = "canbench-rs"))]
+            recent_ballots_next_entry_index,
             #[cfg(test)]
             transfer,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent,
             #[cfg(test)]
             known_neuron_data,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            #[cfg(test)]
+            maturity_disbursements_in_progress,
         } = self;
 
         let auto_stake_maturity = if auto_stake_maturity {
@@ -1478,17 +1957,29 @@ impl NeuronBuilder {
             None
         };
 
+        #[cfg(test)]
+        let visibility = if known_neuron_data.is_some() {
+            assert_eq!(visibility, Visibility::Public, "{:?}", id);
+            Visibility::Public
+        } else {
+            visibility
+        };
+
         // The below fields are always the default values for a new neuron.
         #[cfg(not(test))]
         let neuron_fees_e8s = 0;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let recent_ballots = Vec::new();
+        #[cfg(not(any(test, feature = "canbench-rs")))]
+        let recent_ballots_next_entry_index = Some(0);
         #[cfg(not(test))]
         let transfer = None;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let staked_maturity_e8s_equivalent = None;
         #[cfg(not(test))]
         let known_neuron_data = None;
+        #[cfg(not(test))]
+        let maturity_disbursements_in_progress = Vec::new();
 
         Neuron {
             id,
@@ -1502,6 +1993,7 @@ impl NeuronBuilder {
             spawn_at_timestamp_seconds,
             followees,
             recent_ballots,
+            recent_ballots_next_entry_index,
             kyc_verified,
             transfer,
             maturity_e8s_equivalent,
@@ -1512,12 +2004,14 @@ impl NeuronBuilder {
             known_neuron_data,
             neuron_type,
             visibility,
+            voting_power_refreshed_timestamp_seconds,
+            maturity_disbursements_in_progress,
         }
     }
 }
 
 /// An intermediate struct to represent a neuron's dissolve state and age on the storage layer.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub(crate) struct StoredDissolveStateAndAge {
     pub dissolve_state: Option<NeuronDissolveState>,
     pub aging_since_timestamp_seconds: u64,

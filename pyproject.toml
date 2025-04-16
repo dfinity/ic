@@ -1,15 +1,42 @@
 [tool.ruff]
-unfixable = []
 
-select = [
-    "C9", # Mccabe
-    "F", # Pyflakes
-    "I", # Isort
-    "N", # Pep-8 naming
-    "D", # Pydocstyle
-    "E", # Pydocstyle error
-    "W", # Pydocstyle warning
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    "env",
 ]
+
+line-length = 120
+
+target-version = "py37"
+
+[tool.isort]
+profile = "black"
+remove_redundant_aliases = true
+
+[tool.ruff.lint]
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
 fixable = [
@@ -59,37 +86,17 @@ fixable = [
     "YTT",
 ]
 
-# Exclude a variety of commonly ignored directories.
-exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
-    "env",
+unfixable = []
+
+select = [
+    "C9", # Mccabe
+    "F", # Pyflakes
+    "I", # Isort
+    "N", # Pep-8 naming
+    "D", # Pydocstyle
+    "E", # Pydocstyle error
+    "W", # Pydocstyle warning
 ]
-
-line-length = 120
-
-# Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
-target-version = "py37"
 
 ignore = [
     "C901",
@@ -125,10 +132,6 @@ ignore = [
     "N999",
 ]
 
-[tool.ruff.mccabe]
+[tool.ruff.lint.mccabe]
 # Unlike Flake8, default to a complexity level of 10.
 max-complexity = 10
-
-[tool.isort]
-profile = "black"
-remove_redundant_aliases = true

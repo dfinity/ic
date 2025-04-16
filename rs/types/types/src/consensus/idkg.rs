@@ -10,6 +10,7 @@ pub use crate::consensus::idkg::common::{
     UnmaskedTranscript,
 };
 use crate::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation};
+use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use crate::{
     consensus::BasicSignature,
     crypto::{
@@ -31,10 +32,11 @@ use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf};
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
+    registry::subnet::v1 as subnet_pb,
     types::v1 as pb,
 };
 use phantom_newtype::Id;
@@ -50,6 +52,8 @@ use strum_macros::EnumIter;
 
 use self::common::{PreSignatureInCreation, PreSignatureRef};
 
+use super::vetkd::VetKdEncryptedKeyShare;
+
 pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
@@ -57,17 +61,94 @@ pub mod schnorr;
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedSignature {
     ReportedToExecution,
     Unreported(crate::batch::ConsensusResponse),
 }
 
+/// A [`MasterPublicKeyId`], that contains a variant that is compatible with the IDKG protocol.
+///
+/// The [`MasterPublicKeyId`] can hold a number of different key types.
+/// Some of them can be used with the IDKG protocol, while others can not.
+/// The [`IDkgMasterPublicKeyId`] type indicates, that this key id can be used with a IDKG protocol.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub struct IDkgMasterPublicKeyId(MasterPublicKeyId);
+
+impl TryFrom<MasterPublicKeyId> for IDkgMasterPublicKeyId {
+    type Error = String;
+
+    fn try_from(val: MasterPublicKeyId) -> Result<Self, Self::Error> {
+        if !val.is_idkg_key() {
+            Err("This key is not an idkg key".to_string())
+        } else {
+            Ok(Self(val))
+        }
+    }
+}
+
+impl From<IDkgMasterPublicKeyId> for MasterPublicKeyId {
+    fn from(val: IDkgMasterPublicKeyId) -> Self {
+        val.0
+    }
+}
+
+impl IDkgMasterPublicKeyId {
+    pub fn inner(&self) -> &MasterPublicKeyId {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for IDkgMasterPublicKeyId {
+    type Target = MasterPublicKeyId;
+
+    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
+        self.inner()
+    }
+}
+
+impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
+    fn borrow(&self) -> &MasterPublicKeyId {
+        self.inner()
+    }
+}
+
+impl std::fmt::Display for IDkgMasterPublicKeyId {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{}", &self.0)
+    }
+}
+
+impl Serialize for IDkgMasterPublicKeyId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<IDkgMasterPublicKeyId, D::Error> {
+        use serde::de::Error;
+
+        let master_public_key_id: MasterPublicKeyId =
+            serde::Deserialize::deserialize(deserializer)?;
+
+        if !master_public_key_id.is_idkg_key() {
+            Err(D::Error::custom(
+                "expected an idkg variant of MasterPublicKeyId",
+            ))
+        } else {
+            Ok(Self(master_public_key_id))
+        }
+    }
+}
+
 /// Common data that is carried in both `IDkgSummaryPayload` and `IDkgDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
@@ -91,7 +172,7 @@ pub struct IDkgPayload {
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
 
     /// State of the key transcripts.
-    pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
+    pub key_transcripts: BTreeMap<IDkgMasterPublicKeyId, MasterKeyTranscript>,
 }
 
 impl IDkgPayload {
@@ -169,8 +250,8 @@ impl IDkgPayload {
     /// Return an iterator of all ids of pre-signatures for the given key in the payload.
     pub fn iter_pre_signature_ids<'a>(
         &'a self,
-        key_id: &'a MasterPublicKeyId,
-    ) -> impl Iterator<Item = PreSigId> + '_ {
+        key_id: &'a IDkgMasterPublicKeyId,
+    ) -> impl Iterator<Item = PreSigId> + 'a {
         let available_pre_signature_ids = self
             .available_pre_signatures
             .iter()
@@ -291,7 +372,7 @@ impl IDkgPayload {
 
 /// The unmasked transcript is paired with its attributes, which will be used
 /// in creating reshare params.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscriptWithAttributes(IDkgTranscriptAttributes, UnmaskedTranscript);
 
@@ -359,7 +440,7 @@ impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MasterKeyTranscript {
     /// The key transcript used for the current interval.
@@ -367,11 +448,11 @@ pub struct MasterKeyTranscript {
     /// Progress of creating the next key transcript.
     pub next_in_creation: KeyTranscriptCreation,
     /// Master key Id allowing different signature schemes.
-    pub master_key_id: MasterPublicKeyId,
+    pub master_key_id: IDkgMasterPublicKeyId,
 }
 
 impl MasterKeyTranscript {
-    pub fn new(key_id: MasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
+    pub fn new(key_id: IDkgMasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
         Self {
             current: None,
             next_in_creation,
@@ -486,8 +567,8 @@ impl From<MasterKeyTranscript> for pb::MasterKeyTranscript {
             next_in_creation: Some(pb::KeyTranscriptCreation::from(
                 &transcript.next_in_creation,
             )),
-            master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
-                &transcript.master_key_id,
+            master_key_id: Some(pb_types::MasterPublicKeyId::from(
+                transcript.master_key_id.inner(),
             )),
         }
     }
@@ -514,8 +595,9 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
             "KeyTranscript::next_in_creation",
         )?;
 
-        let master_key_id =
+        let master_key_id: MasterPublicKeyId =
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
+        let master_key_id = master_key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
             current,
@@ -548,7 +630,7 @@ impl TryFrom<&pb::MasterKeyTranscript> for MasterKeyTranscript {
 /// If in the future there is a membership change, we will create a new key transcript
 /// by going through the second path above. Then the switch-over will happen at
 /// the next 'IDkgSummaryPayload'.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum KeyTranscriptCreation {
     Begin,
@@ -658,10 +740,10 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 }
 
 /// Internal format of the resharing request from execution.
-#[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgReshareRequest {
-    pub master_key_id: MasterPublicKeyId,
+    pub master_key_id: IDkgMasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
@@ -672,8 +754,10 @@ impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
         for node in &request.receiving_node_ids {
             receiving_node_ids.push(node_id_into_protobuf(*node));
         }
+
+        let master_key_id: &MasterPublicKeyId = &request.master_key_id;
         Self {
-            master_key_id: Some((&request.master_key_id).into()),
+            master_key_id: Some((master_key_id).into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
         }
@@ -689,10 +773,11 @@ impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
             .map(|node| node_id_try_from_option(Some(node.clone())))
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
-        let master_key_id = try_from_option_field(
+        let master_key_id: MasterPublicKeyId = try_from_option_field(
             request.master_key_id.clone(),
             "IDkgReshareRequest::master_key_id",
         )?;
+        let master_key_id = master_key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
             master_key_id,
@@ -702,7 +787,7 @@ impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedReshareRequest {
     ReportedToExecution,
@@ -711,7 +796,7 @@ pub enum CompletedReshareRequest {
 
 /// To make sure all ids used in IDkg payload are uniquely generated,
 /// we use a generator to keep track of this state.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgUIDGenerator {
     next_unused_transcript_id: IDkgTranscriptId,
@@ -746,12 +831,13 @@ impl IDkgUIDGenerator {
 }
 
 /// The IDKG artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum IDkgMessage {
     Dealing(SignedIDkgDealing),
     DealingSupport(IDkgDealingSupport),
     EcdsaSigShare(EcdsaSigShare),
     SchnorrSigShare(SchnorrSigShare),
+    VetKdKeyShare(VetKdKeyShare),
     Complaint(SignedIDkgComplaint),
     Opening(SignedIDkgOpening),
 }
@@ -759,12 +845,8 @@ pub enum IDkgMessage {
 impl IdentifiableArtifact for IDkgMessage {
     const NAME: &'static str = "idkg";
     type Id = IDkgArtifactId;
-    type Attribute = IDkgMessageAttribute;
     fn id(&self) -> Self::Id {
         self.message_id()
-    }
-    fn attribute(&self) -> Self::Attribute {
-        self.into()
     }
 }
 
@@ -773,8 +855,6 @@ impl PbArtifact for IDkgMessage {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::IDkgMessage;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ic_protobuf::types::v1::IDkgMessageAttribute;
-    type PbAttributeError = ProxyDecodeError;
 }
 
 impl IDkgMessage {
@@ -784,6 +864,7 @@ impl IDkgMessage {
             IDkgMessage::DealingSupport(x) => x.message_id(),
             IDkgMessage::EcdsaSigShare(x) => x.message_id(),
             IDkgMessage::SchnorrSigShare(x) => x.message_id(),
+            IDkgMessage::VetKdKeyShare(x) => x.message_id(),
             IDkgMessage::Complaint(x) => x.message_id(),
             IDkgMessage::Opening(x) => x.message_id(),
         }
@@ -798,6 +879,7 @@ impl From<IDkgMessage> for pb::IDkgMessage {
             IDkgMessage::DealingSupport(x) => Msg::DealingSupport(x.into()),
             IDkgMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
             IDkgMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
+            IDkgMessage::VetKdKeyShare(x) => Msg::VetkdKeyShare(x.into()),
             IDkgMessage::Complaint(x) => Msg::Complaint(x.into()),
             IDkgMessage::Opening(x) => Msg::Opening(x.into()),
         };
@@ -818,6 +900,7 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
             Msg::DealingSupport(x) => IDkgMessage::DealingSupport(x.try_into()?),
             Msg::EcdsaSigShare(x) => IDkgMessage::EcdsaSigShare(x.try_into()?),
             Msg::SchnorrSigShare(x) => IDkgMessage::SchnorrSigShare(x.try_into()?),
+            Msg::VetkdKeyShare(x) => IDkgMessage::VetKdKeyShare(x.try_into()?),
             Msg::Complaint(x) => IDkgMessage::Complaint(x.try_into()?),
             Msg::Opening(x) => IDkgMessage::Opening(x.try_into()?),
         })
@@ -858,7 +941,7 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
 /// would need to do an exact match to filter as needed. But the collisions are expected to
 /// be rare, and the prefix lookup should usually return a single entry.
 ///
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgPrefix {
     group_tag: u64,
     meta_hash: u64,
@@ -937,12 +1020,12 @@ pub fn ecdsa_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
 ) -> IDkgPrefixOf<EcdsaSigShare> {
-    // Group_tag: quadruple Id, Meta info: <sig share sender>
+    // Group_tag: callback Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }
@@ -951,12 +1034,26 @@ pub fn schnorr_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
 ) -> IDkgPrefixOf<SchnorrSigShare> {
-    // Group_tag: pre-signature Id, Meta info: <sig share sender>
+    // Group_tag: callback Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
+        hasher.finish(),
+    ))
+}
+
+pub fn vetkd_key_share_prefix(
+    request_id: &RequestId,
+    vetkd_key_share_node_id: &NodeId,
+) -> IDkgPrefixOf<VetKdKeyShare> {
+    // Group_tag: callback Id, Meta info: <sig share sender>
+    let mut hasher = Sha256::new();
+    vetkd_key_share_node_id.hash(&mut hasher);
+
+    IDkgPrefixOf::new(IDkgPrefix::new(
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }
@@ -989,7 +1086,7 @@ pub fn opening_prefix(
 
 pub type IDkgArtifactIdDataOf<T> = Id<T, IDkgArtifactIdData>;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgArtifactIdData {
     /// The height at which this IDkg instance was requested.
     pub height: Height,
@@ -1026,7 +1123,7 @@ impl TryFrom<pb::IDkgArtifactIdData> for IDkgArtifactIdData {
 
 pub type SigShareIdDataOf<T> = Id<T, SigShareIdData>;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct SigShareIdData {
     /// The height at which the signature request was paired with a pre-signature
     pub height: Height,
@@ -1055,7 +1152,7 @@ impl TryFrom<pb::SigShareIdData> for SigShareIdData {
 
 /// The identifier for artifacts/messages consists of a prefix and additional Id data.
 /// The prefix may be used for sorting and range queries in tree-like structures.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum IDkgArtifactId {
     Dealing(
         IDkgPrefixOf<SignedIDkgDealing>,
@@ -1070,6 +1167,7 @@ pub enum IDkgArtifactId {
         IDkgPrefixOf<SchnorrSigShare>,
         SigShareIdDataOf<SchnorrSigShare>,
     ),
+    VetKdKeyShare(IDkgPrefixOf<VetKdKeyShare>, SigShareIdDataOf<VetKdKeyShare>),
     Complaint(
         IDkgPrefixOf<SignedIDkgComplaint>,
         IDkgArtifactIdDataOf<SignedIDkgComplaint>,
@@ -1087,6 +1185,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::DealingSupport(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::EcdsaSigShare(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::SchnorrSigShare(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::VetKdKeyShare(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
         }
@@ -1098,6 +1197,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::DealingSupport(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::EcdsaSigShare(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::VetKdKeyShare(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::Complaint(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::Opening(_, data) => data.as_ref().hash.clone(),
         }
@@ -1109,6 +1209,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::DealingSupport(_, data) => data.as_ref().height,
             IDkgArtifactId::EcdsaSigShare(_, data) => data.as_ref().height,
             IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().height,
+            IDkgArtifactId::VetKdKeyShare(_, data) => data.as_ref().height,
             IDkgArtifactId::Complaint(_, data) => data.as_ref().height,
             IDkgArtifactId::Opening(_, data) => data.as_ref().height,
         }
@@ -1144,6 +1245,10 @@ impl From<IDkgArtifactId> for pb::IDkgArtifactId {
                     id_data: Some(pb::SigShareIdData::from(d.get())),
                 })
             }
+            IDkgArtifactId::VetKdKeyShare(p, d) => Kind::VetkdKeyShare(pb::PrefixPairSigShare {
+                prefix: Some((&p.get()).into()),
+                id_data: Some(pb::SigShareIdData::from(d.get())),
+            }),
             IDkgArtifactId::Complaint(p, d) => Kind::Complaint(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
                 id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
@@ -1198,6 +1303,13 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
                     "SchnorrSigShare::id_data",
                 )?),
             ),
+            Kind::VetkdKeyShare(p) => Self::VetKdKeyShare(
+                IDkgPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "VetKdKeyShare::prefix",
+                )?),
+                SigShareIdDataOf::new(try_from_option_field(p.id_data, "VetKdKeyShare::id_data")?),
+            ),
             Kind::Complaint(p) => Self::Complaint(
                 IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
@@ -1214,13 +1326,14 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, EnumIter,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
 )]
 pub enum IDkgMessageType {
     Dealing,
     DealingSupport,
     EcdsaSigShare,
     SchnorrSigShare,
+    VetKdKeyShare,
     Complaint,
     Opening,
 }
@@ -1232,6 +1345,7 @@ impl From<&IDkgMessage> for IDkgMessageType {
             IDkgMessage::DealingSupport(_) => IDkgMessageType::DealingSupport,
             IDkgMessage::EcdsaSigShare(_) => IDkgMessageType::EcdsaSigShare,
             IDkgMessage::SchnorrSigShare(_) => IDkgMessageType::SchnorrSigShare,
+            IDkgMessage::VetKdKeyShare(_) => IDkgMessageType::VetKdKeyShare,
             IDkgMessage::Complaint(_) => IDkgMessageType::Complaint,
             IDkgMessage::Opening(_) => IDkgMessageType::Opening,
         }
@@ -1245,6 +1359,7 @@ impl From<&IDkgArtifactId> for IDkgMessageType {
             IDkgArtifactId::DealingSupport(..) => IDkgMessageType::DealingSupport,
             IDkgArtifactId::EcdsaSigShare(..) => IDkgMessageType::EcdsaSigShare,
             IDkgArtifactId::SchnorrSigShare(..) => IDkgMessageType::SchnorrSigShare,
+            IDkgArtifactId::VetKdKeyShare(..) => IDkgMessageType::VetKdKeyShare,
             IDkgArtifactId::Complaint(..) => IDkgMessageType::Complaint,
             IDkgArtifactId::Opening(..) => IDkgMessageType::Opening,
         }
@@ -1258,6 +1373,7 @@ impl IDkgMessageType {
             Self::DealingSupport => "dealing_support",
             Self::EcdsaSigShare => "ecdsa_sig_share",
             Self::SchnorrSigShare => "schnorr_sig_share",
+            Self::VetKdKeyShare => "vetkd_key_share",
             Self::Complaint => "complaint",
             Self::Opening => "opening",
         }
@@ -1265,7 +1381,7 @@ impl IDkgMessageType {
 }
 
 /// The ECDSA signature share
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct EcdsaSigShare {
     /// The node that signed the share
     pub signer_id: NodeId,
@@ -1281,7 +1397,7 @@ impl From<&EcdsaSigShare> for pb::EcdsaSigShare {
     fn from(value: &EcdsaSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            request_id: Some(pb::RequestId::from(value.request_id)),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1314,7 +1430,7 @@ impl Display for EcdsaSigShare {
 }
 
 /// The Schnorr signature share
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct SchnorrSigShare {
     /// The node that signed the share
     pub signer_id: NodeId,
@@ -1330,7 +1446,7 @@ impl From<&SchnorrSigShare> for pb::SchnorrSigShare {
     fn from(value: &SchnorrSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            request_id: Some(pb::RequestId::from(value.request_id)),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1362,10 +1478,64 @@ impl Display for SchnorrSigShare {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// The VetKd share
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct VetKdKeyShare {
+    /// The node that created the share
+    pub signer_id: NodeId,
+
+    /// The request this share belongs to
+    pub request_id: RequestId,
+
+    /// The encrypted key share
+    pub share: VetKdEncryptedKeyShare,
+}
+
+impl From<&VetKdKeyShare> for pb::VetKdKeyShare {
+    fn from(value: &VetKdKeyShare) -> Self {
+        Self {
+            signer_id: Some(node_id_into_protobuf(value.signer_id)),
+            request_id: Some(pb::RequestId::from(value.request_id)),
+            encrypted_key_share: value.share.encrypted_key_share.0.clone(),
+            node_signature: value.share.node_signature.clone(),
+        }
+    }
+}
+
+impl TryFrom<&pb::VetKdKeyShare> for VetKdKeyShare {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::VetKdKeyShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            request_id: try_from_option_field(
+                value.request_id.as_ref(),
+                "VetKdKeyShare::request_id",
+            )?,
+            share: VetKdEncryptedKeyShare {
+                encrypted_key_share: VetKdEncryptedKeyShareContent(
+                    value.encrypted_key_share.clone(),
+                ),
+                node_signature: value.node_signature.clone(),
+            },
+        })
+    }
+}
+
+impl Display for VetKdKeyShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "VetKdKeyShare[request_id = {:?}, signer_id = {:?}]",
+            self.request_id, self.signer_id,
+        )
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SigShare {
     Ecdsa(EcdsaSigShare),
     Schnorr(SchnorrSigShare),
+    VetKd(VetKdKeyShare),
 }
 
 impl Display for SigShare {
@@ -1373,6 +1543,7 @@ impl Display for SigShare {
         match self {
             SigShare::Ecdsa(share) => write!(f, "{share}"),
             SigShare::Schnorr(share) => write!(f, "{share}"),
+            SigShare::VetKd(share) => write!(f, "{share}"),
         }
     }
 }
@@ -1382,13 +1553,15 @@ impl SigShare {
         match self {
             SigShare::Ecdsa(share) => share.signer_id,
             SigShare::Schnorr(share) => share.signer_id,
+            SigShare::VetKd(share) => share.signer_id,
         }
     }
 
     pub fn request_id(&self) -> RequestId {
         match self {
-            SigShare::Ecdsa(share) => share.request_id.clone(),
-            SigShare::Schnorr(share) => share.request_id.clone(),
+            SigShare::Ecdsa(share) => share.request_id,
+            SigShare::Schnorr(share) => share.request_id,
+            SigShare::VetKd(share) => share.request_id,
         }
     }
 
@@ -1396,12 +1569,13 @@ impl SigShare {
         match self {
             SigShare::Ecdsa(_) => SignatureScheme::Ecdsa,
             SigShare::Schnorr(_) => SignatureScheme::Schnorr,
+            SigShare::VetKd(_) => SignatureScheme::VetKd,
         }
     }
 }
 
 /// Complaint related defines
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgComplaintContent {
     pub idkg_complaint: IDkgComplaint,
 }
@@ -1481,7 +1655,7 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgComplaint {
 }
 
 /// Opening related defines
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgOpeningContent {
     /// The opening
     pub idkg_opening: IDkgOpening,
@@ -1560,87 +1734,6 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum IDkgMessageAttribute {
-    Dealing(IDkgTranscriptId),
-    DealingSupport(IDkgTranscriptId),
-    EcdsaSigShare(RequestId),
-    SchnorrSigShare(RequestId),
-    Complaint(IDkgTranscriptId),
-    Opening(IDkgTranscriptId),
-}
-
-impl From<IDkgMessageAttribute> for pb::IDkgMessageAttribute {
-    fn from(value: IDkgMessageAttribute) -> Self {
-        use pb::i_dkg_message_attribute::Kind;
-        let kind = match value {
-            IDkgMessageAttribute::Dealing(id) => Kind::SignedDealing((&id).into()),
-            IDkgMessageAttribute::DealingSupport(id) => Kind::DealingSupport((&id).into()),
-            IDkgMessageAttribute::EcdsaSigShare(id) => Kind::EcdsaSigShare(id.into()),
-            IDkgMessageAttribute::SchnorrSigShare(id) => Kind::SchnorrSigShare(id.into()),
-            IDkgMessageAttribute::Complaint(id) => Kind::Complaint((&id).into()),
-            IDkgMessageAttribute::Opening(id) => Kind::Opening((&id).into()),
-        };
-        Self { kind: Some(kind) }
-    }
-}
-
-impl TryFrom<pb::IDkgMessageAttribute> for IDkgMessageAttribute {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::IDkgMessageAttribute) -> Result<Self, Self::Error> {
-        use pb::i_dkg_message_attribute::Kind;
-        let Some(kind) = &value.kind else {
-            return Err(ProxyDecodeError::MissingField("IDkgMessageAttribute::kind"));
-        };
-        Ok(match &kind {
-            Kind::SignedDealing(id) => IDkgMessageAttribute::Dealing(id.try_into()?),
-            Kind::DealingSupport(id) => IDkgMessageAttribute::DealingSupport(id.try_into()?),
-            Kind::EcdsaSigShare(id) => IDkgMessageAttribute::EcdsaSigShare(id.try_into()?),
-            Kind::SchnorrSigShare(id) => IDkgMessageAttribute::SchnorrSigShare(id.try_into()?),
-            Kind::Complaint(id) => IDkgMessageAttribute::Complaint(id.try_into()?),
-            Kind::Opening(id) => IDkgMessageAttribute::Opening(id.try_into()?),
-        })
-    }
-}
-
-impl From<&IDkgMessage> for IDkgMessageAttribute {
-    fn from(msg: &IDkgMessage) -> IDkgMessageAttribute {
-        match msg {
-            IDkgMessage::Dealing(dealing) => {
-                IDkgMessageAttribute::Dealing(dealing.content.transcript_id)
-            }
-            IDkgMessage::DealingSupport(support) => {
-                IDkgMessageAttribute::DealingSupport(support.transcript_id)
-            }
-            IDkgMessage::EcdsaSigShare(share) => {
-                IDkgMessageAttribute::EcdsaSigShare(share.request_id.clone())
-            }
-            IDkgMessage::SchnorrSigShare(share) => {
-                IDkgMessageAttribute::SchnorrSigShare(share.request_id.clone())
-            }
-            IDkgMessage::Complaint(complaint) => {
-                IDkgMessageAttribute::Complaint(complaint.content.idkg_complaint.transcript_id)
-            }
-            IDkgMessage::Opening(opening) => {
-                IDkgMessageAttribute::Opening(opening.content.idkg_opening.transcript_id)
-            }
-        }
-    }
-}
-
-impl IDkgMessageAttribute {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Dealing(_) => "signed_dealing",
-            Self::DealingSupport(_) => "dealing_support",
-            Self::EcdsaSigShare(_) => "ecdsa_sig_share",
-            Self::SchnorrSigShare(_) => "schnorr_sig_share",
-            Self::Complaint(_) => "complaint",
-            Self::Opening(_) => "opening",
-        }
-    }
-}
-
 impl TryFrom<IDkgMessage> for SignedIDkgDealing {
     type Error = IDkgMessage;
     fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
@@ -1676,6 +1769,16 @@ impl TryFrom<IDkgMessage> for SchnorrSigShare {
     fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
             IDkgMessage::SchnorrSigShare(x) => Ok(x),
+            _ => Err(msg),
+        }
+    }
+}
+
+impl TryFrom<IDkgMessage> for VetKdKeyShare {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
+        match msg {
+            IDkgMessage::VetKdKeyShare(x) => Ok(x),
             _ => Err(msg),
         }
     }
@@ -2045,6 +2148,20 @@ impl IDkgObject for SchnorrSigShare {
     }
 }
 
+impl IDkgObject for VetKdKeyShare {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
+        vetkd_key_share_prefix(&self.request_id, &self.signer_id)
+    }
+
+    fn message_id(&self) -> IDkgArtifactId {
+        let id_data = SigShareIdDataOf::new(SigShareIdData {
+            height: self.request_id.height,
+            hash: crypto_hash(self).get(),
+        });
+        IDkgArtifactId::VetKdKeyShare(self.message_prefix(), id_data)
+    }
+}
+
 impl IDkgObject for SignedIDkgComplaint {
     fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         complaint_prefix(
@@ -2092,73 +2209,76 @@ impl From<&IDkgMessage> for IDkgArtifactId {
             IDkgMessage::DealingSupport(object) => object.message_id(),
             IDkgMessage::EcdsaSigShare(object) => object.message_id(),
             IDkgMessage::SchnorrSigShare(object) => object.message_id(),
+            IDkgMessage::VetKdKeyShare(object) => object.message_id(),
             IDkgMessage::Complaint(object) => object.message_id(),
             IDkgMessage::Opening(object) => object.message_id(),
         }
     }
 }
 
-pub trait HasMasterPublicKeyId {
+pub trait HasIDkgMasterPublicKeyId {
     /// Returns a reference to the [`MasterPublicKeyId`] associated with the object.
-    fn key_id(&self) -> MasterPublicKeyId;
+    fn key_id(&self) -> IDkgMasterPublicKeyId;
 }
 
-impl HasMasterPublicKeyId for QuadrupleInCreation {
-    fn key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+impl HasIDkgMasterPublicKeyId for QuadrupleInCreation {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        IDkgMasterPublicKeyId(MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureQuadrupleRef {
-    fn key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+impl HasIDkgMasterPublicKeyId for PreSignatureQuadrupleRef {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        IDkgMasterPublicKeyId(MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureInCreation {
-    fn key_id(&self) -> MasterPublicKeyId {
-        match self {
+impl HasIDkgMasterPublicKeyId for PreSignatureInCreation {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        let key = match self {
             PreSignatureInCreation::Ecdsa(quadruple) => {
                 MasterPublicKeyId::Ecdsa(quadruple.key_id.clone())
             }
             PreSignatureInCreation::Schnorr(transcript) => {
                 MasterPublicKeyId::Schnorr(transcript.key_id.clone())
             }
-        }
+        };
+        IDkgMasterPublicKeyId(key)
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureRef {
-    fn key_id(&self) -> MasterPublicKeyId {
-        match self {
+impl HasIDkgMasterPublicKeyId for PreSignatureRef {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        let key = match self {
             PreSignatureRef::Ecdsa(quadruple) => MasterPublicKeyId::Ecdsa(quadruple.key_id.clone()),
             PreSignatureRef::Schnorr(transcript) => {
                 MasterPublicKeyId::Schnorr(transcript.key_id.clone())
             }
-        }
+        };
+        IDkgMasterPublicKeyId(key)
     }
 }
 
-impl HasMasterPublicKeyId for IDkgReshareRequest {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl HasIDkgMasterPublicKeyId for IDkgReshareRequest {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.master_key_id.clone()
     }
 }
 
-impl HasMasterPublicKeyId for MasterKeyTranscript {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl HasIDkgMasterPublicKeyId for MasterKeyTranscript {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.master_key_id.clone()
     }
 }
 
-impl<T: HasMasterPublicKeyId, U> HasMasterPublicKeyId for (T, U) {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl<T: HasIDkgMasterPublicKeyId, U> HasIDkgMasterPublicKeyId for (T, U) {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.0.key_id()
     }
 }
 
-impl<T: HasMasterPublicKeyId> HasMasterPublicKeyId for &T {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl<T: HasIDkgMasterPublicKeyId> HasIDkgMasterPublicKeyId for &T {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         (*self).key_id()
     }
 }

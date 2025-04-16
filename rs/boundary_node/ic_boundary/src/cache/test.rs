@@ -29,6 +29,7 @@ fn gen_request_with_params(
     let mut req = Request::post("/").body(Body::from("foobar")).unwrap();
 
     let mut ctx = RequestContext {
+        request_type: RequestType::Query,
         canister_id: Some(Principal::from_text(canister_id).unwrap()),
         sender: Some(if anonymous {
             ANONYMOUS_PRINCIPAL
@@ -112,12 +113,13 @@ async fn test_cache() -> Result<(), Error> {
     assert_eq!(cs, CacheStatus::Miss);
 
     let req = gen_request(CANISTER_1, false);
-    let mut res = app.call(req).await.unwrap();
+    let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Hit);
 
     // Check if the body from cache is correct
-    let body = hyper::body::to_bytes(res.body_mut())
+    let (_, body) = res.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
         .await
         .unwrap()
         .to_vec();

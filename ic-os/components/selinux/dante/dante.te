@@ -1,0 +1,78 @@
+policy_module(dante)
+
+########################################
+#
+# Declarations
+#
+
+type dante_t;
+type dante_exec_t;
+init_daemon_domain(dante_t, dante_exec_t)
+
+type dante_conf_t;
+files_config_file(dante_conf_t)
+
+type dante_runtime_t alias dante_var_run_t;
+files_runtime_file(dante_runtime_t)
+
+########################################
+#
+# Local policy
+#
+
+allow dante_t dante_conf_t:file { getattr ioctl open read };
+
+allow dante_t self:capability {net_admin net_raw setgid};
+allow dante_t self:netlink_route_socket { bind create getattr nlmsg_read read write };
+allow dante_t self:process { getsched setsched };
+allow dante_t self:rawip_socket create;
+allow dante_t self:tcp_socket { accept bind connect create getattr getopt listen read setopt shutdown write };
+allow dante_t self:udp_socket { connect create getattr read setopt write };
+allow dante_t self:unix_dgram_socket { connect create getopt setopt read sendto write };
+
+require { type devlog_t; }
+allow dante_t devlog_t:sock_file write;
+
+require { type etc_t; }
+allow dante_t etc_t:lnk_file read;
+allow dante_t etc_t:file { getattr open read };
+
+require { type http_port_t; }
+allow dante_t http_port_t:tcp_socket name_connect;
+
+require { type initrc_runtime_t; }
+allow dante_t initrc_runtime_t:file { getattr ioctl open read };
+
+require { type locale_t; }
+allow dante_t locale_t:dir search;
+allow dante_t locale_t:file { getattr open read };
+
+require { type net_conf_t; }
+allow dante_t net_conf_t:file { getattr open read };
+
+require { type node_t; }
+allow dante_t node_t:tcp_socket node_bind;
+
+require { type proc_t; }
+allow dante_t proc_t:filesystem getattr;
+
+require { type sysctl_kernel_t; }
+allow dante_t sysctl_kernel_t:dir search;
+allow dante_t sysctl_kernel_t:file { open read };
+
+require { type syslogd_runtime_t; }
+allow dante_t syslogd_runtime_t:dir search;
+
+require { type syslogd_t; }
+allow dante_t syslogd_t:unix_dgram_socket sendto;
+
+require { type tmp_t; }
+allow dante_t tmp_t:dir { add_name search write remove_name };
+allow dante_t tmp_t:file { create open lock map read write unlink };
+
+require { type unreserved_port_t; }
+allow dante_t unreserved_port_t:tcp_socket name_bind;
+
+require { type var_run_t; }
+allow dante_t var_run_t:dir { add_name write };
+allow dante_t var_run_t:file { create getattr open write };

@@ -24,7 +24,9 @@ use ic_sns_governance::{
     reward,
 };
 use ic_sns_test_utils::{
-    itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo},
+    itest_helpers::{
+        state_machine_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+    },
     now_seconds,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -33,6 +35,8 @@ use std::{
     collections::BTreeMap,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+const EXPECTED_MAX_BALLOT_AGE: f64 = 60.0;
 
 const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;
 
@@ -46,7 +50,7 @@ const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParamete
 /// Assert that Motion proposals can be submitted, voted on, and executed
 #[test]
 fn test_motion_proposal_execution() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -132,7 +136,7 @@ fn test_motion_proposal_execution() {
 /// Assert that ManageNervousSystemParameters proposals can be submitted, voted on, and executed
 #[test]
 fn test_manage_nervous_system_parameters_proposal_execution() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -229,7 +233,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
             .as_secs_f64()
     }
 
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with three users (each will create its own neuron).
             let user_1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -344,7 +348,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                     ballot
                 );
                 assert!(
-                    age_seconds < 30.0,
+                    age_seconds < EXPECTED_MAX_BALLOT_AGE,
                     "age_seconds = {}. ballot = {:?}",
                     age_seconds,
                     ballot
@@ -389,7 +393,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
 
 #[test]
 fn test_bad_proposal_id_candid_type() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -419,7 +423,7 @@ fn test_bad_proposal_id_candid_type() {
 
 #[test]
 fn test_bad_proposal_id_candid_encoding() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -435,8 +439,14 @@ fn test_bad_proposal_id_candid_encoding() {
                 .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
                 .await;
 
+            let expected_error = "failed to decode";
             match res {
-                Err(e) => assert!(e.contains("Deserialization Failed")),
+                Err(e) => assert!(
+                    e.contains(expected_error),
+                    "Expected error string \"{}\" not present in actual error. Error was: {:?}",
+                    expected_error,
+                    e
+                ),
                 Ok(_) => panic!("get_proposal should fail to deserialize"),
             };
             Ok(())
@@ -446,7 +456,7 @@ fn test_bad_proposal_id_candid_encoding() {
 
 #[test]
 fn test_non_existent_proposal_id_is_not_a_bad_input() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -481,7 +491,7 @@ fn test_non_existent_proposal_id_is_not_a_bad_input() {
 
 #[test]
 fn test_list_proposals_determinism() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -594,7 +604,7 @@ async fn list_all_proposals_through_pagination(
 
 #[test]
 fn test_proposal_format_validation() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
 
@@ -695,7 +705,7 @@ fn test_proposal_format_validation() {
 
 #[test]
 fn test_neuron_configuration_needed_for_proposals() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -815,7 +825,7 @@ fn test_neuron_configuration_needed_for_proposals() {
 
 #[test]
 fn test_ballots_set_for_multiple_neurons() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let params = NervousSystemParameters {
@@ -904,7 +914,7 @@ fn test_ballots_set_for_multiple_neurons() {
 
 #[test]
 fn test_vote_on_non_existent_proposal() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -951,7 +961,7 @@ fn test_vote_on_non_existent_proposal() {
 
 #[test]
 fn test_ineligible_neuron_voting_fails() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will propose and a user who will vote
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
@@ -1007,7 +1017,7 @@ fn test_ineligible_neuron_voting_fails() {
 
 #[test]
 fn test_repeated_voting_fails() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let yes_voter = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let no_voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
 
@@ -1107,7 +1117,7 @@ fn test_repeated_voting_fails() {
 //          D
 #[test]
 fn test_following_and_voting() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1235,7 +1245,7 @@ fn test_following_and_voting() {
 //   B <- C
 #[test]
 fn test_following_and_voting_from_non_proposer() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1326,7 +1336,7 @@ fn test_following_and_voting_from_non_proposer() {
 //   C
 #[test]
 fn test_following_multiple_neurons_reach_majority() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1437,7 +1447,7 @@ fn test_following_multiple_neurons_reach_majority() {
 
 #[test]
 fn test_proposal_rejection() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will propose and a user who will vote
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
@@ -1557,7 +1567,7 @@ fn assert_voting_error(
 
 #[test]
 fn test_proposal_garbage_collection() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will make proposals
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1627,6 +1637,11 @@ fn test_proposal_garbage_collection() {
             .await
             .expect("Expected set_time_warp to succeed");
 
+        sns_canisters
+            .run_periodic_tasks_now()
+            .await
+            .expect("Expected run_periodic_tasks_now to succeed");
+
         // Proposals should have been garbage_collected. Get all the proposals kept in the current
         // SNS
         let proposals_after_gc = list_all_proposals_through_pagination(
@@ -1655,7 +1670,7 @@ fn test_proposal_garbage_collection() {
 
 #[test]
 fn test_change_voting_rewards_round_duration() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will make proposals
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         // Initialize the ledger with an account for a user who will vote so we can control when
@@ -1758,7 +1773,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()
@@ -1792,7 +1807,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()
@@ -1948,7 +1963,7 @@ fn test_change_voting_rewards_round_duration() {
 ///         ID of the most recent proposal.
 #[test]
 fn test_intermittent_proposal_submission() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Chapter 0: Prepare the world.
 
         // Initialize the ledger with an account for a user who will make proposals
@@ -2251,13 +2266,13 @@ fn test_intermittent_proposal_submission() {
         sns_canisters.set_time_warp(delta_s).await?;
 
         // Wait for the number of proposals to decrease.
-        for _ in 0..25 {
+        for _ in 0..250 {
             proposals = sns_canisters.list_proposals(&proposer.sender).await;
             if proposals.len() < 3 {
                 // GC occurred
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            runtime.tick().await;
         }
 
         // Assert that proposal 1 has disappeared.

@@ -1,3 +1,4 @@
+use crate::cached_upgrade_steps::CachedUpgradeSteps;
 use crate::{pb::v1::governance::Version, proposal::render_version, types::Environment};
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -137,7 +138,7 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
     Ok(proposal_id)
 }
 
-async fn get_canisters_to_upgrade(
+pub(crate) async fn get_canisters_to_upgrade(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     canister_type: SnsCanisterType,
@@ -174,7 +175,7 @@ async fn get_canisters_to_upgrade(
         .collect()
 }
 
-fn canister_type_and_wasm_hash_for_upgrade(
+pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
     current_version: &Version,
     next_version: &Version,
 ) -> Result<(SnsCanisterType, Vec<u8>), String> {
@@ -293,6 +294,42 @@ async fn get_next_version(env: &dyn Environment, current_version: &Version) -> O
     response.next_version.map(|v| v.into())
 }
 
+pub(crate) async fn get_upgrade_steps(
+    env: &dyn Environment,
+    current_version: Version,
+    sns_governance_canister_id: PrincipalId,
+) -> Result<CachedUpgradeSteps, String> {
+    let request = ListUpgradeStepsRequest {
+        starting_at: Some(current_version.into()),
+        sns_governance_canister_id: Some(sns_governance_canister_id),
+        limit: 0,
+    };
+    let arg = Encode!(&request)
+        .map_err(|err| format!("Could not encode ListUpgradeStepsRequest: {:?}", err))?;
+
+    let requested_timestamp_seconds = env.now();
+
+    let response = env
+        .call_canister(SNS_WASM_CANISTER_ID, "list_upgrade_steps", arg)
+        .await
+        .map_err(|err| format!("Request failed for get_next_sns_version: {:?}", err))?;
+
+    let response = Decode!(&response, ListUpgradeStepsResponse).map_err(|err| {
+        format!(
+            "Could not decode the response from SnsW.list_upgrade_steps: {}",
+            err
+        )
+    })?;
+
+    let response_timestamp_seconds = env.now();
+
+    CachedUpgradeSteps::try_from_sns_w_response(
+        response,
+        requested_timestamp_seconds,
+        response_timestamp_seconds,
+    )
+}
+
 /// Returns all SNS canisters known by the Root canister.
 pub(crate) async fn get_all_sns_canisters(
     env: &dyn Environment,
@@ -379,6 +416,7 @@ impl Version {
 
         differences
     }
+
     pub(crate) fn version_has_expected_hashes(
         &self,
         expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],
@@ -459,7 +497,7 @@ impl From<SnsVersion> for Version {
 
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround
 /// The request type accepted by the get_next_sns_version canister method
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetNextSnsVersionRequest {
     #[prost(message, optional, tag = "1")]
     pub current_version: ::core::option::Option<SnsVersion>,
@@ -467,7 +505,7 @@ pub(crate) struct GetNextSnsVersionRequest {
 
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround
 /// The response type returned by the get_next_sns_version canister method
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetNextSnsVersionResponse {
     #[prost(message, optional, tag = "1")]
     pub next_version: ::core::option::Option<SnsVersion>,
@@ -476,8 +514,8 @@ pub(crate) struct GetNextSnsVersionResponse {
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround.
 /// Avoid using outside of tests and the functions in this file.
 /// Specifies the version of an SNS.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
-pub(crate) struct SnsVersion {
+#[derive(Clone, Eq, PartialEq, Hash, ::prost::Message, candid::CandidType, candid::Deserialize)]
+pub struct SnsVersion {
     /// The hash of the Root canister WASM.
     #[prost(bytes = "vec", tag = "1")]
     pub root_wasm_hash: ::prost::alloc::vec::Vec<u8>,
@@ -499,7 +537,7 @@ pub(crate) struct SnsVersion {
 }
 
 /// Copied from ic-sns-root
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryRequest {
     /// If set to true, root will update the list of canisters it owns before building the
     /// GetSnsCanistersSummaryResponse. This currently amounts to asking ledger about its archive
@@ -508,7 +546,7 @@ pub(crate) struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -520,7 +558,7 @@ pub(crate) struct GetSnsCanistersSummaryResponse {
 }
 
 /// Copied from ic-sns-root
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,
@@ -528,14 +566,14 @@ pub(crate) struct CanisterSummary {
 
 ///Copied from ic-sns-wasm.
 /// The argument for get_wasm, which consists of the WASM hash to be retrieved.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetWasmRequest {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// Copied from ic-sns-wasm.
 /// The response for get_wasm, which returns a WASM if it is found, or None.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetWasmResponse {
     #[prost(message, optional, tag = "1")]
     pub wasm: ::core::option::Option<SnsWasm>,
@@ -543,7 +581,7 @@ pub(crate) struct GetWasmResponse {
 
 /// Copied from ic-sns-wasm.
 /// The representation of a WASM along with its target canister type
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
     #[serde(with = "serde_bytes")]
@@ -556,17 +594,17 @@ pub(crate) struct SnsWasm {
 /// Copied from ic-sns-wasm
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub(crate) enum SnsCanisterType {
@@ -601,4 +639,22 @@ pub struct GetProposalIdThatAddedWasmRequest {
 pub struct GetProposalIdThatAddedWasmResponse {
     #[prost(uint64, optional, tag = "1")]
     pub proposal_id: ::core::option::Option<u64>,
+}
+
+#[derive(Clone, PartialEq, candid::CandidType, candid::Deserialize, Debug)]
+pub struct ListUpgradeStepsRequest {
+    /// If provided, limit response to only include entries for this version and later
+    pub starting_at: ::core::option::Option<SnsVersion>,
+    /// If provided, give responses that this canister would get back
+    pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Limit to number of entries (for paging)
+    pub limit: u32,
+}
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+pub struct ListUpgradeStepsResponse {
+    pub steps: ::prost::alloc::vec::Vec<ListUpgradeStep>,
+}
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+pub struct ListUpgradeStep {
+    pub version: ::core::option::Option<SnsVersion>,
 }

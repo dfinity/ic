@@ -7,15 +7,17 @@ DEPENDENCIES = [
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/consensus",
+    "//rs/consensus/certification",
+    "//rs/consensus/dkg",
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
-    "//rs/crypto/test_utils/ni-dkg",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/messaging",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -32,11 +34,10 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
     "//rs/replicated_state",
-    "//rs/rosetta-api/icp_ledger",
     "//rs/state_manager",
     "//rs/types/types",
     "@crate_index//:candid",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -52,6 +53,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
 ]
@@ -62,7 +64,6 @@ ALIASES = {}
 
 rust_library(
     name = "replay",
-    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_replay",
@@ -77,7 +78,6 @@ rust_library(
 
 rust_binary(
     name = "ic-replay",
-    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

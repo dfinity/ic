@@ -4,41 +4,41 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_crypto_sha2::Sha256;
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
 use ic_nns_governance::{
     governance::{
         Environment, Governance, HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     },
     pb::v1::{
         governance_error::ErrorType,
+        install_code::CanisterInstallMode,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command,
         },
-        manage_neuron_response::Command as CommandResponse,
         neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NnsFunction,
-        Proposal,
+        InstallCode, ManageNeuron, Motion, NetworkEconomics, Neuron, Proposal,
     },
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use maplit::btreemap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 struct DegradedEnv {}
 #[async_trait]
 impl Environment for DegradedEnv {
     fn now(&self) -> u64 {
         111000222
-    }
-
-    fn random_u64(&mut self) -> u64 {
-        4 // https://xkcd.com/221
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        unimplemented!()
     }
 
     fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
@@ -50,7 +50,7 @@ impl Environment for DegradedEnv {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         _target: CanisterId,
         _method_name: &str,
         _request: Vec<u8>,
@@ -87,7 +87,7 @@ impl IcpLedger for DegradedEnv {
 
 #[async_trait]
 impl CMC for DegradedEnv {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
@@ -130,9 +130,10 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
 fn degraded_governance() -> Governance {
     Governance::new(
         fixture_two_neurons_second_is_bigger(),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Box::new(CanisterRandomnessGenerator::new()),
     )
 }
 
@@ -162,7 +163,7 @@ async fn test_cannot_submit_motion_in_degraded_mode() {
             })),
             ..Default::default()
         },
-    ),
+    ).await,
     Err(e) if e.error_type == ErrorType::ResourceExhausted as i32);
 }
 
@@ -179,13 +180,19 @@ async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                    payload: Vec::new(),
+                action: Some(proposal::Action::InstallCode(InstallCode {
+                    canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+                    wasm_module: Some(vec![1, 2, 3]),
+                    install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                    arg: Some(vec![4, 5, 6]),
+                    skip_stopping_before_installing: None,
+                    wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                    arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
                 })),
                 ..Default::default()
             },
-        ),
+        )
+        .await,
         Ok(_)
     );
 }

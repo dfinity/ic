@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use aide::{
     axum::{
         routing::{get, post},
@@ -5,8 +6,8 @@ use aide::{
     },
     openapi::{Info, OpenApi},
 };
+use async_trait::async_trait;
 use axum::{
-    async_trait,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
@@ -25,22 +26,24 @@ use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
-use pocket_ic_server::state_api::routes::{handler_read_graph, timeout_or_default};
+use pocket_ic_server::state_api::routes::handler_read_graph;
 use pocket_ic_server::state_api::{
     routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
-    state::PocketIcApiStateBuilder,
+    state::{ApiState, PocketIcApiStateBuilder},
 };
 use pocket_ic_server::BlobStore;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
 
@@ -52,26 +55,20 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "5.0.0")]
+#[clap(version = "8.0.0")]
 struct Args {
-    /// If you use PocketIC from the command line, you should not use this flag.
-    /// Client libraries use this flag to provide a common identifier (the process ID of the test
-    /// process) such that the server is only started once and the individual tests can (re-)use
-    /// the same server.
-    #[clap(long)]
-    pid: Option<u32>,
-    /// The IP address at which the PocketIC server should listen (defaults to 127.0.0.1)
+    /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
     ip_addr: Option<String>,
+    /// Log levels for PocketIC server logs (defaults to `pocket_ic_server=info,tower_http=info,axum::rejection=trace`).
+    #[clap(long, short)]
+    log_levels: Option<String>,
     /// The port at which the PocketIC server should listen
     #[clap(long, short, default_value_t = 0)]
     port: u16,
     /// The file to which the PocketIC server port should be written
-    #[clap(long, conflicts_with = "pid")]
+    #[clap(long)]
     port_file: Option<PathBuf>,
-    /// The file which is created by the PocketIC server once it is ready to accept HTTP connections
-    #[clap(long, conflicts_with = "pid")]
-    ready_file: Option<PathBuf>,
     /// The time-to-live of the PocketIC server in seconds
     #[clap(long, default_value_t = TTL_SEC)]
     ttl: u64,
@@ -80,6 +77,11 @@ struct Args {
 /// Get the path of the current running binary.
 fn current_binary_path() -> Option<PathBuf> {
     std::env::args().next().map(PathBuf::from)
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+extern "C" {
+    fn install_backtrace_handler();
 }
 
 fn main() {
@@ -93,6 +95,10 @@ fn main() {
     // before the arguments are parsed because the parent process does not pass
     // all the normally required arguments of `pocket-ic-server`.
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        unsafe {
+            install_backtrace_handler();
+        }
         canister_sandbox_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
@@ -114,51 +120,25 @@ fn main() {
 async fn start(runtime: Arc<Runtime>) {
     let args = Args::parse();
 
-    // If PocketIC was started with the `--pid` flag, create a port file to communicate the port back to
-    // the parent process (e.g., the `cargo test` invocation). Other tests can then see this port file
-    // and reuse the same PocketIC server.
-    let use_port_file = args.pid.is_some() || args.port_file.is_some();
-    let mut port_file_path = None;
-    let mut port_file = None;
-    let use_ready_file = args.pid.is_some() || args.ready_file.is_some();
-    let mut ready_file_path = None;
-    if use_port_file {
-        if let Some(ref port_file) = args.port_file {
-            // Clean up port file.
-            let _ = std::fs::remove_file(port_file);
-        }
-        port_file_path = if args.port_file.is_some() {
-            args.port_file
-        } else {
-            Some(std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid.unwrap())))
-        };
-        port_file = match create_file_atomically(port_file_path.clone().unwrap()) {
+    let port_file = if let Some(ref port_file_path) = args.port_file {
+        match create_file(port_file_path) {
             Ok(f) => Some(f),
             Err(_) => {
-                // A PocketIC server is already running for this PID, terminate.
+                // A PocketIC server is already running => terminate.
                 return;
             }
-        };
-    }
-    if use_ready_file {
-        if let Some(ref ready_file) = args.ready_file {
-            // Clean up ready file.
-            let _ = std::fs::remove_file(ready_file);
         }
-        ready_file_path = if args.ready_file.is_some() {
-            args.ready_file
-        } else {
-            Some(std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid.unwrap())))
-        };
-    }
+    } else {
+        None
+    };
 
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
     let addr = format!("{}:{}", ip_addr, args.port);
-    let listener = std::net::TcpListener::bind(addr)
-        .unwrap_or_else(|_| panic!("Failed to start PocketIC server on port {}", args.port));
+    let listener = std::net::TcpListener::bind(addr.clone())
+        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
     let real_port = listener.local_addr().unwrap().port();
 
-    let _guard = setup_tracing(args.pid);
+    let _guard = setup_tracing(args.log_levels);
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default()
         .with_port(real_port)
@@ -168,6 +148,7 @@ async fn start(runtime: Arc<Runtime>) {
     let min_alive_until = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
         api_state,
+        pending_requests: Arc::new(AtomicU64::new(0)),
         min_alive_until,
         runtime,
         blob_store: Arc::new(InMemoryBlobStore::new()),
@@ -185,18 +166,19 @@ async fn start(runtime: Arc<Runtime>) {
         .directory_route("/blobstore", post(set_blob_store_entry))
         //
         // Get a blob store entry.
-        .directory_route("/blobstore/:id", get(get_blob_store_entry))
+        .directory_route("/blobstore/{id}", get(get_blob_store_entry))
         //
         // Verify signature.
         .directory_route("/verify_signature", post(verify_signature))
         //
         // Read state: Poll a result based on a received Started{} reply.
-        .directory_route("/read_graph/:state_label/:op_id", get(handler_read_graph))
+        .directory_route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
         // All HTTP gateway routes.
         .nest("/http_gateway", http_gateway_routes::<AppState>())
+        .fallback(|| async { (StatusCode::NOT_FOUND, "") })
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -225,32 +207,36 @@ async fn start(runtime: Arc<Runtime>) {
     let handle = Handle::new();
     let shutdown_handle = handle.clone();
     let axum_handle = handle.clone();
+    let port_file_path = args.port_file.clone();
+    let app_state_clone = app_state.clone();
     // This is a safeguard against orphaning this child process.
-    let port_file_path_clone = port_file_path.clone();
-    let ready_file_path_clone = ready_file_path.clone();
     tokio::spawn(async move {
         loop {
+            let pending_requests = app_state.pending_requests.load(Ordering::Relaxed);
             let guard = app_state.min_alive_until.read().await;
-            if guard.elapsed() > Duration::from_secs(args.ttl) {
+            if pending_requests == 0 && guard.elapsed() > Duration::from_secs(args.ttl) {
                 break;
             }
             drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
-        debug!("The PocketIC server will terminate");
-
-        shutdown_handle.shutdown();
-
-        if use_ready_file {
-            // Clean up ready file.
-            let _ = std::fs::remove_file(ready_file_path_clone.unwrap());
-        }
-        if use_port_file {
-            // Clean up port file.
-            let _ = std::fs::remove_file(port_file_path_clone.unwrap());
+        terminate(app_state, shutdown_handle, port_file_path).await;
+    });
+    // Register a signal handler.
+    let (tx, mut rx) = channel(1);
+    let shutdown_handle = handle.clone();
+    let port_file_path = args.port_file.clone();
+    tokio::spawn(async move {
+        if let Some(()) = rx.recv().await {
+            terminate(app_state_clone, shutdown_handle, port_file_path).await;
         }
     });
+    ctrlc::set_handler(move || {
+        tx.blocking_send(())
+            .expect("Could not send signal on channel.")
+    })
+    .expect("Error setting Ctrl-C handler");
 
     let main_task = tokio::spawn(async move {
         axum_server::from_tcp(listener)
@@ -263,19 +249,9 @@ async fn start(runtime: Arc<Runtime>) {
     // Wait until the PocketIC server starts listening.
     while handle.listening().await.is_none() {}
 
-    if use_port_file {
-        let _ = port_file
-            .as_mut()
-            .unwrap()
-            .write_all(real_port.to_string().as_bytes());
-        let _ = port_file.unwrap().flush();
-    }
-    if use_ready_file {
-        // Signal that the port file can safely be read by other clients.
-        let ready_file = create_file_atomically(ready_file_path.clone().unwrap());
-        if ready_file.is_err() {
-            error!("The .ready file already exists; please do not pass the same ready file path to multiple PocketIC server invocations!");
-        }
+    if let Some(mut port_file) = port_file {
+        let _ = port_file.write_all(format!("{}\n", real_port).as_bytes());
+        let _ = port_file.flush();
     }
 
     info!("The PocketIC server is listening on port {}", real_port);
@@ -283,12 +259,30 @@ async fn start(runtime: Arc<Runtime>) {
     main_task.await.unwrap();
 }
 
+async fn terminate(
+    app_state: AppState,
+    shutdown_handle: axum_server::Handle,
+    port_file_path: Option<PathBuf>,
+) {
+    debug!("The PocketIC server will terminate");
+
+    app_state.api_state.stop_all_http_gateways().await;
+    ApiState::delete_all_instances(app_state.api_state).await;
+
+    if let Some(port_file_path) = port_file_path {
+        // Clean up port file.
+        let _ = std::fs::remove_file(port_file_path);
+    }
+
+    shutdown_handle.shutdown();
+}
+
 async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
     Json(api)
 }
 
 // Registers a global subscriber that collects tracing events and spans.
-fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
+fn setup_tracing(log_levels: Option<String>) -> Option<WorkerGuard> {
     use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
     use tracing_subscriber::prelude::*;
@@ -296,8 +290,12 @@ fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
     let mut layers = Vec::new();
 
     let default_log_filter = || {
-        tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| DEFAULT_LOG_LEVELS.to_string().into())
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            log_levels
+                .clone()
+                .unwrap_or(DEFAULT_LOG_LEVELS.to_string())
+                .into()
+        })
     };
 
     layers.push(
@@ -310,11 +308,7 @@ fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
         Ok(p) => {
             std::fs::create_dir_all(&p).expect("Could not create directory");
             let dt = OffsetDateTime::from(std::time::SystemTime::now());
-            let ts = dt.format(&Rfc3339).unwrap().replace(':', "_");
-            let logfile_suffix = match pid {
-                Some(pid) => format!("{}_{}", ts, pid),
-                None => format!("{}_cli", ts),
-            };
+            let logfile_suffix = dt.format(&Rfc3339).unwrap().replace(':', "_");
             let appender = tracing_appender::rolling::never(
                 &p,
                 format!("pocket_ic_server_{logfile_suffix}.log"),
@@ -342,8 +336,8 @@ fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
     guard
 }
 
-// Ensures atomically that this file was created freshly, and gives an error otherwise.
-fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
+// Create a file at a given path ensuring atomically that the file was created freshly and giving an error otherwise.
+fn create_file<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
     File::options()
         .read(true)
         .write(true)
@@ -353,24 +347,29 @@ fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::R
 
 async fn bump_last_request_timestamp(
     State(AppState {
-        min_alive_until, ..
+        pending_requests,
+        min_alive_until,
+        ..
     }): State<AppState>,
-    headers: HeaderMap,
     request: http::Request<axum::body::Body>,
     next: Next,
 ) -> impl IntoApiResponse {
-    // TTL should not decrease: If now + header_timeout is later
+    pending_requests.fetch_add(1, Ordering::Relaxed);
+    let resp = next.run(request).await;
+    // TTL should not decrease: If now is later
     // than the current TTL (from previous requests), reset it.
     // Otherwise, a previous request set a larger TTL and we don't
     // touch it.
-    let timeout = timeout_or_default(headers).unwrap_or(Duration::from_secs(1));
-    let alive_until = Instant::now().checked_add(timeout).unwrap();
+    let alive_until = Instant::now();
     let mut min_alive_until = min_alive_until.write().await;
     if *min_alive_until < alive_until {
         *min_alive_until = alive_until;
     }
     drop(min_alive_until);
-    next.run(request).await
+    // Only mark the pending request as completed (by subtracting the counter)
+    // *after* updating TTL!
+    pending_requests.fetch_sub(1, Ordering::Relaxed);
+    resp
 }
 
 async fn get_blob_store_entry(
@@ -500,5 +499,55 @@ impl BlobStore for InMemoryBlobStore {
     async fn fetch(&self, blob_id: BlobId) -> Option<BinaryBlob> {
         let m = self.map.read().await;
         m.get(&blob_id).cloned()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use clap::Parser;
+    use ic_agent::agent::route_provider::RoundRobinRouteProvider;
+    use ic_bn_lib::tls::prepare_client_config;
+    use ic_gateway::{setup_router, Cli};
+
+    #[test]
+    fn test_setup_router() {
+        let args = vec![
+            "",
+            "--domain",
+            "ic0.app",
+            "--domain-canister-id-from-query-params",
+        ];
+        let cli = Cli::parse_from(args);
+
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .unwrap();
+
+        let mut http_client_opts: ic_bn_lib::http::client::Options<ic_bn_lib::http::dns::Resolver> =
+            (&cli.http_client).into();
+        http_client_opts.tls_config = Some(prepare_client_config(&[
+            &rustls::version::TLS13,
+            &rustls::version::TLS12,
+        ]));
+        let http_client =
+            Arc::new(ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone()).unwrap());
+
+        let route_provider = RoundRobinRouteProvider::new(vec!["https://icp-api.io"]).unwrap();
+
+        let mut tasks = ic_bn_lib::tasks::TaskManager::new();
+
+        let _ = setup_router(
+            &cli,
+            vec![],
+            &mut tasks,
+            http_client,
+            Arc::new(route_provider),
+            &prometheus::Registry::new(),
+            None,
+            None,
+        )
+        .unwrap();
     }
 }

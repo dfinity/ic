@@ -115,14 +115,12 @@ use super::validation::API_VERSION_IC0;
 use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::embedders::MeteringType;
 use ic_config::flag_status::FlagStatus;
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
 use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
-use wasmtime_environ::WASM_PAGE_SIZE;
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
@@ -130,15 +128,17 @@ use crate::wasmtime_embedder::{
 };
 use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
-    BlockType, CompositeType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType,
-    Operator, SubType, TypeRef, ValType,
+    BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
+    Import, MemoryType, Operator, SubType, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum WasmMemoryType {
+pub enum WasmMemoryType {
     Wasm32,
     Wasm64,
 }
@@ -163,21 +163,18 @@ pub(crate) enum InjectedImports {
 }
 
 impl InjectedImports {
-    fn count(wasm_native_stable_memory: FlagStatus) -> usize {
-        if wasm_native_stable_memory == FlagStatus::Enabled {
-            5
-        } else {
-            2
-        }
+    fn count() -> usize {
+        5
     }
 }
 
 // Gets the cost of an instruction.
-pub fn instruction_to_cost(i: &Operator) -> u64 {
+pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
-    // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
+    // The exceptions are: atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
     // dynamic cost is treated separately. Here we only assign a static cost to these instructions.
+    // Cost for certain instructions differ based on the memory type (Wasm32 vs. Wasm64).
     match i {
         // The following instructions are mostly signaling the start/end of code blocks,
         // so we assign 0 cost to them.
@@ -357,9 +354,8 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I64TruncF64S { .. }
         | Operator::I64TruncF64U { .. } => 20,
 
-        // All load/store instructions are of cost 2.
+        // All load/store instructions are of cost 1 in Wasm32 mode.
         // Validated in benchmarks.
-        // The cost is adjusted to 1 after benchmarking with real canisters.
         Operator::I32Load { .. }
         | Operator::I64Load { .. }
         | Operator::F32Load { .. }
@@ -382,7 +378,10 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I32Store16 { .. }
         | Operator::I64Store8 { .. }
         | Operator::I64Store16 { .. }
-        | Operator::I64Store32 { .. } => 1,
+        | Operator::I64Store32 { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
 
         // Global get/set operations are similarly expensive to loads/stores.
         Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
@@ -423,8 +422,13 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
 
         // Call instructions are of cost 20. Validated in benchmarks.
         // The cost is adjusted to 5 and 10 after benchmarking with real canisters.
-        Operator::Call { .. } | Operator::ReturnCall { .. } => 5,
-        Operator::CallIndirect { .. } | Operator::ReturnCallIndirect { .. } => 10,
+        Operator::Call { .. } => 5,
+        Operator::CallIndirect { .. } => 10,
+
+        // ReturnCall is on average approx. 1.5 times faster than Call
+        // instruction (shown by relative benchmarks).
+        Operator::ReturnCall { .. } => 3,
+        Operator::ReturnCallIndirect { .. } => 60,
 
         // Return, drop, unreachable and nop instructions are of cost 1.
         Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
@@ -454,28 +458,34 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
 
         ////////////////////////////////////////////////////////////////
         // Wasm SIMD Operators
-        Operator::V128Load { .. } => 1,
-        Operator::V128Load8x8S { .. } => 1,
-        Operator::V128Load8x8U { .. } => 1,
-        Operator::V128Load16x4S { .. } => 1,
-        Operator::V128Load16x4U { .. } => 1,
-        Operator::V128Load32x2S { .. } => 1,
-        Operator::V128Load32x2U { .. } => 1,
-        Operator::V128Load8Splat { .. } => 1,
-        Operator::V128Load16Splat { .. } => 1,
-        Operator::V128Load32Splat { .. } => 1,
-        Operator::V128Load64Splat { .. } => 1,
-        Operator::V128Load32Zero { .. } => 1,
-        Operator::V128Load64Zero { .. } => 1,
-        Operator::V128Store { .. } => 1,
-        Operator::V128Load8Lane { .. } => 2,
-        Operator::V128Load16Lane { .. } => 2,
-        Operator::V128Load32Lane { .. } => 1,
-        Operator::V128Load64Lane { .. } => 1,
-        Operator::V128Store8Lane { .. } => 1,
-        Operator::V128Store16Lane { .. } => 1,
-        Operator::V128Store32Lane { .. } => 1,
-        Operator::V128Store64Lane { .. } => 1,
+
+        // Load/store for SIMD cost 1 in Wasm32 mode and 2 in Wasm64 mode.
+        Operator::V128Load { .. }
+        | Operator::V128Load8x8S { .. }
+        | Operator::V128Load8x8U { .. }
+        | Operator::V128Load16x4S { .. }
+        | Operator::V128Load16x4U { .. }
+        | Operator::V128Load32x2S { .. }
+        | Operator::V128Load32x2U { .. }
+        | Operator::V128Load8Splat { .. }
+        | Operator::V128Load16Splat { .. }
+        | Operator::V128Load32Splat { .. }
+        | Operator::V128Load64Splat { .. }
+        | Operator::V128Load32Zero { .. }
+        | Operator::V128Load64Zero { .. }
+        | Operator::V128Store { .. }
+        | Operator::V128Load8Lane { .. }
+        | Operator::V128Load16Lane { .. }
+        | Operator::V128Load32Lane { .. }
+        | Operator::V128Load64Lane { .. }
+        | Operator::V128Store8Lane { .. }
+        | Operator::V128Store16Lane { .. }
+        | Operator::V128Store32Lane { .. }
+        | Operator::V128Store64Lane { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
+
         Operator::V128Const { .. } => 1,
         Operator::I8x16Shuffle { .. } => 3,
         Operator::I8x16ExtractLaneS { .. } => 1,
@@ -719,7 +729,7 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let CompositeType::Func(existing_ty) = &existing_subtype.composite_type {
+        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner {
             if *existing_ty == ty {
                 return idx as u32;
             }
@@ -728,7 +738,10 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     module.types.push(SubType {
         is_final: true,
         supertype_idx: None,
-        composite_type: CompositeType::Func(ty),
+        composite_type: CompositeType {
+            inner: CompositeInnerType::Func(ty),
+            shared: false,
+        },
     });
     (module.types.len() - 1) as u32
 }
@@ -791,6 +804,18 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
     if let Some(start_idx) = module.start.as_mut() {
         *start_idx = f(*start_idx);
     }
+
+    if let Some(name_section) = module.name_section.as_mut() {
+        for (index, _name) in &mut name_section.function_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.local_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.label_names {
+            *index = f(*index);
+        }
+    }
 }
 
 /// Injects hidden api functions.
@@ -800,11 +825,7 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// added as the last imports, we'd need to increment only non imported
 /// functions, since imported functions precede all others in the function index
 /// space, but this would be error-prone).
-fn inject_helper_functions(
-    mut module: Module,
-    wasm_native_stable_memory: FlagStatus,
-    mem_type: WasmMemoryType,
-) -> Module {
+fn inject_helper_functions(mut module: Module, mem_type: WasmMemoryType) -> Module {
     // insert types
     let ooi_type = FuncType::new([], []);
     let tgwm_type = match mem_type {
@@ -829,44 +850,41 @@ fn inject_helper_functions(
     };
 
     let mut old_imports = module.imports;
-    module.imports =
-        Vec::with_capacity(old_imports.len() + InjectedImports::count(wasm_native_stable_memory));
+    module.imports = Vec::with_capacity(old_imports.len() + InjectedImports::count());
     module.imports.push(ooi_imp);
     module.imports.push(tgwm_imp);
 
-    if wasm_native_stable_memory == FlagStatus::Enabled {
-        let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
-        let tgsm_type_idx = add_func_type(&mut module, tgsm_type);
-        let tgsm_imp = Import {
-            module: INSTRUMENTED_FUN_MODULE,
-            name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
-            ty: TypeRef::Func(tgsm_type_idx),
-        };
-        module.imports.push(tgsm_imp);
+    let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
+    let tgsm_type_idx = add_func_type(&mut module, tgsm_type);
+    let tgsm_imp = Import {
+        module: INSTRUMENTED_FUN_MODULE,
+        name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
+        ty: TypeRef::Func(tgsm_type_idx),
+    };
+    module.imports.push(tgsm_imp);
 
-        let it_type = FuncType::new([ValType::I32], []);
-        let it_type_idx = add_func_type(&mut module, it_type);
-        let it_imp = Import {
-            module: INSTRUMENTED_FUN_MODULE,
-            name: INTERNAL_TRAP_FUN_NAME,
-            ty: TypeRef::Func(it_type_idx),
-        };
-        module.imports.push(it_imp);
+    let it_type = FuncType::new([ValType::I32], []);
+    let it_type_idx = add_func_type(&mut module, it_type);
+    let it_imp = Import {
+        module: INSTRUMENTED_FUN_MODULE,
+        name: INTERNAL_TRAP_FUN_NAME,
+        ty: TypeRef::Func(it_type_idx),
+    };
+    module.imports.push(it_imp);
 
-        let fr_type = FuncType::new([ValType::I64, ValType::I64, ValType::I64], []);
-        let fr_type_idx = add_func_type(&mut module, fr_type);
-        let fr_imp = Import {
-            module: INSTRUMENTED_FUN_MODULE,
-            name: STABLE_READ_FIRST_ACCESS_NAME,
-            ty: TypeRef::Func(fr_type_idx),
-        };
-        module.imports.push(fr_imp);
-    }
+    let fr_type = FuncType::new([ValType::I64, ValType::I64, ValType::I64], []);
+    let fr_type_idx = add_func_type(&mut module, fr_type);
+    let fr_imp = Import {
+        module: INSTRUMENTED_FUN_MODULE,
+        name: STABLE_READ_FIRST_ACCESS_NAME,
+        ty: TypeRef::Func(fr_type_idx),
+    };
+    module.imports.push(fr_imp);
 
     module.imports.append(&mut old_imports);
 
     // now increment all function references by InjectedImports::Count
-    let cnt = InjectedImports::count(wasm_native_stable_memory) as u32;
+    let cnt = InjectedImports::count() as u32;
     mutate_function_indices(&mut module, |i| i + cnt);
 
     debug_assert!(
@@ -875,19 +893,16 @@ fn inject_helper_functions(
     debug_assert!(
         module.imports[InjectedImports::TryGrowWasmMemory as usize].name == "try_grow_wasm_memory"
     );
-    if wasm_native_stable_memory == FlagStatus::Enabled {
-        debug_assert!(
-            module.imports[InjectedImports::TryGrowStableMemory as usize].name
-                == "try_grow_stable_memory"
-        );
-        debug_assert!(
-            module.imports[InjectedImports::InternalTrap as usize].name == "internal_trap"
-        );
-        debug_assert!(
-            module.imports[InjectedImports::StableReadFirstAccess as usize].name
-                == "stable_read_first_access"
-        );
-    }
+
+    debug_assert!(
+        module.imports[InjectedImports::TryGrowStableMemory as usize].name
+            == "try_grow_stable_memory"
+    );
+    debug_assert!(module.imports[InjectedImports::InternalTrap as usize].name == "internal_trap");
+    debug_assert!(
+        module.imports[InjectedImports::StableReadFirstAccess as usize].name
+            == "stable_read_first_access"
+    );
 
     module
 }
@@ -897,10 +912,10 @@ fn inject_helper_functions(
 #[derive(Default)]
 pub(super) struct SpecialIndices {
     pub instructions_counter_ix: u32,
-    pub dirty_pages_counter_ix: Option<u32>,
-    pub accessed_pages_counter_ix: Option<u32>,
+    pub dirty_pages_counter_ix: u32,
+    pub accessed_pages_counter_ix: u32,
     pub decr_instruction_counter_fn: u32,
-    pub count_clean_pages_fn: Option<u32>,
+    pub count_clean_pages_fn: u32,
     pub start_fn_ix: Option<u32>,
     pub stable_memory_index: u32,
 }
@@ -914,21 +929,18 @@ pub(super) fn instrument(
     module: Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
     write_barrier: FlagStatus,
-    wasm_native_stable_memory: FlagStatus,
     metering_type: MeteringType,
-    subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     max_wasm_memory_size: NumBytes,
     max_stable_memory_size: NumBytes,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let main_memory_type = main_memory_type(&module);
     let stable_memory_index;
-    let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_type);
+    let mut module = inject_helper_functions(module, main_memory_type);
     module = export_table(module);
     (module, stable_memory_index) = update_memories(
         module,
         write_barrier,
-        wasm_native_stable_memory,
         max_wasm_memory_size,
         max_stable_memory_size,
     );
@@ -953,21 +965,9 @@ pub(super) fn instrument(
     let num_functions = (module.functions.len() + num_imported_functions) as u32;
     let num_globals = (module.globals.len() + num_imported_globals) as u32;
 
-    let dirty_pages_counter_ix;
-    let accessed_pages_counter_ix;
-    let count_clean_pages_fn;
-    match wasm_native_stable_memory {
-        FlagStatus::Enabled => {
-            dirty_pages_counter_ix = Some(num_globals + 1);
-            accessed_pages_counter_ix = Some(num_globals + 2);
-            count_clean_pages_fn = Some(num_functions + 1);
-        }
-        FlagStatus::Disabled => {
-            dirty_pages_counter_ix = None;
-            accessed_pages_counter_ix = None;
-            count_clean_pages_fn = None;
-        }
-    };
+    let dirty_pages_counter_ix = num_globals + 1;
+    let accessed_pages_counter_ix = num_globals + 2;
+    let count_clean_pages_fn = num_functions + 1;
 
     let special_indices = SpecialIndices {
         instructions_counter_ix: num_globals,
@@ -1001,7 +1001,10 @@ pub(super) fn instrument(
     // type) reference to the `code_section`.
     let mut func_types = Vec::new();
     for i in 0..module.code_sections.len() {
-        if let CompositeType::Func(t) = &module.types[module.functions[i] as usize].composite_type {
+        if let CompositeInnerType::Func(t) = &module.types[module.functions[i] as usize]
+            .composite_type
+            .inner
+        {
             func_types.push((i, t.clone()));
         } else {
             return Err(WasmInstrumentationError::InvalidFunctionType(format!(
@@ -1022,18 +1025,15 @@ pub(super) fn instrument(
         }
     }
 
-    module = export_additional_symbols(module, &special_indices, wasm_native_stable_memory);
+    module = export_additional_symbols(module, &special_indices);
 
-    if wasm_native_stable_memory == FlagStatus::Enabled {
-        replace_system_api_functions(
-            &mut module,
-            special_indices,
-            subnet_type,
-            dirty_page_overhead,
-            main_memory_type,
-            max_wasm_memory_size,
-        )
-    }
+    replace_system_api_functions(
+        &mut module,
+        special_indices,
+        dirty_page_overhead,
+        main_memory_type,
+        max_wasm_memory_size,
+    );
 
     let exported_functions = module
         .exports
@@ -1045,10 +1045,7 @@ pub(super) fn instrument(
         1 + match write_barrier {
             FlagStatus::Enabled => 1,
             FlagStatus::Disabled => 0,
-        } + match wasm_native_stable_memory {
-            FlagStatus::Enabled => 2,
-            FlagStatus::Disabled => 0,
-        };
+        } + 2;
     if module.memories.len() > expected_memories {
         return Err(WasmInstrumentationError::IncorrectNumberMemorySections {
             expected: expected_memories,
@@ -1113,7 +1110,6 @@ fn calculate_api_indexes(module: &Module<'_>) -> BTreeMap<SystemApiFunc, u32> {
 fn replace_system_api_functions(
     module: &mut Module<'_>,
     special_indices: SpecialIndices,
-    subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
@@ -1130,7 +1126,6 @@ fn replace_system_api_functions(
     let mut func_index_replacements = BTreeMap::new();
     for (api, (ty, body)) in replacement_functions(
         special_indices,
-        subnet_type,
         dirty_page_overhead,
         main_memory_type,
         max_wasm_memory_size,
@@ -1156,7 +1151,6 @@ fn replace_system_api_functions(
 fn export_additional_symbols<'a>(
     mut module: Module<'a>,
     special_indices: &SpecialIndices,
-    wasm_native_stable_memory: FlagStatus,
 ) -> Module<'a> {
     // push function to decrement the instruction counter
 
@@ -1216,93 +1210,91 @@ fn export_additional_symbols<'a>(
     module.functions.push(type_idx);
     module.code_sections.push(func_body);
 
-    if wasm_native_stable_memory == FlagStatus::Enabled {
-        // function to count clean pages in a given range
-        // Arg 0 - start of the range
-        // Arg 1 - end of the range
-        // Return index 0 is the number of pages that haven't been written to in the given range
-        // Return index 1 is the number of pages that haven't been accessed in the given range.
-        let func_type = FuncType::new([ValType::I32, ValType::I32], [ValType::I32, ValType::I32]);
-        let it = 2; // iterator index
-        let tmp = 3;
-        let acc_w = 4; // accumulator index
-        let acc_a = 5; // accumulator index
-        let instructions = vec![
-            LocalGet { local_index: 0 },
-            LocalGet { local_index: 1 },
-            I32GeU,
-            If {
-                blockty: BlockType::Empty,
+    // function to count clean pages in a given range
+    // Arg 0 - start of the range
+    // Arg 1 - end of the range
+    // Return index 0 is the number of pages that haven't been written to in the given range
+    // Return index 1 is the number of pages that haven't been accessed in the given range.
+    let func_type = FuncType::new([ValType::I32, ValType::I32], [ValType::I32, ValType::I32]);
+    let it = 2; // iterator index
+    let tmp = 3;
+    let acc_w = 4; // accumulator index
+    let acc_a = 5; // accumulator index
+    let instructions = vec![
+        LocalGet { local_index: 0 },
+        LocalGet { local_index: 1 },
+        I32GeU,
+        If {
+            blockty: BlockType::Empty,
+        },
+        // If range is empty, return early
+        I32Const { value: 0 },
+        I32Const { value: 0 },
+        Return,
+        End,
+        LocalGet { local_index: 0 },
+        LocalSet { local_index: it },
+        Loop {
+            blockty: BlockType::Empty,
+        },
+        LocalGet { local_index: it },
+        // TODO read in bigger chunks (i64Load)
+        I32Load8U {
+            memarg: wasmparser::MemArg {
+                align: 0,
+                max_align: 0,
+                offset: 0,
+                // We assume the bytemap for stable memory is always
+                // inserted directly after the stable memory.
+                memory: special_indices.stable_memory_index + 1,
             },
-            // If range is empty, return early
-            I32Const { value: 0 },
-            I32Const { value: 0 },
-            Return,
-            End,
-            LocalGet { local_index: 0 },
-            LocalSet { local_index: it },
-            Loop {
-                blockty: BlockType::Empty,
-            },
-            LocalGet { local_index: it },
-            // TODO read in bigger chunks (i64Load)
-            I32Load8U {
-                memarg: wasmparser::MemArg {
-                    align: 0,
-                    max_align: 0,
-                    offset: 0,
-                    // We assume the bytemap for stable memory is always
-                    // inserted directly after the stable memory.
-                    memory: special_indices.stable_memory_index + 1,
-                },
-            },
-            LocalTee { local_index: tmp },
-            I32Const { value: 1 }, //write bit
-            I32And,
-            // update acc_w
-            LocalGet { local_index: acc_w },
-            I32Add,
-            LocalSet { local_index: acc_w },
-            // get access bit
-            LocalGet { local_index: tmp },
-            I32Const { value: 1 },
-            I32ShrU,
-            I32Const { value: 1 },
-            I32And,
-            // update acc_a
-            LocalGet { local_index: acc_a },
-            I32Add,
-            LocalSet { local_index: acc_a },
-            LocalGet { local_index: it },
-            I32Const { value: 1 },
-            I32Add,
-            LocalTee { local_index: it },
-            LocalGet { local_index: 1 },
-            I32LtU,
-            BrIf { relative_depth: 0 },
-            End,
-            // clean pages = len - dirty_count
-            LocalGet { local_index: 1 },
-            LocalGet { local_index: 0 },
-            I32Sub,
-            LocalGet { local_index: acc_w },
-            I32Sub,
-            // non-accessed pages
-            LocalGet { local_index: 1 },
-            LocalGet { local_index: 0 },
-            I32Sub,
-            LocalGet { local_index: acc_a },
-            I32Sub,
-            End,
-        ];
-        let func_body = ic_wasm_transform::Body {
-            locals: vec![(4, ValType::I32)],
-            instructions,
-        };
-        let type_idx = add_func_type(&mut module, func_type);
-        module.functions.push(type_idx);
-        module.code_sections.push(func_body);
-    }
+        },
+        LocalTee { local_index: tmp },
+        I32Const { value: 1 }, //write bit
+        I32And,
+        // update acc_w
+        LocalGet { local_index: acc_w },
+        I32Add,
+        LocalSet { local_index: acc_w },
+        // get access bit
+        LocalGet { local_index: tmp },
+        I32Const { value: 1 },
+        I32ShrU,
+        I32Const { value: 1 },
+        I32And,
+        // update acc_a
+        LocalGet { local_index: acc_a },
+        I32Add,
+        LocalSet { local_index: acc_a },
+        LocalGet { local_index: it },
+        I32Const { value: 1 },
+        I32Add,
+        LocalTee { local_index: it },
+        LocalGet { local_index: 1 },
+        I32LtU,
+        BrIf { relative_depth: 0 },
+        End,
+        // clean pages = len - dirty_count
+        LocalGet { local_index: 1 },
+        LocalGet { local_index: 0 },
+        I32Sub,
+        LocalGet { local_index: acc_w },
+        I32Sub,
+        // non-accessed pages
+        LocalGet { local_index: 1 },
+        LocalGet { local_index: 0 },
+        I32Sub,
+        LocalGet { local_index: acc_a },
+        I32Sub,
+        End,
+    ];
+    let func_body = ic_wasm_transform::Body {
+        locals: vec![(4, ValType::I32)],
+        instructions,
+    };
+    let type_idx = add_func_type(&mut module, func_type);
+    module.functions.push(type_idx);
+    module.code_sections.push(func_body);
 
     // globals must be exported to be accessible to hypervisor or persisted
     let counter_export = Export {
@@ -1313,25 +1305,21 @@ fn export_additional_symbols<'a>(
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&counter_export.name));
     module.exports.push(counter_export);
 
-    if let Some(index) = special_indices.dirty_pages_counter_ix {
-        let export = Export {
-            name: DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-            kind: ExternalKind::Global,
-            index,
-        };
-        debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
-        module.exports.push(export);
-    }
+    let export = Export {
+        name: DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        kind: ExternalKind::Global,
+        index: special_indices.dirty_pages_counter_ix,
+    };
+    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
+    module.exports.push(export);
 
-    if let Some(index) = special_indices.accessed_pages_counter_ix {
-        let export = Export {
-            name: ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
-            kind: ExternalKind::Global,
-            index,
-        };
-        debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
-        module.exports.push(export);
-    }
+    let export = Export {
+        name: ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        kind: ExternalKind::Global,
+        index: special_indices.accessed_pages_counter_ix,
+    };
+    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
+    module.exports.push(export);
 
     if let Some(index) = special_indices.start_fn_ix {
         // push canister_start
@@ -1349,35 +1337,36 @@ fn export_additional_symbols<'a>(
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
+            shared: false,
         },
         init_expr: Operator::I64Const { value: 0 },
     });
 
-    if wasm_native_stable_memory == FlagStatus::Enabled {
-        // push the dirty page counter
-        module.globals.push(Global {
-            ty: GlobalType {
-                content_type: ValType::I64,
-                mutable: true,
-            },
-            init_expr: Operator::I64Const { value: 0 },
-        });
-        // push the accessed page counter
-        module.globals.push(Global {
-            ty: GlobalType {
-                content_type: ValType::I64,
-                mutable: true,
-            },
-            init_expr: Operator::I64Const { value: 0 },
-        });
-    }
+    // push the dirty page counter
+    module.globals.push(Global {
+        ty: GlobalType {
+            content_type: ValType::I64,
+            mutable: true,
+            shared: false,
+        },
+        init_expr: Operator::I64Const { value: 0 },
+    });
+    // push the accessed page counter
+    module.globals.push(Global {
+        ty: GlobalType {
+            content_type: ValType::I64,
+            mutable: true,
+            shared: false,
+        },
+        init_expr: Operator::I64Const { value: 0 },
+    });
 
     module
 }
 
 // Represents a hint about the context of each static cost injection point in
 // wasm.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Scope {
     ReentrantBlockStart,
     NonReentrantBlockStart,
@@ -1386,7 +1375,7 @@ enum Scope {
 
 // Represents the type of the cost operand on the stack.
 // Needed to determine the correct instruction to decrement the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum CostOperandOnStack {
     X32Bit,
     X64Bit,
@@ -1395,7 +1384,7 @@ enum CostOperandOnStack {
 // `StaticCost` injection points contain information about the cost of the
 // following basic block. `DynamicCost` injection points assume there is an i32
 // on the stack which should be decremented from the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum InjectionPointCostDetail {
     StaticCost {
         scope: Scope,
@@ -1810,7 +1799,8 @@ fn injections(code: &[Operator], mem_type: WasmMemoryType) -> Vec<InjectionPoint
     // functions should consume at least some fuel.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
+        curr.cost_detail
+            .increment_cost(instruction_to_cost(i, mem_type));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
@@ -1952,12 +1942,9 @@ fn export_table(mut module: Module) -> Module {
 fn update_memories(
     mut module: Module,
     write_barrier: FlagStatus,
-    wasm_native_stable_memory: FlagStatus,
     max_wasm_memory_size: NumBytes,
     max_stable_memory_size: NumBytes,
 ) -> (Module, u32) {
-    let mut stable_index = 0;
-
     if let Some(mem) = module.memories.first_mut() {
         if mem.memory64 {
             let max_wasm_memory_size_in_wasm_pages =
@@ -2000,6 +1987,7 @@ fn update_memories(
             shared: false,
             initial: wasm_bytemap_size_in_wasm_pages,
             maximum: Some(wasm_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2009,36 +1997,36 @@ fn update_memories(
         });
     }
 
-    if wasm_native_stable_memory == FlagStatus::Enabled {
-        stable_index = module.memories.len() as u32;
-        module.memories.push(MemoryType {
-            memory64: true,
-            shared: false,
-            initial: 0,
-            maximum: Some(max_memory_size_in_wasm_pages(max_stable_memory_size)),
-        });
+    let stable_index = module.memories.len() as u32;
+    module.memories.push(MemoryType {
+        memory64: true,
+        shared: false,
+        initial: 0,
+        maximum: Some(max_memory_size_in_wasm_pages(max_stable_memory_size)),
+        page_size_log2: None,
+    });
 
-        module.exports.push(Export {
-            name: STABLE_MEMORY_NAME,
-            kind: ExternalKind::Memory,
-            index: stable_index,
-        });
+    module.exports.push(Export {
+        name: STABLE_MEMORY_NAME,
+        kind: ExternalKind::Memory,
+        index: stable_index,
+    });
 
-        let stable_bytemap_size_in_wasm_pages = bytemap_size_in_wasm_pages(max_stable_memory_size);
-        module.memories.push(MemoryType {
-            memory64: false,
-            shared: false,
-            initial: stable_bytemap_size_in_wasm_pages,
-            maximum: Some(stable_bytemap_size_in_wasm_pages),
-        });
+    let stable_bytemap_size_in_wasm_pages = bytemap_size_in_wasm_pages(max_stable_memory_size);
+    module.memories.push(MemoryType {
+        memory64: false,
+        shared: false,
+        initial: stable_bytemap_size_in_wasm_pages,
+        maximum: Some(stable_bytemap_size_in_wasm_pages),
+        page_size_log2: None,
+    });
 
-        module.exports.push(Export {
-            name: STABLE_BYTEMAP_MEMORY_NAME,
-            kind: ExternalKind::Memory,
-            // Bytemap for a memory needs to be placed at the next index after the memory
-            index: stable_index + 1,
-        })
-    }
+    module.exports.push(Export {
+        name: STABLE_BYTEMAP_MEMORY_NAME,
+        kind: ExternalKind::Memory,
+        // Bytemap for a memory needs to be placed at the next index after the memory
+        index: stable_index + 1,
+    });
 
     (module, stable_index)
 }

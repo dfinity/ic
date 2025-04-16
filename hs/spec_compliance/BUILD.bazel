@@ -77,6 +77,10 @@ haskell_binary(
     srcs = [
         "bin/ic-ref-test.hs",
     ],
+    ghcopts = [
+        "-threaded",  # use the threaded Run Time System (RTS)
+        "-rtsopts",  # allow passing RTS options like: +RTS -N -RTS
+    ],
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//visibility:public"],
     deps = STACK_DEPS + [
@@ -123,7 +127,6 @@ haskell_binary(
         ":IC-Test-Spec",
         ":IC-Test-Spec-CanisterHistory",
         ":IC-Test-Spec-CanisterVersion",
-        ":IC-Test-Spec-HTTP",
         ":IC-Test-Spec-Timer",
         ":IC-Test-Spec-Utils",
         ":IC-Test-Universal",
@@ -594,7 +597,6 @@ haskell_library(
         ":IC-Test-Agent-UserCalls",
         ":IC-Test-Spec-CanisterHistory",
         ":IC-Test-Spec-CanisterVersion",
-        ":IC-Test-Spec-HTTP",
         ":IC-Test-Spec-Timer",
         ":IC-Test-Spec-Utils",
         ":IC-Test-Universal",
@@ -652,27 +654,6 @@ haskell_library(
         ":IC-Test-Spec-Utils",
         ":IC-Test-Universal",
         ":IC-Types",
-        "@haskell-candid//:candid",
-        "@miracl-core//:lib",
-    ],
-)
-
-haskell_library(
-    name = "IC-Test-Spec-HTTP",
-    srcs = ["src/IC/Test/Spec/HTTP.hs"],
-    src_strip_prefix = "src",
-    target_compatible_with = ["@platforms//os:linux"],
-    deps = STACK_DEPS + [
-        ":IC-Constants",
-        ":IC-Id-Fresh",
-        ":IC-Management",
-        ":IC-Test-Agent",
-        ":IC-Test-Agent-SafeCalls",
-        ":IC-Test-Agent-UnsafeCalls",
-        ":IC-Test-Spec-Utils",
-        ":IC-Test-Universal",
-        ":IC-Types",
-        ":IC-Utils",
         "@haskell-candid//:candid",
         "@miracl-core//:lib",
     ],

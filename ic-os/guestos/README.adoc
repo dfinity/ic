@@ -40,7 +40,7 @@ Instead of running GuestOS locally in qemu, you can launch a GuestOS virtual mac
 
 The program will spin up a new GuestOS VM on Farm, and the machine can then be accessed via SSH.
 
-For more details about the program, refer to the `rs/ic_os/launch-single-vm` directory.
+For more details about the program, refer to the `rs/ic_os/dev_test_tools/launch-single-vm` directory.
 
 == Developing the Ubuntu system
 
@@ -49,3 +49,19 @@ See instructions link:components/README.adoc#[here] on how to make changes to th
 
 For further reading, see the docs in the
 link:docs/README.adoc#[docs/ subdirectory]
+
+== Performance Benchmarking
+
+Performance benchmarks are run in GuestOS, on hardware, every day during the nightly
+link:../../.github/workflows-source/schedule-daily.yml[`Bazel Test Bare Metal`] job.
+
+This job runs commands from link:../dev-tools/bare_metal_deployment/benchmark_runner.sh[`benchmark_runner.sh`],
+and expects that results are placed into the `results` folder on the node. All results are then
+dumped into the logs of the CI job.
+
+Currently, node metrics are not collected, but we hope to point the monitoring infrastructure at
+this node to track performance changes over time.
+
+These benchmarks can be run manually, following the benchmarking instructions
+link:../dev-tools/bare_metal_deployment/README.md[here], but it is easiest to trigger the nightly
+job via https://github.com/dfinity/ic/actions.

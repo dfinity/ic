@@ -11,6 +11,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
+    checkpoint::{flush_canister_snapshots_and_page_maps, PageMapType},
     manifest::compute_bundled_manifest,
     state_sync::{
         chunkable::cache::StateSyncCache,
@@ -32,26 +33,22 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
-    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
-    StateManagerResult, StateReader, TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
+    CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
+    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
+    TransientStateHashError::*,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    canister_snapshots::SnapshotOperation, page_map::PageAllocatorFileDescriptor,
-};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
     page_map::{PersistenceError, StorageMetrics},
-    PageIndex, PageMap, ReplicatedState,
+    PageMap, ReplicatedState,
 };
-use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CheckpointLayout, PageMapLayout, ReadOnly, StateLayout,
-};
+use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, StateLayout};
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
@@ -59,15 +56,15 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SnapshotId,
-    SubnetId,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
-use ic_utils_thread::JoinOnDrop;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::ops::Deref;
 use std::os::unix::io::RawFd;
 use std::os::unix::prelude::IntoRawFd;
 use std::path::{Path, PathBuf};
@@ -104,6 +101,10 @@ const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
 pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
     "state_manager_checkpoint_soft_invariant_broken";
 
+/// Critical error tracking ReplicatedState altering after checkpoint.
+const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
+    "state_manager_replicated_state_altered_after_checkpoint";
+
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
@@ -139,6 +140,7 @@ pub struct StateManagerMetrics {
     api_call_duration: HistogramVec,
     last_diverged_state_timestamp: IntGauge,
     latest_certified_height: IntGauge,
+    certification_duration: Histogram,
     max_resident_height: IntGauge,
     min_resident_height: IntGauge,
     last_computed_manifest_height: IntGauge,
@@ -186,9 +188,9 @@ pub struct CheckpointMetrics {
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
     load_checkpoint_soft_invariant_broken: IntCounter,
+    replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
-    page_map_flushes: IntCounter,
-    page_map_flush_skips: IntCounter,
+    num_page_maps_by_load_status: IntGaugeVec,
     log: ReplicaLogger,
 }
 
@@ -220,6 +222,9 @@ impl CheckpointMetrics {
         let load_checkpoint_soft_invariant_broken =
             metrics_registry.error_counter(CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN);
 
+        let replicated_state_altered_after_checkpoint = metrics_registry
+            .error_counter(CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -228,23 +233,19 @@ impl CheckpointMetrics {
             &["request"],
         );
 
-        let page_map_flushes = metrics_registry.int_counter(
-            "state_manager_page_map_flushes",
-            "Amount of sent FlushPageMap requests.",
+        let num_page_maps_by_load_status = metrics_registry.int_gauge_vec(
+            "state_manager_num_page_maps_by_load_status",
+            "How many PageMaps are loaded or not at the end of checkpoint interval.",
+            &["status"],
         );
-        let page_map_flush_skips = metrics_registry.int_counter(
-            "state_manager_page_map_flush_skips",
-            "Amount of FlushPageMap requests that were skipped.",
-        );
-
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
             load_canister_step_duration,
             load_checkpoint_soft_invariant_broken,
+            replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
-            page_map_flushes,
-            page_map_flush_skips,
+            num_page_maps_by_load_status,
             log: replica_logger,
         }
     }
@@ -310,7 +311,7 @@ impl MergeMetrics {
 // very first metric update should be visible to Prometheus.
 
 impl StateManagerMetrics {
-    fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
         let checkpoint_op_duration = metrics_registry.histogram_vec(
             "state_manager_checkpoint_op_duration_seconds",
             "Duration of checkpoint operations in seconds.",
@@ -347,6 +348,13 @@ impl StateManagerMetrics {
             "Height of the latest certified state.",
         );
 
+        let certification_latency = metrics_registry.histogram(
+            "state_manager_certification_latency_seconds",
+            "Wall time taken to deliver a certification, in seconds.",
+            // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 10s, 20s, 50s
+            decimal_buckets(-3, 2),
+        );
+
         let min_resident_height = metrics_registry.int_gauge(
             "state_manager_min_resident_height",
             "Height of the oldest state resident in memory.",
@@ -364,7 +372,7 @@ impl StateManagerMetrics {
 
         let checkpoints_on_disk_count = metrics_registry.int_gauge(
             "state_manager_checkpoints_on_disk_count",
-            "Number of checkpoints on disk, independent of if they are loaded or not.",
+            "Number of verified checkpoints on disk, independent of if they are loaded or not.",
         );
 
         let last_computed_manifest_height = metrics_registry.int_gauge(
@@ -423,6 +431,7 @@ impl StateManagerMetrics {
             api_call_duration,
             last_diverged_state_timestamp,
             latest_certified_height,
+            certification_duration: certification_latency,
             max_resident_height,
             min_resident_height,
             last_computed_manifest_height,
@@ -624,14 +633,14 @@ type StatesMetadata = BTreeMap<Height, StateMetadata>;
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
 /// This struct bundles the root hash, manifest and meta-manifest.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct BundledManifest {
     root_hash: CryptoHashOfState,
     manifest: Manifest,
     meta_manifest: Arc<MetaManifest>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct StateMetadata {
     /// We don't persist the checkpoint layout because we re-create it every
     /// time we discover a checkpoint on disk.
@@ -702,6 +711,8 @@ struct CertificationMetadata {
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
+    /// Wall time when certification was requested.
+    certification_requested_at: Instant,
 }
 
 fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
@@ -765,14 +776,6 @@ impl SharedState {
     }
 }
 
-// We send complex objects to a different thread to free them. This will spread
-// the cost of deallocation over a longer period of time, and avoid long pauses.
-type Deallocation = Box<dyn std::any::Any + Send + 'static>;
-
-// We will not use the deallocation thread when the number of pending
-// deallocation objects goes above the threshold.
-const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
-
 /// The number of archived and diverged states to keep before we start deleting the old ones.
 const MAX_ARCHIVED_DIVERGED_CHECKPOINTS_TO_KEEP: usize = 1;
 
@@ -794,19 +797,17 @@ pub struct StateManagerImpl {
     verifier: Arc<dyn Verifier>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-    deallocation_sender: Sender<Deallocation>,
+    deallocator_thread: DeallocatorThread,
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
-    _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
-    lsmt_status: FlagStatus,
 }
 
 #[cfg(debug_assertions)]
@@ -825,25 +826,22 @@ fn load_checkpoint(
     metrics: &StateManagerMetrics,
     own_subnet_type: SubnetType,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<ReplicatedState, CheckpointError> {
+) -> Result<(ReplicatedState, CheckpointLayout<ReadOnly>), CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
-    state_layout
-        .checkpoint(height)
-        .map_err(|e| e.into())
-        .and_then(|layout| {
-            let _timer = metrics
-                .checkpoint_op_duration
-                .with_label_values(&["recover"])
-                .start_timer();
-            checkpoint::load_checkpoint(
-                &layout,
-                own_subnet_type,
-                &metrics.checkpoint_metrics,
-                Some(&mut thread_pool),
-                Arc::clone(&fd_factory),
-            )
-        })
+    let cp_layout = state_layout.checkpoint_verified(height)?;
+    let _timer = metrics
+        .checkpoint_op_duration
+        .with_label_values(&["recover"])
+        .start_timer();
+    let state = checkpoint::load_checkpoint(
+        &cp_layout,
+        own_subnet_type,
+        &metrics.checkpoint_metrics,
+        Some(&mut thread_pool),
+        Arc::clone(&fd_factory),
+    )?;
+    Ok((state, cp_layout))
 }
 
 #[cfg(debug_assertions)]
@@ -862,9 +860,6 @@ fn check_certifications_metadata_snapshots_and_states_metadata_are_consistent(
         .filter(|h| h.get() != 0)
         .collect::<Vec<_>>();
     debug_assert_eq!(certification_heights, snapshot_heights);
-    for h in states.states_metadata.keys() {
-        debug_assert!(states.certifications_metadata.contains_key(h));
-    }
 }
 
 fn initialize_tip(
@@ -874,6 +869,8 @@ fn initialize_tip(
     checkpoint_layout: CheckpointLayout<ReadOnly>,
 ) -> ReplicatedState {
     debug_assert_eq!(snapshot.height, checkpoint_layout.height());
+
+    info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
     // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
     #[cfg(debug_assertions)]
@@ -898,26 +895,13 @@ fn initialize_tip(
         }
     }
 
-    info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
-
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
-            pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
-            is_initializing_tip: true,
+            pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
-}
-
-fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
-    let mut result = Vec::new();
-    for entry in PageMapType::list_all_including_snapshots(state) {
-        if let Some(page_map) = entry.get(state) {
-            result.push((entry, page_map.num_host_pages()));
-        }
-    }
-    result
 }
 
 /// Return duration since path creation (or modification, if no creation)
@@ -1065,277 +1049,119 @@ struct PopulatedMetadata {
     snapshots_with_checkpoint_layouts: Vec<(Snapshot, CheckpointLayout<ReadOnly>)>,
 }
 
-/// An enum describing all possible PageMaps in ReplicatedState
-/// When adding additional PageMaps, add an appropriate entry here
-/// to enable all relevant state manager features, e.g. incremental
-/// manifest computations
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum PageMapType {
-    WasmMemory(CanisterId),
-    StableMemory(CanisterId),
-    WasmChunkStore(CanisterId),
-    SnapshotWasmMemory(SnapshotId),
-    SnapshotStableMemory(SnapshotId),
-    SnapshotWasmChunkStore(SnapshotId),
-}
-
-impl PageMapType {
-    /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
-    fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
-        let mut result = vec![];
-        for (id, canister) in &state.canister_states {
-            result.push(Self::WasmChunkStore(id.to_owned()));
-            if canister.execution_state.is_some() {
-                result.push(Self::WasmMemory(id.to_owned()));
-                result.push(Self::StableMemory(id.to_owned()));
-            }
-        }
-
-        result
-    }
-
-    /// List all PageMaps contained in `state`, including those in snapshots.
-    fn list_all_including_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
-        let mut result = Self::list_all_without_snapshots(state);
-        for (id, _snapshot) in state.canister_snapshots.iter() {
-            result.push(Self::SnapshotWasmMemory(id.to_owned()));
-            result.push(Self::SnapshotStableMemory(id.to_owned()));
-            result.push(Self::SnapshotWasmChunkStore(id.to_owned()));
-        }
-
-        result
-    }
-
-    /// The layout of the files on disk for this PageMap.
-    fn layout<Access>(
-        &self,
-        layout: &CheckpointLayout<Access>,
-    ) -> Result<PageMapLayout<Access>, LayoutError>
-    where
-        Access: AccessPolicy,
-    {
-        match &self {
-            PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
-            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory()),
-            PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
-            PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot(id)?.vmemory_0()),
-            PageMapType::SnapshotStableMemory(id) => Ok(layout.snapshot(id)?.stable_memory()),
-            PageMapType::SnapshotWasmChunkStore(id) => Ok(layout.snapshot(id)?.wasm_chunk_store()),
-        }
-    }
-
-    /// Maps a PageMapType to the the `&PageMap` in `state`
-    fn get<'a>(&self, state: &'a ReplicatedState) -> Option<&'a PageMap> {
-        match &self {
-            PageMapType::WasmMemory(id) => state.canister_state(id).and_then(|can| {
-                can.execution_state
-                    .as_ref()
-                    .map(|ex| &ex.wasm_memory.page_map)
-            }),
-            PageMapType::StableMemory(id) => state.canister_state(id).and_then(|can| {
-                can.execution_state
-                    .as_ref()
-                    .map(|ex| &ex.stable_memory.page_map)
-            }),
-            PageMapType::WasmChunkStore(id) => state
-                .canister_state(id)
-                .map(|can| can.system_state.wasm_chunk_store.page_map()),
-            PageMapType::SnapshotWasmMemory(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| &snap.execution_snapshot().wasm_memory.page_map),
-            PageMapType::SnapshotStableMemory(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| &snap.execution_snapshot().stable_memory.page_map),
-            PageMapType::SnapshotWasmChunkStore(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| snap.chunk_store().page_map()),
-        }
-    }
-
-    /// Maps a PageMapType to the the `&mut PageMap` in `state`
-    fn get_mut<'a>(&self, state: &'a mut ReplicatedState) -> Option<&'a mut PageMap> {
-        match &self {
-            PageMapType::WasmMemory(id) => state.canister_state_mut(id).and_then(|can| {
-                can.execution_state
-                    .as_mut()
-                    .map(|ex| &mut ex.wasm_memory.page_map)
-            }),
-            PageMapType::StableMemory(id) => state.canister_state_mut(id).and_then(|can| {
-                can.execution_state
-                    .as_mut()
-                    .map(|ex| &mut ex.stable_memory.page_map)
-            }),
-            PageMapType::WasmChunkStore(id) => state
-                .canister_state_mut(id)
-                .map(|can| can.system_state.wasm_chunk_store.page_map_mut()),
-            // Snapshots are kept behind an `Arc` inside `state`, which makes the pattern of `list_all` and `get_mut` for pagemaps difficult
-            // without excessive copies.
-            // In the few places where we need to iterate over all pagemaps and modify them we instead handle snapshots separately.
-            // Note that this is not a problem in the many more places where we need to iterate over all pagemaps and only need read access.
-            PageMapType::SnapshotWasmMemory(_) => unimplemented!(),
-            PageMapType::SnapshotStableMemory(_) => unimplemented!(),
-            PageMapType::SnapshotWasmChunkStore(_) => unimplemented!(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DirtyPageMap {
-    pub height: Height,
-    pub page_type: PageMapType,
-    pub page_delta_indices: Vec<PageIndex>,
-}
-
-pub type DirtyPages = Vec<DirtyPageMap>;
-
-/// Get dirty pages of all PageMaps backed by a checkpoint
-/// file.
-pub fn get_dirty_pages(state: &ReplicatedState) -> DirtyPages {
-    PageMapType::list_all_without_snapshots(state) // Snapshots don't have dirty pages for the manifest computation.
-        .into_iter()
-        .filter_map(|entry| {
-            let page_map = entry.get(state)?;
-            let height = page_map.base_height?;
-            Some(DirtyPageMap {
-                height,
-                page_type: entry,
-                page_delta_indices: page_map.get_page_delta_indices(),
-            })
-        })
-        .collect()
-}
-
-/// Strips away the deltas from all page maps of the replicated state.
-/// We execute this procedure before making a checkpoint because we
-/// don't want those deltas to be persisted to TIP as we apply deltas
-/// incrementally.
-fn strip_page_map_deltas(
-    state: &mut ReplicatedState,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) {
-    PageMapType::list_all_without_snapshots(state)
-        .into_iter()
-        .for_each(|entry| {
-            if let Some(page_map) = entry.get_mut(state) {
-                assert!(page_map.unflushed_delta_is_empty());
-                page_map.strip_all_deltas(Arc::clone(&fd_factory));
-            }
-        });
-    for (_id, canister_snapshot) in state.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(canister_snapshot);
-        new_snapshot
-            .chunk_store_mut()
-            .page_map_mut()
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
-            .execution_snapshot_mut()
-            .wasm_memory
-            .page_map
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
-            .execution_snapshot_mut()
-            .stable_memory
-            .page_map
-            .strip_all_deltas(Arc::clone(&fd_factory));
-    }
-
-    // Reset the sandbox state to force full synchronization on the next execution
-    // since the page deltas are out of sync now.
-    for canister in state.canisters_iter_mut() {
-        if let Some(execution_state) = &mut canister.execution_state {
-            execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
-            execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
-        }
-    }
-}
-
-/// Switches `tip` to the most recent checkpoint file provided by `src`.
+/// Switches `tip` to the most recent checkpoint file provided by `layout`.
 ///
 /// Preconditions:
-/// 1) `tip` and `src` mut have exactly the same set of canisters.
-/// 2) The page deltas must be empty in both states.
+/// 1) `tip` and `layout` mut have exactly the same set of canisters.
+/// 2) The page deltas must be empty in `tip`
 /// 3) The memory sizes must match.
-fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
-    let maps = PageMapType::list_all_without_snapshots(src);
-    assert_eq!(maps, PageMapType::list_all_without_snapshots(tip));
+fn switch_to_checkpoint(
+    tip: &mut ReplicatedState,
+    layout: &CheckpointLayout<ReadOnly>,
+    fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        let canister_layout = layout.canister(tip_id).unwrap();
+        tip_canister
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(canister_layout.wasm_chunk_store()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
 
-    for map_type in maps {
-        let src_page_map_opt = map_type.get(src);
-        let tip_page_map_opt = map_type.get_mut(tip);
-
-        assert_eq!(src_page_map_opt.is_some(), tip_page_map_opt.is_some(),);
-
-        if let (Some(src_page_map), Some(tip_page_map)) = (src_page_map_opt, tip_page_map_opt) {
-            tip_page_map.switch_to_checkpoint(src_page_map);
+        if let Some(tip_execution) = tip_canister.execution_state.as_mut() {
+            tip_execution
+                .wasm_memory
+                .page_map
+                .switch_to_checkpoint(&PageMap::open(
+                    Box::new(canister_layout.vmemory_0()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )?);
+            tip_execution
+                .stable_memory
+                .page_map
+                .switch_to_checkpoint(&PageMap::open(
+                    Box::new(canister_layout.stable_memory()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )?);
         }
     }
 
-    for ((tip_id, tip_snapshot), (src_id, src_snapshot)) in tip
-        .canister_snapshots
-        .iter_mut()
-        .zip(src.canister_snapshots.iter())
-    {
+    for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
         let new_snapshot = Arc::make_mut(tip_snapshot);
-
-        assert_eq!(tip_id, src_id);
+        let snapshot_layout = layout.snapshot(tip_id).unwrap();
 
         new_snapshot
             .chunk_store_mut()
             .page_map_mut()
-            .switch_to_checkpoint(src_snapshot.chunk_store().page_map());
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.wasm_chunk_store()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
 
         new_snapshot
             .execution_snapshot_mut()
             .wasm_memory
             .page_map
-            .switch_to_checkpoint(&src_snapshot.execution_snapshot().wasm_memory.page_map);
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.vmemory_0()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
         new_snapshot
             .execution_snapshot_mut()
             .stable_memory
             .page_map
-            .switch_to_checkpoint(&src_snapshot.execution_snapshot().stable_memory.page_map);
+            .switch_to_checkpoint(&PageMap::open(
+                Box::new(snapshot_layout.stable_memory()),
+                layout.height(),
+                Arc::clone(fd_factory),
+            )?);
+
+        let wasm_binary = snapshot_layout.wasm().deserialize(
+            new_snapshot
+                .execution_snapshot()
+                .wasm_binary
+                .module_hash()
+                .into(),
+        )?;
+        new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
-    for (tip_canister, src_canister) in tip.canisters_iter_mut().zip(src.canisters_iter()) {
-        assert_eq!(
-            tip_canister.system_state.canister_id,
-            src_canister.system_state.canister_id
-        );
-        assert_eq!(
-            tip_canister.execution_state.is_some(),
-            src_canister.execution_state.is_some(),
-            "execution state of canister {} unexpectedly (dis)appeared after creating a checkpoint",
-            tip_canister.system_state.canister_id
-        );
-        if let (Some(tip_state), Some(src_state)) = (
-            &mut tip_canister.execution_state,
-            &src_canister.execution_state,
-        ) {
-            debug_assert_eq!(
-                tip_state.wasm_binary.binary.as_slice(),
-                src_state.wasm_binary.binary.as_slice()
-            );
+    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+        if let Some(tip_state) = &mut tip_canister.execution_state {
+            let canister_layout = layout.canister(tip_id).unwrap();
 
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
+            let wasm_binary = canister_layout
+                .wasm()
+                .deserialize(tip_state.wasm_binary.binary.module_hash().into())?;
+            debug_assert_eq!(
+                tip_state.wasm_binary.binary.as_slice(),
+                wasm_binary.as_slice()
+            );
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
-                    binary: src_state.wasm_binary.binary.clone(),
+                    binary: wasm_binary,
                     embedder_cache,
                 },
             );
 
-            assert_eq!(tip_state.wasm_memory.size, src_state.wasm_memory.size);
             // Reset the sandbox state to force full synchronization on the next message
             // execution because the checkpoint file of `tip` has changed.
             tip_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             tip_state.stable_memory.sandbox_memory = SandboxMemory::new();
         }
     }
+    Ok(())
 }
 
 /// Persists metadata after releasing the write lock
@@ -1423,7 +1249,8 @@ fn persist_metadata_or_die(
 }
 
 struct CreateCheckpointResult {
-    checkpointed_state: ReplicatedState,
+    // ReplicatedState switched to the new checkpoint.
+    state: Arc<ReplicatedState>,
     state_metadata: StateMetadata,
     // TipRequest to compute manifest.
     compute_manifest_request: TipRequest,
@@ -1496,24 +1323,36 @@ impl StateManagerImpl {
         info!(log, "Loading metadata took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
-        let checkpoint_heights = state_layout
-            .checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
-
-        for h in checkpoint_heights {
-            let cp_layout = state_layout.checkpoint_untracked(h).unwrap_or_else(|err| {
+        // Archive unverified checkpoints.
+        let unfiltered_checkpoint_heights = state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| {
                 fatal!(
-                    log,
-                    "Failed to create untracked checkpoint layout @{}: {}",
-                    h,
+                    &log,
+                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
                     err
                 )
             });
-            if cp_layout.unverified_checkpoint_marker().exists() {
-                info!(log, "Archiving unverified checkpoint {} ", h);
-                state_layout
-                    .archive_checkpoint(h)
-                    .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+
+        for h in unfiltered_checkpoint_heights {
+            match state_layout.checkpoint_verification_status(h) {
+                // If the checkpoint is verified, we don't need to do anything.
+                Ok(true) => {}
+                // If the checkpoint is unverified, we archive it.
+                Ok(false) => {
+                    info!(log, "Archiving unverified checkpoint {}", h);
+                    state_layout
+                        .archive_checkpoint(h)
+                        .unwrap_or_else(|err| fatal!(&log, "{:?}", err))
+                }
+                Err(err) => {
+                    fatal!(
+                        log,
+                        "Failed to retrieve the checkpoint status @{} from disk: {}",
+                        h,
+                        err
+                    )
+                }
             }
         }
 
@@ -1578,15 +1417,17 @@ impl StateManagerImpl {
         let states = checkpoint_heights
             .iter()
             .map(|height| {
-                let cp_layout = state_layout.checkpoint(*height).unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to create checkpoint layout @{}: {}",
-                        height,
-                        err
-                    )
-                });
-                let state = checkpoint::load_checkpoint_parallel(
+                let cp_layout = state_layout
+                    .checkpoint_verified(*height)
+                    .unwrap_or_else(|err| {
+                        fatal!(
+                            log,
+                            "Failed to create checkpoint layout @{}: {}",
+                            height,
+                            err
+                        )
+                    });
+                let state = checkpoint::load_checkpoint_and_validate_parallel(
                     &cp_layout,
                     own_subnet_type,
                     &metrics.checkpoint_metrics,
@@ -1596,7 +1437,7 @@ impl StateManagerImpl {
                     fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
                 });
 
-                (*height, state)
+                (cp_layout, state)
             })
             .collect();
 
@@ -1612,13 +1453,7 @@ impl StateManagerImpl {
             states_metadata,
             checkpoint_layouts_to_compute_manifest,
             snapshots_with_checkpoint_layouts,
-        } = Self::populate_metadata(
-            &log,
-            &metrics,
-            &state_layout,
-            loaded_states_metadata,
-            states,
-        );
+        } = Self::populate_metadata(&log, &metrics, loaded_states_metadata, states);
 
         info!(
             log,
@@ -1665,7 +1500,7 @@ impl StateManagerImpl {
             .zip(snapshots.iter().skip(1))
             .all(|(s0, s1)| s0.height < s1.height));
 
-        let last_snapshot_height = snapshots.back().map(|s| s.height.get() as i64).unwrap_or(0);
+        let last_snapshot_height = snapshots.back().map_or(0, |s| s.height.get() as i64);
 
         metrics.resident_state_count.set(snapshots.len() as i64);
 
@@ -1683,22 +1518,8 @@ impl StateManagerImpl {
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
-        #[allow(clippy::disallowed_methods)]
-        let (deallocation_sender, deallocation_receiver) = unbounded();
-        let _deallocation_handle = JoinOnDrop::new(
-            std::thread::Builder::new()
-                .name("StateDeallocation".to_string())
-                .spawn({
-                    move || {
-                        while let Ok(object) = deallocation_receiver.recv() {
-                            std::mem::drop(object);
-                            // The sleep below is to spread out the load on memory allocator
-                            std::thread::sleep(std::time::Duration::from_millis(1));
-                        }
-                    }
-                })
-                .expect("failed to spawn background deallocation thread"),
-        );
+        let deallocator_thread =
+            DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
         for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
             tip_channel
@@ -1721,17 +1542,15 @@ impl StateManagerImpl {
             verifier,
             own_subnet_id,
             own_subnet_type,
-            deallocation_sender,
+            deallocator_thread,
             latest_state_height,
             latest_certified_height,
-            _deallocation_handle,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
-            lsmt_status: config.lsmt_config.lsmt_status,
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -1745,6 +1564,32 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Populate `num_page_maps_by_load_status` in the metrics with their actual
+    /// values in provided state.
+    fn observe_num_loaded_pagemaps(&self, state: &ReplicatedState) {
+        let mut loaded = 0;
+        let mut not_loaded = 0;
+        for entry in PageMapType::list_all_including_snapshots(state) {
+            if let Some(page_map) = entry.get(state) {
+                if page_map.is_loaded() {
+                    loaded += 1;
+                } else {
+                    not_loaded += 1;
+                }
+            }
+        }
+        self.metrics
+            .checkpoint_metrics
+            .num_page_maps_by_load_status
+            .with_label_values(&["loaded"])
+            .set(loaded);
+        self.metrics
+            .checkpoint_metrics
+            .num_page_maps_by_load_status
+            .with_label_values(&["not_loaded"])
+            .set(not_loaded);
     }
 
     /// Reads states metadata file, returning an empty one if any errors occurs.
@@ -1788,7 +1633,12 @@ impl StateManagerImpl {
                     match StateMetadata::try_from(pb) {
                         Ok(meta) => {
                             if let Some(root_hash) = meta.root_hash() {
-                                info!(log, "Recomputed root hash {:?} when loading state metadata at height {}", root_hash, h);
+                                info!(
+                                    log,
+                                    "Root hash {:?} when loading state metadata at height {}",
+                                    root_hash,
+                                    h
+                                );
                             }
                             map.insert(Height::new(h), meta);
                         }
@@ -1909,6 +1759,7 @@ impl StateManagerImpl {
             hash_tree: Some(Arc::new(hash_tree)),
             certified_state_hash,
             certification: None,
+            certification_requested_at: Instant::now(),
         })
     }
 
@@ -1918,9 +1769,8 @@ impl StateManagerImpl {
     fn populate_metadata(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
-        layout: &StateLayout,
         mut metadatas: BTreeMap<Height, StateMetadata>,
-        states: Vec<(Height, ReplicatedState)>,
+        states: Vec<(CheckpointLayout<ReadOnly>, ReplicatedState)>,
     ) -> PopulatedMetadata {
         let mut checkpoint_layouts_to_compute_manifest = Vec::<CheckpointLayout<ReadOnly>>::new();
 
@@ -1929,14 +1779,13 @@ impl StateManagerImpl {
         let mut snapshots_with_checkpoint_layouts: Vec<(Snapshot, CheckpointLayout<ReadOnly>)> =
             Default::default();
 
-        for (height, state) in states {
+        for (checkpoint_layout, state) in states {
+            let height = checkpoint_layout.height();
             certifications_metadata.insert(
                 height,
                 Self::compute_certification_metadata(metrics, log, &state)
                     .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
             );
-
-            let checkpoint_layout = layout.checkpoint(height).unwrap();
 
             let metadata = metadatas.remove(&height);
 
@@ -2014,89 +1863,6 @@ impl StateManagerImpl {
         }
     }
 
-    /// Flushes to disk all the canister heap deltas accumulated in memory
-    /// during execution from the last flush.
-    fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
-        self.metrics.checkpoint_metrics.page_map_flushes.inc();
-        let mut pagemaps = Vec::new();
-
-        let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
-            // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
-            // created one. In these cases, we also need to wipe the data from the file on disk.
-            // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
-            // when loading a PageMap from a checkpoint. Furthermore, we only want to wipe data from the file on
-            // disk before applying any unflushed deltas of that PageMap. We detect this case by looking at
-            // has_stripped_unflushed_deltas, which will be false at the beginning, but true as soon as we strip unflushed
-            // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
-            // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
-            // unlushed delta, and we truncate the file on disk to size 0.
-            let truncate =
-                page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas();
-            let page_map_clone = if !page_map.unflushed_delta_is_empty() {
-                Some(page_map.clone())
-            } else {
-                None
-            };
-            if truncate || page_map_clone.is_some() {
-                pagemaps.push(PageMapToFlush {
-                    page_map_type: entry,
-                    truncate,
-                    page_map: page_map_clone,
-                });
-            }
-            // We strip empty unflushed deltas to keep has_stripped_unflushed_deltas() correct
-            page_map.strip_unflushed_delta();
-        };
-
-        for entry in PageMapType::list_all_without_snapshots(tip_state) {
-            if let Some(page_map) = entry.get_mut(tip_state) {
-                add_to_pagemaps_and_strip(entry, page_map);
-            }
-        }
-
-        // Take all snapshot operations that happened since the last flush and clear the list stored in `tip_state`.
-        // This way each operation is executed exactly once, independent of how many times `flush_page_maps` is called.
-        let snapshot_operations = tip_state.canister_snapshots.take_unflushed_changes();
-
-        for op in &snapshot_operations {
-            // Only CanisterSnapshots that are new since the last flush will have PageMaps that need to be flushed. They will
-            // have a corresponding Backup in the snapshot operations list.
-            if let SnapshotOperation::Backup(_canister_id, snapshot_id) = op {
-                // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
-                if let Some(canister_snapshot) = tip_state.canister_snapshots.get_mut(*snapshot_id)
-                {
-                    let new_snapshot = Arc::make_mut(canister_snapshot);
-
-                    add_to_pagemaps_and_strip(
-                        PageMapType::SnapshotWasmChunkStore(*snapshot_id),
-                        new_snapshot.chunk_store_mut().page_map_mut(),
-                    );
-                    add_to_pagemaps_and_strip(
-                        PageMapType::SnapshotWasmMemory(*snapshot_id),
-                        &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
-                    );
-                    add_to_pagemaps_and_strip(
-                        PageMapType::SnapshotStableMemory(*snapshot_id),
-                        &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
-                    );
-                }
-            }
-        }
-
-        if !pagemaps.is_empty() || !snapshot_operations.is_empty() {
-            self.tip_channel
-                .send(TipRequest::FlushPageMapDelta {
-                    height,
-                    pagemaps,
-                    snapshot_operations,
-                })
-                .unwrap();
-            // We flush further when the tip_channel queue is not empty. Meaning we're blind
-            // to a request being processed, so we send Noop to signal for the busy Tip Thread.
-            self.tip_channel.send(TipRequest::Noop).unwrap();
-        }
-    }
-
     fn find_checkpoint_by_root_hash(
         &self,
         root_hash: &CryptoHashOfState,
@@ -2122,11 +1888,12 @@ impl StateManagerImpl {
     fn on_synced_checkpoint(
         &self,
         state: ReplicatedState,
-        height: Height,
+        cp_layout: CheckpointLayout<ReadOnly>,
         manifest: Manifest,
         meta_manifest: Arc<MetaManifest>,
         root_hash: CryptoHashOfState,
     ) {
+        let height = cp_layout.height();
         if self
             .state_layout
             .diverged_checkpoint_heights()
@@ -2151,6 +1918,7 @@ impl StateManagerImpl {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
             hash_tree: Some(Arc::new(hash_tree)),
             certification: None,
+            certification_requested_at: Instant::now(),
         };
 
         let mut states = self.states.write();
@@ -2158,11 +1926,15 @@ impl StateManagerImpl {
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
         states.disable_state_fetch_below(height);
 
-        if states
+        let is_snapshot_present = states
             .snapshots
             .iter()
-            .any(|snapshot| snapshot.height == height)
-        {
+            .any(|snapshot| snapshot.height == height);
+
+        let is_state_metadata_present = states.states_metadata.contains_key(&height);
+
+        // If both the snapshot and the state metadata are present, we can safely skip it.
+        if is_snapshot_present && is_state_metadata_present {
             info!(
                 self.log,
                 "Completed StateSync for state {} that we already have locally", height
@@ -2170,22 +1942,32 @@ impl StateManagerImpl {
             return;
         }
 
-        states.snapshots.push_back(Snapshot {
-            height,
-            state: Arc::new(state),
-        });
-        states
-            .snapshots
-            .make_contiguous()
-            .sort_by_key(|snapshot| snapshot.height);
+        if !is_snapshot_present {
+            // Normal case: we don't have the in-memory state yet.
+            states.snapshots.push_back(Snapshot {
+                height,
+                state: Arc::new(state),
+            });
+            states
+                .snapshots
+                .make_contiguous()
+                .sort_by_key(|snapshot| snapshot.height);
 
-        self.metrics
-            .resident_state_count
-            .set(states.snapshots.len() as i64);
+            self.metrics
+                .resident_state_count
+                .set(states.snapshots.len() as i64);
 
-        states
-            .certifications_metadata
-            .insert(height, certification_metadata);
+            states
+                .certifications_metadata
+                .insert(height, certification_metadata);
+        } else {
+            // Rare case: we already have the in-memory state.
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a in-memory state locally for",
+                height
+            );
+        }
 
         let state_size_bytes: i64 = manifest
             .file_table
@@ -2193,18 +1975,28 @@ impl StateManagerImpl {
             .map(|f| f.size_bytes as i64)
             .sum();
 
-        states.states_metadata.insert(
-            height,
-            StateMetadata {
-                checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                bundled_manifest: Some(BundledManifest {
-                    root_hash,
-                    manifest,
-                    meta_manifest,
-                }),
-                state_sync_file_group: None,
-            },
-        );
+        if !is_state_metadata_present {
+            // Normal case: we don't have the state metadata yet.
+            states.states_metadata.insert(
+                height,
+                StateMetadata {
+                    checkpoint_layout: Some(cp_layout),
+                    bundled_manifest: Some(BundledManifest {
+                        root_hash,
+                        manifest,
+                        meta_manifest,
+                    }),
+                    state_sync_file_group: None,
+                },
+            );
+        } else {
+            // Rare case: we already have the state metadata.
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have a StateMetadata locally for",
+                height
+            );
+        }
 
         let latest_height = update_latest_height(&self.latest_state_height, height);
         if latest_height == height.get() {
@@ -2222,7 +2014,13 @@ impl StateManagerImpl {
         // `take_tip()` and update the tip accordingly.
     }
 
-    /// Remove any inmemory state at height h with h < last_height_to_keep, and
+    /// Wait till deallocation queue is empty.
+    pub fn flush_deallocation_channel(&self) {
+        self.deallocator_thread.flush_deallocation_channel();
+    }
+
+    /// Remove any inmemory state at height h with h < last_height_to_keep
+    /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
     /// any checkpoint at height h < last_checkpoint_to_keep
     ///
     /// Shared inner function of the public functions remove_states_below
@@ -2231,6 +2029,7 @@ impl StateManagerImpl {
         &self,
         last_height_to_keep: Height,
         last_checkpoint_to_keep: Height,
+        extra_inmemory_heights_to_keep: &BTreeSet<Height>,
     ) {
         debug_assert!(
             last_height_to_keep >= last_checkpoint_to_keep,
@@ -2243,6 +2042,18 @@ impl StateManagerImpl {
         // that we can verify later that this height is retained.
         #[cfg(debug_assertions)]
         let latest_state_height = self.latest_state_height();
+
+        // Practically, Consensus does not ask state manager to keep states which are already removed.
+        // However, in debug builds, we filter `extra_inmemory_heights_to_keep` and store `existing_extra_inmemory_heights_to_keep`
+        // so that we can verify later that they are all retained.
+        #[cfg(debug_assertions)]
+        let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
+        #[cfg(debug_assertions)]
+        let existing_extra_inmemory_heights_to_keep: Vec<Height> = extra_inmemory_heights_to_keep
+            .iter()
+            .filter(|h| state_heights.contains(h))
+            .copied()
+            .collect();
 
         let heights_to_remove = std::ops::Range {
             start: Height::new(1),
@@ -2264,31 +2075,28 @@ impl StateManagerImpl {
                     state_metadata.bundled_manifest.as_ref().map(|_| *height)
                 });
 
-        let heights_to_keep: BTreeSet<Height> = states
+        // We keep checkpoints at or above the `last_checkpoint_to_keep` height
+        // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
+        let checkpoint_heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
             .copied()
             .filter(|height| {
                 *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
             })
-            .chain(std::iter::once(latest_certified_height))
             .chain(latest_manifest_height)
             .collect();
 
-        // Send object to deallocation thread if it has capacity.
-        let deallocate = |x| {
-            if self.deallocation_sender.len() < DEALLOCATION_BACKLOG_THRESHOLD {
-                self.deallocation_sender
-                    .send(x)
-                    .expect("failed to send object to deallocation thread");
-            } else {
-                std::mem::drop(x);
-            }
-        };
+        // In addition, we retain the latest certified state and any extra states specified to keep.
+        // Note that `checkpoint_heights_to_keep` and `inmemory_heights_to_keep` are separate,
+        // as decisions to retain a checkpoint or an in-memory state are made independently.
+        let inmemory_heights_to_keep = std::iter::once(latest_certified_height)
+            .chain(extra_inmemory_heights_to_keep.iter().copied())
+            .collect::<BTreeSet<_>>();
 
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
             heights_to_remove.contains(&snapshot.height)
-                && !heights_to_keep.contains(&snapshot.height)
+                && !inmemory_heights_to_keep.contains(&snapshot.height)
         });
         states.snapshots = retained;
 
@@ -2299,8 +2107,7 @@ impl StateManagerImpl {
         let latest_height = states
             .snapshots
             .back()
-            .map(|s| s.height)
-            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
+            .map_or(Self::INITIAL_STATE_HEIGHT, |s| s.height);
 
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
@@ -2310,7 +2117,6 @@ impl StateManagerImpl {
             .iter()
             .map(|s| s.height)
             .filter(|h| h.get() != 0)
-            .chain(states.states_metadata.keys().copied())
             .min();
         if let Some(min_resident_height) = min_resident_height {
             self.metrics
@@ -2323,10 +2129,10 @@ impl StateManagerImpl {
             .set(latest_height.get() as i64);
 
         // Send removed snapshot to deallocator thread
-        deallocate(Box::new(removed));
+        self.deallocator_thread.send(Box::new(removed));
 
         for (height, metadata) in states.states_metadata.range(heights_to_remove) {
-            if heights_to_keep.contains(height) {
+            if checkpoint_heights_to_keep.contains(height) {
                 continue;
             }
             if let Some(ref checkpoint_layout) = metadata.checkpoint_layout {
@@ -2339,7 +2145,7 @@ impl StateManagerImpl {
             .certifications_metadata
             .split_off(&last_height_to_keep);
 
-        for h in heights_to_keep.iter() {
+        for h in inmemory_heights_to_keep.iter() {
             if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
                 certifications_metadata.insert(*h, cert_metadata);
             }
@@ -2350,8 +2156,9 @@ impl StateManagerImpl {
             &mut states.certifications_metadata,
         );
 
-        // Send removed certification metadata to deallocator thread
-        deallocate(Box::new(certifications_metadata));
+        // Send removed certification metadata to deallocator thread.
+        self.deallocator_thread
+            .send(Box::new(certifications_metadata));
 
         let latest_certified_height = states
             .certifications_metadata
@@ -2369,7 +2176,7 @@ impl StateManagerImpl {
 
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
-        for h in heights_to_keep.iter() {
+        for h in checkpoint_heights_to_keep.iter() {
             if let Some(metadata) = states.states_metadata.remove(h) {
                 metadata_to_keep.insert(*h, metadata);
             }
@@ -2384,7 +2191,10 @@ impl StateManagerImpl {
             //
             // NOTE: we rely on deallocations happening sequentially, adding more
             // deallocation threads might break the desired behavior.
-            deallocate(Box::new(metadata_to_keep));
+            //
+            // FIXME: Objects are not necessarily deleted in order: if the backlog is too
+            // large, we drop them synchronously.
+            self.deallocator_thread.send(Box::new(metadata_to_keep));
         }
 
         if number_of_checkpoints != states.states_metadata.len() {
@@ -2396,13 +2206,28 @@ impl StateManagerImpl {
 
         #[cfg(debug_assertions)]
         {
-            use ic_interfaces_state_manager::CERT_ANY;
-            let checkpoint_heights = self.checkpoint_heights();
-            let state_heights = self.list_state_heights(CERT_ANY);
+            let unfiltered_checkpoint_heights = self
+                .state_layout
+                .unfiltered_checkpoint_heights()
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        &self.log,
+                        "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                        err
+                    )
+                });
 
-            debug_assert!(heights_to_keep
+            let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
+
+            // All checkpoints to keep should exist on disk.
+            debug_assert!(checkpoint_heights_to_keep
                 .iter()
-                .all(|h| checkpoint_heights.contains(h) || *h == latest_certified_height));
+                .all(|h| unfiltered_checkpoint_heights.contains(h)));
+
+            // If the in-memory states that Consensus ask to keep exist in the beginning, they should be all retained.
+            debug_assert!(existing_extra_inmemory_heights_to_keep
+                .iter()
+                .all(|h| state_heights.contains(h)));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
@@ -2424,14 +2249,70 @@ impl StateManagerImpl {
         result
     }
 
+    /// Returns the list of heights corresponding to snapshots matching
+    /// the mask. E.g. `list_state_heights(CERT_ANY)` will return all snapshots.
+    ///
+    /// Note that the initial state at height 0 is considered uncertified from
+    /// the State Manager point of view.  This is because the protocol requires
+    /// each replica to individually obtain the initial state using some
+    /// out-of-band mechanism (i.e., not state sync).  Also note that the
+    /// authenticity of this initial state will be verified by some protocol
+    /// external to this component.
+    ///
+    /// The list of heights is guaranteed to be
+    /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
+    ///   0 even if no states were committed yet.
+    /// * Sorted in ascending order.
+    #[allow(dead_code)]
+    pub fn list_state_heights(
+        &self,
+        cert_mask: ic_interfaces_state_manager::CertificationMask,
+    ) -> Vec<Height> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["list_state_heights"])
+            .start_timer();
+
+        fn matches(
+            cert: Option<&Certification>,
+            mask: ic_interfaces_state_manager::CertificationMask,
+        ) -> bool {
+            match cert {
+                Some(_) => mask.is_set(ic_interfaces_state_manager::CERT_CERTIFIED),
+                None => mask.is_set(ic_interfaces_state_manager::CERT_UNCERTIFIED),
+            }
+        }
+
+        let states = self.states.read();
+
+        let heights: BTreeSet<_> = states
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.height)
+            .filter(|h| {
+                matches(
+                    states
+                        .certifications_metadata
+                        .get(h)
+                        .and_then(|metadata| metadata.certification.as_ref()),
+                    cert_mask,
+                )
+            })
+            .collect();
+
+        // convert the b-tree into a vector
+        heights.into_iter().collect()
+    }
+
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
-        state: &mut ReplicatedState,
+        mut state: ReplicatedState,
         height: Height,
     ) -> CreateCheckpointResult {
+        self.observe_num_loaded_pagemaps(&state);
         struct PreviousCheckpointInfo {
-            dirty_pages: DirtyPages,
             base_manifest: Manifest,
             base_height: Height,
             checkpoint_layout: CheckpointLayout<ReadOnly>,
@@ -2446,9 +2327,13 @@ impl StateManagerImpl {
                 .with_label_values(&["wait_for_manifest_and_flush"])
                 .start_timer();
             // We need the previous manifest computation to complete because:
-            //   1) We need it it speed up the next manifest computation using ManifestDelta
+            //   1) We need it to speed up the next manifest computation using ManifestDelta
             //   2) We don't want to run too much ahead of the latest ready manifest.
             self.flush_tip_channel();
+
+            // Ensure all pending asynchronous checkpoint removals are completed before creating a new one.
+            // This prevents excessive accumulation of checkpoints in `fs_tmp`, which could lead to high disk usage.
+            self.state_layout.flush_checkpoint_removal_channel();
         }
 
         let previous_checkpoint_info = {
@@ -2468,15 +2353,8 @@ impl StateManagerImpl {
                     Some((base_manifest, *base_height))
                 })
                 .and_then(|(base_manifest, base_height)| {
-                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint(base_height) {
-                        // If `lsmt_status` is enabled, then `dirty_pages` is not needed, as each file is either completely
-                        // new, or identical (same inode) to before.
-                        let dirty_pages = match self.lsmt_status {
-                            FlagStatus::Enabled => Vec::new(),
-                            FlagStatus::Disabled => get_dirty_pages(state),
-                        };
+                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint_verified(base_height) {
                         Some(PreviousCheckpointInfo {
-                            dirty_pages,
                             base_manifest,
                             base_height,
                             checkpoint_layout,
@@ -2490,29 +2368,16 @@ impl StateManagerImpl {
                 })
         };
 
-        {
-            // We don't need to persist the deltas to the tip because we
-            // flush deltas before calling this method, see flush_page_maps.
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
-                .with_label_values(&["strip_page_map_deltas"])
-                .start_timer();
-            strip_page_map_deltas(state, self.get_fd_factory());
-        }
         let result = {
-            checkpoint::make_checkpoint(
-                state,
+            checkpoint::make_unvalidated_checkpoint(
+                &mut state,
                 height,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
-                &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                 self.get_fd_factory(),
-                self.lsmt_status,
             )
         };
-        let (cp_layout, checkpointed_state, has_downgrade) = match result {
+        let (cp_layout, has_downgrade) = match result {
             Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
@@ -2522,35 +2387,19 @@ impl StateManagerImpl {
                     height
                 );
 
-                let checkpointed_state = self
+                let cp_layout = self
                     .state_layout
-                    .checkpoint(height)
-                    .map_err(|e| e.into())
-                    .and_then(|layout| {
-                        let _timer = self
-                            .metrics
-                            .checkpoint_op_duration
-                            .with_label_values(&["recover"])
-                            .start_timer();
-
-                        checkpoint::load_checkpoint_parallel(
-                            &layout,
-                            self.own_subnet_type,
-                            &self.metrics.checkpoint_metrics,
-                            self.get_fd_factory(),
-                        )
-                    })
+                    .checkpoint_in_verification(height)
                     .unwrap_or_else(|err| {
                         fatal!(
                             self.log,
-                            "Failed to load existing checkpoint @{}: {}",
+                            "Failed to open checkpoint layout #{}: {}",
                             height,
                             err
-                        )
+                        );
                     });
                 (
-                    self.state_layout.checkpoint(height).unwrap(),
-                    checkpointed_state,
+                    cp_layout,
                     // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
                     HasDowngrade::Yes,
                 )
@@ -2567,20 +2416,40 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
+                .with_label_values(&["defrag_canisters_map"])
+                .start_timer();
+
+            // This step is a functional no-op, but results in a cleaner memory layout that is ultimately faster to iterate over.
+            let canisters = std::mem::take(&mut state.canister_states);
+            state.canister_states = canisters.into_iter().collect();
+        }
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
-            switch_to_checkpoint(state, &checkpointed_state);
-            #[cfg(debug_assertions)]
-            {
-                self.tip_channel
-                    .send(TipRequest::ValidateReplicatedState {
-                        checkpointed_state: Box::new(checkpointed_state.clone()),
-                        execution_state: Box::new(state.clone()),
-                    })
-                    .expect("Failed to send Validate request");
-                self.flush_tip_channel();
-            }
+            switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory()).unwrap_or_else(
+                |err| {
+                    fatal!(
+                        self.log,
+                        "Failed to switch to checkpoint for height #{}: {}",
+                        height,
+                        err
+                    );
+                },
+            );
         }
+        let state = Arc::new(state);
+        self.tip_channel
+            .send(TipRequest::ValidateReplicatedStateAndFinalize {
+                checkpoint_layout: cp_layout.clone(),
+                reference_state: Arc::clone(&state),
+                own_subnet_type: self.own_subnet_type,
+                fd_factory: self.fd_factory.clone(),
+            })
+            .expect("Failed to send Validate request");
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
@@ -2595,7 +2464,6 @@ impl StateManagerImpl {
                 .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
-                     dirty_pages,
                      checkpoint_layout,
                      base_manifest,
                      base_height,
@@ -2604,9 +2472,7 @@ impl StateManagerImpl {
                         base_manifest,
                         base_height,
                         target_height: height,
-                        dirty_memory_pages: dirty_pages,
                         base_checkpoint: checkpoint_layout,
-                        lsmt_status: self.lsmt_status,
                     }
                 },
             )
@@ -2619,27 +2485,16 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
-            let checkpoint_layout = self.state_layout.checkpoint(height).unwrap();
-            // With lsmt, we do not need the defrag.
-            // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
-            let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
-                vec![TipRequest::ResetTipAndMerge {
-                    checkpoint_layout: checkpoint_layout.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
-                    is_initializing_tip: false,
-                }]
-            } else {
-                vec![TipRequest::DefragTip {
-                    height,
-                    page_map_types: PageMapType::list_all_without_snapshots(state),
-                }]
-            };
+            let tip_requests = vec![TipRequest::ResetTipAndMerge {
+                checkpoint_layout: cp_layout.clone(),
+                pagemaptypes: PageMapType::list_all_including_snapshots(&state),
+            }];
 
             CreateCheckpointResult {
                 tip_requests,
-                checkpointed_state,
+                state,
                 state_metadata: StateMetadata {
-                    checkpoint_layout: Some(checkpoint_layout),
+                    checkpoint_layout: Some(cp_layout.clone()),
                     bundled_manifest: None,
                     state_sync_file_group: None,
                 },
@@ -2823,10 +2678,10 @@ impl StateManager for StateManagerImpl {
         let checkpoint_layout = states
             .states_metadata
             .get(&target_snapshot.height)
-            .unwrap()
+            .expect("Attempting to initialize tip from a non-checkpoint height")
             .checkpoint_layout
             .as_ref()
-            .unwrap()
+            .expect("Missing CheckpointLayout")
             .clone();
         std::mem::drop(states);
 
@@ -2914,11 +2769,31 @@ impl StateManager for StateManagerImpl {
                           "Copying checkpoint {} with root hash {:?} under new height {}",
                           checkpoint_height, root_hash, height);
 
+                    match self.state_layout.checkpoint_verification_status(checkpoint_height) {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            warn!(self.log,
+                                "Unverified checkpoint @{} cannot be cloned to a new checkpoint height.",
+                                checkpoint_height
+                            );
+                            return;
+                        }
+                        Err(err) => {
+                            warn!(self.log,
+                                "Checkpoint @{} does not exist but it is found in states metadata: {:?}",
+                                checkpoint_height,
+                                err
+                            );
+                            return;
+                        }
+                    }
+
+                    // Clone the checkpoint if it is verified.
                     match self.state_layout.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
-                            let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
+                            let (state, cp_layout) = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
                                 .expect("failed to load checkpoint");
-                            self.on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
+                            self.on_synced_checkpoint(state, cp_layout, manifest, meta_manifest, root_hash);
                             return;
                         }
                         Err(e) => {
@@ -3027,6 +2902,9 @@ impl StateManager for StateManagerImpl {
             self.metrics
                 .latest_certified_height
                 .set(latest_certified as i64);
+            self.metrics
+                .certification_duration
+                .observe(metadata.certification_requested_at.elapsed().as_secs_f64());
 
             metadata.certification = Some(certification);
 
@@ -3035,51 +2913,10 @@ impl StateManager for StateManagerImpl {
                 .range_mut(Self::INITIAL_STATE_HEIGHT..certification_height)
             {
                 if let Some(tree) = certification_metadata.hash_tree.take() {
-                    self.deallocation_sender
-                        .send(Box::new(tree))
-                        .expect("failed to send object to deallocation thread");
+                    self.deallocator_thread.send(Box::new(tree));
                 }
             }
         }
-    }
-
-    /// # Panics
-    ///
-    /// This method panics if checkpoint labels can not be retrieved
-    /// from the disk.
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
-        let _timer = self
-            .metrics
-            .api_call_duration
-            .with_label_values(&["list_state_heights"])
-            .start_timer();
-
-        fn matches(cert: Option<&Certification>, mask: CertificationMask) -> bool {
-            match cert {
-                Some(_) => mask.is_set(CERT_CERTIFIED),
-                None => mask.is_set(CERT_UNCERTIFIED),
-            }
-        }
-
-        let states = self.states.read();
-
-        let heights: BTreeSet<_> = self
-            .checkpoint_heights()
-            .into_iter()
-            .chain(states.snapshots.iter().map(|snapshot| snapshot.height))
-            .filter(|h| {
-                matches(
-                    states
-                        .certifications_metadata
-                        .get(h)
-                        .and_then(|metadata| metadata.certification.as_ref()),
-                    cert_mask,
-                )
-            })
-            .collect();
-
-        // convert the b-tree into a vector
-        heights.into_iter().collect()
     }
 
     /// This method instructs the state manager that Consensus doesn't need
@@ -3089,14 +2926,14 @@ impl StateManager for StateManagerImpl {
     ///
     /// # Notation
     ///
-    ///  * *OCK* stands for "Oldest Checkpoint to Keep". This is the height of
-    ///    the latest checkpoint ≤ H passed to `remove_states_below`.
+    ///  * *OCK* stands for "Oldest verified Checkpoint to Keep". This is the height of
+    ///    the latest verified checkpoint ≤ H passed to `remove_states_below`.
     ///  * *LSH* stands for "Latest State Height". This is the latest state that
     ///    the state manager has.
-    ///  * *LCH* stands for "Latest Checkpoint Height*. This is the height of
-    ///    the latest checkpoint that the state manager created.
-    ///  * *CHS* stands for "CHeckpoint Heights". These are heights of all the
-    ///    checkpoints available.
+    ///  * *LCH* stands for "Latest verified Checkpoint Height". This is the height of
+    ///    the latest verified checkpoint that the state manager created.
+    ///  * *CHS* stands for "verified CHeckpoint Heights". These are heights of all the
+    ///    verified checkpoints available.
     ///
     /// # Heuristic
     ///
@@ -3133,7 +2970,7 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().drain(..).collect();
+        let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().into_iter().collect();
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
@@ -3165,7 +3002,12 @@ impl StateManager for StateManagerImpl {
                 .min(oldest_checkpoint_to_keep)
         };
 
-        self.remove_states_below_impl(oldest_height_to_keep, oldest_checkpoint_to_keep);
+        // The public interface does not protect extra states, so we pass an empty set here.
+        self.remove_states_below_impl(
+            oldest_height_to_keep,
+            oldest_checkpoint_to_keep,
+            &BTreeSet::new(),
+        );
     }
 
     /// Variant of `remove_states_below()` that only removes states committed with
@@ -3177,7 +3019,12 @@ impl StateManager for StateManagerImpl {
     /// * The latest state
     /// * The latest certified state
     /// * State 0
-    fn remove_inmemory_states_below(&self, requested_height: Height) {
+    /// * Specified extra heights to keep
+    fn remove_inmemory_states_below(
+        &self,
+        requested_height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         let _timer = self
             .metrics
             .api_call_duration
@@ -3190,7 +3037,42 @@ impl StateManager for StateManagerImpl {
             .min(requested_height)
             .max(Height::new(1));
 
-        self.remove_states_below_impl(oldest_height_to_keep, Self::INITIAL_STATE_HEIGHT);
+        // Log how Consensus calls this API when it has some extra states to keep.
+        if !extra_heights_to_keep.is_empty() {
+            info!(
+                self.log,
+                "Removing in-memory states below {} except for {:?}",
+                requested_height,
+                extra_heights_to_keep,
+            );
+
+            let states = self.states.read();
+            let checkpoint_heights_below_oldest_height_to_keep: BTreeSet<Height> = states
+                .snapshots
+                .iter()
+                .map(|snapshot| snapshot.height)
+                .filter(|height| {
+                    states.states_metadata.contains_key(height) && *height < oldest_height_to_keep
+                })
+                .collect();
+            drop(states);
+
+            // Memory usage can be saved by removing them if they are not protected by `extra_heights_to_keep`.
+            // Log these potential removal candidates and evaluate them against `extra_heights_to_keep` before actual removal in future versions.
+            if !checkpoint_heights_below_oldest_height_to_keep.is_empty() {
+                info!(
+                    self.log,
+                    "In-memory states at checkpoint heights {:?} are candidates for removal in future.",
+                    checkpoint_heights_below_oldest_height_to_keep,
+                );
+            }
+        }
+
+        self.remove_states_below_impl(
+            oldest_height_to_keep,
+            Self::INITIAL_STATE_HEIGHT,
+            extra_heights_to_keep,
+        );
     }
 
     fn commit_and_certify(
@@ -3216,62 +3098,57 @@ impl StateManager for StateManagerImpl {
             None;
         let mut follow_up_tip_requests = Vec::new();
 
-        let checkpointed_state = match scope {
+        let state = match scope {
             CertificationScope::Full => {
-                self.flush_page_maps(&mut state, height);
                 let CreateCheckpointResult {
-                    checkpointed_state,
+                    state,
                     state_metadata,
                     compute_manifest_request,
                     tip_requests,
-                } = self.create_checkpoint_and_switch(&mut state, height);
+                } = self.create_checkpoint_and_switch(state, height);
                 state_metadata_and_compute_manifest_request =
                     Some((state_metadata, compute_manifest_request));
                 follow_up_tip_requests = tip_requests;
 
-                checkpointed_state
+                state
             }
             CertificationScope::Metadata => {
-                match self.lsmt_status {
-                    FlagStatus::Enabled => {
-                        // We want to balance writing too many overlay files with having too many unflushed pages at
-                        // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
-                        // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
-                        // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                        if let Some(batch_summary) = batch_summary {
-                            if batch_summary
-                                .next_checkpoint_height
-                                .get()
-                                .saturating_sub(height.get())
-                                == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                            {
-                                self.flush_page_maps(&mut state, height);
-                            }
-                        }
-                    }
-                    FlagStatus::Disabled => {
-                        if self.tip_channel.is_empty() {
-                            self.flush_page_maps(&mut state, height);
-                        } else {
-                            self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
-                        }
+                // We want to balance writing too many overlay files with having too many unflushed pages at
+                // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
+                // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
+                // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
+                if let Some(batch_summary) = batch_summary {
+                    if batch_summary
+                        .next_checkpoint_height
+                        .get()
+                        .saturating_sub(height.get())
+                        == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+                    {
+                        flush_canister_snapshots_and_page_maps(
+                            &mut state,
+                            height,
+                            &self.tip_channel,
+                        );
                     }
                 }
 
-                {
-                    let _timer = self
-                        .metrics
-                        .checkpoint_op_duration
-                        .with_label_values(&["copy_state"])
-                        .start_timer();
-                    state.clone()
-                }
+                Arc::new(state)
             }
         };
 
         let certification_metadata =
-            Self::compute_certification_metadata(&self.metrics, &self.log, &checkpointed_state)
+            Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+
+        // This step is expensive, so we do it before the write lock for `states`.
+        let next_tip = {
+            let _timer = self
+                .metrics
+                .checkpoint_op_duration
+                .with_label_values(&["copy_state"])
+                .start_timer();
+            Some((height, state.deref().clone()))
+        };
 
         let mut states = self.states.write();
         #[cfg(debug_assertions)]
@@ -3309,7 +3186,7 @@ impl StateManager for StateManagerImpl {
         {
             states.snapshots.push_back(Snapshot {
                 height,
-                state: Arc::new(checkpointed_state),
+                state: Arc::clone(&state),
             });
             states
                 .snapshots
@@ -3319,18 +3196,6 @@ impl StateManager for StateManagerImpl {
             states
                 .certifications_metadata
                 .insert(height, certification_metadata);
-
-            if let Some((state_metadata, compute_manifest_request)) =
-                state_metadata_and_compute_manifest_request
-            {
-                states.states_metadata.insert(height, state_metadata);
-                debug_assert!(self.tip_channel.len() <= 1);
-                self.tip_channel
-                    .send(compute_manifest_request)
-                    .expect("failed to send ComputeManifestRequest message");
-            } else {
-                debug_assert!(scope != CertificationScope::Full);
-            }
 
             let latest_height = update_latest_height(&self.latest_state_height, height);
             self.metrics.max_resident_height.set(latest_height as i64);
@@ -3347,13 +3212,30 @@ impl StateManager for StateManagerImpl {
             }
         }
 
+        if let Some((state_metadata, compute_manifest_request)) =
+            state_metadata_and_compute_manifest_request
+        {
+            let metadata = states
+                .states_metadata
+                .entry(height)
+                .or_insert(state_metadata);
+            debug_assert!(self.tip_channel.len() <= 1);
+            if metadata.bundled_manifest.is_none() {
+                self.tip_channel
+                    .send(compute_manifest_request)
+                    .expect("failed to send ComputeManifestRequest message");
+            }
+        } else {
+            debug_assert!(scope != CertificationScope::Full);
+        }
+
         self.metrics
             .resident_state_count
             .set(states.snapshots.len() as i64);
 
         // The next call to take_tip() will take care of updating the
         // tip if needed.
-        states.tip = Some((height, state));
+        states.tip = next_tip;
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
@@ -3367,7 +3249,17 @@ impl StateManager for StateManagerImpl {
 
     fn report_diverged_checkpoint(&self, height: Height) {
         let mut states = self.states.write();
-        let heights = self.checkpoint_heights();
+        // Unverified checkpoints should also be considered when removing checkpoints higher than the diverged height.
+        let heights = self
+            .state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    &self.log,
+                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                    err
+                )
+            });
 
         info!(self.log, "Moving diverged checkpoint @{}", height);
         if let Err(err) = self.state_layout.mark_checkpoint_diverged(height) {
@@ -3492,6 +3384,7 @@ impl StateReader for StateManagerImpl {
             (snapshot.height == height).then(|| Labeled::new(height, snapshot.state.clone()))
         }) {
             Some(state) => Ok(state),
+            // In normal operation, getting in-memory states should not fall back to loading checkpoints.
             None => match load_checkpoint(
                 &self.state_layout,
                 height,
@@ -3499,9 +3392,30 @@ impl StateReader for StateManagerImpl {
                 self.own_subnet_type,
                 Arc::clone(&self.get_fd_factory()),
             ) {
-                Ok(state) => Ok(Labeled::new(height, Arc::new(state))),
+                Ok((state, _)) => {
+                    self.metrics
+                        .state_manager_error_count
+                        .with_label_values(&["state_fallback_to_checkpoint"])
+                        .inc();
+                    warn!(
+                        self.log,
+                        "State @{} unavailable in memory; fallback to checkpoint succeeded.",
+                        height
+                    );
+
+                    Ok(Labeled::new(height, Arc::new(state)))
+                }
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
                 Err(err) => {
+                    self.metrics
+                        .state_manager_error_count
+                        .with_label_values(&["state_fallback_to_checkpoint"])
+                        .inc();
+                    warn!(
+                        self.log,
+                        "State @{} unavailable in memory; fallback to checkpoint failed.", height
+                    );
+
                     self.metrics
                         .state_manager_error_count
                         .with_label_values(&["recover_checkpoint"])
@@ -3714,7 +3628,7 @@ fn maliciously_alter_certified_hash(
     certification
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CheckpointError {
     /// Wraps a stringified `std::io::Error`, a message and the path of the
     /// affected file/directory.
@@ -3740,6 +3654,8 @@ pub enum CheckpointError {
     Persistence(PersistenceError),
     /// Trying to remove the last checkpoint.
     LatestCheckpoint(Height),
+    /// Checkpoint for the requested height is unverified.
+    CheckpointUnverified(Height),
 }
 
 impl std::error::Error for CheckpointError {
@@ -3793,6 +3709,9 @@ impl std::fmt::Display for CheckpointError {
                 "Trying to remove the latest checkpoint at height @{}",
                 height
             ),
+            CheckpointError::CheckpointUnverified(height) => {
+                write!(f, "Checkpoint at height @{} is unverified", height)
+            }
         }
     }
 }
@@ -3821,6 +3740,7 @@ impl From<LayoutError> for CheckpointError {
             LayoutError::NotFound(h) => CheckpointError::NotFound(h),
             LayoutError::AlreadyExists(h) => CheckpointError::AlreadyExists(h),
             LayoutError::LatestCheckpoint(h) => CheckpointError::LatestCheckpoint(h),
+            LayoutError::CheckpointUnverified(h) => CheckpointError::CheckpointUnverified(h),
         }
     }
 }

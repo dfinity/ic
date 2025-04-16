@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-#[derive(Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 /// The source of the unix domain socket to be used for inter-process
 /// communication.
 pub enum IncomingSource {
@@ -58,12 +58,15 @@ fn default_idle_seconds() -> u64 {
 
 /// This function is used to get the address limits for the `AddressBook`
 /// based on the provided `Network`.
-pub(crate) fn address_limits(network: Network) -> (usize, usize) {
+pub fn address_limits(network: Network) -> (usize, usize) {
     match network {
         Network::Bitcoin => (500, 2000),
         Network::Testnet => (100, 1000),
+        //TODO(mihailjianu): revisit these values
+        Network::Testnet4 => (100, 1000),
         Network::Signet => (1, 1),
         Network::Regtest => (1, 1),
+        _ => (1, 1),
     }
 }
 
@@ -73,6 +76,7 @@ impl Config {
         match self.network {
             Network::Bitcoin => 8333,
             Network::Testnet => 18333,
+            Network::Testnet4 => 48333,
             _ => 8333,
         }
     }

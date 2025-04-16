@@ -352,7 +352,7 @@ fn remove_nodes_removes_all_keys() {
 
         // Add the node along with keys and certs
         let mut mutations = make_add_node_registry_mutations(node_id, node, valid_pks);
-        // Add node operator records
+        // Add node operator record
         mutations.push(insert(
             make_node_operator_record_key(user_test_id(NO_ID).get()).as_bytes(),
             node_operator.encode_to_vec(),

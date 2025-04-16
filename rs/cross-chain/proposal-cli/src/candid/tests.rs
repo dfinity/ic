@@ -11,10 +11,10 @@ fn should_encode_default_upgrade_args() {
         let path = repository_root().join(canister.candid_file());
         let expected = "4449444c0000";
 
-        let upgrade_args = encode_upgrade_args(&path, canister.default_upgrade_args());
+        let upgrade_args = encode_upgrade_args(&canister, &path, canister.default_upgrade_args());
 
         assert_eq!(
-            upgrade_args.upgrade_args_hex(),
+            hex::encode(upgrade_args.upgrade_args_bin()),
             expected,
             "failed to encode default upgrade args for: {:?}",
             canister
@@ -27,15 +27,23 @@ fn should_encode_non_empty_ledger_upgrade_args() {
     let canister = TargetCanister::CkEthLedger;
     let path = repository_root().join(canister.candid_file());
 
-    let upgrade_args = encode_upgrade_args(&path, "(variant {Upgrade})");
+    let upgrade_args = encode_upgrade_args(&canister, &path, "(variant {Upgrade})");
 
-    assert_matches!(upgrade_args.upgrade_args_hex(), _string);
+    assert!(hex::encode(upgrade_args.upgrade_args_bin()).starts_with("4449444c"));
 }
 
 #[test]
 fn should_parse_constructor_parameters() {
     for canister in TargetCanister::iter() {
-        if canister == TargetCanister::IcpArchive1 || canister == TargetCanister::IcpArchive2 {
+        if canister == TargetCanister::IcpArchive1
+            || canister == TargetCanister::IcpArchive2
+            || canister == TargetCanister::IcpArchive3
+            || canister == TargetCanister::IcpArchive4
+            //canister lives outside the monorepo
+            || canister == TargetCanister::EvmRpc
+            || canister == TargetCanister::CyclesLedger
+            || canister == TargetCanister::ExchangeRateCanister
+        {
             continue;
         }
 
@@ -48,8 +56,8 @@ fn should_parse_constructor_parameters() {
             (
                 TargetCanister::CkBtcArchive,
                 "(principal, nat64, opt nat64, opt nat64)"
-            ) | (TargetCanister::CkBtcIndex, "(opt IndexArg)")
-                | (TargetCanister::CkBtcKyt, "(LifecycleArg)")
+            ) | (TargetCanister::BtcChecker, "(CheckArg)")
+                | (TargetCanister::CkBtcIndex, "(opt IndexArg)")
                 | (TargetCanister::CkBtcLedger, "(LedgerArg)")
                 | (TargetCanister::CkBtcMinter, "(MinterArg)")
                 | (
@@ -70,13 +78,13 @@ fn should_parse_constructor_parameters() {
 fn should_render_correct_didc_encode_command() {
     let canister = TargetCanister::CkEthMinter;
     let path = repository_root().join(canister.candid_file());
-    let upgrade_args = encode_upgrade_args(&path, "(variant {UpgradeArg = record {} })");
+    let upgrade_args = encode_upgrade_args(&canister, &path, "(variant {UpgradeArg = record {} })");
 
     let didc_encode_cmd = upgrade_args.didc_encode_cmd();
 
     assert_eq!(
         didc_encode_cmd,
-        "didc encode -d cketh_minter.did -t '(MinterArg)' '(variant {UpgradeArg = record {} })'"
+        "didc encode -d rs/ethereum/cketh/minter/cketh_minter.did -t '(MinterArg)' '(variant {UpgradeArg = record {} })'"
     );
 }
 

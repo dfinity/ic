@@ -15,7 +15,7 @@ Reserve the target machine in Dee before deploying.
 
 ### Run it via bazel target 
     
-Must be run inside the devenv container. Use `./gitlab-ci/container/container-run.sh`.
+Must be run inside the devenv container. Use `./ci/container/container-run.sh`.
 
 The config files must be accessible from inside the container - e.g., at the root of the ic directory, which maps to `/ic` inside the container.
 
@@ -31,8 +31,16 @@ bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
     --file_share_username <your username per infrasec> \
     # --file_share_ssh_key <custom ssh private key> # Specify if a special ssh key is needed \
     --config_path $(realpath ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml) \
+    --inject_image_pub_key "XXX" # Optional SSH key for access to the node after deploying, required for benchmarking \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
+
+
+### Performance Benchmarking
+
+Once the desired image has been deployed to the node following the instructions above, benchmarking
+can be started by passing the `--benchmark` flag to the original deployment command. Be sure to add
+an SSH key when deploying for access to the node.
 
 
 #### What's in the yaml configuration file? 

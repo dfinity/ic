@@ -12,13 +12,14 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
+    "//packages/ic-error-types",
     "//rs/certification",
     "//rs/config",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/async_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
@@ -30,8 +31,8 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/types",
+    "//rs/utils",
     "//rs/validator",
     "@crate_index//:askama",
     "@crate_index//:axum",
@@ -65,12 +66,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:tracing-flame",
     "@crate_index//:tracing-subscriber",
-] + select({
-    "@rules_rust//rust/platform:linux": [
-        "//rs/monitoring/backtrace",
-    ],
-    "//conditions:default": [],
-})
+]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
@@ -82,6 +78,7 @@ BUILD_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
+    "//rs/canister_client/read_state_response_parser",
     "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification/test-utils",
@@ -91,15 +88,20 @@ DEV_DEPENDENCIES = [
     "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager/mocks",
     "//rs/protobuf",
+    "//rs/registry/fake",
     "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/test_utilities",
+    "//rs/test_utilities/registry",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "@crate_index//:axum-server",
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:rcgen",
     "@crate_index//:reqwest",
     "@crate_index//:rstest",
     "@crate_index//:rustls",

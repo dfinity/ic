@@ -1,34 +1,35 @@
 mod client;
 mod metrics;
 
-pub use crate::client::{
-    grpc_status_code_to_reject, BrokenCanisterHttpClient, CanisterHttpAdapterClientImpl,
-};
+pub use crate::client::CanisterHttpAdapterClientImpl;
+
+use crate::client::BrokenCanisterHttpClient;
 use ic_adapter_metrics_client::AdapterMetrics;
-use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
+use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
+use ic_types::{
+    canister_http::{CanisterHttpRequest, CanisterHttpResponse},
+    messages::CertificateDelegation,
+};
 use std::convert::TryFrom;
-use tokio::net::UnixStream;
+use tokio::{net::UnixStream, sync::watch};
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
-
-/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
-/// The worst case request latency used here should be equivalent to the request timeout in the adapter.
-const CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY: usize = 3000;
 
 pub fn setup_canister_http_client(
     rt_handle: tokio::runtime::Handle,
     metrics_registry: &MetricsRegistry,
     adapter_config: AdaptersConfig,
     query_handler: QueryExecutionService,
+    max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
     subnet_type: SubnetType,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {
@@ -51,8 +52,13 @@ pub fn setup_canister_http_client(
                     let endpoint = endpoint.executor(ExecuteOnTokioRuntime(rt_handle.clone()));
                     let channel =
                         endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
-                            // Connect to a Uds socket
-                            UnixStream::connect(uds_path.clone())
+                            let uds_path = uds_path.clone();
+                            async move {
+                                // Connect to a Uds socket
+                                Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(
+                                    UnixStream::connect(uds_path).await?,
+                                ))
+                            }
                         }));
 
                     // Register canister http adapter metrics with replica metrics. The adapter exposes a
@@ -68,9 +74,10 @@ pub fn setup_canister_http_client(
                         rt_handle,
                         channel,
                         query_handler,
-                        CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
+                        max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
                         subnet_type,
+                        delegation_from_nns,
                     ))
                 }
                 Err(e) => {

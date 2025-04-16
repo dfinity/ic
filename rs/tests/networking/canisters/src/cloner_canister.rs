@@ -12,7 +12,8 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 /// The amount of cycles that each created canister gets.
-const INITIAL_CYCLES_BALANCE: u128 = 10_u64.pow(11) as u128; // 100B Cycles;
+/// It is used to pay for the canister creation and wasm module installation.
+const INITIAL_CYCLES_BALANCE: u128 = 10_u64.pow(12) as u128; // 1T Cycles;
 
 /// This number should not exceed the length of the canister output queue,
 /// which is currently 500.
@@ -26,20 +27,13 @@ thread_local! {
     static CANISTER_IDS: RefCell<BTreeSet<CanisterId>> = const { RefCell::new(BTreeSet::new()) };
 }
 
-fn store_canister_id(canister_id: CanisterId) {
-    CANISTER_IDS.with(|canister_ids| canister_ids.borrow_mut().insert(canister_id));
-}
-
 async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     // Create canister.
     let canister_id = create_canister(
         CreateCanisterArgument {
             settings: Some(CanisterSettings {
                 controllers: Some(vec![ic_cdk::api::id()]),
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
-                reserved_cycles_limit: None,
+                ..CanisterSettings::default()
             }),
         },
         INITIAL_CYCLES_BALANCE,
@@ -49,7 +43,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     .canister_id;
 
     // Store canister id.
-    store_canister_id(canister_id);
+    CANISTER_IDS.with(|canister_ids| canister_ids.borrow_mut().insert(canister_id));
 
     // Install code if provided.
     let is_wasm_module_empty = wasm_module.is_empty();
@@ -91,7 +85,7 @@ async fn spinup_canisters(args: SpinupCanistersArgs) {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct SpinupCanistersArgs {
     pub canisters_number: u64,
     pub wasm_module: Vec<u8>,

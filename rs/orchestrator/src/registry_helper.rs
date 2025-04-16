@@ -1,5 +1,5 @@
 use crate::error::{OrchestratorError, OrchestratorResult};
-use ic_consensus::dkg::make_registry_cup;
+use ic_consensus::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{
@@ -158,6 +158,17 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> OrchestratorResult<Vec<IpAddr>> {
         let ips = self.registry_client.get_all_nodes_ip_addresses(version)?;
+
+        Ok(ips.unwrap_or_default())
+    }
+
+    pub(crate) fn get_system_subnet_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<IpAddr>> {
+        let ips = self
+            .registry_client
+            .get_system_subnet_nodes_ip_addresses(version)?;
 
         Ok(ips.unwrap_or_default())
     }

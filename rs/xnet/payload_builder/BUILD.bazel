@@ -5,15 +5,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/canonical_state",
-    "//rs/constants",
+    "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
     "//rs/interfaces",
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -25,10 +25,13 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/xnet/hyper",
     "//rs/xnet/uri",
-    "@crate_index//:hyper_0_14_27",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:slog",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
 ]
 
@@ -39,7 +42,6 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/config",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/certified_stream_store/mocks",
     "//rs/interfaces/state_manager/mocks",
@@ -67,6 +69,7 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:test-strategy",
 ]
 
 rust_library(

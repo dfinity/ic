@@ -3,10 +3,9 @@
 use crate::helpers::get_subnet_ids;
 use async_trait::async_trait;
 use candid::CandidType;
-use ic_canister_client::Agent;
-use ic_canister_client::Sender;
+use ic_canister_client::{Agent, Sender};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::proposal::Action;
+use ic_nns_governance_api::pb::v1::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -14,15 +13,15 @@ use ic_protobuf::registry::{
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use std::{
     convert::{From, TryFrom, TryInto},
     net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
 };
 use strum_macros::EnumString;
 
@@ -57,7 +56,7 @@ pub(crate) enum RegistryValue {
 
 /// User-friendly representation of a v1::SubnetRecord. For instance,
 /// the `membership` field is a `Vec<String>` to pretty-print the node IDs.
-#[derive(Default, Serialize, Clone)]
+#[derive(Clone, Default, Serialize)]
 pub(crate) struct SubnetRecord {
     pub membership: Vec<String>,
     pub nodes: IndexMap<PrincipalId, NodeDetails>,
@@ -68,13 +67,13 @@ pub(crate) struct SubnetRecord {
     pub initial_notary_delay_millis: u64,
     pub replica_version_id: String,
     pub dkg_interval_length: u64,
+    pub dkg_dealings_per_block: u64,
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
     pub features: SubnetFeatures,
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-    pub ecdsa_config: Option<EcdsaConfig>,
     pub chain_key_config: Option<ChainKeyConfig>,
 }
 
@@ -117,16 +116,13 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             initial_notary_delay_millis: value.initial_notary_delay_millis,
             replica_version_id: value.replica_version_id.clone(),
             dkg_interval_length: value.dkg_interval_length,
+            dkg_dealings_per_block: value.dkg_dealings_per_block,
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
-            features: value.features.clone().unwrap_or_default().into(),
+            features: value.features.unwrap_or_default().into(),
             max_number_of_canisters: value.max_number_of_canisters,
             ssh_readonly_access: value.ssh_readonly_access.clone(),
             ssh_backup_access: value.ssh_backup_access.clone(),
-            ecdsa_config: value
-                .ecdsa_config
-                .as_ref()
-                .map(|c| c.clone().try_into().unwrap()),
             chain_key_config: value
                 .chain_key_config
                 .as_ref()
@@ -137,7 +133,7 @@ impl From<&SubnetRecordProto> for SubnetRecord {
 
 /// User-friendly representation of the v1::IPv4InterfaceConfig.
 /// Ipv4 is parsed into Ipv4Addr. Other fields are omitted for now.
-#[derive(Serialize, Clone)]
+#[derive(Clone, Serialize)]
 pub(crate) struct IPv4Interface {
     pub address: Ipv4Addr,
     pub gateways: Vec<Ipv4Addr>,
@@ -145,7 +141,7 @@ pub(crate) struct IPv4Interface {
 }
 
 /// Encapsulates a node/node operator id pair.
-#[derive(Serialize, Clone)]
+#[derive(Clone, Serialize)]
 pub(crate) struct NodeDetails {
     pub ipv6: Ipv6Addr,
     pub ipv4: Option<IPv4Interface>,
@@ -206,7 +202,7 @@ pub trait ProposalMetadata {
 }
 
 /// A description of a subnet, either by index, or by id.
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum SubnetDescriptor {
     Id(PrincipalId),
     Index(usize),
@@ -247,7 +243,7 @@ impl SubnetDescriptor {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Copy)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumString, Serialize)]
 pub enum LogVisibility {
     #[strum(serialize = "controllers")]
     Controllers,
@@ -264,5 +260,5 @@ pub trait ProposalPayload<T: CandidType> {
 
 #[async_trait]
 pub trait ProposalAction {
-    async fn action(&self) -> Action;
+    async fn action(&self) -> ProposalActionRequest;
 }

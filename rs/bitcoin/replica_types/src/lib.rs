@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::mem::size_of_val;
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct SendTransactionRequest {
     pub network: Network,
     #[serde(with = "serde_bytes")]
@@ -55,7 +55,7 @@ impl TryFrom<v1::SendTransactionRequest> for SendTransactionRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BitcoinAdapterRequestWrapper {
     GetSuccessorsRequest(GetSuccessorsRequestInitial),
     SendTransactionRequest(SendTransactionRequest),
@@ -125,7 +125,7 @@ impl TryFrom<v1::BitcoinAdapterRequestWrapper> for BitcoinAdapterRequestWrapper 
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BitcoinAdapterRequest {
     pub request: BitcoinAdapterRequestWrapper,
     pub callback_id: u64,
@@ -152,7 +152,7 @@ impl TryFrom<v1::BitcoinAdapterRequest> for BitcoinAdapterRequest {
     }
 }
 //--------------------------- BLOCK HEADER ------------------------------------
-#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct BlockHeader {
     pub version: i32,
     #[serde(with = "serde_bytes")]
@@ -203,7 +203,7 @@ impl From<v1::BlockHeader> for BlockHeader {
 }
 
 //--------------------------- BLOCK -------------------------------------------
-#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub txdata: Vec<Transaction>,
@@ -292,7 +292,7 @@ impl TryFrom<v1::Block> for Block {
     }
 }
 
-#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct Transaction {
     pub version: i32,
     pub lock_time: u32,
@@ -314,7 +314,7 @@ pub const HASH_LEN: usize = 32;
 pub type Hash = [u8; HASH_LEN];
 pub type Txid = Hash;
 
-#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct OutPoint {
     pub txid: Txid,
     pub vout: u32,
@@ -327,7 +327,7 @@ impl OutPoint {
 }
 //--------------------------- TxIn --------------------------------------------
 
-#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct TxIn {
     pub previous_output: OutPoint,
     #[serde(with = "serde_bytes")]
@@ -383,7 +383,7 @@ impl TryFrom<v1::TxIn> for TxIn {
     }
 }
 
-#[derive(Clone, Debug, Default, Hash, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct TxOut {
     pub value: u64,
     #[serde(with = "serde_bytes")]
@@ -396,7 +396,7 @@ impl TxOut {
     }
 }
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct SendTransactionResponse {}
 
 impl From<&SendTransactionResponse> for v1::SendTransactionResponse {
@@ -414,11 +414,12 @@ impl From<v1::SendTransactionResponse> for SendTransactionResponse {
 impl SendTransactionResponse {
     /// Returns the size of this `SendTransactionResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
+        let SendTransactionResponse {} = &self;
         0
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct BitcoinReject {
     /// The [`RejectCode`] of the request.
     pub reject_code: RejectCode,
@@ -429,7 +430,11 @@ pub struct BitcoinReject {
 impl BitcoinReject {
     /// Returns the size of this `RejectResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        size_of_val(&self.reject_code) + self.message.len()
+        let BitcoinReject {
+            reject_code,
+            message,
+        } = &self;
+        size_of_val(reject_code) + message.len()
     }
 }
 
@@ -485,7 +490,7 @@ impl TryFrom<v1::SendTransactionReject> for BitcoinReject {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum BitcoinAdapterResponseWrapper {
     GetSuccessorsResponse(GetSuccessorsResponseComplete),
     SendTransactionResponse(SendTransactionResponse),
@@ -568,7 +573,7 @@ impl TryFrom<v1::BitcoinAdapterResponseWrapper> for BitcoinAdapterResponseWrappe
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct BitcoinAdapterResponse {
     pub response: BitcoinAdapterResponseWrapper,
     pub callback_id: u64,
@@ -598,7 +603,11 @@ impl TryFrom<v1::BitcoinAdapterResponse> for BitcoinAdapterResponse {
 impl BitcoinAdapterResponse {
     /// Returns the size of this `BitcoinAdapterResponse` in bytes.
     pub fn count_bytes(&self) -> usize {
-        self.response.count_bytes() + std::mem::size_of::<u64>()
+        let BitcoinAdapterResponse {
+            response,
+            callback_id,
+        } = &self;
+        response.count_bytes() + size_of_val(callback_id)
     }
 }
 
@@ -624,7 +633,7 @@ type PageNumber = u8;
 ///   follow_up : nat8;
 /// };
 /// ```
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GetSuccessorsRequest {
     /// A request containing the hashes of blocks we'd like to retrieve succeessors for.
     #[serde(rename = "initial")]
@@ -635,7 +644,7 @@ pub enum GetSuccessorsRequest {
     FollowUp(PageNumber),
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetSuccessorsRequestInitial {
     pub network: Network,
     pub anchor: BlockHash,
@@ -694,7 +703,7 @@ impl TryFrom<v1::GetSuccessorsRequestInitial> for GetSuccessorsRequestInitial {
 ///   follow_up : blob;
 /// };
 /// ```
-#[derive(CandidType, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum GetSuccessorsResponse {
     /// A complete response that doesn't require pagination.
     #[serde(rename = "complete")]
@@ -709,7 +718,7 @@ pub enum GetSuccessorsResponse {
     FollowUp(BlockBlob),
 }
 
-#[derive(CandidType, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetSuccessorsResponseComplete {
     pub blocks: Vec<BlockBlob>,
     pub next: Vec<BlockHeaderBlob>,
@@ -749,7 +758,7 @@ impl TryFrom<v1::GetSuccessorsResponseComplete> for GetSuccessorsResponseComplet
     }
 }
 
-#[derive(CandidType, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetSuccessorsResponsePartial {
     /// A block that is partial (i.e. the full blob has not been sent).
     pub partial_block: BlockBlob,

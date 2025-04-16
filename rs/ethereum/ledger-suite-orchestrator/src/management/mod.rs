@@ -4,7 +4,7 @@ use candid::{CandidType, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CreateCanisterArgs,
     InstallCodeArgs,
 };
@@ -16,7 +16,7 @@ use std::fmt::Debug;
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CallError {
     pub method: String,
     pub reason: Reason,
@@ -44,7 +44,7 @@ impl fmt::Display for CallError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// The reason for the management call failure.
 pub enum Reason {
     /// The canister does not have enough cycles to submit the request.
@@ -147,7 +147,7 @@ pub trait CanisterRuntime {
         O: CandidType + DeserializeOwned + Debug + 'static;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct IcCanisterRuntime {}
 
 impl IcCanisterRuntime {
@@ -268,7 +268,7 @@ impl CanisterRuntime for IcCanisterRuntime {
             sender_canister_version: None,
         };
 
-        self.call("install_code", 0, &install_code).await?;
+        () = self.call("install_code", 0, &install_code).await?;
 
         Ok(())
     }
@@ -288,7 +288,7 @@ impl CanisterRuntime for IcCanisterRuntime {
             sender_canister_version: None,
         };
 
-        self.call("install_code", 0, &install_code).await?;
+        () = self.call("install_code", 0, &install_code).await?;
 
         Ok(())
     }

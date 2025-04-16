@@ -2,8 +2,10 @@
 //! The ingress manager crate implements the selection and validation of
 //! ingresses on the internet computer block chain.
 
+pub mod bouncer;
 mod ingress_handler;
 mod ingress_selector;
+mod metrics;
 
 #[cfg(test)]
 mod proptests;
@@ -17,7 +19,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
@@ -33,7 +35,7 @@ use ic_types::{
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
-use prometheus::{Histogram, IntGauge};
+use metrics::IngressManagerMetrics;
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::hash::BuildHasher;
 use std::{
@@ -48,40 +50,6 @@ use std::{
 ///    branching.
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
-
-/// Keeps the metrics to be exported by the IngressManager
-struct IngressManagerMetrics {
-    ingress_handler_time: Histogram,
-    ingress_selector_get_payload_time: Histogram,
-    ingress_selector_validate_payload_time: Histogram,
-    ingress_payload_cache_size: IntGauge,
-}
-
-impl IngressManagerMetrics {
-    fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            ingress_handler_time: metrics_registry.histogram(
-                "ingress_handler_execution_time",
-                "Ingress Handler execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_selector_get_payload_time: metrics_registry.histogram(
-                "ingress_selector_get_payload_time",
-                "Ingress Selector get_payload execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_selector_validate_payload_time: metrics_registry.histogram(
-                "ingress_selector_validate_payload_time",
-                "Ingress Selector validate_payload execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_payload_cache_size: metrics_registry.int_gauge(
-                "ingress_payload_cache_size",
-                "The number of HashSets in payload builder's ingress payload cache.",
-            ),
-        }
-    }
-}
 
 /// The kind of RandomState you want to generate.
 pub enum RandomStateKind {
@@ -192,7 +160,7 @@ impl IngressManager {
             ingress_pool,
             registry_client,
             request_validator,
-            metrics: IngressManagerMetrics::new(metrics_registry),
+            metrics: IngressManagerMetrics::new(&metrics_registry),
             subnet_id,
             log,
             last_purge_time: RwLock::new(UNIX_EPOCH),
@@ -302,6 +270,7 @@ pub(crate) mod tests {
         registry_and_subnet_id: Option<(Arc<dyn RegistryClient>, SubnetId)>,
         consensus_time: Option<Arc<dyn ConsensusTime>>,
         state: Option<ReplicatedState>,
+        ingress_pool_max_count: Option<usize>,
         run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>),
     ) {
         let ingress_hist_reader = ingress_hist_reader.unwrap_or_else(|| {
@@ -325,7 +294,7 @@ pub(crate) mod tests {
             ),
         ));
         with_test_replica_logger(|log| {
-            with_test_pool_config(|pool_config| {
+            with_test_pool_config(|mut pool_config| {
                 let metrics_registry = MetricsRegistry::new();
                 const VALIDATOR_NODE_ID: u64 = 42;
                 let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
@@ -336,6 +305,9 @@ pub(crate) mod tests {
                         .with_subnet_id(subnet_id)
                         .build(),
                 );
+                if let Some(ingress_pool_max_count) = ingress_pool_max_count {
+                    pool_config.ingress_pool_max_count = ingress_pool_max_count;
+                }
                 let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
                     node_test_id(VALIDATOR_NODE_ID),
                     pool_config,
@@ -367,7 +339,9 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn setup(run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>)) {
-        setup_with_params(None, None, None, None, run)
+        setup_with_params(
+            None, None, None, None, /*ingress_pool_max_count=*/ None, run,
+        )
     }
 
     /// This function takes a lock on the ingress pool and allows the closure to access it.

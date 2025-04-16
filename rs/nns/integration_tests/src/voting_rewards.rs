@@ -2,7 +2,7 @@ use canister_test::Runtime;
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
-use ic_nns_common::types::NeuronId;
+use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
 use ic_nns_governance::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
 use ic_nns_governance_api::pb::v1::{
     Ballot, Governance as GovernanceProto, GovernanceError, NetworkEconomics, Neuron, ProposalData,
@@ -57,6 +57,7 @@ fn test_increase_maturity_just_after_init() {
             proposals: once((
                 1,
                 ProposalData {
+                    id: Some(ProposalId { id: 1 }),
                     proposal_timestamp_seconds: genesis_timestamp_secs,
                     ballots: once((
                         TEST_NEURON_1_ID,
@@ -108,6 +109,11 @@ fn test_increase_maturity_just_after_init() {
                 .await
                 .unwrap());
         }
+        // Async reward distribution
+        for _ in 0..5 {
+            runtime.tick().await;
+        }
+
         assert_eq!(latest_reward_event.day_after_genesis, 1);
         assert!(
             latest_reward_event.distributed_e8s_equivalent > 0,

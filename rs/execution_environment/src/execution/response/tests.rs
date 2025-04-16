@@ -1,26 +1,22 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
-use ic_error_types::ErrorCode;
-use ic_error_types::UserError;
-use ic_interfaces::execution_environment::HypervisorError;
-use ic_management_canister_types::CanisterStatusType;
+use ic_config::embedders::BestEffortResponsesFeature;
+use ic_error_types::{ErrorCode, UserError};
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::NumWasmPages;
+use ic_replicated_state::{MessageMemoryUsage, NumWasmPages};
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
-use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, MessageId},
-    CanisterId, Cycles, Time,
+    messages::{CallbackId, MessageId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, SubnetId, Time,
 };
-use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
-use ic_types::{ComputeAllocation, MemoryAllocation};
+use ic_types_test_utils::ids::{SUBNET_1, SUBNET_42};
 use ic_universal_canister::{call_args, wasm};
 
 #[test]
@@ -128,7 +124,8 @@ fn execute_response_refunds_cycles() {
         .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, test.subnet_size());
     mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size());
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
-    let execution_refund = mgr.convert_instructions_to_cycles(instructions_left);
+    let execution_refund = mgr
+        .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
     assert_eq!(
         balance_after,
         balance_before + cycles_sent / 2u64 + response_transmission_refund + execution_refund
@@ -265,21 +262,23 @@ fn execute_response_traps() {
     // Execute response returns failed status due to trap.
     let result = test.execute_response(a_id, response);
     match result {
-        ExecutionResponse::Ingress((_, ingress_status)) => {
-            let user_id = ingress_status.user_id().unwrap();
-            assert_eq!(
-                ingress_status,
-                IngressStatus::Known {
-                    state: IngressState::Failed(
-                        HypervisorError::CalledTrap(String::new()).into_user_error(&a_id)
-                    ),
-                    receiver: a_id.get(),
-                    time: Time::from_nanos_since_unix_epoch(0),
-                    user_id
-                }
+        ExecutionResponse::Ingress((
+            _,
+            IngressStatus::Known {
+                state: IngressState::Failed(user_error),
+                receiver,
+                time,
+                user_id: _,
+            },
+        )) => {
+            assert_eq!(time, Time::from_nanos_since_unix_epoch(0));
+            assert_eq!(receiver, a_id.get());
+            user_error.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Canister called `ic0.trap` with message: ",
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+        _ => {
             panic!("Wrong execution result.")
         }
     }
@@ -320,26 +319,25 @@ fn execute_response_with_trapping_cleanup() {
     // Execute response returns failed status due to trap.
     let result = test.execute_response(a_id, response);
     match result {
-        ExecutionResponse::Ingress((_, ingress_status)) => {
-            let user_id = ingress_status.user_id().unwrap();
-            let err_trapped = Box::new(HypervisorError::CalledTrap(String::new()));
-            assert_eq!(
-                ingress_status,
-                IngressStatus::Known {
-                    state: IngressState::Failed(
-                        HypervisorError::Cleanup {
-                            callback_err: err_trapped.clone(),
-                            cleanup_err: err_trapped
-                        }
-                        .into_user_error(&a_id)
-                    ),
-                    receiver: a_id.get(),
-                    time: Time::from_nanos_since_unix_epoch(0),
-                    user_id
-                }
+        ExecutionResponse::Ingress((
+            _,
+            IngressStatus::Known {
+                state: IngressState::Failed(user_error),
+                receiver,
+                time,
+                user_id: _,
+            },
+        )) => {
+            assert_eq!(time, Time::from_nanos_since_unix_epoch(0));
+            assert_eq!(receiver, a_id.get());
+            user_error.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Canister called `ic0.trap` with message: ",
             );
+            user_error
+                .assert_contains(ErrorCode::CanisterCalledTrap, "all_on_cleanup also failed:");
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+        _ => {
             panic!("Wrong execution result.")
         }
     }
@@ -1289,9 +1287,11 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1406,9 +1406,11 @@ fn dts_response_concurrent_cycles_change_fails() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1470,7 +1472,7 @@ fn dts_response_concurrent_cycles_change_fails() {
 }
 
 #[test]
-fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
+fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     // Test steps:
     // 1. Canister A calls canister B.
     // 2. Canister B replies to canister A.
@@ -1546,9 +1548,11 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1609,6 +1613,104 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
         test.execution_state(a_id).stable_memory.size,
         NumWasmPages::from(2)
     );
+}
+
+#[test]
+fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
+    // Test steps:
+    // 1. Canister A calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A traps.
+    // 4. The cleanup callback of canister A runs in multiple slices.
+    // 5. While canister A is paused, we emulate more postponed charges.
+    // 6. The cleanup callback resumes and succeeds because it cannot change the
+    //    cycles balance of the canister.
+    let instruction_limit = 100_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(1_000_000)
+        .with_subnet_memory_threshold(100 * 1024 * 1024)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let transferred_cycles = Cycles::new(1_000);
+
+    let b = wasm()
+        .accept_cycles(transferred_cycles)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .inter_update(
+            b_id,
+            call_args()
+                .other_side(b.clone())
+                .on_reply(
+                    wasm()
+                        // Fail the response callback to trigger the cleanup callback.
+                        .trap(),
+                )
+                .on_cleanup(
+                    wasm()
+                        // Grow by enough pages to trigger a cycles reservation for the extra storage.
+                        .stable64_grow(1_300)
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(a_id, Some(1), None)
+        .unwrap();
+
+    // The test setup is done by this point.
+
+    // Execute one slice of the canister. This will run the response callback in full as
+    // it immediately traps and will start the first slice of the cleanup callback.
+    test.execute_slice(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Emulate a postponed charge that drives the cycles balance of the canister to zero.
+    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    // Keep running the cleanup callback until it finishes.
+    test.execute_slice(a_id);
+    while test.canister_state(a_id).next_execution() != NextExecution::None {
+        test.execute_slice(a_id);
+    }
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    // Check that the cleanup callback did run.
+    assert_eq!(
+        test.execution_state(a_id).stable_memory.size,
+        NumWasmPages::from(1300)
+    );
+
+    // Even though the emulated ingress induction debit was set to be equal to the
+    // canister's balance, it's going to be capped by the amount removed from the
+    // balance during Wasm execution, so the canister will maintain a positive
+    // balance.
+    assert!(test.canister_state(a_id).system_state.balance() > Cycles::zero());
 }
 
 #[test]
@@ -2480,7 +2582,7 @@ fn cycles_balance_changes_applied_correctly() {
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(81_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(301_000_000_000))
         .unwrap();
 
     test.ingress(
@@ -2510,7 +2612,7 @@ fn cycles_balance_changes_applied_correctly() {
             b_id,
             "update",
             call_args().other_side(b.clone()),
-            Cycles::new(5_000_000_000_000),
+            Cycles::new(10_000_000_000_000),
         )
         .build();
     let a_balance_old = test.canister_state(a_id).system_state.balance();
@@ -2531,7 +2633,7 @@ fn test_cycles_burn() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let amount = 1_000_000_000;
     let mut balance = Cycles::new(amount);
@@ -2558,7 +2660,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::from(1_000_000);
-    let canister_message_memory_usage = NumBytes::from(0);
+    let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
@@ -2939,8 +3041,14 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     assert!(counters[1] < counters[2]);
 }
 
-fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResult, UserError> {
+const OWN_SUBNET_ID: SubnetId = SUBNET_1;
+const OTHER_SUBNET_ID: SubnetId = SUBNET_42;
+
+fn test_call_with_best_effort_response_feature_flag_impl(
+    flag: BestEffortResponsesFeature,
+) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(OWN_SUBNET_ID)
         .with_best_effort_responses(flag)
         .build();
 
@@ -2968,28 +3076,23 @@ fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResul
 }
 
 #[test]
-fn test_best_effort_responses_feature_flag_enabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Enabled) {
-        Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
-        _ => panic!("Unexpected result"),
-    };
+fn test_call_with_best_effort_response_feature_flag() {
+    for flag in &[
+        BestEffortResponsesFeature::SpecificSubnets(vec![]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OWN_SUBNET_ID, OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::ApplicationSubnetsOnly,
+        BestEffortResponsesFeature::Enabled,
+    ] {
+        match test_call_with_best_effort_response_feature_flag_impl(flag.clone()) {
+            Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
+            _ => panic!("Unexpected result"),
+        };
+    }
 }
 
-#[test]
-fn test_best_effort_responses_feature_flag_disabled() {
-    match test_best_effort_responses_feature_flag(FlagStatus::Disabled) {
-        Err(e) => {
-            assert_eq!(e.code(), ErrorCode::CanisterContractViolation);
-            assert!(e
-                .description()
-                .ends_with("ic0::call_with_best_effort_response is not enabled."));
-        }
-        _ => panic!("Unexpected result"),
-    };
-}
-
-fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
-    flag: FlagStatus,
+fn ic0_msg_deadline_best_effort_responses_feature_flag_impl(
+    flag: BestEffortResponsesFeature,
 ) -> Result<WasmResult, UserError> {
     let mut test = ExecutionTestBuilder::new()
         .with_best_effort_responses(flag)
@@ -3007,21 +3110,18 @@ fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
 }
 
 #[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_enabled() {
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag() {
     let no_deadline = Time::from(NO_DEADLINE).as_nanos_since_unix_epoch();
-    assert_eq!(
-        helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Enabled).unwrap(),
-        WasmResult::Reply(no_deadline.to_le_bytes().into())
-    );
-}
-
-#[test]
-fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
-    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
-        .unwrap_err();
-
-    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
-    assert!(err
-        .description()
-        .ends_with("ic0::msg_deadline is not enabled."));
+    for flag in &[
+        BestEffortResponsesFeature::SpecificSubnets(vec![]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::SpecificSubnets(vec![OWN_SUBNET_ID, OTHER_SUBNET_ID]),
+        BestEffortResponsesFeature::ApplicationSubnetsOnly,
+        BestEffortResponsesFeature::Enabled,
+    ] {
+        assert_eq!(
+            ic0_msg_deadline_best_effort_responses_feature_flag_impl(flag.clone()).unwrap(),
+            WasmResult::Reply(no_deadline.to_le_bytes().into())
+        );
+    }
 }

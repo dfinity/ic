@@ -16,7 +16,7 @@ use std::{
 use strum_macros::EnumIter;
 
 /// Represents the types of methods that a Wasm module can export.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmMethod {
     /// An exported update method along with its name.
@@ -129,7 +129,7 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
 }
 
 /// The various system methods available to canisters.
-#[derive(Clone, Debug, PartialEq, Eq, EnumIter, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum SystemMethod {
     /// A system method for initializing a Wasm module.
@@ -230,7 +230,7 @@ impl TryFrom<pb::wasm_method::SystemMethod> for SystemMethod {
 /// If the canister migrates from `wasm32` to `wasm64` or back having some
 /// outstanding calls, we will try to convert the stored values into
 /// the required type and call the function.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmClosure {
     pub func_idx: u32,
     pub env: u64,
@@ -251,7 +251,7 @@ pub const UNKNOWN_CANISTER_ID: CanisterId =
 /// Callback holds references to functions executed when a response is received.
 /// It also tracks information about the origin of the request.
 /// This information is used to validate the response when it is received.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
     /// The request sender's ID.
@@ -380,7 +380,7 @@ impl TryFrom<pb::Callback> for Callback {
 }
 
 /// A reference to a callable function/method in a Wasm module, which can be:
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum FuncRef {
     /// A method that a canister can export.
     Method(WasmMethod),

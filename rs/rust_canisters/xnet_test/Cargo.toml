@@ -12,7 +12,10 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
-dfn_core = { path = "../dfn_core" }
+futures = { workspace = true }
+ic-cdk = { git = "https://github.com/dfinity/cdk-rs", rev = "4e287ce51636b0e70768c193da38d2fc5324ea15" }
+ic-cdk-macros = { git = "https://github.com/dfinity/cdk-rs", rev = "4e287ce51636b0e70768c193da38d2fc5324ea15" }
 rand = { workspace = true }
 rand_pcg = "0.3"
 serde = { workspace = true }
+serde_bytes = { workspace = true }

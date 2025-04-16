@@ -1,15 +1,18 @@
 [package]
 name = "icp-config"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-ic-config = { path = "../../config" }
-ic-replicated-state = { path = "../../replicated_state" }
-ic-system-api = { path = "../../system_api" }
-ic-types = { path = "../../types/types" }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 eyre = "0.6.8"
+ic-config = { path = "../../config" }
+ic-embedders = { path = "../../embedders" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-types = { path = "../../types/types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

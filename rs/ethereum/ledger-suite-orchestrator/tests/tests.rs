@@ -4,50 +4,23 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
-    ManagedCanisters, OrchestratorArg, OrchestratorInfo, UpdateCyclesManagement, UpgradeArg,
+    ManagedCanisters, ManagedLedgerSuite, OrchestratorArg, OrchestratorInfo,
+    UpdateCyclesManagement, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
 use ic_ledger_suite_orchestrator_test_utils::{
-    assert_reply, default_init_arg, ledger_suite_orchestrator_wasm, new_state_machine,
-    supported_erc20_tokens, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
+    assert_reply, cketh_installed_canisters, default_init_arg, ledger_suite_orchestrator_wasm,
+    new_state_machine, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
     GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-use proptest::prelude::ProptestConfig;
-use proptest::proptest;
 use std::sync::Arc;
 
 const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 
 pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
-
-proptest! {
-    #![proptest_config(ProptestConfig {
-            cases: 10,
-            .. ProptestConfig::default()
-        })]
-    #[test]
-    fn should_install_orchestrator_and_add_supported_erc20_tokens(mut init_arg in arb_init_arg(), minter_id in arb_principal()) {
-        init_arg.minter_id = Some(minter_id);
-        let more_controllers = init_arg.more_controller_ids.clone();
-        let mut orchestrator = LedgerSuiteOrchestrator::new(Arc::new(new_state_machine()), init_arg).register_embedded_wasms();
-        let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id.get().into();
-        let controllers: Vec<_> = std::iter::once(orchestrator_principal).chain(more_controllers.into_iter()).collect();
-
-        for token in supported_erc20_tokens() {
-            orchestrator = orchestrator
-                .add_erc20_token(token)
-                .expect_new_ledger_and_index_canisters()
-                .assert_all_controlled_by(&controllers)
-                .assert_ledger_icrc1_total_supply(0_u8)
-                .assert_index_has_correct_ledger_id()
-                .setup;
-        }
-    }
-}
 
 #[test]
 fn should_spawn_ledger_with_correct_init_args() {
@@ -129,6 +102,7 @@ fn should_change_cycles_for_canister_creation() {
                     cycles_for_index_creation: Some(50_000_000_000_000_u128.into()),
                     ..Default::default()
                 }),
+                manage_ledger_suites: None,
             },
         ))
         .unwrap();
@@ -164,7 +138,8 @@ fn should_discover_new_archive_and_top_up() {
         .expect_new_ledger_and_index_canisters()
         .assert_ledger_has_cycles(200_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+        .into()
         .trigger_creation_of_archive()
         .assert_ledger_has_cycles(100_000_000_000_000_u128)
         .assert_all_archives_have_cycles(100_000_000_000_000_u128);
@@ -175,14 +150,15 @@ fn should_discover_new_archive_and_top_up() {
     let managed_canisters = managed_canisters
         .assert_all_archives_have_cycles(100_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1")
+        .into();
 
     managed_canisters.setup.advance_time_for_periodic_tasks();
 
     managed_canisters
         .assert_all_archives_have_cycles(110_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1");
 }
 
 #[test]
@@ -274,6 +250,7 @@ fn should_reject_upgrade_with_invalid_args() {
         index_compressed_wasm_hash: None,
         archive_compressed_wasm_hash: None,
         cycles_management: None,
+        manage_ledger_suites: None,
     };
 
     test_upgrade_with_invalid_args(
@@ -299,6 +276,17 @@ fn should_reject_upgrade_with_invalid_args() {
         &OrchestratorArg::UpgradeArg(UpgradeArg {
             git_commit_hash: Some(GIT_COMMIT_HASH.to_string()),
             archive_compressed_wasm_hash: Some(UNKNOWN_WASM_HASH.to_string()),
+            ..valid_upgrade_arg.clone()
+        }),
+    );
+
+    test_upgrade_with_invalid_args(
+        &orchestrator,
+        &OrchestratorArg::UpgradeArg(UpgradeArg {
+            manage_ledger_suites: Some(vec![
+                cketh_installed_canisters(),
+                cketh_installed_canisters(), //erroneous duplicate entry
+            ]),
             ..valid_upgrade_arg.clone()
         }),
     );
@@ -351,37 +339,40 @@ fn should_retrieve_orchestrator_info() {
     let usdt_ledger_id = canisters.ledger_canister_id();
     let usdt_index_id = canisters.index_canister_id();
 
-    let info = canisters.setup.get_orchestrator_info();
+    let orchestrator = canisters.setup;
+    let info = orchestrator.get_orchestrator_info();
+    let ckusdc_managed_canisters = ManagedCanisters {
+        erc20_contract: usdc.contract.clone(),
+        ckerc20_token_symbol: "ckUSDC".to_string(),
+        ledger: Some(ManagedCanisterStatus::Installed {
+            canister_id: usdc_ledger_id.into(),
+            installed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
+        }),
+        index: Some(ManagedCanisterStatus::Installed {
+            canister_id: usdc_index_id.into(),
+            installed_wasm_hash: embedded_index_wasm_hash.to_string(),
+        }),
+        archives: vec![],
+    };
+    let ckusdt_managed_canisters = ManagedCanisters {
+        erc20_contract: usdt.contract.clone(),
+        ckerc20_token_symbol: "ckUSDT".to_string(),
+        ledger: Some(ManagedCanisterStatus::Installed {
+            canister_id: usdt_ledger_id.into(),
+            installed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
+        }),
+        index: Some(ManagedCanisterStatus::Installed {
+            canister_id: usdt_index_id.into(),
+            installed_wasm_hash: embedded_index_wasm_hash.to_string(),
+        }),
+        archives: vec![],
+    };
     assert_eq!(
         info,
         OrchestratorInfo {
             managed_canisters: vec![
-                ManagedCanisters {
-                    erc20_contract: usdc.contract.clone(),
-                    ckerc20_token_symbol: "ckUSDC".to_string(),
-                    ledger: Some(ManagedCanisterStatus::Installed {
-                        canister_id: usdc_ledger_id.into(),
-                        installed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
-                    }),
-                    index: Some(ManagedCanisterStatus::Installed {
-                        canister_id: usdc_index_id.into(),
-                        installed_wasm_hash: embedded_index_wasm_hash.to_string()
-                    }),
-                    archives: vec![]
-                },
-                ManagedCanisters {
-                    erc20_contract: usdt.contract.clone(),
-                    ckerc20_token_symbol: "ckUSDT".to_string(),
-                    ledger: Some(ManagedCanisterStatus::Installed {
-                        canister_id: usdt_ledger_id.into(),
-                        installed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
-                    }),
-                    index: Some(ManagedCanisterStatus::Installed {
-                        canister_id: usdt_index_id.into(),
-                        installed_wasm_hash: embedded_index_wasm_hash.to_string()
-                    }),
-                    archives: vec![]
-                }
+                ckusdc_managed_canisters.clone(),
+                ckusdt_managed_canisters.clone()
             ],
             cycles_management: CyclesManagement {
                 cycles_for_ledger_creation: Nat::from(200_000_000_000_000_u64),
@@ -396,7 +387,31 @@ fn should_retrieve_orchestrator_info() {
                 index_compressed_wasm_hash: embedded_index_wasm_hash.to_string(),
                 archive_compressed_wasm_hash: embedded_archive_wasm_hash.to_string(),
             }),
+            managed_pre_existing_ledger_suites: None,
         }
+    );
+
+    let cketh_canisters = cketh_installed_canisters();
+    let orchestrator = orchestrator.manage_installed_canisters(vec![cketh_canisters.clone()]);
+    let info_after_managing_cketh = orchestrator.get_orchestrator_info();
+
+    assert_eq!(
+        OrchestratorInfo {
+            managed_pre_existing_ledger_suites: Some(vec![ManagedLedgerSuite {
+                token_symbol: cketh_canisters.token_symbol,
+                ledger: Some(ManagedCanisterStatus::Installed {
+                    canister_id: cketh_canisters.ledger.canister_id,
+                    installed_wasm_hash: cketh_canisters.ledger.installed_wasm_hash,
+                }),
+                index: Some(ManagedCanisterStatus::Installed {
+                    canister_id: cketh_canisters.index.canister_id,
+                    installed_wasm_hash: cketh_canisters.index.installed_wasm_hash,
+                }),
+                archives: cketh_canisters.archives.unwrap(),
+            }]),
+            ..info
+        },
+        info_after_managing_cketh
     );
 }
 
@@ -506,6 +521,7 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
             index_compressed_wasm_hash: None,
             archive_compressed_wasm_hash: None,
             cycles_management: None,
+            manage_ledger_suites: None,
         },
     );
 
@@ -518,6 +534,7 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
 mod upgrade {
     use super::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_ledger_suite_orchestrator::candid::{InstalledCanister, InstalledLedgerSuite};
     use ic_ledger_suite_orchestrator::state::WasmHash;
     use ic_ledger_suite_orchestrator_test_utils::universal_canister::{
         CanisterChangeDetails, CanisterInfoResponse, CanisterInstallMode, UniversalCanister,
@@ -526,7 +543,7 @@ mod upgrade {
         default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
         usdt_erc20_contract, GIT_COMMIT_HASH_UPGRADE,
     };
-    use ic_state_machine_tests::CanisterStatusType;
+    use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusType};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use proptest::prelude::Rng;
@@ -617,6 +634,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -696,6 +714,7 @@ mod upgrade {
                 index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
+                manage_ledger_suites: None,
             },
         );
         orchestrator.advance_time_for_upgrade();
@@ -790,6 +809,7 @@ mod upgrade {
                 index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -860,6 +880,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -921,6 +942,7 @@ mod upgrade {
                     index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                     archive_compressed_wasm_hash: None,
                     cycles_management: None,
+                    manage_ledger_suites: None,
                 },
             );
 
@@ -970,7 +992,8 @@ mod upgrade {
             .assert_ledger_has_wasm_hash(embedded_ledger_wasm_hash.clone())
             .assert_index_has_wasm_hash(embedded_index_wasm_hash.clone())
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into();
 
         // Run task DiscoverArchives pre-emptively to ensure it's not run during upgrade
         // so that we can test the case where the orchestrator doesn't know about the archive
@@ -978,11 +1001,13 @@ mod upgrade {
 
         let managed_canisters = managed_canisters
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into()
             .trigger_creation_of_archive()
             .check_metrics()
             // the orchestrator is not yet aware of the archive
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into();
 
         let orchestrator = managed_canisters.setup.upgrade_ledger_suite_orchestrator(
             ledger_suite_orchestrator_wasm(),
@@ -992,6 +1017,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -1005,7 +1031,8 @@ mod upgrade {
             })
             .check_metrics()
             // the orchestrator is not yet aware of the archive
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into()
             .setup;
 
         orchestrator.env.tick();
@@ -1017,6 +1044,89 @@ mod upgrade {
                 has_been_upgraded_to(t, &embedded_archive_wasm_hash)
             })
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1");
+    }
+
+    #[test]
+    fn should_upgrade_canisters_managed_but_not_installed_by_orchestrator() {
+        let env = Arc::new(new_state_machine());
+        let orchestrator =
+            LedgerSuiteOrchestrator::new(env.clone(), default_init_arg()).register_embedded_wasms();
+        let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+        let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+        let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
+        let [ledger, index] = {
+            // Temporary orchestrator is used as helper to spawn-off a new ledger suite.
+            let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
+                env.clone(),
+                default_init_arg(),
+            );
+            let embedded_ledger_wasm_hash_v1 = orchestrator_v1.embedded_ledger_wasm_hash.clone();
+            let embedded_index_wasm_hash_v1 = orchestrator_v1.embedded_index_wasm_hash.clone();
+            assert_ne!(embedded_ledger_wasm_hash, embedded_ledger_wasm_hash_v1);
+            let canisters = orchestrator_v1
+                .register_embedded_wasms()
+                .add_erc20_token(usdc())
+                .expect_new_ledger_and_index_canisters()
+                .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash_v1)
+                .canister_ids;
+            [
+                InstalledCanister {
+                    canister_id: canisters.ledger.unwrap(),
+                    installed_wasm_hash: embedded_ledger_wasm_hash_v1.to_string(),
+                },
+                InstalledCanister {
+                    canister_id: canisters.index.unwrap(),
+                    installed_wasm_hash: embedded_index_wasm_hash_v1.to_string(),
+                },
+            ]
+        };
+        let universal_canister = UniversalCanister::new(env.clone());
+        for canister_id in [ledger.canister_id, index.canister_id] {
+            env.update_settings(
+                &CanisterId::try_from(PrincipalId(canister_id)).unwrap(),
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![orchestrator.ledger_suite_orchestrator_id.into()])
+                    .build(),
+            )
+            .unwrap();
+        }
+
+        let orchestrator = orchestrator.upgrade_ledger_suite_orchestrator(
+            ledger_suite_orchestrator_wasm(),
+            UpgradeArg {
+                git_commit_hash: Some(GIT_COMMIT_HASH_UPGRADE.to_string()),
+                ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash.to_string()),
+                index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
+                archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
+                cycles_management: None,
+                manage_ledger_suites: Some(vec![InstalledLedgerSuite {
+                    token_symbol: "ckETH".to_string(),
+                    ledger: ledger.clone(),
+                    index: index.clone(),
+                    archives: None,
+                }]),
+            },
+        );
+
+        orchestrator.advance_time_for_upgrade();
+        orchestrator.advance_time_for_upgrade();
+
+        assert_eq!(
+            universal_canister
+                .canister_info(CanisterId::try_from(PrincipalId(index.canister_id)).unwrap())
+                .module_hash()
+                .unwrap()
+                .as_slice(),
+            embedded_index_wasm_hash.as_ref()
+        );
+        assert_eq!(
+            universal_canister
+                .canister_info(CanisterId::try_from(PrincipalId(ledger.canister_id)).unwrap())
+                .module_hash()
+                .unwrap()
+                .as_slice(),
+            embedded_ledger_wasm_hash.as_ref()
+        );
     }
 }

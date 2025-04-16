@@ -673,12 +673,7 @@ impl SnsCanisters<'_> {
                     subaccount: to_subaccount,
                 },
                 memo: None,
-                created_at_time: Some(
-                    SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                ),
+                created_at_time: None,
             },
         )
         .await
@@ -989,6 +984,12 @@ impl SnsCanisters<'_> {
             .await
     }
 
+    pub async fn run_periodic_tasks_now(&self) -> Result<(), String> {
+        self.governance
+            .update_("run_periodic_tasks_now", candid_one, ())
+            .await
+    }
+
     pub async fn add_neuron_permissions_or_panic(
         &self,
         sender: &Sender,
@@ -1127,7 +1128,7 @@ impl SnsCanisters<'_> {
             if reward_event.end_timestamp_seconds.unwrap() > last_end_timestamp_seconds {
                 return reward_event;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
 
         panic!(
@@ -1146,7 +1147,7 @@ impl SnsCanisters<'_> {
             if proposal.reward_event_end_timestamp_seconds.is_some() {
                 return proposal;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
         panic!("Proposal {:?} was not rewarded", proposal_id);
     }
@@ -1173,7 +1174,7 @@ impl SnsCanisters<'_> {
                 return status;
             }
 
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
         panic!(
             "Canister {} didn't reach the running state after upgrading",
@@ -1191,7 +1192,8 @@ impl SnsCanisters<'_> {
                 return proposal;
             }
 
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
+
             proposal = self.get_proposal(*proposal_id).await;
         }
 
@@ -1274,7 +1276,7 @@ impl SnsCanisters<'_> {
                 );
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
         }
 
         panic!(
@@ -1301,19 +1303,27 @@ pub async fn install_rust_canister_with_memory_allocation(
         .collect::<Box<[String]>>();
 
     // Wrapping call to cargo_bin_* to avoid blocking current thread
-    let wasm: Wasm = tokio::runtime::Handle::current()
-        .spawn_blocking(move || {
-            println!(
-                "Compiling Wasm for {} in task on thread: {:?}",
-                binary_name_,
-                thread::current().id()
-            );
-            // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+    let wasm: Wasm = match canister.runtime() {
+        Runtime::Remote(_) | Runtime::Local(_) => {
+            tokio::runtime::Handle::current()
+                .spawn_blocking(move || {
+                    println!(
+                        "Compiling Wasm for {} in task on thread: {:?}",
+                        binary_name_,
+                        thread::current().id()
+                    );
+                    // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+                    let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
+                    Project::cargo_bin_maybe_from_env(&binary_name_, &features)
+                })
+                .await
+                .unwrap()
+        }
+        Runtime::StateMachine(_) => {
             let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
             Project::cargo_bin_maybe_from_env(&binary_name_, &features)
-        })
-        .await
-        .unwrap();
+        }
+    };
 
     println!("Done compiling the wasm for {}", binary_name.as_ref());
 
@@ -1380,10 +1390,7 @@ pub async fn set_up_governance_canister(
 }
 
 /// Compiles the ledger canister, builds it's initial payload and installs it
-pub async fn install_ledger_canister<'runtime, 'a>(
-    canister: &mut Canister<'runtime>,
-    args: LedgerArgument,
-) {
+pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerArgument) {
     install_rust_canister_with_memory_allocation(
         canister,
         "ic-icrc1-ledger",
@@ -1402,10 +1409,7 @@ pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) 
 }
 
 /// Compiles the ledger index canister, builds it's initial payload and installs it
-pub async fn install_index_ng_canister<'runtime, 'a>(
-    canister: &mut Canister<'runtime>,
-    args: Option<IndexArg>,
-) {
+pub async fn install_index_ng_canister(canister: &mut Canister<'_>, args: Option<IndexArg>) {
     install_rust_canister_with_memory_allocation(
         canister,
         "ic-icrc1-index-ng",

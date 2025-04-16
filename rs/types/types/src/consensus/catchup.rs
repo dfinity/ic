@@ -24,7 +24,7 @@ pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 /// A generic struct shared between [`CatchUpContent`] and [`CatchUpShareContent`].
 /// Consists of objects all occurring at a specific height which we will refer to
 /// as the catch up height.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct CatchUpContentT<T> {
     /// Replica version that was running when this CUP was created.
     pub version: ReplicaVersion,
@@ -207,7 +207,7 @@ pub type CatchUpContentHash = CryptoHashOf<CatchUpContent>;
 impl From<&CatchUpPackage> for pb::CatchUpPackage {
     fn from(cup: &CatchUpPackage) -> Self {
         Self {
-            signer: Some(pb::NiDkgId::from(cup.signature.signer)),
+            signer: Some(pb::NiDkgId::from(cup.signature.signer.clone())),
             signature: cup.signature.signature.clone().get().0,
             content: pb::CatchUpContent::from(&cup.content).as_protobuf_vec(),
         }
@@ -316,7 +316,7 @@ impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
 ///   C1.height > C2.height ||
 ///   C1.height == C2.height && C1.registry_version > C2.registry_version
 /// ```
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CatchUpPackageParam {
     height: Height,
     registry_version: RegistryVersion,
@@ -372,7 +372,7 @@ impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
 
 /// [`CatchUpContentProtobufBytes`] holds bytes that represent a protobuf serialized
 /// catch-up package
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CatchUpContentProtobufBytes(Vec<u8>);
 
 impl From<&pb::CatchUpPackage> for CatchUpContentProtobufBytes {

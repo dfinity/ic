@@ -31,7 +31,6 @@ def take_ownership_of_file(file: Path):
     invoke.run(f"sudo chgrp {current_user} {file}")
 
 
-
 def make_tmpfs(base_dir: str = DEFAULT_TMP_PREFIX) -> str:
     """
     Mount a tmpfs volume in a subdirectory of the given `base_dir`.
@@ -39,7 +38,7 @@ def make_tmpfs(base_dir: str = DEFAULT_TMP_PREFIX) -> str:
 
     This seems to work across environments:
       - CI - running K8S containerd runners
-      - gitlab-ci/container/container-run.sh
+      - ci/container/container-run.sh
 
     Returns the unique tmpfs mount point
     """
@@ -52,15 +51,17 @@ def make_tmpfs(base_dir: str = DEFAULT_TMP_PREFIX) -> str:
     return temp_sys_dir
 
 
-def process_temp_sys_dir_args(temp_container_sys_dir: Optional[str],
-                              tmpfs_container_sys_dir: Optional[str]) -> Optional[str]:
+def process_temp_sys_dir_args(
+    temp_container_sys_dir: Optional[str], tmpfs_container_sys_dir: Optional[str]
+) -> Optional[str]:
     """
 
     Handles two program arguments - user chooses either temp dir or tmpfs dir for podman activities.
     Returns a string pointing at the temporary base dir or None.
     """
-    assert not (temp_container_sys_dir and tmpfs_container_sys_dir), \
-        "temp_container_sys_dir and tmpfs_container_sys_dir flags are mutually exclusive"
+    assert not (
+        temp_container_sys_dir and tmpfs_container_sys_dir
+    ), "temp_container_sys_dir and tmpfs_container_sys_dir flags are mutually exclusive"
     if temp_container_sys_dir:
         return temp_container_sys_dir
 
@@ -88,8 +89,7 @@ def create_container_system_dirs(base_dir: Path) -> ContainerSystemDirs:
     # Remove this whole function when podman heisenbug no longer applies - see NODE-973
     atexit.register(lambda: invoke.run(f"sudo rm -rf {container_sys_dir} {container_run_dir}"))
 
-    return ContainerSystemDirs(Path(container_sys_dir),
-                               Path(container_run_dir))
+    return ContainerSystemDirs(Path(container_sys_dir), Path(container_run_dir))
 
 
 def remove_image(container_cmd: str, image_tag: str):
@@ -102,4 +102,3 @@ def generate_container_command(default_command: str, temp_sys_dir: Optional[Path
         return f"{default_command} --root {dirs.sys_dir} --runroot {dirs.run_dir} "
 
     return default_command
-

@@ -2,15 +2,16 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types::{CanisterSettingsArgs, LogVisibility};
+use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
+use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
-use num_traits::cast::ToPrimitive;
+use num_traits::{cast::ToPrimitive, SaturatingSub};
 use std::convert::TryFrom;
 
-use crate::canister_manager::CanisterManagerError;
+use crate::canister_manager::types::CanisterManagerError;
 
 /// These limit comes from the spec and is not expected to change,
 /// which is why it is not part of the replica config.
@@ -25,7 +26,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) wasm_memory_threshold: Option<NumBytes>,
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
-    pub(crate) log_visibility: Option<LogVisibility>,
+    pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
 }
 
@@ -37,7 +38,7 @@ impl CanisterSettings {
         wasm_memory_threshold: Option<NumBytes>,
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
-        log_visibility: Option<LogVisibility>,
+        log_visibility: Option<LogVisibilityV2>,
         wasm_memory_limit: Option<NumBytes>,
     ) -> Self {
         Self {
@@ -76,7 +77,7 @@ impl CanisterSettings {
         self.reserved_cycles_limit
     }
 
-    pub fn log_visibility(&self) -> Option<&LogVisibility> {
+    pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
     }
 
@@ -179,7 +180,7 @@ pub(crate) struct CanisterSettingsBuilder {
     wasm_memory_threshold: Option<NumBytes>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
 }
 
@@ -253,7 +254,7 @@ impl CanisterSettingsBuilder {
         }
     }
 
-    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
             ..self
@@ -348,7 +349,7 @@ pub(crate) struct ValidatedCanisterSettings {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
 }
 
@@ -381,7 +382,7 @@ impl ValidatedCanisterSettings {
         self.reservation_cycles
     }
 
-    pub fn log_visibility(&self) -> Option<&LogVisibility> {
+    pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
     }
 
@@ -407,7 +408,7 @@ impl ValidatedCanisterSettings {
 pub(crate) fn validate_canister_settings(
     settings: CanisterSettings,
     canister_memory_usage: NumBytes,
-    canister_message_memory_usage: NumBytes,
+    canister_message_memory_usage: MessageMemoryUsage,
     canister_memory_allocation: MemoryAllocation,
     subnet_available_memory: &SubnetAvailableMemory,
     subnet_memory_saturation: &ResourceSaturation,
@@ -473,24 +474,14 @@ pub(crate) fn validate_canister_settings(
     }
 
     let controllers = settings.controllers();
-    match &controllers {
-        Some(controllers) => {
-            if controllers.len() > max_controllers {
-                return Err(CanisterManagerError::InvalidSettings {
-                    message: format!("Invalid settings: 'controllers' length exceeds maximum size allowed of {}.", max_controllers),
-                });
-            }
-        }
-        None => {}
-    }
-
-    if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
-        if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
-            if wasm_memory_threshold > wasm_memory_limit {
-                return Err(CanisterManagerError::InvalidSettings {
-                    message: format!("Invalid settings: 'wasm_memory_threshold' cannot be larger than 'wasm_memory_limit'. 'wasm_memory_threshold': {}, 'wasm_memory_limit': {}", wasm_memory_threshold, wasm_memory_limit),
-                });
-            }
+    if let Some(controllers) = &controllers {
+        if controllers.len() > max_controllers {
+            return Err(CanisterManagerError::InvalidSettings {
+                message: format!(
+                    "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
+                    max_controllers
+                ),
+            });
         }
     }
 
@@ -541,12 +532,7 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    let allocated_bytes = if new_memory_bytes > old_memory_bytes {
-        new_memory_bytes - old_memory_bytes
-    } else {
-        NumBytes::new(0)
-    };
-
+    let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
     let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
         allocated_bytes,
         subnet_memory_saturation,

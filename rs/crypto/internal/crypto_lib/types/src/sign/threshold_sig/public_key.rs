@@ -8,7 +8,7 @@ use std::hash::Hash;
 use thiserror::Error;
 
 /// A threshold signature public key.
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialOrd, Ord, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum CspThresholdSigPublicKey {
     ThresBls12_381(bls12_381::PublicKeyBytes),
 }
@@ -22,7 +22,7 @@ impl From<CspThresholdSigPublicKey> for bls12_381::PublicKeyBytes {
 }
 
 /// Converting an NI-DKG transcript to a BLS 12 381 CspThresholdSigPublicKey struct failed.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError {
     #[error("the public coefficients of the threshold public key are empty")]
     CoefficientsEmpty,
@@ -85,7 +85,7 @@ pub mod bls12_381 {
     }
 
     /// Converting a threshold signature public key to bytes failed.
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
     pub enum ThresholdSigPublicKeyBytesConversionError {
         #[error("malformed threshold signature public key: {internal_error}")]
         Malformed {
@@ -127,7 +127,7 @@ pub mod bls12_381 {
     }
 
     /// Converting an NI-DKG transcript to a BLS 12 381 public key bytes struct failed.
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
     pub enum CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError {
         #[error("coefficients empty")]
         CoefficientsEmpty,

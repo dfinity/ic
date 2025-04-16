@@ -5,7 +5,7 @@ use phantom_newtype::Id;
 use thiserror::Error;
 
 /// Identifier of a state sync artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StateSyncArtifactId {
     pub height: Height,
     pub hash: CryptoHash,
@@ -49,7 +49,7 @@ impl Chunk {
 }
 
 /// Error codes returned by the `Chunkable` interface.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum AddChunkError {
     #[error("bad chunk")]
     Invalid,

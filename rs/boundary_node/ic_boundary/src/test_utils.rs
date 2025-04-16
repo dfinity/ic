@@ -9,9 +9,11 @@ use axum::Router;
 use clap::Parser;
 use http;
 use ic_base_types::NodeId;
+use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -32,20 +34,27 @@ use ic_types::{
     CanisterId, RegistryVersion, SubnetId,
 };
 use prometheus::Registry;
-use rand::Rng;
 use reqwest;
 
 use crate::{
     cache::Cache,
     cli::Cli,
     core::setup_router,
-    http::HttpClient,
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
-    socket::TcpConnectInfo,
 };
 
-struct TestHttpClient(usize);
+#[macro_export]
+macro_rules! principal {
+    ($id:expr) => {{
+        candid::Principal::from_text($id).unwrap()
+    }};
+}
+
+pub use principal;
+
+#[derive(Debug)]
+pub struct TestHttpClient(pub usize);
 
 #[async_trait]
 impl HttpClient for TestHttpClient {
@@ -64,10 +73,9 @@ impl HttpClient for TestHttpClient {
     }
 }
 
-fn new_random_certified_data() -> Digest {
-    let mut random_certified_data: [u8; 32] = [0; 32];
-    rand::thread_rng().fill(&mut random_certified_data);
-    Digest(random_certified_data)
+fn new_certified_data() -> Digest {
+    let data: [u8; 32] = [0; 32];
+    Digest(data)
 }
 
 pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) {
@@ -97,7 +105,7 @@ pub fn valid_tls_certificate_and_validation_time() -> (X509PublicKeyCert, Time) 
 pub fn new_threshold_key() -> ThresholdSigPublicKey {
     let (_, pk, _) = CertificateBuilder::new(CanisterData {
         canister_id: CanisterId::from_u64(1),
-        certified_data: new_random_certified_data(),
+        certified_data: new_certified_data(),
     })
     .build();
 
@@ -111,7 +119,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
-        initial_notary_delay_millis: 1500,
+        initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
         replica_version_id: ReplicaVersion::default().into(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
@@ -123,7 +131,6 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
     }
 }
@@ -250,26 +257,47 @@ pub fn create_fake_registry_client(
     (registry_client, nodes, ranges)
 }
 
+async fn add_conninfo(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    request
+        .extensions_mut()
+        .insert(Arc::new(ConnInfo::default()));
+    next.run(request).await
+}
+
 pub fn setup_test_router(
     enable_cache: bool,
     enable_logging: bool,
     subnet_count: usize,
     nodes_per_subnet: usize,
     response_size: usize,
+    rate_limit_subnet: Option<usize>,
 ) -> (Router, Vec<Subnet>) {
-    use axum::extract::connect_info::MockConnectInfo;
-    use std::net::SocketAddr;
-
-    let mut args = vec!["", "--local-store-path", "/tmp", "--log-null"];
+    let mut args = vec![
+        "",
+        "--registry-local-store-path",
+        "/tmp",
+        "--obs-log-null",
+        "--retry-update-call",
+    ];
     if !enable_logging {
-        args.push("--disable-request-logging");
+        args.push("--obs-disable-request-logging");
+    }
+
+    // Hacky, but required due to &str
+    let rate_limit_subnet = rate_limit_subnet.unwrap_or(0).to_string();
+    if rate_limit_subnet != "0" {
+        args.push("--rate-limit-per-second-per-subnet");
+        args.push(rate_limit_subnet.as_str());
     }
 
     #[cfg(not(feature = "tls"))]
     let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
-        args.extend_from_slice(&["--hostname", "foobar"]);
+        args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args
     });
 
@@ -293,6 +321,8 @@ pub fn setup_test_router(
     let subnets = registry_snapshot.load_full().unwrap().subnets.clone();
     persister.persist(subnets.clone());
 
+    let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
+
     let router = setup_router(
         registry_snapshot,
         routing_table,
@@ -304,12 +334,10 @@ pub fn setup_test_router(
         enable_cache.then_some(Arc::new(
             Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
         )),
+        salt,
     );
 
-    let router = router.layer(MockConnectInfo(TcpConnectInfo(SocketAddr::from((
-        [0, 0, 0, 0],
-        1337,
-    )))));
+    let router = router.layer(axum::middleware::from_fn(add_conninfo));
 
     (router, subnets)
 }

@@ -1,6 +1,6 @@
 use crate::metrics::HttpHandlerMetrics;
-use ic_async_utils::JoinMap;
-use ic_logger::{error, ReplicaLogger};
+use ic_http_endpoints_async_utils::JoinMap;
+use ic_logger::{info, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
 use std::{
     cmp::max,
@@ -140,7 +140,6 @@ impl IngressWatcher {
         completed_execution_messages_rx: Receiver<(MessageId, Height)>,
         cancellation_token: CancellationToken,
     ) -> (IngressWatcherHandle, JoinHandle<()>) {
-        #[allow(clippy::disallowed_methods)]
         let (subscriber_registration_tx, subscriber_registration_rx) =
             channel::<IngressWatcherSubscription>(INGRESS_WATCHER_CHANNEL_SIZE);
 
@@ -240,14 +239,21 @@ impl IngressWatcher {
                     self.handle_certification(*certified_height.borrow_and_update());
                 }
                 // Cancel the tracking of an ingress message.
-                // TODO: Handle Some(Err(_)) case?
-                Some(Ok((_, message_id))) = self.cancellations.join_next() => {
-                    self.metrics.ingress_watcher_cancelled_subscriptions_total.inc();
-                    self.handle_cancellation(&message_id);
+                Some(cancellation_handle) = self.cancellations.join_next() => {
+                    match cancellation_handle {
+                        Ok((_, message_id)) => {
+                            self.metrics.ingress_watcher_cancelled_subscriptions_total.inc();
+                            self.handle_cancellation(&message_id);
+                        }
+                        // If the task panics we propagate the panic.
+                        Err(join_error) => if join_error.is_panic() {
+                            std::panic::resume_unwind(join_error.into_panic());
+                        }
+                    }
                 }
 
                 _ = self.cancellation_token.cancelled() => {
-                    error!(
+                    info!(
                         self.log,
                         "Ingress watcher event loop cancelled.",
                     );
@@ -479,7 +485,6 @@ mod tests {
         assert_eq!(ingress_watcher.completed_execution_heights.len(), 0);
     }
 
-    /// TODO: Can be removed. We have integration test covering the sames scenario.
     #[rstest]
     fn test_handling_of_duplicate_requests(mut ingress_watcher: IngressWatcher) {
         let message = MessageId::from([0; EXPECTED_MESSAGE_ID_LENGTH]);

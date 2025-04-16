@@ -5,6 +5,7 @@ use crate::{
     },
 };
 use ic_certified_map::RbTree;
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
     pb::v1::{
         registry_mutation::Type, RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation,
@@ -36,7 +37,7 @@ pub const MAX_REGISTRY_DELTAS_SIZE: usize =
 /// so that we're able to call pop_front().
 pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
 pub type Version = u64;
-#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub struct EncodedVersion([u8; 8]);
 
 impl EncodedVersion {
@@ -74,7 +75,7 @@ impl AsRef<[u8]> for EncodedVersion {
 /// The registry is a versioned key value store.
 ///
 /// TODO(NNS1-487): Garbage collection.
-#[derive(PartialEq, Default, Clone, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct Registry {
     /// Global counter that is incremented each time a mutation is applied to
     /// the registry. Each set of changes is tagged with this version.
@@ -147,6 +148,21 @@ impl Registry {
             return None;
         }
         Some(value)
+    }
+
+    pub fn get_chunk(&self, request: GetChunkRequest) -> Result<Chunk, String> {
+        let GetChunkRequest { content_sha256 } = request;
+
+        let Some(content_sha256) = content_sha256 else {
+            return Err("Request does not specify content_sha256.".to_string());
+        };
+
+        let content = crate::storage::with_chunks(|chunks| chunks.get_chunk(&content_sha256))
+            .ok_or_else(|| format!("No chunk with SHA256 = {:X?}", content_sha256))?;
+
+        Ok(Chunk {
+            content: Some(content),
+        })
     }
 
     /// Computes the number of deltas with version greater than `since_version`
@@ -286,6 +302,11 @@ impl Registry {
         self.apply_mutations(mutations);
     }
 
+    #[cfg(test)]
+    pub fn apply_mutations_for_test(&mut self, mutations: Vec<RegistryMutation>) {
+        self.apply_mutations(mutations);
+    }
+
     /// Checks that invariants would hold after applying the mutations
     pub(crate) fn verify_mutations_internal(&self, mutations: &Vec<RegistryMutation>) {
         let errors = self.verify_mutation_type(mutations.as_slice());
@@ -347,7 +368,7 @@ impl Registry {
     /// [`MAX_REGISTRY_DELTAS_SIZE`] limit.
     fn changelog_insert(&mut self, version: u64, req: &RegistryAtomicMutateRequest) {
         let version = EncodedVersion::from(version);
-        let bytes = pb_encode(req);
+        let bytes = req.encode_to_vec();
 
         let delta_size = version.as_ref().len() + bytes.len();
         if delta_size > MAX_REGISTRY_DELTAS_SIZE {
@@ -457,12 +478,6 @@ impl Registry {
             }
         }
     }
-}
-
-fn pb_encode(msg: &impl prost::Message) -> Vec<u8> {
-    let mut buf = vec![];
-    msg.encode(&mut buf).unwrap();
-    buf
 }
 
 #[cfg(test)]
@@ -1085,7 +1100,7 @@ mod tests {
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
             .changelog
-            .insert(EncodedVersion::from(version), pb_encode(&req));
+            .insert(EncodedVersion::from(version), req.encode_to_vec());
 
         (*registry.store.entry(mutation.key).or_default()).push_back(RegistryValue {
             version,
@@ -1214,7 +1229,7 @@ Average length of the values: {} (desired: {})",
             };
 
             let version = EncodedVersion::from(version);
-            let bytes = pb_encode(&req);
+            let bytes = req.encode_to_vec();
 
             version.as_ref().len() + bytes.len()
         }

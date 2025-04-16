@@ -13,70 +13,42 @@ Network configuration details for each IC-OS:
 
 == Deterministic MAC Address
 
-Each IC-OS node must have a unique but deterministic MAC address. To solve this, a schema has been devised.
+Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment environment (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS, BoundaryGuestOS). This MAC address is then utilized to generate the node's network configuration.
 
-=== Schema
+For details, see the link:../../rs/ic_os/deterministic_ips/README.md[mac_address README].
 
-* *The first 8-bits:*
-** IPv4 interfaces: 4a
-** IPv6 interfaces: 6a
+== Hostname
 
-* *The second 8-bits:*
-** We reserve the following hexadecimal numbers for each IC-OS:
-*** SetupOS: 0f
-*** HostOS: 00
-*** GuestOS: 01
-*** Boundary-GuestOS: 02
+Since every HostOS and GuestOS are created equal, assigning a human-centric hostname isn't feasible (think pets vs. cattle). Instead, the management MAC address is used as part of the hostname.
 
-** Note: any additional virtual machine on the same physical machine gets the next higher hexadecimal number.
+There are two different hostname schemas used, depending on the stage of the setup process: *Transient Setup Hostname* and *Persistent Setup Hostname*.
 
-* *The remaining 32-bits:*
-** Deterministically generated
+*1. Transient Setup Hostname*
 
-=== Example MAC addresses
+This schema is used during the initial setup, before a replica has joined the IC. The format is:
 
-* SetupOS: `{4a,6a}:0f:<deterministically-generated-part>`
-* HostOS: `{4a,6a}:00:<deterministically-generated-part>`
-* GuestOS: `{4a,6a}:01:<deterministically-generated-part>`
-* BoundaryOS: `{4a,6a}:02:<deterministically-generated-part>`
-* Next Virtual Machine: `{4a,6a}:03:<deterministically-generated-part>`
+`<system type>-<management mac address>`
 
-Note that the MAC address is expected to be lower-case and to contain colons between the octets.
+Examples:
 
-=== Deterministically Generated Part
+  host-3cecef6b3799
+  replica-3cecef6b3799
+  boundary-3cecef6b3799
 
-The deterministically generated part is generated using the following inputs:
+*2. Persistent Setup Hostname*
 
-1. IPMI MAC address (the MAC address of the BMC)
-a. Obtained via `$ ipmitool lan print | grep 'MAC Address'``
-2. Deployment name
-a. Ex: `mainnet`
+[NOTE]
+Currently, the Persistent Setup Hostname feature is not used, but it has been developed.
 
-The concatenation of the IPMI MAC address and deployment name is hashed:
+After a node has successfully joined the IC, the first 5 characters of the node-id are added to the end of the hostname. The orchestrator is used to fetch the node's node-id. The format is:
 
-  $ sha256sum "<IPMI MAC ADDRESS><DEPLOYMENT NAME>"
-    # Example:
-    $ sha256sum "3c:ec:ef:6b:37:99mainnet"
+`<system type>-<management mac address>-<first 5 characters of the node-id>`
 
-The first 32-bits of the sha256 checksum are then used as the deterministically generated part of the MAC address.
+Examples:
 
-  # Checksum
-  f409d72aa8c98ea40a82ea5a0a437798a67d36e587b2cc49f9dabf2de1cedeeb
-
-  # Deterministically Generated Part
-  f409d72a
-
-==== Deployment name
-
-The deployment name is added to the MAC address generation to further increase its uniqueness. The deployment name *mainnet* is reserved for production. Testnets must use other names to avoid any chance of a MAC address collision in the same data center.
-
-The deployment name is retrieved from the +deployment.json+ configuration file, generated as part of the SetupOS:
-
-  {
-    "deployment": {
-      "name": "mainnet"
-    }
-  }
+  host-3cecef6b3799-4wd4u
+  replica--3cecef6b3799-4wd4u
+  boundary-3cecef6b3799-4wd4u
 
 == IPv6 Address 
 
@@ -85,17 +57,4 @@ In other words, the prefix of the EUI-64 formatted IPv6 SLAAC address is swapped
 
 When the corresponding IPv6 address is assigned, the IEEE’s 64-bit Extended Unique Identifier (EUI-64) format is followed. In this convention, the interface’s unique 48-bit MAC address is reformatted to match the EUI-64 specifications.
 
-The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.json+ configuration file. The host part is the EUI-64 formatted address.
-
-== Active backup
-
-[NOTE]
-This feature is currently under development. See ticket https://dfinity.atlassian.net/browse/NODE-869#[NODE-869].
-
-In order to simplify the physical cabling of the machine, Linux's active-backup bonding technique is utilized. This operating mode also improves redundancy when more than one 10-gigabit ethernet network interface is connected to the switch. A Node Technician can decide to either just use one or all of the 10GbE network interfaces in the bond. The handling of the uplink and connectivity is taken care of by the Linux operating system.
-
-Details can be found in:
-
-  ic/rs/ic_os/setupos_tool generate-network-config
-
-Note that this mode does not increase the bandwidth/throughput. Only one link will be active at the same time.
+The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.ini+ configuration file. The host part is the EUI-64 formatted address.

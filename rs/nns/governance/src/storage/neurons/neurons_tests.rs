@@ -94,7 +94,9 @@ fn new_red_herring_neuron(seed: u64) -> Neuron {
         vote: Vote::No as i32,
     });
 
-    result.known_neuron_data.as_mut().unwrap().name = format!("Red Herring {}", seed,);
+    let mut new_known_neuron_data = result.known_neuron_data().unwrap().clone();
+    new_known_neuron_data.name = format!("Red Herring {}", seed);
+    result.set_known_neuron_data(new_known_neuron_data);
 
     result.transfer.as_mut().unwrap().memo = seed;
 
@@ -132,7 +134,7 @@ fn assert_that_red_herring_neurons_are_untouched(store: &StableNeuronStore<Vecto
     for red_herring_neuron in &*RED_HERRING_NEURONS {
         let id = red_herring_neuron.id();
         assert_eq!(
-            store.read(id, NeuronSections::all()),
+            store.read(id, NeuronSections::ALL),
             Ok(red_herring_neuron.clone())
         );
     }
@@ -188,12 +190,12 @@ fn test_store_simplest_nontrivial_case() {
 
     // 3. Read back the first neuron (the second one should have no effect).
     assert_eq!(
-        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        store.read(NeuronId { id: 42 }, NeuronSections::ALL),
         Ok(neuron_1.clone()),
     );
 
     // 4. Bad read: Unknown NeuronId. This should result in a NotFound Err.
-    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
+    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::NONE);
     match &bad_read_result {
         Err(err) => match err {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
@@ -233,8 +235,8 @@ fn test_store_simplest_nontrivial_case() {
             vote: Vote::Yes as i32,
         });
 
-        let mut known_neuron_data = neuron_1.known_neuron_data.clone();
-        known_neuron_data.as_mut().unwrap().name = "I changed my mind".to_string();
+        let mut known_neuron_data = neuron_1.known_neuron_data().unwrap().clone();
+        known_neuron_data.name = "I changed my mind".to_string();
 
         let mut transfer = neuron_1.transfer.clone();
         transfer.as_mut().unwrap().memo = 405_405;
@@ -246,7 +248,7 @@ fn test_store_simplest_nontrivial_case() {
         neuron.followees = followees;
         neuron.recent_ballots = recent_ballots;
 
-        neuron.known_neuron_data = known_neuron_data;
+        neuron.set_known_neuron_data(known_neuron_data);
         neuron.transfer = transfer;
 
         neuron
@@ -256,7 +258,7 @@ fn test_store_simplest_nontrivial_case() {
 
     // 6. Read to verify update.
     assert_eq!(
-        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        store.read(NeuronId { id: 42 }, NeuronSections::ALL),
         Ok(neuron_5.clone())
     );
 
@@ -278,7 +280,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 8. Read to verify bad update.
-    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
+    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::NONE);
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -296,14 +298,14 @@ fn test_store_simplest_nontrivial_case() {
 
     // 9. Update again.
     let mut neuron_9 = neuron_5.clone();
-    neuron_9.known_neuron_data = None;
+    neuron_9.clear_known_neuron_data();
     neuron_9.transfer = None;
     assert_eq!(store.update(&neuron_5, neuron_9.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 10. Read to verify second update.
     assert_eq!(
-        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        store.read(NeuronId { id: 42 }, NeuronSections::ALL),
         Ok(neuron_9)
     );
 
@@ -330,7 +332,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 13. Read to verify delete.
-    let read_result = store.read(NeuronId { id: 42 }, NeuronSections::default());
+    let read_result = store.read(NeuronId { id: 42 }, NeuronSections::NONE);
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -441,11 +443,11 @@ fn test_partial_read() {
 
         if sections.known_neuron_data {
             assert_eq!(
-                neuron_read_result.known_neuron_data,
-                neuron.known_neuron_data,
+                neuron_read_result.known_neuron_data(),
+                neuron.known_neuron_data(),
             );
         } else {
-            assert_eq!(neuron_read_result.known_neuron_data, None);
+            assert_eq!(neuron_read_result.known_neuron_data(), None);
         }
 
         if sections.transfer {
@@ -455,27 +457,27 @@ fn test_partial_read() {
         }
     };
 
-    partial_read_test_helper(NeuronSections::default());
-    partial_read_test_helper(NeuronSections::all());
+    partial_read_test_helper(NeuronSections::NONE);
+    partial_read_test_helper(NeuronSections::ALL);
     partial_read_test_helper(NeuronSections {
         hot_keys: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         followees: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         recent_ballots: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         known_neuron_data: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         transfer: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
 }
 
@@ -505,10 +507,325 @@ fn test_abridged_neuron_size() {
         neuron_type: Some(i32::MAX),
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
         visibility: None,
+        voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
+        recent_ballots_next_entry_index: Some(100),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
-    // This size can be updated. This assertion is created so that we are aware of the available
-    // headroom.
-    assert_eq!(abridged_neuron.encoded_len(), 184);
+    // This size can be updated. This assertion is here to make sure we are very aware of growth.
+    // Reminder: the amount we allocated for AbridgedNeuron is 380 bytes.
+    assert_eq!(abridged_neuron.encoded_len(), 199);
+}
+
+#[test]
+fn test_range_neurons_reconstitutes_fully() {
+    let mut store = new_heap_based();
+    let neurons = {
+        let mut neurons = vec![];
+        for i in 1..10 {
+            let neuron = create_model_neuron(i);
+            store.create(neuron.clone()).unwrap();
+            neurons.push(neuron);
+        }
+        neurons
+    };
+
+    let result = store.range_neurons(..).collect::<Vec<_>>();
+
+    assert_eq!(result, neurons);
+}
+
+#[test]
+fn test_range_neurons_ranges_work_correctly() {
+    // This test is here to ensure that the conversions that happen inside range_neurons are correct.
+    let mut store = new_heap_based();
+    let neurons = {
+        let mut neurons = vec![];
+        for i in 1..=10 {
+            let neuron = create_model_neuron(i);
+            store.create(neuron.clone()).unwrap();
+            neurons.push(neuron);
+        }
+        neurons
+    };
+
+    let result = store
+        .range_neurons(NeuronId::from_u64(2)..NeuronId::from_u64(9))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[1..8]);
+
+    let result = store
+        .range_neurons(NeuronId::from_u64(2)..=NeuronId::from_u64(3))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[1..3]);
+
+    let result = store
+        .range_neurons((
+            std::ops::Bound::Excluded(NeuronId::from_u64(2)),
+            std::ops::Bound::Included(NeuronId::from_u64(4)),
+        ))
+        .collect::<Vec<_>>();
+    assert_eq!(result.len(), 2);
+    assert_eq!(result, neurons[2..4]);
+}
+
+#[test]
+fn test_range_neurons_not_all_neuron_sections() {
+    let mut store = new_heap_based();
+    let neurons = {
+        let mut neurons = vec![];
+        for i in 1..=10 {
+            let neuron = create_model_neuron(i);
+            store.create(neuron.clone()).unwrap();
+            neurons.push(neuron);
+        }
+        neurons
+    };
+
+    type NeuronModifier = Box<dyn Fn(Neuron) -> Neuron>;
+    let cases: Vec<(NeuronSections, NeuronModifier)> = vec![
+        // Fetch 0 auxiliary.
+        (
+            NeuronSections::NONE,
+            Box::new(|mut neuron: Neuron| {
+                neuron.hot_keys.clear();
+                neuron.recent_ballots.clear();
+                neuron.followees.clear();
+                neuron.clear_known_neuron_data();
+                neuron.transfer = None;
+
+                neuron
+            }),
+        ),
+        // Fetch 1 auxiliary.
+        (
+            NeuronSections {
+                hot_keys: true,
+                ..NeuronSections::NONE
+            },
+            Box::new(|mut neuron: Neuron| {
+                neuron.recent_ballots.clear();
+                neuron.followees.clear();
+                neuron.clear_known_neuron_data();
+                neuron.transfer = None;
+
+                neuron
+            }),
+        ),
+        (
+            NeuronSections {
+                recent_ballots: true,
+                ..NeuronSections::NONE
+            },
+            Box::new(|mut neuron: Neuron| {
+                neuron.hot_keys.clear();
+                neuron.followees.clear();
+                neuron.clear_known_neuron_data();
+                neuron.transfer = None;
+
+                neuron
+            }),
+        ),
+        (
+            NeuronSections {
+                followees: true,
+                ..NeuronSections::NONE
+            },
+            Box::new(|mut neuron: Neuron| {
+                neuron.hot_keys.clear();
+                neuron.recent_ballots.clear();
+                neuron.clear_known_neuron_data();
+                neuron.transfer = None;
+
+                neuron
+            }),
+        ),
+        (
+            NeuronSections {
+                known_neuron_data: true,
+                ..NeuronSections::NONE
+            },
+            Box::new(|mut neuron: Neuron| {
+                neuron.hot_keys.clear();
+                neuron.recent_ballots.clear();
+                neuron.followees.clear();
+                neuron.transfer = None;
+
+                neuron
+            }),
+        ),
+        (
+            NeuronSections {
+                transfer: true,
+                ..NeuronSections::NONE
+            },
+            Box::new(|mut neuron: Neuron| {
+                neuron.hot_keys.clear();
+                neuron.recent_ballots.clear();
+                neuron.followees.clear();
+                neuron.clear_known_neuron_data();
+
+                neuron
+            }),
+        ),
+        // Fetch two auxiliary.
+        (
+            NeuronSections {
+                hot_keys: true,
+                transfer: true,
+                ..NeuronSections::NONE
+            },
+            Box::new(|mut neuron: Neuron| {
+                neuron.recent_ballots.clear();
+                neuron.followees.clear();
+                neuron.clear_known_neuron_data();
+
+                neuron
+            }),
+        ),
+    ];
+
+    for (neuron_sections, clear) in cases {
+        let neuron_2 = neurons[2].clone();
+        let neuron_3 = neurons[3].clone();
+        let expected_result = vec![clear(neuron_2), clear(neuron_3)];
+
+        let result = store
+            .range_neurons_sections(
+                (
+                    std::ops::Bound::Excluded(NeuronId::from_u64(2)),
+                    std::ops::Bound::Included(NeuronId::from_u64(4)),
+                ),
+                neuron_sections,
+            )
+            .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result, "{:#?}", neuron_sections);
+    }
+}
+
+#[test]
+fn test_register_recent_neuron_ballot_migration_full() {
+    // Set up with 100 ballots, and ensure that the pointer is in the right place and the ballots are reversed
+    let mut store = new_heap_based();
+    let mut neuron = create_model_neuron(1);
+    neuron.recent_ballots_next_entry_index = None;
+
+    let recent_ballots = (0..100)
+        .map(|i| BallotInfo {
+            proposal_id: Some(ProposalId { id: i as u64 }),
+            vote: Vote::Yes as i32,
+        })
+        .collect::<Vec<_>>();
+
+    neuron.recent_ballots = recent_ballots.clone();
+
+    store.create(neuron.clone()).unwrap();
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
+    assert_eq!(retrieved_neuron, neuron);
+
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 100 },
+            Vote::No,
+        )
+        .unwrap();
+
+    let mut expected_updated_ballots = {
+        let mut recent_ballots = recent_ballots.clone();
+        recent_ballots.reverse();
+        recent_ballots[0] = BallotInfo {
+            proposal_id: Some(ProposalId { id: 100 }),
+            vote: Vote::No as i32,
+        };
+        recent_ballots
+    };
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(1));
+
+    // Now, let's add another ballot and ensure that the pointer is updated correctly and ballots
+    // are not reversed again
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 101 },
+            Vote::Yes,
+        )
+        .unwrap();
+    expected_updated_ballots[1] = BallotInfo {
+        proposal_id: Some(ProposalId { id: 101 }),
+        vote: Vote::Yes as i32,
+    };
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(2));
+}
+
+#[test]
+fn test_register_recent_neuron_ballot_migration_notfull() {
+    // Set up with 100 ballots, and ensure that the pointer is in the right place and the ballots are reversed
+    let mut store = new_heap_based();
+    let mut neuron = create_model_neuron(1);
+    neuron.recent_ballots_next_entry_index = None;
+
+    let recent_ballots = (0..20)
+        .map(|i| BallotInfo {
+            proposal_id: Some(ProposalId { id: i as u64 }),
+            vote: Vote::Yes as i32,
+        })
+        .collect::<Vec<_>>();
+
+    neuron.recent_ballots = recent_ballots.clone();
+
+    store.create(neuron.clone()).unwrap();
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
+    assert_eq!(retrieved_neuron, neuron);
+
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 100 },
+            Vote::No,
+        )
+        .unwrap();
+
+    let mut expected_updated_ballots = {
+        let mut recent_ballots = recent_ballots.clone();
+        recent_ballots.reverse();
+        recent_ballots.push(BallotInfo {
+            proposal_id: Some(ProposalId { id: 100 }),
+            vote: Vote::No as i32,
+        });
+        recent_ballots
+    };
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(21));
+
+    // Now, let's add another ballot and ensure that the pointer is updated correctly and ballots
+    // are not reversed again
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 101 },
+            Vote::Yes,
+        )
+        .unwrap();
+    expected_updated_ballots.push(BallotInfo {
+        proposal_id: Some(ProposalId { id: 101 }),
+        vote: Vote::Yes as i32,
+    });
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(22));
 }

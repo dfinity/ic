@@ -6,7 +6,7 @@ mod tests;
 /// Some key related utils
 pub mod utils {
     use crate::types::{CspPop, CspPublicKey};
-    use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, MEGaPublicKey};
     use ic_crypto_internal_types::encrypt::forward_secure::{
         CspFsEncryptionPop, CspFsEncryptionPublicKey,
     };
@@ -73,7 +73,7 @@ pub mod utils {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug)]
     pub enum MEGaPublicKeyFromProtoError {
         UnsupportedAlgorithm {
             algorithm_id: Option<AlgorithmIdProto>,

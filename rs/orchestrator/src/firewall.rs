@@ -19,11 +19,10 @@ use std::{
     convert::TryFrom,
     net::IpAddr,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
-use tokio::sync::RwLock;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum DataSource {
     Config,
     Registry,
@@ -35,6 +34,8 @@ enum Role {
     UnassignedReplica,
     BoundaryNode,
 }
+
+const SOCKS_PROXY_PORT: u16 = 1080;
 
 /// Provides function to continuously check the Registry to determine if there
 /// has been a change in the firewall config, and if so, updates the node's
@@ -147,14 +148,9 @@ impl Firewall {
         }
     }
 
-    fn get_node_whitelisting_rules(
-        &mut self,
-        registry_version: RegistryVersion,
-    ) -> (FirewallRule, FirewallRule, FirewallRule) {
-        // First, get all the registry versions between the latest CUP and the latest version
-        // in the registry inclusive.
-        let registry_versions: Vec<RegistryVersion> = self
-            .catchup_package_provider
+    // Get all the registry versions between the latest CUP and the latest version in the registry (inclusive)
+    fn get_registry_versions(&mut self, registry_version: RegistryVersion) -> Vec<RegistryVersion> {
+        self.catchup_package_provider
             .get_local_cup()
             .map(|latest_cup| {
                 let cup_registry_version = latest_cup.get_oldest_registry_version_in_use();
@@ -175,7 +171,16 @@ impl Firewall {
 
                 registry_version_range.map(RegistryVersion::from).collect()
             })
-            .unwrap_or_else(|| vec![registry_version]);
+            .unwrap_or_else(|| vec![registry_version])
+    }
+
+    fn get_node_whitelisting_rules(
+        &mut self,
+        registry_version: RegistryVersion,
+    ) -> (FirewallRule, FirewallRule, FirewallRule) {
+        // First, get all the registry versions between the latest CUP and the latest version
+        // in the registry inclusive.
+        let registry_versions = self.get_registry_versions(registry_version);
 
         // Get the union of all the node IP addresses from the registry
         let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
@@ -194,20 +199,11 @@ impl Firewall {
             .collect();
 
         // Then split it to v4 and v6 separately
-        let node_ipv4s: Vec<String> = node_whitelist_ips
-            .iter()
-            .filter(|ip| ip.is_ipv4())
-            .map(|ip| ip.to_string())
-            .collect();
-        let node_ipv6s: Vec<String> = node_whitelist_ips
-            .iter()
-            .filter(|ip| ip.is_ipv6())
-            .map(|ip| ip.to_string())
-            .collect();
+        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_whitelist_ips);
+
         info!(
             self.logger,
-            "Whitelisting {} node IP addresses ({} v4 and {} v6) on the firewall",
-            node_whitelist_ips.len(),
+            "Whitelisting node IP addresses ({} v4 and {} v6) on the firewall",
             node_ipv4s.len(),
             node_ipv6s.len()
         );
@@ -258,12 +254,57 @@ impl Firewall {
         )
     }
 
+    fn get_socks_proxy_whitelisting_rules(
+        &mut self,
+        registry_version: RegistryVersion,
+    ) -> FirewallRule {
+        // First, get all the registry versions between the latest CUP and the latest version
+        // in the registry inclusive.
+        let registry_versions = self.get_registry_versions(registry_version);
+
+        // Get the IPs of all nodes on system subnets
+        let system_subnet_node_ips: BTreeSet<IpAddr> = registry_versions
+            .into_iter()
+            .flat_map(|registry_version| {
+                self.registry
+                    .get_system_subnet_nodes_ip_addresses(registry_version)
+                    .inspect_err(|err| {
+                        warn!(
+                        every_n_seconds => 30,
+                        self.logger,
+                        "Failed to get the IPs of system subnet nodes in the registry: {}", err)
+                    })
+                    .unwrap_or_default()
+            })
+            .collect();
+
+        // Then split it to v4 and v6 separately
+        let (system_subnet_node_ipv4s, system_subnet_node_ipv6s) =
+            split_ips_by_address_family(&system_subnet_node_ips);
+        info!(
+            self.logger,
+            "Whitelisting system subnet node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
+            system_subnet_node_ipv4s.len(),
+            system_subnet_node_ipv6s.len()
+        );
+
+        FirewallRule {
+            ipv4_prefixes: system_subnet_node_ipv4s,
+            ipv6_prefixes: system_subnet_node_ipv6s,
+            ports: vec![SOCKS_PROXY_PORT.into()],
+            action: FirewallAction::Allow as i32,
+            comment: "system subnet nodes for SOCKS proxy".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
+        }
+    }
+
     /// Checks for the firewall configuration that applies to this node
-    async fn check_for_firewall_config(
+    fn check_for_firewall_config(
         &mut self,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        if *self.last_applied_version.read().await == registry_version {
+        if *self.last_applied_version.read().unwrap() == registry_version {
             // No update in the registry, so no need to re-check
             return Ok(());
         }
@@ -341,7 +382,13 @@ impl Firewall {
 
                 self.replica_config.insert_rules(tcp_rules, udp_rules)
             }
-            Role::BoundaryNode => self.boundary_node_config.insert_rules(tcp_rules, udp_rules),
+            Role::BoundaryNode => {
+                let socks_proxy_whitelisting_rules =
+                    self.get_socks_proxy_whitelisting_rules(registry_version);
+                // Insert the whitelisting rules at the top of the list (highest priority)
+                tcp_rules.insert(0, socks_proxy_whitelisting_rules);
+                self.boundary_node_config.insert_rules(tcp_rules, udp_rules)
+            }
         };
 
         let changed = content.ne(&self.compiled_config);
@@ -376,7 +423,7 @@ impl Firewall {
                 .firewall_registry_version
                 .set(i64::try_from(registry_version.get()).unwrap_or(-1));
         }
-        *self.last_applied_version.write().await = registry_version;
+        *self.last_applied_version.write().unwrap() = registry_version;
 
         Ok(())
     }
@@ -393,7 +440,7 @@ impl Firewall {
 
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
-    pub async fn check_and_update(&mut self) {
+    pub fn check_and_update(&mut self) {
         if !self.enabled {
             return;
         }
@@ -403,7 +450,7 @@ impl Firewall {
             "Checking for firewall config registry version: {}", registry_version
         );
 
-        if let Err(e) = self.check_for_firewall_config(registry_version).await {
+        if let Err(e) = self.check_for_firewall_config(registry_version) {
             info!(
                 self.logger,
                 "Failed to check for firewall config at version {}: {}", registry_version, e
@@ -617,6 +664,21 @@ fn action_to_nftables_action(action: Option<FirewallAction>) -> String {
     }
 }
 
+/// takes a list of IP address and returns a list containing only IPv4 and one only IPv6 addresses
+fn split_ips_by_address_family(ips: &BTreeSet<IpAddr>) -> (Vec<String>, Vec<String>) {
+    let ipv4s: Vec<String> = ips
+        .iter()
+        .filter(|ip| ip.is_ipv4())
+        .map(|ip| ip.to_string())
+        .collect();
+    let ipv6s: Vec<String> = ips
+        .iter()
+        .filter(|ip| ip.is_ipv6())
+        .map(|ip| ip.to_string())
+        .collect();
+    (ipv4s, ipv6s)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{io::Write, path::Path};
@@ -632,14 +694,17 @@ mod tests {
         make_api_boundary_node_record_key, make_firewall_rules_record_key, make_node_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::crypto::CryptoReturningOk;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{
+        add_single_subnet_record, add_subnet_list_record, SubnetRecordBuilder,
+    };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/components/ic/ic.json5.template");
+        include_bytes!("../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES: &[u8] =
@@ -768,29 +833,27 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_test() {
+    #[test]
+    fn nftables_golden_test() {
         golden_test(
             Role::AssignedReplica(subnet_test_id(1)),
             NFTABLES_GOLDEN_BYTES,
             "assigned_replica",
-        )
-        .await
+        );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_boundary_node_test() {
+    #[test]
+    fn nftables_golden_boundary_node_test() {
         golden_test(
             Role::BoundaryNode,
             NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES,
             "boundary_node",
-        )
-        .await
+        );
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    async fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
+    fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -811,7 +874,6 @@ mod tests {
 
         firewall
             .check_for_firewall_config(RegistryVersion::new(1))
-            .await
             .expect("Should successfully produce a firewall config");
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
@@ -832,13 +894,11 @@ mod tests {
         // Make the string parsable by filling the template placeholders with dummy values
         let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
             .unwrap()
-            .replace("{{ node_index }}", "0")
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+            .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
             .replace("{{ query_stats_epoch_length }}", "600");
         let config_source = ConfigSource::Literal(cfg);
 
@@ -878,12 +938,15 @@ mod tests {
 
         let registry = set_up_registry(role, node);
 
-        let registry_helper = Arc::new(RegistryHelper::new(node, registry, no_op_logger()));
+        let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
 
+        let (crypto, _) =
+            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node);
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
+            Arc::new(crypto),
             no_op_logger(),
             node,
         );
@@ -908,8 +971,6 @@ mod tests {
         let registry_version = RegistryVersion::new(1);
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
-        let subnet_record = SubnetRecordBuilder::from(&[node]).build();
-
         // add [`NodeRecord`] for the given node
         add_node_record(
             &registry_data_provider,
@@ -917,12 +978,66 @@ mod tests {
             node,
             /*ip=*/ "1.1.1.1",
         );
-        // add [`NodeRecord`] for some other node
+
+        // create a system subnet with one node
+        let system_subnet_node_id = node_test_id(1001);
         add_node_record(
             &registry_data_provider,
             registry_version,
-            node_test_id(123),
-            /*ip=*/ "2.2.2.2",
+            system_subnet_node_id,
+            /*ip=*/ "fd5b:693c:f8ea::1",
+        );
+        let system_subnet_record = SubnetRecordBuilder::from(&[system_subnet_node_id])
+            .with_subnet_type(SubnetType::System)
+            .build();
+        let system_subnet_id = subnet_test_id(100);
+        add_single_subnet_record(
+            &registry_data_provider,
+            registry_version.get(),
+            system_subnet_id,
+            system_subnet_record,
+        );
+
+        // create an application subnet
+        let app_subnet_node_id = node_test_id(2002);
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            app_subnet_node_id,
+            /*ip=*/ "2.0.0.2",
+        );
+        let app_subnet_record = SubnetRecordBuilder::from(&[app_subnet_node_id])
+            .with_subnet_type(SubnetType::Application)
+            .build();
+        let app_subnet_id = subnet_test_id(200);
+        add_single_subnet_record(
+            &registry_data_provider,
+            registry_version.get(),
+            app_subnet_id,
+            app_subnet_record,
+        );
+
+        // Add an API boundary node
+        let api_boundary_node_id = node_test_id(3003);
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            api_boundary_node_id,
+            /*ip=*/ "3.0.0.3",
+        );
+        add_api_boundary_node_record(
+            &registry_data_provider,
+            registry_version,
+            api_boundary_node_id,
+        );
+
+        // Add an unassigned node
+        let unassigned_node_id = node_test_id(4004);
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            unassigned_node_id,
+            /*ip=*/ "4.0.0.4",
         );
 
         // Add a bunch of firewall rules for different scopes.
@@ -962,23 +1077,18 @@ mod tests {
             /*port=*/ 1007,
         );
 
+        let mut subnet_ids = vec![system_subnet_id, app_subnet_id];
+
         match role {
             Role::AssignedReplica(subnet_id) => {
-                add_subnet_record(
+                let subnet_record = SubnetRecordBuilder::from(&[node]).build();
+                add_single_subnet_record(
                     &registry_data_provider,
                     registry_version.get(),
                     subnet_id,
                     subnet_record,
                 );
-            }
-            Role::UnassignedReplica => {
-                registry_data_provider
-                    .add::<ApiBoundaryNodeRecord>(
-                        &make_api_boundary_node_record_key(node),
-                        RegistryVersion::from(registry_version),
-                        None,
-                    )
-                    .expect("Failed to add subnet record.");
+                subnet_ids.push(subnet_id);
             }
             Role::BoundaryNode => {
                 registry_data_provider
@@ -989,9 +1099,12 @@ mod tests {
                             version: String::from("11"),
                         }),
                     )
-                    .expect("Failed to add subnet record.");
+                    .expect("Failed to add API BN record.");
             }
+            Role::UnassignedReplica => {}
         }
+
+        add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_ids);
 
         let registry = Arc::new(FakeRegistryClient::new(
             Arc::clone(&registry_data_provider) as Arc<_>
@@ -1004,7 +1117,7 @@ mod tests {
 
     /// Adds a [`NodeRecord`] to the registry.
     fn add_node_record(
-        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         node: NodeId,
         ip: &str,
@@ -1024,14 +1137,32 @@ mod tests {
                     hostos_version_id: None,
                     public_ipv4_config: None,
                     domain: None,
+                    node_reward_type: None,
                 }),
             )
             .expect("Failed to add node record.");
     }
 
+    /// Adds an [`ApiBoundaryNodeRecord`] to the registry.
+    fn add_api_boundary_node_record(
+        registry_data_provider: &ProtoRegistryDataProvider,
+        registry_version: RegistryVersion,
+        node: NodeId,
+    ) {
+        registry_data_provider
+            .add(
+                &make_api_boundary_node_record_key(node),
+                registry_version,
+                Some(ApiBoundaryNodeRecord {
+                    version: String::from("11"),
+                }),
+            )
+            .expect("Failed to add API boundary node record.");
+    }
+
     /// Adds a [`FirewallRule`] to the registry.
     fn add_firewall_rules_record(
-        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         scope: &FirewallRulesScope,
         ip: &str,

@@ -15,10 +15,6 @@
 //!     - The endpoints tls configuration gets updated (periodically) to match
 //!       the subnet topology. -> Only accept connections from peers in topology.
 //!     - When dialing a peer TLS is configured to only accept a specific peer.
-//!     - Since currently the attestation handshake is a noop we also do a small "gruezi"
-//!       handshake to verify that the connection is active from both sides. This adds
-//!       latency during the setup but we are not worried about this since connections are
-//!       long lived in our case.
 //!     - Only if all these steps successfully complete do we add the connection to the active set.
 //!
 //! Connection reconciliation:
@@ -33,50 +29,65 @@ use std::{
     time::Duration,
 };
 
-use axum::{middleware::from_fn_with_state, Router};
-use either::Either;
-use futures::StreamExt;
-use ic_async_utils::JoinMap;
-use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{
-    MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
+use axum::{
+    body::Body, body::HttpBody, extract::Request, extract::State, middleware::from_fn_with_state,
+    middleware::Next, Router,
 };
+use futures::StreamExt;
+use ic_base_types::NodeId;
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
-    VarInt,
+    Runtime, TokioRuntime, VarInt,
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use static_assertions::const_assert;
+use thiserror::Error;
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    utils::collect_metrics,
-    ConnId, Shutdown, SubnetTopology,
+    Shutdown, SubnetTopology,
 };
-use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+use crate::{metrics::QuicTransportMetrics, request_handler::start_stream_acceptor};
 
-/// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
+/// The value of 25MB is chosen from experiments and the BDP product shown below to support
+/// around 2Gb/s.
+/// Bandwidth-Delay Product
+/// 2Gb/s * 100ms ≈ 200M bits = 25MB
+/// To this only on to avoid unnecessary error in dfx on MacOS
+#[cfg(target_os = "linux")]
+const UDP_BUFFER_SIZE: usize = 25_000_000; // 25MB
+
+const RECEIVE_WINDOW: VarInt = VarInt::from_u32(200_000_000);
+const SEND_WINDOW: u64 = 100_000_000;
+const STREAM_RECEIVE_WINDOW: VarInt = VarInt::from_u32(4_000_000);
+const MAX_CONCURRENT_BIDI_STREAMS: VarInt = VarInt::from_u32(1_000);
+const MAX_CONCURRENT_UNI_STREAMS: VarInt = VarInt::from_u32(1_000);
+
+/// Interval of quic heartbeats. They are only sent if the connection is idle for more than 1sec.
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(1);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
 /// that were not explicitly closed. I.e replica crash
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
-const GRUEZI_HANDSHAKE: &str = "gruezi";
+const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Direction {
-    Inbound,
-    Outbound,
-}
+// There should be least two probes before timing out a connection.
+const_assert!(KEEP_ALIVE_INTERVAL.as_nanos() < IDLE_TIMEOUT.as_nanos());
+// The application level timeout should no less than the QUIC idle timeout.
+const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_TIMEOUT.as_nanos());
+// The waiting time before re-trying to connect should be no less than the IDLE_TIMEOUT.
+const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_RETRY_BACKOFF.as_nanos());
 
 /// Connection manager is responsible for making sure that
 /// there always exists a healthy connection to each peer
@@ -101,11 +112,10 @@ struct ConnectionManager {
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    conn_id_counter: ConnId,
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
-    outbound_connecting: JoinMap<NodeId, Result<ConnectionWithPeerId, ConnectionEstablishError>>,
+    outbound_connecting: JoinMap<NodeId, Result<Connection, ConnectionEstablishError>>,
     /// Task joinset on which incoming connection requests are spawned. This is not a JoinMap
     /// because the peerId is not available until the TLS handshake succeeded.
     inbound_connecting: JoinSet<Result<ConnectionWithPeerId, ConnectionEstablishError>>,
@@ -118,28 +128,28 @@ struct ConnectionManager {
     router: Router,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ConnectionEstablishError {
+    #[error(
+        "Timeout during connection establishment. Took longer than {:?} to establish a connection",
+        CONNECT_TIMEOUT
+    )]
     Timeout,
-    Gruezi(String),
-    TlsClientConfigError {
-        peer_id: NodeId,
-        cause: TlsConfigError,
-    },
-    ConnectError {
-        peer_id: NodeId,
-        cause: ConnectError,
-    },
+    #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
-    MissingPeerIdentity,
-    MalformedPeerIdentity(MalformedPeerCertificateError),
-    PeerIdMismatch {
-        client: NodeId,
-        server: NodeId,
+    // The following errors should be infallible/internal.
+    #[error("Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}")]
+    BadConnectParameters {
+        peer_id: NodeId,
+        cause: ConnectError,
     },
+    #[error("Authentication failed: {0}")]
+    AuthenticationFailed(String),
+    #[error("Incoming connection from {client:?}, which is > than {server:?}")]
+    InvalidIncomingPeerId { client: NodeId, server: NodeId },
 }
 
 struct ConnectionWithPeerId {
@@ -147,33 +157,23 @@ struct ConnectionWithPeerId {
     connection: Connection,
 }
 
-impl std::fmt::Display for ConnectionEstablishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Timeout => write!(f, "Timeout during connection establishment."),
-            Self::Gruezi(e) => write!(f, "Gruezi handshake failed. {e}"),
-            Self::TlsClientConfigError { peer_id, cause } => {
-                write!(
-                    f,
-                    "Failed to get rustls client config for peer {peer_id}. {cause}"
-                )
-            }
-            Self::ConnectError { peer_id, cause } => {
-                write!(f, "Failed to connect to peer {peer_id}. {cause}")
-            }
-            Self::ConnectionError { peer_id, cause } => match peer_id {
-                Some(peer_id) => write!(f, "Outgoing connection to peer {peer_id}. {cause}"),
-                None => write!(f, "Incoming connection failed. {cause}"),
-            },
-            Self::MissingPeerIdentity => write!(f, "No peer identity available."),
-            Self::MalformedPeerIdentity(MalformedPeerCertificateError { internal_error }) => {
-                write!(f, "Malformed peer identity. {internal_error}")
-            }
-            Self::PeerIdMismatch { client, server } => {
-                write!(f, "Received peer ids didn't match {client} and {server}.")
-            }
-        }
-    }
+pub fn create_udp_socket(rt: &Handle, addr: SocketAddr) -> Arc<dyn AsyncUdpSocket> {
+    let _guard = rt.enter();
+    let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
+        .expect("Failed to create udp socket");
+
+    // Set socket send/recv buffer size. Setting these explicitly makes sure that a
+    // sufficiently large value is used. Increasing these buffers can help with high packet loss.
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE);
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_send_buffer_size(UDP_BUFFER_SIZE);
+
+    socket2
+        .bind(&SockAddr::from(addr))
+        .expect("Failed to bind to UDP socket");
+
+    TokioRuntime::wrap_udp_socket(&TokioRuntime, socket2.into()).unwrap()
 }
 
 pub(crate) fn start_connection_manager(
@@ -185,7 +185,7 @@ pub(crate) fn start_connection_manager(
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    socket: Either<SocketAddr, impl AsyncUdpSocket>,
+    socket: Arc<dyn AsyncUdpSocket>,
     router: Router,
 ) -> Shutdown {
     let topology = watcher.borrow().clone();
@@ -208,79 +208,35 @@ pub(crate) fn start_connection_manager(
             SomeOrAllNodes::Some(BTreeSet::new()),
             registry_client.get_latest_version(),
         )
-        .expect("Failed to get rustls server config, so transport can't start.");
+        .expect(
+            "The rustls server config must be locally available, otherwise transport can't start.",
+        );
 
     let mut transport_config = quinn::TransportConfig::default();
 
-    transport_config.keep_alive_interval(Some(KEEP_ALIVE_INTERVAL));
-    transport_config.max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()));
-    // defaults:
-    // STREAM_RWN 1_250_000
-    // stream_receive_window: STREAM_RWND.into(),
-    // send_window: (8 * STREAM_RWND).into()
-    transport_config.send_window(100_000_000);
-    // Upper bound on receive memory consumption.
-    transport_config.receive_window(VarInt::from_u32(200_000_000));
-    transport_config.stream_receive_window(VarInt::from_u32(4_000_000));
-    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(1_000));
-    transport_config.max_concurrent_uni_streams(VarInt::from_u32(1_000));
+    transport_config
+        .max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()))
+        .keep_alive_interval(Some(KEEP_ALIVE_INTERVAL))
+        .send_window(SEND_WINDOW)
+        .receive_window(RECEIVE_WINDOW)
+        .stream_receive_window(STREAM_RECEIVE_WINDOW)
+        .max_concurrent_bidi_streams(MAX_CONCURRENT_BIDI_STREAMS)
+        .max_concurrent_uni_streams(MAX_CONCURRENT_UNI_STREAMS);
+
     let transport_config = Arc::new(transport_config);
-    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
-        QuicServerConfig::try_from(rustls_server_config).unwrap(),
-    ));
+    let quinn_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quinn_server_config));
     server_config.transport_config(transport_config.clone());
 
-    // Start endpoint
-    let endpoint = match socket {
-        Either::Left(addr) => {
-            let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
-                .expect("Failed to create udp socket");
-
-            // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficiently large value is used. Increasing these buffers can help with high packetloss.
-            // The value of 25MB isch chosen from experiments and the BDP product shown below to support
-            // around 2Gb/s.
-            // Bandwidth-Delay Product
-            // 2Gb/s * 100ms ~ 200M bits = 25MB
-            // To this only on to avoid unecessary error in dfx on MacOS
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(25_000_000) {
-                info!(log, "Failed to set receive udp buffer. {}", e)
-            }
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(25_000_000) {
-                info!(log, "Failed to set send udp buffer. {}", e)
-            }
-            info!(
-                log,
-                "Udp receive buffer size: {:?}",
-                socket2.recv_buffer_size()
-            );
-            info!(
-                log,
-                "Udp send buffer size: {:?}",
-                socket2.send_buffer_size()
-            );
-            socket2
-                .bind(&SockAddr::from(addr))
-                .expect("Failed to bind to UDP socket");
-
-            let _enter_guard = rt.enter();
-            Endpoint::new(
-                endpoint_config,
-                Some(server_config),
-                socket2.into(),
-                Arc::new(quinn::TokioRuntime),
-            )
-            .expect("Failed to create endpoint")
-        }
-        Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
+    let endpoint = {
+        let _guard = rt.enter();
+        Endpoint::new_with_abstract_socket(
             endpoint_config,
             Some(server_config),
-            Arc::new(async_udp_socket),
+            socket,
             Arc::new(quinn::TokioRuntime),
         )
-        .expect("Failed to create endpoint"),
+        .expect("Failed to create endpoint")
     };
     let manager = ConnectionManager {
         log: log.clone(),
@@ -291,7 +247,6 @@ pub(crate) fn start_connection_manager(
         topology,
         connect_queue: DelayQueue::new(),
         peer_map,
-        conn_id_counter: ConnId::default(),
         watcher,
         endpoint,
         transport_config,
@@ -311,6 +266,25 @@ impl ConnectionManager {
         self.node_id < *dst
     }
 
+    /// Conditions under which the node can start outbound connecting attempt
+    /// - the node is a designated dialer
+    /// - peer is in the subnet
+    /// - this node is part of the subnet (can happen when a node is removed from the subnet)
+    /// - there is no connect attempted
+    /// - there is no established connection
+    fn can_i_dial_to(&self, dst: &NodeId) -> bool {
+        let dialer = self.am_i_dialer(dst);
+        let peer_in_subnet = self.topology.is_member(dst);
+        let node_in_subnet = self.topology.is_member(&self.node_id);
+        let no_active_connection_attempt = !self.outbound_connecting.contains(dst);
+        let no_active_connection = !self.active_connections.contains(dst);
+        no_active_connection_attempt
+            && no_active_connection
+            && dialer
+            && node_in_subnet
+            && peer_in_subnet
+    }
+
     pub async fn run(mut self, cancellation: CancellationToken) {
         loop {
             select! {
@@ -318,7 +292,7 @@ impl ConnectionManager {
                     break;
                 },
                 Some(reconnect) = self.connect_queue.next() => {
-                    self.handle_dial(reconnect.into_inner())
+                    self.handle_outbound_conn_attemp(reconnect.into_inner())
                 },
                 // Ignore the case if the sender is dropped. It is not transport's responsibility to make
                 // sure topology senders are up and running.
@@ -327,7 +301,7 @@ impl ConnectionManager {
                 },
                 incoming = self.endpoint.accept() => {
                     if let Some(incoming) = incoming {
-                        self.handle_inbound(incoming);
+                        self.handle_inbound_conn_attemp(incoming);
                     } else {
                         error!(self.log, "Quic endpoint closed. Stopping transport.");
                         // Endpoint is closed. This indicates NOT graceful shutdown.
@@ -336,7 +310,16 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     match conn_res {
-                        Ok((conn_out, peer_id)) => self.handle_connecting_result(conn_out, Some(peer_id)),
+                        Ok((Ok(conn), peer_id)) => self.handle_established_connection(conn, peer_id),
+                        // retry
+                        Ok((Err(err), peer_id)) =>  {
+                            self.metrics
+                                .connection_results_total
+                                .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
+                                .inc();
+                            info!(self.log, "Failed to establish outbound connection {:?}.", err);
+                            self.connect_queue.insert(peer_id, CONNECT_RETRY_BACKOFF);
+                        }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -347,7 +330,14 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.inbound_connecting.join_next() => {
                     match conn_res {
-                        Ok(conn_out) => self.handle_connecting_result(conn_out, None),
+                        Ok(Ok(conn)) => self.handle_established_connection(conn.connection, conn.peer_id),
+                        Ok(Err(err)) => {
+                            self.metrics
+                                .connection_results_total
+                                .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
+                                .inc();
+                            info!(self.log, "Failed to establish inbound connection {:?}.", err);
+                        }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -358,7 +348,13 @@ impl ConnectionManager {
                 },
                 Some(active_result) = self.active_connections.join_next() => {
                     match active_result {
-                        Ok((_, peer_id)) => self.handled_closed_conn(peer_id),
+                        Ok(((), peer_id)) => {
+                            self.peer_map.write().unwrap().remove(&peer_id);
+                            self.metrics.peers_removed_total.inc();
+                            self.connect_queue.insert(peer_id, Duration::ZERO);
+                            self.metrics.peer_map_size.dec();
+                            self.metrics.closed_request_handlers_total.inc();
+                        }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -394,14 +390,6 @@ impl ConnectionManager {
         self.endpoint.wait_idle().await;
     }
 
-    // Removes connection and sets peer status to disconnected
-    fn handled_closed_conn(&mut self, peer_id: NodeId) {
-        self.peer_map.write().unwrap().remove(&peer_id);
-        self.connect_queue.insert(peer_id, Duration::from_secs(0));
-        self.metrics.peer_map_size.dec();
-        self.metrics.closed_request_handlers_total.inc();
-    }
-
     fn handle_topology_change(&mut self) {
         self.metrics.topology_changes_total.inc();
         self.topology = self.watcher.borrow_and_update().clone();
@@ -411,115 +399,78 @@ impl ConnectionManager {
         let subnet_nodes = SomeOrAllNodes::Some(subnet_node_set);
 
         // Set new server config to only accept connections from the current set.
-        match self
-            .tls_config
+        let rustls_server_config = self.tls_config
             .server_config(subnet_nodes, self.topology.latest_registry_version())
-        {
-            Ok(rustls_server_config) => {
-                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).unwrap();
-                let mut server_config =
-                    quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
-                server_config.transport_config(self.transport_config.clone());
-                self.endpoint.set_server_config(Some(server_config));
-            }
-            Err(e) => {
-                error!(self.log, "Failed to get certificate from crypto {}", e)
-            }
-        }
+            .expect("The rustls server config must be locally available, otherwise transport can't run.");
+
+        let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
+        server_config.transport_config(self.transport_config.clone());
+        self.endpoint.set_server_config(Some(server_config));
 
         // Connect/Disconnect from peers according to new topology
         for (peer_id, _) in self.topology.iter() {
-            let dialer = self.am_i_dialer(peer_id);
-            let no_active_connection_attempt = !self.outbound_connecting.contains(peer_id);
-            let no_active_connection = !self.active_connections.contains(peer_id);
-            let node_in_subnet = self.topology.is_member(&self.node_id);
-            // Add to delayqueue for connecting iff
-            // - Not currently trying to connect
-            // - No active connection to this peer
-            // - Our node id is lower -> This node is dialer.
-            // - This node is part of the subnet. This can happen when a node is removed from the subnet.
-            if no_active_connection_attempt && no_active_connection && dialer && node_in_subnet {
+            if self.can_i_dial_to(peer_id) {
                 self.connect_queue.insert(*peer_id, Duration::from_secs(0));
             }
         }
 
         // Remove peer connections that are not part of subnet anymore.
         // Also remove peer connections that have closed connections.
-        let mut peer_map = self.peer_map.write().unwrap();
-        peer_map.retain(|peer_id, conn_handle| {
+        let peer_map = self.peer_map.read().unwrap();
+        peer_map.iter().for_each(|(peer_id, conn_handle)| {
             let peer_left_topology = !self.topology.is_member(peer_id);
             let node_left_topology = !self.topology.is_member(&self.node_id);
             // If peer is not member anymore or this node not part of subnet close connection.
             let should_close_connection = peer_left_topology || node_left_topology;
-
             if should_close_connection {
-                self.metrics.peers_removed_total.inc();
                 conn_handle
-                    .connection
+                    .conn()
                     .close(VarInt::from_u32(0), b"node not part of subnet anymore");
-                false
-            } else {
-                true
             }
         });
+
         self.metrics.peer_map_size.set(peer_map.len() as i64);
     }
 
-    fn handle_dial(&mut self, peer_id: NodeId) {
-        let not_dialer = !self.am_i_dialer(&peer_id);
-        let peer_not_in_subnet = self.topology.get_addr(&peer_id).is_none();
-        let active_connection_attempt = self.outbound_connecting.contains(&peer_id);
-        let active_connection = self.active_connections.contains(&peer_id);
-        let node_not_in_subnet = !self.topology.is_member(&self.node_id);
-
-        // Conditions under which we do NOT connect
-        // - prefer lower node id / dialing ourself
-        // - peer not in subnet
-        // - currently trying to connect
-        // - already connected
-        // - this node is not part of subnet. This can happen when a node is removed from the subnet.
-        if not_dialer
-            || peer_not_in_subnet
-            || active_connection_attempt
-            || active_connection
-            || node_not_in_subnet
-        {
+    /// Inserts a task into `outbound_connecting`` that handles an outbound connection attempt. (The function can also be called `handle_outbound`).
+    fn handle_outbound_conn_attemp(&mut self, peer_id: NodeId) {
+        if !self.can_i_dial_to(&peer_id) {
             return;
         }
 
-        info!(self.log, "Connecting to node {}", peer_id);
+        info!(self.log, "Connecting to node {:?}", peer_id);
         self.metrics.outbound_connection_total.inc();
         let addr = self
             .topology
             .get_addr(&peer_id)
-            .expect("Just checked this conditions");
+            .expect("Just checked this conditions.");
         let endpoint = self.endpoint.clone();
         let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
-            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
-            .unwrap();
+            .expect("The rustls client config must be locally available, otherwise transport can't start.");
         let transport_config = self.transport_config.clone();
+        let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
+        let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
+        client_config.transport_config(transport_config);
         let conn_fut = async move {
-            let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
-            let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
-            client_config.transport_config(transport_config);
-            let connecting = endpoint.connect_with(client_config, addr, "irrelevant");
-            let established = connecting
-                .map_err(|cause| ConnectionEstablishError::ConnectError { peer_id, cause })?
-                .await
-                .map_err(|cause| ConnectionEstablishError::ConnectionError {
-                    peer_id: Some(peer_id),
+            // 'connect_with' is placed inside the async block so the event loop retries on failure.
+            let connecting = endpoint
+                .connect_with(client_config, addr, "irrelevant")
+                .map_err(|cause| ConnectionEstablishError::BadConnectParameters {
+                    peer_id,
                     cause,
                 })?;
+            let established =
+                connecting
+                    .await
+                    .map_err(|cause| ConnectionEstablishError::ConnectionError {
+                        peer_id: Some(peer_id),
+                        cause,
+                    })?;
 
-            // Authentication handshakes
-            let connection = Self::gruezi(established, Direction::Outbound).await?;
-
-            Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
-                peer_id,
-                connection,
-            })
+            Ok::<_, ConnectionEstablishError>(established)
         };
 
         let timeout_conn_fut = async move {
@@ -537,77 +488,50 @@ impl ConnectionManager {
     /// added to peer map. If unsuccessful and this node is dialer the
     /// connection will be retried. `peer` is `Some` if this node was
     /// the dialer. I.e lower node id.
-    fn handle_connecting_result(
-        &mut self,
-        conn_res: Result<ConnectionWithPeerId, ConnectionEstablishError>,
-        peer_id: Option<NodeId>,
-    ) {
-        match conn_res {
-            Ok(ConnectionWithPeerId {
+    fn handle_established_connection(&mut self, connection: Connection, peer_id: NodeId) {
+        self.metrics
+            .connection_results_total
+            .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
+            .inc();
+        let mut peer_map_mut = self.peer_map.write().unwrap();
+        // Increase the connection ID for the newly connected peer.
+        // This should be done while holding a write lock to the peer map
+        // such that the next read call sees the new id.
+
+        let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
+
+        // dropping the old connection will result in closing it
+        if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
+            old_conn
+                .conn()
+                .close(VarInt::from_u32(0), b"using newer connection");
+            info!(
+                self.log,
+                "Replacing old connection to {:?} with newer", peer_id
+            );
+        } else {
+            self.metrics.peer_map_size.inc();
+        }
+
+        info!(
+            self.log,
+            "Spawning request handler for peer : {:?}", peer_id
+        );
+        self.active_connections.spawn_on(
+            peer_id,
+            start_stream_acceptor(
+                self.log.clone(),
                 peer_id,
-                connection,
-            }) => {
-                self.metrics
-                    .connection_results_total
-                    .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
-                    .inc();
-                let mut peer_map_mut = self.peer_map.write().unwrap();
-                // Increase the connection ID for the newly connected peer.
-                // This should be done while holding a write lock to the peer map
-                // such that the next read call sees the new id.
-
-                self.conn_id_counter.inc_assign();
-                let conn_id = self.conn_id_counter;
-
-                let connection_handle =
-                    ConnectionHandle::new(peer_id, connection, self.metrics.clone(), conn_id);
-                let req_handler_connection_handle = connection_handle.clone();
-
-                // dropping the old connection will result in closing it
-                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle) {
-                    old_conn
-                        .connection
-                        .close(VarInt::from_u32(0), b"using newer connection");
-                    info!(
-                        self.log,
-                        "Replacing old connection to {} with newer", peer_id
-                    );
-                } else {
-                    self.metrics.peer_map_size.inc();
-                }
-
-                info!(
-                    self.log,
-                    "Spawning request handler for peer : {:?}", peer_id
-                );
-                self.active_connections.spawn_on(
-                    peer_id,
-                    run_stream_acceptor(
-                        self.log.clone(),
-                        req_handler_connection_handle.peer_id,
-                        req_handler_connection_handle.conn_id(),
-                        req_handler_connection_handle.connection,
-                        self.metrics.clone(),
-                        self.router.clone(),
-                    ),
-                    &self.rt,
-                );
-            }
-            Err(err) => {
-                self.metrics
-                    .connection_results_total
-                    .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
-                    .inc();
-                // The peer is only present in connections that this node initiated. This node should therefore retry connecting to the peer.
-                if let Some(peer_id) = peer_id {
-                    self.connect_queue.insert(peer_id, CONNECT_RETRY_BACKOFF);
-                }
-                info!(self.log, "Failed to connect {}", err);
-            }
-        };
+                connection_handle,
+                self.metrics.clone(),
+                self.router.clone(),
+            ),
+            &self.rt,
+        );
     }
 
-    fn handle_inbound(&mut self, incoming: Incoming) {
+    /// Inserts a task into 'inbound_connecting' that handles an inbound connection attempt.
+    fn handle_inbound_conn_attemp(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
         let conn_fut = async move {
@@ -621,36 +545,31 @@ impl ConnectionManager {
 
             let rustls_certs = established
                 .peer_identity()
-                .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
+                .ok_or(ConnectionEstablishError::AuthenticationFailed(
+                    "missing peer identity".to_string(),
+                ))?
                 .downcast::<Vec<CertificateDer>>()
                 .unwrap();
             let rustls_cert =
                 rustls_certs
                     .first()
-                    .ok_or(ConnectionEstablishError::MalformedPeerIdentity(
-                        MalformedPeerCertificateError {
-                            internal_error: "a single cert must be present".to_string(),
-                        },
+                    .ok_or(ConnectionEstablishError::AuthenticationFailed(
+                        "a single cert must be present".to_string(),
                     ))?;
-            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref()).map_err(|err| {
-                ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
-                    internal_error: format!("{:?}", err),
-                })
-            })?;
+            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref())
+                .map_err(|err| ConnectionEstablishError::AuthenticationFailed(err.to_string()))?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
-                return Err(ConnectionEstablishError::PeerIdMismatch {
+                return Err(ConnectionEstablishError::InvalidIncomingPeerId {
                     client: peer_id,
                     server: node_id,
                 });
             }
 
-            let connection = Self::gruezi(established, Direction::Inbound).await?;
-
             Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
                 peer_id,
-                connection,
+                connection: established,
             })
         };
 
@@ -663,65 +582,26 @@ impl ConnectionManager {
 
         self.inbound_connecting.spawn(timeout_conn_fut);
     }
+}
 
-    // To authenticate peers we do mutual TLS. Both peers therefore know the identity
-    // of the other peer. It can can happen that one side assumes that the connection
-    // is fully established when the other peer may still reject the connection. This
-    // handshake makes sure that connection is fully functional.
-    async fn gruezi(
-        conn: Connection,
-        direction: Direction,
-    ) -> Result<Connection, ConnectionEstablishError> {
-        match direction {
-            Direction::Inbound => {
-                let (mut send, mut recv) = conn
-                    .open_bi()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.write_all(GRUEZI_HANDSHAKE.as_bytes())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.finish()
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.stopped()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                let data = recv
-                    .read_to_end(GRUEZI_HANDSHAKE.len())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                if data != GRUEZI_HANDSHAKE.as_bytes() {
-                    return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {}",
-                        String::from_utf8_lossy(&data)
-                    )));
-                }
-            }
-            Direction::Outbound => {
-                let (mut send, mut recv) = conn
-                    .accept_bi()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                let data = recv
-                    .read_to_end(GRUEZI_HANDSHAKE.len())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                if data != GRUEZI_HANDSHAKE.as_bytes() {
-                    return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {}",
-                        String::from_utf8_lossy(&data)
-                    )));
-                }
-                send.write_all(GRUEZI_HANDSHAKE.as_bytes())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.finish()
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.stopped()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-            }
-        };
-        Ok(conn)
-    }
+/// Axum middleware to collect metrics
+async fn collect_metrics(
+    State(state): State<QuicTransportMetrics>,
+    request: Request<Body>,
+    next: Next,
+) -> axum::response::Response {
+    state
+        .request_handle_bytes_received_total
+        .with_label_values(&[request.uri().path()])
+        .inc_by(request.body().size_hint().lower());
+    let _timer = state
+        .request_handle_duration_seconds
+        .with_label_values(&[request.uri().path()])
+        .start_timer();
+    let out_counter = state
+        .request_handle_bytes_sent_total
+        .with_label_values(&[request.uri().path()]);
+    let response = next.run(request).await;
+    out_counter.inc_by(response.body().size_hint().lower());
+    response
 }

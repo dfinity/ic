@@ -36,8 +36,9 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             get_dependency_path, get_ic_os_update_img_sha256, get_ic_os_update_img_url,
-            read_dependency_to_string, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer, IcNodeSnapshot, NnsCustomizations, SshSession, TopologySnapshot,
+            get_mainnet_nns_revision, read_dependency_to_string, HasIcDependencies,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsCustomizations, SshSession, TopologySnapshot,
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
@@ -312,7 +313,9 @@ fn support_snses(
         recovered_nns_public_key.clone(),
     );
 
-    wait_until_ready_for_interaction(env.logger(), new_subnet_node.clone());
+    new_subnet_node
+        .await_status_is_healthy()
+        .expect("New subnet node should become healthy.");
 
     let new_subnet_id = get_app_subnet_id(
         env.clone(),
@@ -492,16 +495,12 @@ fn setup_boundary_node(
     let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
     boundary_node.block_on_bash_script(&format!(r#"
         set -e
-        cp /etc/systemd/system/ic-boundary.service /tmp/
-        sed -i '/--nns-urls/d' /tmp/ic-boundary.service
-        sed -i '/--local-store-path/d' /tmp/ic-boundary.service
-        sed -i '/--nns-pub-key-pem/a\        --stub-replica [{recovered_nns_node_ipv6}]:8080 \\' /tmp/ic-boundary.service
-        sed -i '/--stub-replica/a\        --skip-replica-tls-verification \\' /tmp/ic-boundary.service
-        sudo mount --bind /tmp/ic-boundary.service /etc/systemd/system/ic-boundary.service
-        sudo systemctl daemon-reload
+        sudo sed -i '/REGISTRY_LOCAL_STORE_PATH/d' /run/ic-node/etc/default/ic-boundary
+        echo 'REGISTRY_STUB_REPLICA="[{recovered_nns_node_ipv6}]:8080"' | sudo tee -a /run/ic-node/etc/default/ic-boundary
+        echo 'SKIP_REPLICA_TLS_VERIFICATION="true"' | sudo tee -a /run/ic-node/etc/default/ic-boundary
         sudo systemctl restart ic-boundary
     "#)).unwrap_or_else(|e| {
-        panic!("Could not reconfigure nginx on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
+        panic!("Could not reconfigure ic-boundary on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
     });
 
     info!(logger, "Waiting until {BOUNDARY_NODE_NAME} is healthy ...");
@@ -683,7 +682,7 @@ fn with_ledger_account_for_tests(env: TestEnv, account_id: AccountIdentifier) {
 
 fn fetch_mainnet_ic_replay(env: TestEnv) {
     let logger = env.logger();
-    let version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+    let version = get_mainnet_nns_revision();
     let mainnet_ic_replica_url =
         format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
     let ic_replay_path = env.get_path(IC_REPLAY);
@@ -735,7 +734,7 @@ fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
 
 fn fetch_mainnet_ic_recovery(env: TestEnv) {
     let logger = env.logger();
-    let version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+    let version = get_mainnet_nns_revision();
     let mainnet_ic_recovery_url =
         format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
     let ic_recovery_path = env.get_path(IC_RECOVERY);
@@ -855,27 +854,9 @@ fn recover_nns_subnet(
     if !exit_status.success() {
         panic!("{cmd:?} failed!");
     }
-    wait_until_ready_for_interaction(logger.clone(), recovered_nns_node);
-}
-
-fn wait_until_ready_for_interaction(logger: Logger, node: IcNodeSnapshot) {
-    let node_ip = node.get_ip_addr();
-    info!(
-        logger.clone(),
-        "Waiting until node {node_ip:?} is ready for interaction ..."
-    );
-    ic_system_test_driver::retry_with_msg!(
-        format!("Check if node {node_ip:?} is ready for interaction"),
-        logger.clone(),
-        Duration::from_secs(500),
-        Duration::from_secs(5),
-        || node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'")
-    )
-    .unwrap_or_else(|e| {
-        panic!("Node {node_ip:?} didn't become ready for interaction in time because {e:?}")
-    });
-
-    info!(logger, "Node {node_ip:?} is ready for interaction.");
+    recovered_nns_node
+        .await_status_is_healthy()
+        .expect("Recovered NNS node should become healthy.");
 }
 
 fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapshot) {
@@ -1476,8 +1457,8 @@ fn bless_replica_version(
                 &governance_canister,
                 proposal_sender,
                 neuron_id,
-                ReplicaVersion::try_from(replica_version.clone()).unwrap(),
-                sha256,
+                Some(ReplicaVersion::try_from(replica_version.clone()).unwrap()),
+                Some(sha256),
                 vec![upgrade_url.to_string()],
                 vec![],
             )

@@ -1,0 +1,23 @@
+[package]
+name = "ic-ethereum-types"
+version = "1.0.0"
+description = "Ethereum common types that by canisters on the Internet Computer"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation = "https://docs.rs/ic-ethereum-types"
+
+[dependencies]
+hex = { workspace = true }
+ic-sha3 = { workspace = true }
+minicbor = { workspace = true }
+minicbor-derive = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+proptest = { workspace = true }
+serde_json = { workspace = true }

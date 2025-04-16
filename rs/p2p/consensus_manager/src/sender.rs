@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_methods)]
-
 use std::{
     collections::{hash_map::Entry, HashMap},
     marker::PhantomData,
@@ -12,10 +10,7 @@ use axum::http::Request;
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::{
-    artifact_manager::ArtifactProcessorEvent,
-    consensus::{ArtifactAssembler, ArtifactWithOpt},
-};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit, ArtifactWithOpt};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Shutdown, Transport};
@@ -37,12 +32,10 @@ use self::available_slot_set::{AvailableSlot, AvailableSlotSet};
 
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
 /// in size are pushed.
-pub(crate) const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
-
+const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(60);
 const BACKOFF_MULTIPLIER: f64 = 2.0;
-
 // Used to log warnings if the slot table grows beyond the threshold.
 const SLOT_TABLE_THRESHOLD: u64 = 30_000;
 
@@ -60,16 +53,16 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
     }
 }
 
-pub(crate) struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, Assembler> {
+pub struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, Assembler> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
     transport: Arc<dyn Transport>,
-    adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+    outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
-    active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
-    join_set: JoinSet<()>,
+    active_slots: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
+    active_transmit_tasks: JoinSet<()>,
     assembler: Assembler,
     marker: PhantomData<WireArtifact>,
 }
@@ -80,12 +73,12 @@ impl<
         Assembler: ArtifactAssembler<Artifact, WireArtifact>,
     > ConsensusManagerSender<Artifact, WireArtifact, Assembler>
 {
-    pub(crate) fn run(
+    pub fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
         transport: Arc<dyn Transport>,
-        adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+        outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
         assembler: Assembler,
     ) -> Shutdown {
         let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), WireArtifact::NAME);
@@ -95,11 +88,11 @@ impl<
             metrics,
             rt_handle: rt_handle.clone(),
             transport,
-            adverts_to_send,
+            outbound_transmits,
             slot_manager,
             current_commit_id: CommitId::from(0),
-            active_adverts: HashMap::new(),
-            join_set: JoinSet::new(),
+            active_slots: HashMap::new(),
+            active_transmit_tasks: JoinSet::new(),
             assembler,
             marker: PhantomData,
         };
@@ -116,30 +109,30 @@ impl<
                 _ = cancellation_token.cancelled() => {
                     error!(
                         self.log,
-                        "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
+                        "Sender event loop for the P2P client `{:?}` terminated. No more transmits will be sent for this client.",
                         uri_prefix::<WireArtifact>()
                     );
                     break;
                 }
-                Some(advert) = self.adverts_to_send.recv() => {
-                    match advert {
-                        ArtifactProcessorEvent::Artifact(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
-                        ArtifactProcessorEvent::Purge(id) => self.handle_purge_advert(&id),
+                Some(outbound_transmit) = self.outbound_transmits.recv() => {
+                    match outbound_transmit {
+                        ArtifactTransmit::Deliver(artifact) => self.handle_deliver_transmit(artifact, cancellation_token.clone()),
+                        ArtifactTransmit::Abort(id) => self.handle_abort_transmit(&id),
                     }
 
                     self.current_commit_id.inc_assign();
                 }
 
-                Some(result) = self.join_set.join_next() => {
+                Some(result) = self.active_transmit_tasks.join_next() => {
                     panic_on_join_err(result);
                 }
             }
 
             #[cfg(debug_assertions)]
             {
-                if self.join_set.len() < self.active_adverts.len() {
+                if self.active_transmit_tasks.len() < self.active_slots.len() {
                     // This invariant can be violated if the root cancellation token is cancelled.
-                    // It can be violated because the active_adverts HashMap is only cleared
+                    // It can be violated because the active_slots HashMap is only cleared
                     // when purging artifacts, and not when the tasks join due to a cancellation
                     // not triggered by the manager.
                     let is_not_cancelled =
@@ -149,22 +142,22 @@ impl<
 
                     if is_not_cancelled {
                         panic!(
-                            "Invariant violated: join_set.len() {:?} >= active_adverts.len() {:?}.",
-                            self.join_set.len(),
-                            self.active_adverts.len()
+                            "Invariant violated: active_transmit_tasks.len() {:?} >= active_slots.len() {:?}.",
+                            self.active_transmit_tasks.len(),
+                            self.active_slots.len()
                         );
                     }
                 }
             }
         }
 
-        while let Some(result) = self.join_set.join_next().await {
+        while let Some(result) = self.active_transmit_tasks.join_next().await {
             panic_on_join_err(result);
         }
     }
 
-    fn handle_purge_advert(&mut self, id: &Artifact::Id) {
-        if let Some((cancellation_token, free_slot)) = self.active_adverts.remove(id) {
+    fn handle_abort_transmit(&mut self, id: &Artifact::Id) {
+        if let Some((cancellation_token, free_slot)) = self.active_slots.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             cancellation_token.cancel();
             self.slot_manager.push(free_slot);
@@ -174,7 +167,7 @@ impl<
     }
 
     #[instrument(skip_all)]
-    fn handle_send_advert(
+    fn handle_deliver_transmit(
         &mut self,
         new_artifact: ArtifactWithOpt<Artifact>,
         cancellation_token: CancellationToken,
@@ -182,8 +175,7 @@ impl<
         let id = new_artifact.artifact.id();
         let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
         let wire_artifact_id = wire_artifact.id();
-        let wire_artifact_attribute = wire_artifact.attribute();
-        let entry = self.active_adverts.entry(id.clone());
+        let entry = self.active_slots.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
@@ -192,10 +184,7 @@ impl<
 
             let child_token = cancellation_token.child_token();
             let child_token_clone = child_token.clone();
-            let send_future = Self::send_advert_to_all_peers(
-                self.rt_handle.clone(),
-                self.metrics.clone(),
-                self.transport.clone(),
+            let payload = Self::get_transmit_payload(
                 self.current_commit_id,
                 used_slot.slot_number(),
                 ArtifactWithOpt {
@@ -203,23 +192,26 @@ impl<
                     is_latency_sensitive: new_artifact.is_latency_sensitive,
                 },
                 wire_artifact_id,
-                wire_artifact_attribute,
+            );
+            let route = uri_prefix::<WireArtifact>();
+            let send_future = send_transmit_to_all_peers(
+                self.rt_handle.clone(),
+                self.metrics.clone(),
+                self.transport.clone(),
+                payload,
+                route,
                 child_token_clone,
             );
 
-            self.join_set.spawn_on(send_future, &self.rt_handle);
+            self.active_transmit_tasks
+                .spawn_on(send_future, &self.rt_handle);
             entry.insert((child_token, used_slot));
         } else {
             self.metrics.send_view_consensus_dup_adverts_total.inc();
         }
     }
 
-    /// Sends an advert to all peers.
-    #[instrument(skip_all)]
-    async fn send_advert_to_all_peers(
-        rt_handle: Handle,
-        metrics: ConsensusManagerMetrics,
-        transport: Arc<dyn Transport>,
+    fn get_transmit_payload(
         commit_id: CommitId,
         slot_number: SlotNumber,
         ArtifactWithOpt {
@@ -227,9 +219,7 @@ impl<
             is_latency_sensitive,
         }: ArtifactWithOpt<WireArtifact>,
         id: WireArtifact::Id,
-        attribute: WireArtifact::Attribute,
-        cancellation_token: CancellationToken,
-    ) {
+    ) -> Bytes {
         let pb_slot_update = pb::SlotUpdate {
             commit_id: commit_id.get(),
             slot_id: slot_number.get(),
@@ -240,83 +230,86 @@ impl<
                 {
                     pb::slot_update::Update::Artifact(pb_artifact.encode_to_vec())
                 } else {
-                    pb::slot_update::Update::Advert(pb::Advert {
-                        id: WireArtifact::PbId::proxy_encode(id),
-                        attribute: WireArtifact::PbAttribute::proxy_encode(attribute),
-                    })
+                    pb::slot_update::Update::Id(WireArtifact::PbId::proxy_encode(id))
                 }
             }),
         };
-
-        let body = Bytes::from(pb_slot_update.encode_to_vec());
-
-        let mut in_progress_transmissions = JoinSet::new();
-        // Stores the connection ID and the [`CancellationToken`] of the last successful transmission task to a peer.
-        let mut initiated_transmissions: HashMap<NodeId, (ConnId, CancellationToken)> =
-            HashMap::new();
-        let mut periodic_check_interval = time::interval(Duration::from_secs(5));
-        loop {
-            select! {
-                _ = periodic_check_interval.tick() => {
-                    // check for new peers/connection IDs
-                    // spawn task for peers with higher conn id or not in completed transmissions.
-                    // add task to join map
-                    for (peer, connection_id) in transport.peers() {
-                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|(id, token)| {
-                            if *id == connection_id {
-                                true
-                            } else {
-                                token.cancel();
-                                metrics.send_view_resend_reconnect_total.inc();
-                                false
-                            }
-                        });
-
-
-                        if !is_initiated {
-                            let child_token = cancellation_token.child_token();
-                            let child_token_clone = child_token.clone();
-                            metrics.send_view_send_to_peer_total.inc();
-
-                            let transport = transport.clone();
-                            let body = body.clone();
-
-                            let send_future = async move {
-                                select! {
-                                    _ = send_advert_to_peer(transport, body, peer, uri_prefix::<WireArtifact>()) => {},
-                                    _ = child_token.cancelled() => {},
-                                }
-                            };
-
-                            in_progress_transmissions.spawn_on(send_future, &rt_handle);
-                            initiated_transmissions.insert(peer, (connection_id, child_token_clone));
+        Bytes::from(pb_slot_update.encode_to_vec())
+    }
+}
+#[instrument(skip_all)]
+async fn send_transmit_to_all_peers(
+    rt_handle: Handle,
+    metrics: ConsensusManagerMetrics,
+    transport: Arc<dyn Transport>,
+    body: Bytes,
+    route: String,
+    cancellation_token: CancellationToken,
+) {
+    let mut in_progress_transmissions = JoinSet::new();
+    // Stores the connection ID and the [`CancellationToken`] of the last successful transmission task to a peer.
+    let mut initiated_transmissions: HashMap<NodeId, (ConnId, CancellationToken)> = HashMap::new();
+    let mut periodic_check_interval = time::interval(Duration::from_secs(5));
+    loop {
+        select! {
+            _ = periodic_check_interval.tick() => {
+                // check for new peers/connection IDs
+                // spawn task for peers with higher conn id or not in completed transmissions.
+                // add task to join map
+                for (peer, connection_id) in transport.peers() {
+                    let is_initiated = initiated_transmissions.get(&peer).is_some_and(|(id, token)| {
+                        if *id == connection_id {
+                            true
+                        } else {
+                            token.cancel();
+                            metrics.send_view_resend_reconnect_total.inc();
+                            false
                         }
+                    });
+
+
+                    if !is_initiated {
+                        let child_token = cancellation_token.child_token();
+                        let child_token_clone = child_token.clone();
+                        metrics.send_view_send_to_peer_total.inc();
+
+                        let transport = transport.clone();
+                        let body = body.clone();
+                        let route = route.clone();
+
+                        let send_future = async move {
+                            select! {
+                                _ = send_transmit_to_peer(transport, body, peer, route) => {},
+                                _ = child_token.cancelled() => {},
+                            }
+                        };
+
+                        in_progress_transmissions.spawn_on(send_future, &rt_handle);
+                        initiated_transmissions.insert(peer, (connection_id, child_token_clone));
                     }
                 }
-                Some(result) = in_progress_transmissions.join_next() => {
+            }
+            Some(result) = in_progress_transmissions.join_next() => {
+                panic_on_join_err(result);
+                metrics.send_view_send_to_peer_delivered_total.inc();
+            }
+            _ = cancellation_token.cancelled() => {
+                while let Some(result) = in_progress_transmissions.join_next().await {
+                    metrics.send_view_send_to_peer_cancelled_total.inc();
                     panic_on_join_err(result);
-                    metrics.send_view_send_to_peer_delivered_total.inc();
                 }
-                _ = cancellation_token.cancelled() => {
-                    while let Some(result) = in_progress_transmissions.join_next().await {
-                        metrics.send_view_send_to_peer_cancelled_total.inc();
-                        panic_on_join_err(result);
-                    }
-                    break;
-                }
+                break;
             }
         }
     }
 }
 
-/// Sends a serialized advert or artifact message to a peer.
-/// If the peer is not reachable, it will retry with an exponential backoff.
 #[instrument(skip(transport, message))]
-async fn send_advert_to_peer(
+async fn send_transmit_to_peer(
     transport: Arc<dyn Transport>,
     message: Bytes,
     peer: NodeId,
-    uri_prefix: String,
+    route: String,
 ) {
     let mut backoff = ExponentialBackoffBuilder::new()
         .with_initial_interval(MIN_BACKOFF_INTERVAL)
@@ -327,11 +320,12 @@ async fn send_advert_to_peer(
 
     loop {
         let request = Request::builder()
-            .uri(format!("/{}/update", uri_prefix))
+            .uri(format!("/{}/update", route))
             .body(message.clone())
             .expect("Building from typed values");
 
-        if let Ok(()) = transport.push(&peer, request).await {
+        // TODO: NET-1748
+        if transport.rpc(&peer, request).await.is_ok() {
             return;
         }
 
@@ -341,7 +335,9 @@ async fn send_advert_to_peer(
 }
 
 mod available_slot_set {
-    use super::*;
+    use super::SLOT_TABLE_THRESHOLD;
+    use crate::{ConsensusManagerMetrics, SlotNumber};
+    use ic_logger::{warn, ReplicaLogger};
 
     pub struct AvailableSlot(u64);
 
@@ -406,9 +402,12 @@ mod available_slot_set {
     }
 }
 
+#[allow(clippy::disallowed_methods)]
 #[cfg(test)]
 mod tests {
     use anyhow::anyhow;
+    use axum::http::Response;
+    use ic_interfaces::p2p::consensus::{AssembleResult, Peers};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockTransport};
@@ -416,8 +415,6 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
     use tokio::{runtime::Handle, time::timeout};
-
-    use ic_interfaces::p2p::consensus::{Aborted, Peers};
 
     use super::*;
 
@@ -431,17 +428,16 @@ mod tests {
         async fn assemble_message<P: Peers + Send + 'static>(
             &self,
             _id: <U64Artifact as IdentifiableArtifact>::Id,
-            _attr: <U64Artifact as IdentifiableArtifact>::Attribute,
             _artifact: Option<(U64Artifact, NodeId)>,
             _peers: P,
-        ) -> Result<(U64Artifact, NodeId), Aborted> {
+        ) -> AssembleResult<U64Artifact> {
             todo!()
         }
     }
 
     /// Verify that advert is sent to multiple peers.
     #[tokio::test]
-    async fn send_advert_to_all_peers() {
+    async fn send_transmit_to_all_peers() {
         with_test_replica_logger(|log| async {
             let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
             let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -450,13 +446,10 @@ mod tests {
             mock_transport
                 .expect_peers()
                 .return_const(vec![(NODE_1, ConnId::from(1)), (NODE_2, ConnId::from(2))]);
-            mock_transport
-                .expect_push()
-                .times(2)
-                .returning(move |n, _| {
-                    push_tx.send(*n).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(2).returning(move |n, _| {
+                push_tx.send(*n).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -467,7 +460,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -489,6 +482,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that increasing connection id causes advert to be resent.
@@ -512,13 +506,10 @@ mod tests {
                 .returning(|| vec![(NODE_1, ConnId::from(3)), (NODE_2, ConnId::from(2))])
                 .in_sequence(&mut seq);
             mock_transport.expect_peers().return_const(vec![]);
-            mock_transport
-                .expect_push()
-                .times(3)
-                .returning(move |n, _| {
-                    push_tx.send(*n).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(3).returning(move |n, _| {
+                push_tx.send(*n).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -529,7 +520,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -550,6 +541,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify failed send is retried.
@@ -567,17 +559,14 @@ mod tests {
                 .return_const(vec![(NODE_1, ConnId::from(1))]);
             // Let transport push fail a few times.
             mock_transport
-                .expect_push()
+                .expect_rpc()
                 .times(5)
                 .returning(move |_, _| Err(anyhow!("")))
                 .in_sequence(&mut seq);
-            mock_transport
-                .expect_push()
-                .times(1)
-                .returning(move |n, _| {
-                    push_tx.send(*n).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(1).returning(move |n, _| {
+                push_tx.send(*n).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -588,7 +577,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -602,6 +591,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify commit id increases with new adverts/purge events.
@@ -616,14 +606,11 @@ mod tests {
             mock_transport
                 .expect_peers()
                 .return_const(vec![(NODE_1, ConnId::from(1))]);
-            mock_transport
-                .expect_push()
-                .times(3)
-                .returning(move |_, r| {
-                    let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
-                    commit_id_tx.send(pb_slot.commit_id).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(3).returning(move |_, r| {
+                let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
+                commit_id_tx.send(pb_slot.commit_id).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -634,7 +621,7 @@ mod tests {
                 IdentityAssembler,
             );
             // Send advert and verify commit it.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -643,7 +630,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send second advert and observe commit id bump.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -651,8 +638,8 @@ mod tests {
             .unwrap();
             assert_eq!(commit_id_rx.recv().await.unwrap(), 1);
             // Send purge and new advert and observe commit id increase by 2.
-            tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Abort(2)).await.unwrap();
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(3, 1024),
                 is_latency_sensitive: false,
             }))
@@ -665,6 +652,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that duplicate Advert event does not cause sending twice.
@@ -679,14 +667,11 @@ mod tests {
             mock_transport
                 .expect_peers()
                 .return_const(vec![(NODE_1, ConnId::from(1))]);
-            mock_transport
-                .expect_push()
-                .times(2)
-                .returning(move |_, r| {
-                    let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
-                    commit_id_tx.send(pb_slot.commit_id).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(2).returning(move |_, r| {
+                let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
+                commit_id_tx.send(pb_slot.commit_id).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -698,7 +683,7 @@ mod tests {
             );
 
             // Send advert and verify commit id.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -707,7 +692,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send same advert again. This should be noop.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -715,7 +700,7 @@ mod tests {
             .unwrap();
 
             // Check that new advert is advertised with correct commit id.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -729,6 +714,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that a panic happening in one of the tasks spawned by the ConsensusManagerSender
@@ -749,7 +735,7 @@ mod tests {
 
             // We don't create an expectation for `push` here, so that we can trigger a panic
             mock_transport
-                .expect_push()
+                .expect_rpc()
                 .times(2)
                 .returning(move |_, _| {
                     panic!("Panic in mock transport expectation.");
@@ -764,7 +750,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+        tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
             artifact: U64Artifact::id_to_msg(1, 1024),
             is_latency_sensitive: false,
         }))
@@ -773,7 +759,8 @@ mod tests {
 
         timeout(Duration::from_secs(5), shutdown.shutdown())
             .await
-            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.");
+            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.")
+            .unwrap();
 
         //assert!(join_error.is_panic(), "The join error should be a panic.");
     }).await

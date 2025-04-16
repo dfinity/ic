@@ -3,7 +3,6 @@
 set -o nounset
 set -o pipefail
 
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 endpoints=("1.1.1.1" "ic0.app" "httpbin.org")

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = [
@@ -9,7 +9,7 @@ package(default_visibility = [
 DEPENDENCIES = [
     # There should not be any deps from "//rs".
     # If you have to add a new one please consult the NET team.
-    "//rs/async_utils",
+    "//rs/http_endpoints/async_utils",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/tls",
     "//rs/interfaces/registry",
@@ -21,15 +21,16 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:bytes",
-    "@crate_index//:either",
     "@crate_index//:futures",
+    "@crate_index//:http",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:quinn",
-    "@crate_index//:quinn-udp",
     "@crate_index//:rustls",
     "@crate_index//:slog",
     "@crate_index//:socket2",
+    "@crate_index//:static_assertions",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",
     "@crate_index//:tokio-util",
@@ -42,7 +43,9 @@ DEV_DEPENDENCIES = [
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
     "@crate_index//:criterion",
+    "@crate_index//:rstest",
     "@crate_index//:turmoil",
 ]
 
@@ -61,6 +64,14 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "quic_transport_test",
+    aliases = ALIASES,
+    crate = ":quic_transport",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(

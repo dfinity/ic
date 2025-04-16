@@ -4,7 +4,7 @@ use std::path::PathBuf;
 /// We assume pre-agreed values when interacting with the USB HSM. The purpose
 /// of this configuration is to override one or more of the default values if
 /// necessary.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct Config {
     /// The transport PIN required for the DC-owned USB HSM.
     #[serde(default = "pin_default")]
@@ -30,6 +30,10 @@ pub struct Config {
 
     /// If this Sec256k1 PEM is available, use it instead of the HSM.
     pub node_operator_pem: Option<PathBuf>,
+
+    /// Specifies the type of node rewards that the node operator expects to receive.
+    /// Examples include "type3.1" or "type1", corresponding to entries in the node rewards table in the NNS.
+    pub node_reward_type: Option<String>,
 }
 
 // We allow for the operator to only specify some of the fields while the others
@@ -57,6 +61,7 @@ impl Default for Config {
             nns_url: None,
             nns_pub_key_pem: None,
             node_operator_pem: None,
+            node_reward_type: None,
         }
     }
 }

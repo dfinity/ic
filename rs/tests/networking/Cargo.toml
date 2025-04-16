@@ -8,15 +8,24 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+assert_matches = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 canister_http = { path = "./canister_http" }
-candid = { workspace = true }
 cloner-canister-types = { path = "./canisters" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-limits = { path = "../../limits" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-networking-subnet-update-workload = { path = "./subnet_update_workload" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
@@ -24,11 +33,18 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
+leb128 = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
-tests = { path = ".." }
 tokio = { workspace = true }
+url = { workspace = true }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"
@@ -68,7 +84,7 @@ path = "network_reliability_test.rs"
 
 [[bin]]
 name = "ic-systest-p2p-performance"
-path = "p2p_performance.rs"
+path = "p2p_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-query-workload-long-test"
@@ -81,3 +97,7 @@ path = "update_workload_large_payload.rs"
 [[bin]]
 name = "ic-systest-cloner-canister-workload"
 path = "cloner_canister_workload.rs"
+
+[[bin]]
+name = "ic-systest-nns-delegation-test"
+path = "nns_delegation_test.rs"

@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "integration_test_common",
+    testonly = True,
+    srcs = [
+        "src/lib.rs",
+        "src/v2_call_transport.rs",
+    ],
+    crate_name = "ic_boundary_nodes_integration_test_common",
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/tree_hash",
+        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:wat",
+    ],
+)

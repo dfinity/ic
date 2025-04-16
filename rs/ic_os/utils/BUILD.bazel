@@ -5,15 +5,6 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:anyhow",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
-    "@crate_index//:url",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:once_cell",
 ]
 
 rust_library(
@@ -23,7 +14,6 @@ rust_library(
     ),
     aliases = {},
     crate_name = "utils",
-    edition = "2021",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )
@@ -32,5 +22,5 @@ rust_test(
     name = "test",
     size = "small",
     crate = ":utils",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )

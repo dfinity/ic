@@ -89,7 +89,7 @@ mod tests {
     // DataCenterRecord cannot implement Eq because of the Gps field being float, in the following
     // tests we assume that the presence of the Gps field is not important for the functionality
     // being tested and use this struct to compare the results of the tests with their expected results.
-    #[derive(PartialEq, Eq, Hash)]
+    #[derive(Eq, PartialEq, Hash)]
     struct DataCenterNoGps {
         id: String,
         region: String,

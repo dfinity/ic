@@ -1,7 +1,10 @@
 [package]
 name = "cloner-canister-types"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 crate-type = ["lib"]
@@ -9,6 +12,6 @@ path = "src/cloner_canister.rs"
 
 [dependencies]
 candid = { workspace = true }
+futures = { workspace = true }
 ic-cdk = { workspace = true }
 serde = { workspace = true }
-futures = { workspace = true }

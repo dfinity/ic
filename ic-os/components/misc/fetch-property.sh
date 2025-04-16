@@ -6,6 +6,8 @@ set -o pipefail
 
 # Fetch configuration property
 
+source /opt/ic/bin/logging.sh
+
 SCRIPT="$(basename $0)[$$]"
 
 # Get keyword arguments
@@ -23,7 +25,7 @@ Arguments:
   -c=, --config=        mandatory: specify the configuration file to read from
   -h, --help            show this help message and exit
   -k=, --key=           mandatory: specify the property key
-  -m=, --metric=        mandatory: specify the metric name
+  -m=, --metric=        optional: specify the metric name (required if metrics.sh exists)
 '
             exit 1
             ;;
@@ -43,19 +45,14 @@ Arguments:
 done
 
 function validate_arguments() {
-    if [ "${CONFIG}" == "" -o "${KEY}" == "" -o "${METRIC}" == "" ]; then
+    if [ -z "${CONFIG}" ] || [ -z "${KEY}" ]; then
         $0 --help
     fi
-}
 
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
+    if [ -f "/opt/ic/bin/metrics.sh" ] && [ -z "${METRIC:-}" ]; then
+        echo "Error: METRIC is required when metrics.sh exists."
+        exit 1
     fi
-
-    logger -t ${SCRIPT} "${message}"
 }
 
 try_write_metric() {
@@ -75,16 +72,16 @@ try_write_metric() {
 function fetch_property() {
     PROPERTY=$(jq -r "$(echo ${KEY})" ${CONFIG})
 
-    if [ -z "${PROPERTY}" -o "${PROPERTY}" == "null" ]; then
+    if [ -z "${PROPERTY}" ] || [ "${PROPERTY}" == "null" ]; then
         write_log "ERROR: Unable to fetch property: ${KEY}"
-        try_write_metric "$(echo ${METRIC})" \
+        try_write_metric "$(echo ${METRIC:-})" \
             "1" \
             "Property: $(echo ${KEY})" \
             "gauge"
         exit 1
     else
         write_log "Using property: ${PROPERTY}"
-        try_write_metric "$(echo ${METRIC})" \
+        try_write_metric "$(echo ${METRIC:-})" \
             "0" \
             "Property: $(echo ${KEY})" \
             "gauge"

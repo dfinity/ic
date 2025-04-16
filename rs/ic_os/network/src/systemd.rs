@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::fs::{create_dir_all, write};
 use std::net::Ipv6Addr;
 use std::path::Path;
@@ -7,7 +8,8 @@ use anyhow::{Context, Result};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
-use crate::mac_address::FormattedMacAddress;
+use config_types::DeterministicIpv6Config;
+use macaddr::MacAddr6;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
@@ -18,7 +20,7 @@ DNS=2001:4860:4860::8888
 DNS=2001:4860:4860::8844
 "#;
 
-fn generate_network_interface_content(interface_name: &str) -> String {
+fn generate_network_interface_content(interface_name: &str, mac_line: &str) -> String {
     format!(
         "
 [Match]
@@ -27,38 +29,15 @@ Name={interface_name}
 [Link]
 RequiredForOnline=no
 MTUBytes=1500
+{mac_line}
 
 [Network]
 LLDP=true
 EmitLLDP=true
-Bond=bond6
+Bridge=br6
 "
     )
 }
-
-// `mac_line` - Must be in format: "MACAddress=ff:ff:ff:ff:ff:ff". Potentially unnecessary.
-fn generate_bond6_netdev_content(mac_line: &str) -> String {
-    format!(
-        "
-[NetDev]
-Name=bond6
-Kind=bond
-{mac_line}
-
-[Bond]
-Mode=active-backup
-MIIMonitorSec=5
-UpDelaySec=10
-DownDelaySec=10"
-    )
-}
-
-static BOND6_NETWORK_CONTENT: &str = "
-[Match]
-Name=bond6
-
-[Network]
-Bridge=br6";
 
 static BRIDGE6_NETDEV_CONTENT: &str = "
 [NetDev]
@@ -97,36 +76,74 @@ pub fn restart_systemd_networkd() {
     // Explicitly don't care about return code status...
 }
 
+// TODO(NODE-1466): Consolidate generate_systemd_config_files_new_config and generate_and_write_systemd_files
+pub fn generate_systemd_config_files_new_config(
+    output_directory: &Path,
+    ipv6_config: &DeterministicIpv6Config,
+    generated_mac: Option<&MacAddr6>,
+    ipv6_address: &Ipv6Addr,
+) -> Result<()> {
+    let mut interfaces = get_interfaces()?;
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
+    eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
+
+    let ping_target = ipv6_config.gateway.to_string();
+
+    let fastest_interface = interfaces
+        .iter()
+        .find(|i| {
+            match has_ipv6_connectivity(i, ipv6_address, ipv6_config.prefix_length, &ping_target) {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("Error testing connectivity on {}: {}", &i.name, e);
+                    false
+                }
+            }
+        })
+        .context("Could not find any network interfaces")?;
+
+    eprintln!("Using fastest interface: {:?}", fastest_interface);
+
+    // Format the IP address to include the subnet length. See `man systemd.network`.
+    let ipv6_address = format!(
+        "{}/{}",
+        &ipv6_address.to_string(),
+        ipv6_config.prefix_length
+    );
+    generate_and_write_systemd_files(
+        output_directory,
+        fastest_interface,
+        generated_mac,
+        &ipv6_address,
+        &ipv6_config.gateway.to_string(),
+    )?;
+
+    println!("Restarting systemd networkd");
+    restart_systemd_networkd();
+
+    Ok(())
+}
+
 fn generate_and_write_systemd_files(
     output_directory: &Path,
     interface: &Interface,
-    generated_mac: Option<&FormattedMacAddress>,
+    generated_mac: Option<&MacAddr6>,
     ipv6_address: &str,
     ipv6_gateway: &str,
 ) -> Result<()> {
     eprintln!("Creating directory: {}", output_directory.to_string_lossy());
     create_dir_all(output_directory)?;
 
-    let interface_filename = format!("20-{}.network", interface.name);
-    let interface_path = output_directory.join(interface_filename);
-    let interface_content = generate_network_interface_content(&interface.name);
-    eprintln!("Writing {}", interface_path.to_string_lossy());
-    write(interface_path, interface_content)?;
-
-    let bond6_filename = "20-bond6.network";
-    let bond6_path = output_directory.join(bond6_filename);
-    eprintln!("Writing {}", bond6_path.to_string_lossy());
-    write(bond6_path, BOND6_NETWORK_CONTENT)?;
-
-    let bond6_netdev_filename = "20-bond6.netdev";
-    let bond6_netdev_path = output_directory.join(bond6_netdev_filename);
     let mac_line = match generated_mac {
-        Some(mac) => format!("MACAddress={}", mac.get()),
+        Some(mac) => format!("MACAddress={mac}"),
         None => String::new(),
     };
-    let bond6_netdev_content = generate_bond6_netdev_content(&mac_line);
-    eprintln!("Writing {}", bond6_netdev_path.to_string_lossy());
-    write(bond6_netdev_path, bond6_netdev_content)?;
+
+    let interface_filename = format!("20-{}.network", interface.name);
+    let interface_path = output_directory.join(interface_filename);
+    let interface_content = generate_network_interface_content(&interface.name, &mac_line);
+    eprintln!("Writing {}", interface_path.to_string_lossy());
+    write(interface_path, interface_content)?;
 
     let bridge6_netdev_filename = "20-br6.netdev";
     let bridge6_netdev_path = output_directory.join(bridge6_netdev_filename);
@@ -135,7 +152,6 @@ fn generate_and_write_systemd_files(
 
     let bridge6_filename = "20-br6.network";
     let bridge6_path = output_directory.join(bridge6_filename);
-
     let bridge6_content = generate_bridge6_network_content(
         ipv6_address,
         ipv6_gateway,
@@ -150,19 +166,18 @@ fn generate_and_write_systemd_files(
 pub fn generate_systemd_config_files(
     output_directory: &Path,
     network_info: &NetworkInfo,
-    generated_mac: Option<&FormattedMacAddress>,
+    generated_mac: Option<&MacAddr6>,
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
-    interfaces.sort_by(|a, b| a.speed_mbps.cmp(&b.speed_mbps));
-    eprintln!("Interfaces sorted by speed: {:?}", interfaces);
+    interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
+    eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
-    // old nodes are still configured with a local IPv4 interface connection
-    // local IPv4 interfaces must be filtered out
-    let ipv6_interfaces: Vec<&Interface> = interfaces
+
+    let fastest_interface = interfaces
         .iter()
-        .filter(|i| {
+        .find(|i| {
             match has_ipv6_connectivity(i, ipv6_address, network_info.ipv6_subnet, &ping_target) {
                 Ok(result) => result,
                 Err(e) => {
@@ -171,18 +186,11 @@ pub fn generate_systemd_config_files(
                 }
             }
         })
-        .collect();
-
-    // For now only assign the fastest interface to ipv6.
-    // TODO - probe to make sure the interfaces are on the same network before doing active-backup bonding.
-    // TODO - Ensure ipv6 connectivity exists
-    let fastest_interface = ipv6_interfaces
-        .first()
         .context("Could not find any network interfaces")?;
 
     eprintln!("Using fastest interface: {:?}", fastest_interface);
 
-    // Format the ip address to include the subnet length. See `man systemd.network`.
+    // Format the IP address to include the subnet length. See `man systemd.network`.
     let ipv6_address = format!("{}/{}", &ipv6_address.to_string(), network_info.ipv6_subnet);
     generate_and_write_systemd_files(
         output_directory,
@@ -192,7 +200,7 @@ pub fn generate_systemd_config_files(
         &network_info.ipv6_gateway.to_string(),
     )?;
 
-    print!("Restarting systemd networkd");
+    println!("Restarting systemd networkd");
     restart_systemd_networkd();
 
     Ok(())

@@ -6,11 +6,11 @@ sh_binary(
     args = ["ecdsa_public_key"],
     data = [
         "@candid//:didc",
-        "@interface_spec//file",
+        "@management_canister_did//file",
     ],
     env = {
         "DIDC_PATH": "$(execpath @candid//:didc)",
-        "IC_SPEC": "$(rootpath @interface_spec//file)",
+        "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )
 
@@ -20,11 +20,11 @@ sh_binary(
     args = ["http_request"],
     data = [
         "@candid//:didc",
-        "@interface_spec//file",
+        "@management_canister_did//file",
     ],
     env = {
         "DIDC_PATH": "$(execpath @candid//:didc)",
-        "IC_SPEC": "$(rootpath @interface_spec//file)",
+        "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )
 
@@ -34,11 +34,11 @@ sh_binary(
     args = ["sign_with_ecdsa"],
     data = [
         "@candid//:didc",
-        "@interface_spec//file",
+        "@management_canister_did//file",
     ],
     env = {
         "DIDC_PATH": "$(execpath @candid//:didc)",
-        "IC_SPEC": "$(rootpath @interface_spec//file)",
+        "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )
 
@@ -48,10 +48,10 @@ sh_binary(
     args = ["install_code"],
     data = [
         "@candid//:didc",
-        "@interface_spec//file",
+        "@management_canister_did//file",
     ],
     env = {
         "DIDC_PATH": "$(execpath @candid//:didc)",
-        "IC_SPEC": "$(rootpath @interface_spec//file)",
+        "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )

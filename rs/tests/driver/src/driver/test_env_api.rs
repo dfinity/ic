@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 //! # The Test Environment API
 //!
 //! The goal of this module is to provide the user with an extensible,
@@ -139,7 +140,7 @@ use super::{
 use crate::{
     driver::{
         boundary_node::BoundaryNodeVm,
-        constants::{self, kibana_link, SSH_USERNAME},
+        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
@@ -166,12 +167,18 @@ use ic_nns_governance_api::pb::v1::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
-use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
+use ic_protobuf::registry::{
+    node::v1 as pb_node,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    subnet::v1 as pb_subnet,
+};
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_registry_keys::REPLICA_VERSION_KEY_PREFIX;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -182,6 +189,8 @@ use ic_types::{
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
+use itertools::Itertools;
+use prost::Message;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{debug, error, info, warn, Logger};
@@ -194,7 +203,7 @@ use std::{
     fs,
     future::Future,
     io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -295,6 +304,21 @@ impl std::fmt::Display for TopologySnapshot {
                 .unwrap();
             });
         });
+        if self.api_boundary_nodes().count() > 0 {
+            writeln!(f, "API boundary nodes:").unwrap();
+        }
+        self.api_boundary_nodes().enumerate().for_each(|(idx, n)| {
+            writeln!(
+                f,
+                "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
+                n.node_id,
+                n.get_ip_addr(),
+                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                idx,
+                width = max_length_ipv6,
+            )
+            .unwrap()
+        });
         if self.unassigned_nodes().count() > 0 {
             writeln!(f, "Unassigned nodes:").unwrap();
         }
@@ -320,24 +344,26 @@ impl std::fmt::Display for TopologySnapshot {
 
 impl TopologySnapshot {
     pub fn emit_log_event(&self, log: &slog::Logger) {
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize, Serialize)]
         pub struct NodeView {
             pub id: NodeId,
             pub ipv6: IpAddr,
+            pub domain: Option<String>,
         }
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize, Serialize)]
         pub struct SubnetView {
             pub subnet_type: SubnetType,
             pub subnet_id: SubnetId,
             pub nodes: Vec<NodeView>,
         }
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize, Serialize)]
         pub struct TopologyView {
             pub registry_version: String,
             pub subnets: Vec<SubnetView>,
             pub unassigned_nodes: Vec<NodeView>,
+            pub api_boundary_nodes: Vec<NodeView>,
         }
         let subnets: Vec<_> = self
             .subnets()
@@ -347,6 +373,7 @@ impl TopologySnapshot {
                     .map(|n| NodeView {
                         id: n.node_id,
                         ipv6: n.get_ip_addr(),
+                        domain: n.get_domain(),
                     })
                     .collect();
                 SubnetView {
@@ -361,6 +388,15 @@ impl TopologySnapshot {
             .map(|n| NodeView {
                 id: n.node_id,
                 ipv6: n.get_ip_addr(),
+                domain: n.get_domain(),
+            })
+            .collect();
+        let api_boundary_nodes: Vec<_> = self
+            .api_boundary_nodes()
+            .map(|n| NodeView {
+                id: n.node_id,
+                ipv6: n.get_ip_addr(),
+                domain: n.get_domain(),
             })
             .collect();
         let event = log_events::LogEvent::new(
@@ -369,6 +405,7 @@ impl TopologySnapshot {
                 registry_version: self.registry_version.to_string(),
                 subnets,
                 unassigned_nodes,
+                api_boundary_nodes,
             },
         );
         event.emit_log(log);
@@ -418,12 +455,19 @@ impl TopologySnapshot {
             })
             .collect();
 
+        let api_boundary_nodes = self
+            .local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap();
+
         Box::new(
             self.local_registry
                 .get_node_ids(registry_version)
                 .unwrap()
                 .into_iter()
-                .filter(|node_id| !assigned_nodes.contains(node_id))
+                .filter(|node_id| {
+                    !assigned_nodes.contains(node_id) && !api_boundary_nodes.contains(node_id)
+                })
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
                     registry_version,
@@ -434,6 +478,83 @@ impl TopologySnapshot {
                 .collect::<Vec<_>>()
                 .into_iter(),
         )
+    }
+
+    pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .local_registry
+            .get_key_family(
+                "blessed_replica_versions",
+                self.local_registry.get_latest_version(),
+            )
+            .map_err(anyhow::Error::from)?
+            .iter()
+            .filter_map(|key| {
+                let r = self
+                    .local_registry
+                    .get_versioned_value(key, self.local_registry.get_latest_version())
+                    .unwrap_or_else(|_| {
+                        panic!("Failed to get entry {} for blessed replica versions", key)
+                    });
+
+                r.as_ref().map(|v| {
+                    BlessedReplicaVersions::decode(v.as_slice()).expect("Invalid registry value")
+                })
+            })
+            .collect_vec()
+            .first()
+            .ok_or(anyhow::anyhow!(
+                "Failed to find any blessed replica versions"
+            ))?
+            .blessed_version_ids
+            .clone())
+    }
+
+    pub fn replica_version_records(&self) -> anyhow::Result<Vec<(String, ReplicaVersionRecord)>> {
+        Ok(self
+            .local_registry
+            .get_key_family(
+                REPLICA_VERSION_KEY_PREFIX,
+                self.local_registry.get_latest_version(),
+            )
+            .map_err(anyhow::Error::from)?
+            .iter()
+            .map(|key| {
+                let r = self
+                    .local_registry
+                    .get_versioned_value(key, self.local_registry.get_latest_version())
+                    .unwrap_or_else(|_| panic!("Failed to get entry for replica version {}", key));
+                (
+                    key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
+                    r.as_ref()
+                        .map(|v| {
+                            ReplicaVersionRecord::decode(v.as_slice())
+                                .expect("Invalid registry value")
+                        })
+                        .unwrap(),
+                )
+            })
+            .collect_vec())
     }
 
     /// The subnet id of the root subnet.
@@ -760,10 +881,22 @@ impl IcNodeSnapshot {
                     .expect("Optional routing table is None in local registry.");
                 match canister_ranges.first() {
                     Some(range) => range.start.get(),
-                    None => PrincipalId::default(),
+                    None => {
+                        warn!(
+                            self.env.logger(),
+                            "No canister ranges found for subnet_id={}", subnet_id
+                        );
+                        PrincipalId::default()
+                    }
                 }
             }
-            None => PrincipalId::default(),
+            None => {
+                warn!(
+                    self.env.logger(),
+                    "Node {} is not assigned to any subnet", self.node_id
+                );
+                PrincipalId::default()
+            }
         }
     }
 
@@ -796,6 +929,39 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
+        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+    }
+
+    pub fn install_canister_with_arg(
+        &self,
+        canister_id: Principal,
+        name: &str,
+        arg: Option<Vec<u8>>,
+    ) {
+        let canister_bytes = load_wasm(name);
+        self.with_default_agent(move |agent| async move {
+            // Create a canister.
+            let mgr = ManagementCanister::create(&agent);
+
+            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+            if let Some(arg) = arg {
+                install_code = install_code.with_raw_arg(arg)
+            }
+            install_code
+                .call_and_wait()
+                .await
+                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+            Ok::<_, String>(canister_id)
+        })
+        .expect("Could not install canister");
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
@@ -804,7 +970,7 @@ impl IcNodeSnapshot {
             let mgr = ManagementCanister::create(&agent);
             let canister_id = mgr
                 .create_canister()
-                .as_provisional_create_with_amount(None)
+                .as_provisional_create_with_amount(cycles_amount)
                 .with_effective_canister_id(effective_canister_id)
                 .call_and_wait()
                 .await
@@ -986,14 +1152,12 @@ impl<T: HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let mainnet_version = get_mainnet_nns_revision();
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
@@ -1001,106 +1165,104 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     let dep_rel_path = "elasticsearch_hosts";
     let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
+        .unwrap_or_else(|_| "elasticsearch.ch1-obsdev1.dfinity.network:443".to_string());
     parse_elasticsearch_hosts(Some(hosts))
 }
 
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var(
+        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
+    )?)
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
-    let url = read_dependency_to_string(dep_rel_path)?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
-    let sha256 = read_dependency_to_string(dep_rel_path)?;
-    bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
+}
+
+pub fn get_mainnet_nns_revision() -> String {
+    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet nns version from environment")
+}
+
+pub fn get_mainnet_application_subnet_revision() -> String {
+    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+        .expect("could not read mainnet application subnet version from environment")
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version: String = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let mainnet_version = get_mainnet_nns_revision();
     let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
-    Ok(sha256)
+    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
+}
+
+pub fn get_empty_disk_img_url() -> Result<Url> {
+    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_empty_disk_img_sha256() -> Result<String> {
+    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1142,11 +1304,11 @@ fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> 
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self, group_base_name: String);
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self, group_base_name: String) {
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
         if self.get_json_path(GroupSetup::attribute_name()).exists() {
             let group_setup = GroupSetup::read_attribute(self);
@@ -1155,7 +1317,10 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            let group_setup = GroupSetup::new(group_base_name.clone());
+            // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
+            // Afterwards, the group's TTL should be bumped via a keepalive task
+            let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
+            let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
@@ -1171,7 +1336,6 @@ impl HasGroupSetup for TestEnv {
                         &group_setup.infra_group_name,
                         group_setup.group_timeout,
                         group_spec,
-                        self,
                     )
                     .unwrap();
                 }
@@ -1253,6 +1417,17 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
     Path::new(&runfiles).join(p)
 }
 
+/// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+    let runfiles =
+        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
+
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+
+    Path::new(&runfiles).join(path_from_env)
+}
+
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     let dep_path = get_dependency_path(p);
     if dep_path.exists() {
@@ -1321,9 +1496,11 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
+        let mut err = String::new();
+        channel.stderr().read_to_string(&mut err)?;
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
     }
@@ -1454,6 +1631,34 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         )
     }
 
+    /// Checks if the Orchestrator dashboard endpoint is accessible
+    fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
+        let dashboard_endpoint = format!("http://[{}]:7070", ip);
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let resp = match client.get(&dashboard_endpoint).send() {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Failed to send request: {}", e);
+                return false;
+            }
+        };
+
+        if !resp.status().is_success() {
+            eprintln!(
+                "Orchestrator dashboard returned non-success status: {}",
+                resp.status()
+            );
+            return false;
+        }
+
+        resp.text().is_ok()
+    }
+
     /// Waits until the is_healthy() returns an error three times in a row
     fn await_status_is_unavailable(&self) -> Result<()> {
         let mut count = 0;
@@ -1474,6 +1679,34 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
                 Ok(_) => {
                     count = 0;
                     Err(anyhow!("Status is still available"))
+                }
+            }
+        )
+    }
+
+    /// Waits until the Orchestrator dashboard endpoint is accessible
+    fn await_orchestrator_dashboard_accessible(&self) -> anyhow::Result<()> {
+        let mut count = 0;
+        retry_with_msg!(
+            &format!(
+                "await_orchestrator_dashboard_accessible for {}",
+                self.get_public_addr().ip()
+            ),
+            self.test_env().logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || {
+                let ip = match self.get_public_addr().ip() {
+                    IpAddr::V6(ip) => ip,
+                    IpAddr::V4(_) => panic!("Expected IPv6 address"),
+                };
+                if Self::is_orchestrator_dashboard_accessible(ip, 5) {
+                    Ok(())
+                } else {
+                    count += 1;
+                    Err(anyhow::anyhow!(
+                        "Orchestrator dashboard not available, attempt {count}"
+                    ))
                 }
             }
         )
@@ -1911,7 +2144,7 @@ where
     let start = Instant::now();
     debug!(
         log,
-        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
     );
     loop {
         match f().await {
@@ -2131,7 +2364,7 @@ where
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FarmBaseUrl {
     url: Url,
 }
@@ -2164,7 +2397,7 @@ impl TestEnvAttribute for FarmBaseUrl {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct InitialReplicaVersion {
     pub version: ReplicaVersion,
 }
@@ -2187,7 +2420,7 @@ pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
 }
 
 pub fn emit_group_event(log: &slog::Logger, group: &str) {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize, Serialize)]
     pub struct GroupName {
         message: String,
         group: String,
@@ -2203,7 +2436,7 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
 }
 
 pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize, Serialize)]
     pub struct KibanaUrl {
         message: String,
         url: String,

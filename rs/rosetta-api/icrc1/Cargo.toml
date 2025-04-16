@@ -1,41 +1,88 @@
 [package]
-name = "ic-icrc1"
-description = "ICRC-1 compliant ledger library."
-version.workspace = true
+name = "ic-icrc-rosetta"
+description = "Build Once. Integrate Your Blockchain Everywhere. "
+default-run = "ic-icrc-rosetta"
+version = "1.2.0"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
 
+[[bin]]
+name = "ic-icrc-rosetta"
+path = "src/main.rs"
+
 [dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
+clap = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-ledger-canister-core = { path = "../ledger_canister_core" }
-ic-ledger-core = { path = "../ledger_core" }
-ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
+ic-limits = { path = "../../limits" }
+ic-icrc1 = { path = "../../ledger_suite/icrc1" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
+ic-icrc1-tokens-u256 = { path = "../../ledger_suite/icrc1/tokens_u256" }
+ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
+ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-rosetta-api = { path = "../icp" }
+ic-sys = { path = "../../sys" }
+icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+indicatif = "0.17.3"
+lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
+proptest = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+rolling-file = "0.2.0"
+rosetta-core = { path = "../common/rosetta_core" }
+rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tempfile = { workspace = true }
-thiserror = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+tower-request-id = "^0.3.0"
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+
+[lib]
+path = "src/lib.rs"
 
 [dev-dependencies]
-canister-test = { path = "../../rust_canisters/canister_test" }
-ic-icrc1-index-ng = { path = "index-ng" }
-ic-icrc1-ledger = { path = "ledger" }
-ic-icrc1-ledger-sm-tests = { path = "ledger/sm-tests" }
-ic-icrc1-test-utils = { path = "test_utils" }
-ic-icrc1-tokens-u256 = { path = "tokens_u256" }
-ic-icrc1-tokens-u64 = { path = "tokens_u64" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
-ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+futures = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-icrc-rosetta-client = { path = "client" }
+ic-icrc-rosetta-runner = { path = "runner" }
+ic-ledger-suite-state-machine-tests = { path = "../../ledger_suite/tests/sm-tests" }
+ic-icrc1-test-utils = { path = "../../ledger_suite/icrc1/test_utils" }
+ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
+ic-rosetta-test-utils = { path = "../icp/test_utils" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
-leb128 = "0.2.4"
-proptest = "1.0"
-rand = { workspace = true }
+ic-utils = { workspace = true }
+once_cell = "1.8.0"
+pocket-ic = { path = "../../../packages/pocket-ic" }
+url = { workspace = true }
+
+[[test]]
+name = "integration_tests"
+path = "tests/integration_tests.rs"
+
+[[test]]
+name = "system_tests"
+path = "tests/system_tests.rs"
+
+[[test]]
+name = "multitoken_system_tests"
+path = "tests/multitoken_system_tests.rs"

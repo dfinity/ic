@@ -1,19 +1,19 @@
 use candid::CandidType;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
 
 /// The UpdateSettings struct as defined in the ic-interface-spec
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candids
-#[derive(Clone, PartialEq, Eq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct UpdateSettings {
     pub canister_id: PrincipalId,
     pub settings: CanisterSettings,
     pub sender_canister_version: Option<u64>,
 }
 
-#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
@@ -24,7 +24,7 @@ pub enum LogVisibility {
 
 /// The CanisterSettings struct as defined in the ic-interface-spec
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Deserialize, CandidType)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettings {
     pub controllers: Option<Vec<PrincipalId>>,
     pub compute_allocation: Option<candid::Nat>,
@@ -33,6 +33,7 @@ pub struct CanisterSettings {
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 /// A wrapper call to the management canister `update_settings` API.

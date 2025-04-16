@@ -1,14 +1,14 @@
 use crate::{
+    allow_active_neurons_in_stable_memory,
     neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
-    storage::{with_stable_neuron_indexes, with_stable_neuron_store},
+    storage::{neurons::NeuronSections, with_stable_neuron_indexes, with_stable_neuron_store},
 };
 
 use candid::{CandidType, Deserialize};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use serde::Serialize;
@@ -25,7 +25,7 @@ const MAX_EXAMPLE_ISSUES_COUNT: usize = 10;
 // 26.2 recent ballots). Using batch size = 10 keeps the overall instructions under 60M.
 const INACTIVE_NEURON_VALIDATION_CHUNK_SIZE: usize = 10;
 
-#[derive(Clone, Debug, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum ValidationIssue {
     ActiveNeuronInStableStorage(NeuronId),
     NeuronStoreError(String),
@@ -64,7 +64,7 @@ pub enum ValidationIssue {
 }
 
 /// A summary of neuron data validation.
-#[derive(Debug, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct NeuronDataValidationSummary {
     pub current_validation_started_time_seconds: Option<u64>,
     pub current_issues_summary: Option<IssuesSummary>,
@@ -73,7 +73,7 @@ pub struct NeuronDataValidationSummary {
 
 /// A group of validation issues, where we keep track of the count of issues and truncate the
 /// example issues to only 10.
-#[derive(Clone, Debug, Default, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct IssueGroup {
     /// Count of issues for a specific type.
     pub issues_count: u64,
@@ -82,7 +82,7 @@ pub struct IssueGroup {
 }
 
 /// A summary of validation issues.
-#[derive(Debug, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct IssuesSummary {
     pub last_updated_time_seconds: u64,
     pub issue_groups: Vec<IssueGroup>,
@@ -225,9 +225,11 @@ impl ValidationInProgress {
             KnownNeuronIndexValidator,
         >::new()));
 
-        tasks.push_back(Box::new(StableNeuronStoreValidator::new(
-            INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
-        )));
+        if !allow_active_neurons_in_stable_memory() {
+            tasks.push_back(Box::new(StableNeuronStoreValidator::new(
+                INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
+            )));
+        }
 
         Self {
             started_time_seconds: now,
@@ -246,7 +248,7 @@ impl ValidationInProgress {
 
 /// Validation issues stored on the heap while the validation is running. This is not meant to be
 /// exposed through a query method (but IssuesSummary does).
-#[derive(Debug, Default, PartialEq)]
+#[derive(PartialEq, Debug, Default)]
 pub(crate) struct Issues {
     last_updated_time_seconds: u64,
     issue_groups_map: HashMap<Discriminant<ValidationIssue>, IssueGroup>,
@@ -325,7 +327,7 @@ impl ValidationTask for VecDeque<Box<dyn ValidationTask>> {
 /// storage, and therefore past inconsistencies would be preserved indefinitely until found and
 /// fixed.
 trait CardinalityAndRangeValidator {
-    const HEAP_NEURON_RANGE_CHUNK_SIZE: usize;
+    const NEURON_SECTIONS: NeuronSections;
 
     /// Validates the cardinalities of primary data and index to be equal.
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue>;
@@ -394,24 +396,31 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
     }
 
     fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
-        if let Some(next_neuron_id) = self.heap_next_neuron_id.take() {
+        // Set a limit on the number of instructions used by this function.
+        #[cfg(target_arch = "wasm32")]
+        let instruction_limit = ic_cdk::api::instruction_counter() + 100_000_000;
+        #[cfg(target_arch = "wasm32")]
+        let keep_going = || ic_cdk::api::instruction_counter() < instruction_limit;
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let keep_going = || true;
+
+        let issues = if let Some(next_neuron_id) = self.heap_next_neuron_id.take() {
             neuron_store
-                .heap_neurons()
-                .range(next_neuron_id.id..)
-                .take(Validator::HEAP_NEURON_RANGE_CHUNK_SIZE)
-                .flat_map(|(neuron_id, neuron)| {
-                    self.heap_next_neuron_id = (NeuronId { id: *neuron_id }).next();
+                .heap_neurons_range(next_neuron_id..)
+                .take_while(|_| keep_going())
+                .flat_map(|neuron| {
+                    self.heap_next_neuron_id = neuron.id().next();
                     Validator::validate_primary_neuron_has_corresponding_index_entries(neuron)
                 })
                 .collect()
         } else if let Some(next_neuron_id) = self.stable_next_neuron_id.take() {
             with_stable_neuron_store(|stable_neuron_store| {
                 stable_neuron_store
-                    .range_neurons(next_neuron_id..)
-                    .take(INACTIVE_NEURON_VALIDATION_CHUNK_SIZE)
+                    .range_neurons_sections(next_neuron_id.., Validator::NEURON_SECTIONS)
+                    .take_while(|_| keep_going())
                     .flat_map(|neuron| {
-                        let neuron_id_to_validate = neuron.id();
-                        self.stable_next_neuron_id = neuron_id_to_validate.next();
+                        self.stable_next_neuron_id = neuron.id().next();
                         Validator::validate_primary_neuron_has_corresponding_index_entries(&neuron)
                     })
                     .collect()
@@ -419,23 +428,18 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
         } else {
             println!("validate_next_chunk should not be called when is_done() is true");
             vec![]
-        }
+        };
+        issues
     }
 }
 
 struct SubaccountIndexValidator;
 
 impl CardinalityAndRangeValidator for SubaccountIndexValidator {
-    // On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions,
-    // and there is exactly one entry for a neuron, so 400 neurons takes 52M instructions (aiming to
-    // keep it under 60M).
-    const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 400;
+    const NEURON_SECTIONS: NeuronSections = NeuronSections::NONE;
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap = neuron_store.heap_neurons().len() as u64;
-        let cardinality_primary_stable =
-            with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len() as u64);
-        let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
+        let cardinality_primary = neuron_store.len() as u64;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.subaccount().num_entries()) as u64;
         if cardinality_primary != cardinality_index {
@@ -470,15 +474,14 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
 struct PrincipalIndexValidator;
 
 impl CardinalityAndRangeValidator for PrincipalIndexValidator {
-    // On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions,
-    // and there is 1 controler + 1.2 hot keys (=2.2) on average, so 200 neurons takes 57.2M
-    // instructions (aiming to keep it under 60M).
-    const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 200;
+    const NEURON_SECTIONS: NeuronSections = NeuronSections {
+        hot_keys: true,
+        ..NeuronSections::NONE
+    };
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap: u64 = neuron_store
-            .heap_neurons()
-            .values()
+            .heap_neurons_iter()
             .map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
             .sum();
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store|
@@ -529,15 +532,14 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
 struct FollowingIndexValidator;
 
 impl CardinalityAndRangeValidator for FollowingIndexValidator {
-    // On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions,
-    // and there are ~11.3 followee entries on average, so 40 neurons takes 58.76M instructions
-    // (aiming to keep it under 60M).
-    const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 40;
+    const NEURON_SECTIONS: NeuronSections = NeuronSections {
+        followees: true,
+        ..NeuronSections::NONE
+    };
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap: u64 = neuron_store
-            .heap_neurons()
-            .values()
+            .heap_neurons_iter()
             .map(|neuron| neuron.topic_followee_pairs().len() as u64)
             .sum();
         let cardinality_primary_stable =
@@ -587,14 +589,14 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
 struct KnownNeuronIndexValidator;
 
 impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
-    // As long as we have <460 known neurons, we will be able to keep the instructions <60M as each
-    // entry lookup takes ~130K instructions.
-    const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 300000;
+    const NEURON_SECTIONS: NeuronSections = NeuronSections {
+        known_neuron_data: true,
+        ..NeuronSections::NONE
+    };
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap = neuron_store
-            .heap_neurons()
-            .values()
-            .filter(|neuron| neuron.known_neuron_data.is_some())
+            .heap_neurons_iter()
+            .filter(|neuron| neuron.known_neuron_data().is_some())
             .count() as u64;
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store| {
             stable_neuron_store.lens().known_neuron_data
@@ -616,7 +618,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
         neuron: &Neuron,
     ) -> Option<ValidationIssue> {
         let neuron_id = neuron.id();
-        let known_neuron_name = match &neuron.known_neuron_data {
+        let known_neuron_name = match neuron.known_neuron_data() {
             // Most neurons aren't known neurons.
             None => return None,
             Some(known_neuron_data) => &known_neuron_data.name,
@@ -686,6 +688,7 @@ mod tests {
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::{neuron::Followees, KnownNeuronData},
         storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
+        temporarily_disable_allow_active_neurons_in_stable_memory,
     };
 
     thread_local! {
@@ -993,6 +996,8 @@ mod tests {
 
     #[test]
     fn test_validator_invalid_issues_active_neuron_in_stable() {
+        let _t = temporarily_disable_allow_active_neurons_in_stable_memory();
+
         // Step 1: Cause an issue with active neuron in stable storage.
         // Step 1.1 First create it as an inactive neuron so it can be added to stable storage.
         let inactive_neuron = next_test_neuron()

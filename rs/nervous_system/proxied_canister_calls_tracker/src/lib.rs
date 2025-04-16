@@ -221,7 +221,7 @@ impl Drop for SingleProxiedCallTracker {
 // Privates
 // ========
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 struct ProxiedCallId(u128);
 
 impl ProxiedCallId {
@@ -238,7 +238,7 @@ impl ProxiedCallId {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct CanisterCallMetadata {
     created_at: SystemTime,
     caller: PrincipalId,
@@ -271,7 +271,7 @@ impl CanisterCallMetadata {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct CanisterCallArgsMetadata {
     len: usize,
 

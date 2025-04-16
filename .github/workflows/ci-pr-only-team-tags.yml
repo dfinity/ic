@@ -2,6 +2,12 @@ name: Tag Team Reviewers
 
 on:
   pull_request:
+    # Only tag PRs on the branches for which we have protection rules / rulesets
+    branches:
+      - master
+      - 'rc--*'
+      - 'hotfix-*'
+      - 'follow-*'
     types:
       - ready_for_review
       - synchronize
@@ -9,6 +15,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  repository-projects: read
 
 env:
   REPO: "${{ github.repository }}"

@@ -1,4 +1,5 @@
-load("@bazel_gazelle//:def.bzl", "gazelle")
+load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
+load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 
 package(default_visibility = ["//visibility:public"])
@@ -12,17 +13,9 @@ exports_files([
     "clippy.toml",
     "rustfmt.toml",
     "WORKSPACE.bazel",
-    "mainnet-canisters.bzl",
+    "mainnet-canister-revisions.json",
+    "mainnet-icos-images.bzl",
 ])
-
-# bazel/workspace_status.sh will write the current timestamp to this file on every run to provade an input that always changes for some targets.
-# The file does not have to and should not be committed, therefore will not exist on the first run on a clean source tree.
-# Therefore glob is used to not fail when the file does not exist.
-# buildifier: disable=constant-glob
-filegroup(
-    name = "bazel-timestamp",
-    srcs = glob(["bazel-timestamp.txt"]),
-)
 
 alias(
     name = "buildifier",
@@ -78,23 +71,83 @@ gazelle(
 
 alias(
     name = "gobin",
-    actual = "@go_sdk//:bin/go",
+    actual = "@rules_go//go",
     visibility = ["//visibility:public"],
 )
 
-# Builds python dependencies
+# Builds python dependencies. To update the lockfile:
+# $ bazel run //:python-requirements.update
 compile_pip_requirements(
     name = "python-requirements",
     timeout = "moderate",
-    requirements_in = "requirements.in",
+    src = "requirements.in",
     requirements_txt = "requirements.txt",
-    tags = [
-        "requires-network",
-    ],
 )
 
 test_suite(
     name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
     tags = ["manual"],
-    tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
+    tests = ["//rs/tests/testnets:single_large_node"],
+)
+
+### Bitcoind
+
+alias(
+    name = "bitcoind",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
+    }),
+)
+
+### Pocket IC
+
+# The pocket-ic server binary. Use this as a test dependency if the test
+# does not require a specific pocket-ic version (see ":pocket-ic-server-variant"
+# for details).
+# By default returns the pocket-ic server from the source tree to ensure
+# consistency within the source tree. See 'pocket_ic_mainnet_test' for
+# overrides.
+alias(
+    name = "pocket-ic-server",
+    actual = select({
+        ":pocket-ic-server-variant-mainnet": "//:pocket-ic-mainnet",
+        ":pocket-ic-server-variant-head": "//rs/pocket_ic_server:pocket-ic-server",
+        "//conditions:default": "//rs/pocket_ic_server:pocket-ic-server",
+    }),
+)
+
+# A setting to switch between different variants of pocket-ic. The
+# default pocket-ic variant/version (head) is the one as in the
+# source tree.
+string_setting(
+    name = "pocket-ic-server-variant",
+    build_setting_default = "head",
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "pocket-ic-server-variant-head",
+    flag_values = {
+        ":pocket-ic-server-variant": "head",
+    },
+)
+
+# A "mainnet" variant of the pocket-ic server which represents a
+# released version of pocket-ic.
+config_setting(
+    name = "pocket-ic-server-variant-mainnet",
+    flag_values = {
+        ":pocket-ic-server-variant": "mainnet",
+    },
+)
+
+# The pocket-ic as released; use this for tests that need to ensure consistency
+# with a release pocket-ic/replica.
+genrule(
+    name = "pocket-ic-mainnet",
+    srcs = ["@pocket-ic-mainnet-gz//file"],
+    outs = ["pocket-ic"],
+    cmd = "gunzip -c $< > $@",
 )

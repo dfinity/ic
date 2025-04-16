@@ -5,20 +5,18 @@ use crate::framework::{
     malicious, setup_subnet, ComponentModifier, ConsensusDependencies, ConsensusInstance,
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
-use framework::test_threshold_key_ids;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
-use ic_interfaces::consensus_pool::ConsensusPool;
-use ic_interfaces::messaging::MessageRouting;
+use framework::test_master_public_key_ids;
+use ic_consensus_utils::pool_reader::PoolReader;
+use ic_interfaces::{consensus_pool::ConsensusPool, messaging::MessageRouting};
 use ic_interfaces_registry::RegistryClient;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
+use ic_types::{
+    crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, Height,
+};
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 #[test]
 fn multiple_nodes_are_live() -> Result<(), String> {
@@ -277,15 +275,9 @@ fn run_test(
             .zip(inst_deps.iter())
             .zip(cryptos.iter())
         {
-            let membership = Membership::new(
-                deps.consensus_pool.read().unwrap().get_cache(),
-                Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-                subnet_id,
-            );
-            let membership = Arc::new(membership);
             let modifier = modifiers.pop();
             runner.add_instance(
-                membership.clone(),
+                deps.consensus_pool.read().unwrap().get_cache(),
                 crypto.clone(),
                 crypto.clone(),
                 modifier,
@@ -336,12 +328,12 @@ fn run_n_rounds_and_check_pubkeys(
         };
 
         let mut found_keys = 0;
-        for key_id in test_threshold_key_ids() {
-            if batch.idkg_subnet_public_keys.contains_key(&key_id) {
+        for key_id in test_master_public_key_ids() {
+            if batch.chain_key_subnet_public_keys.contains_key(&key_id) {
                 found_keys += 1
             }
         }
-        if found_keys == test_threshold_key_ids().len() {
+        if found_keys == test_master_public_key_ids().len() {
             *pubkey_exists_clone.borrow_mut() = true;
         }
         *pubkey_exists_clone.borrow()
@@ -362,8 +354,12 @@ fn equivocating_block_maker_test(
         .and_then(|config| config.parse_extra_config())
         .map(|config| {
             let mut malicious: Vec<ComponentModifier> = Vec::new();
+            let malicious_flags = MaliciousFlags {
+                maliciously_propose_equivocating_blocks: true,
+                ..MaliciousFlags::default()
+            };
             for _ in 0..num_nodes_equivocating {
-                malicious.push(malicious::absent_notary_share());
+                malicious.push(malicious::with_malicious_flags(malicious_flags.clone()));
             }
             run_n_rounds_and_collect_hashes(config, malicious, finish);
         })

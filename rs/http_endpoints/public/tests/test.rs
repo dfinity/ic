@@ -17,7 +17,7 @@ use http_body::Frame;
 use http_body_util::StreamBody;
 use hyper::{body::Incoming, Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
+use ic_canister_client::prepare_read_state;
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
 use ic_certification_test_utils::{
@@ -25,9 +25,7 @@ use ic_certification_test_utils::{
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{
-    flatmap, Label as CryptoTreeHashLabel, LabeledTree, MixedHashTree, Path,
-};
+use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree, Path};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -37,6 +35,7 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
+use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
@@ -645,7 +644,7 @@ fn test_too_long_paths_are_rejected() {
 
     let long_path: Path = (0..100)
         .map(|i| format!("hallo{}", i).into())
-        .collect::<Vec<CryptoTreeHashLabel>>()
+        .collect::<Vec<Label>>()
         .into();
 
     rt.block_on(async move {
@@ -723,9 +722,9 @@ fn can_retrieve_subnet_metrics() {
 
     let (certificate, root_pk, _cbor) =
         CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
-            CryptoTreeHashLabel::from("subnet") => LabeledTree::SubTree(flatmap![
-                CryptoTreeHashLabel::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                    CryptoTreeHashLabel::from("metrics") => LabeledTree::Leaf(serialize_to_cbor(&expected_subnet_metrics)),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("metrics") => LabeledTree::Leaf(serialize_to_cbor(&expected_subnet_metrics)),
                 ])
             ]),
         ])))
@@ -844,9 +843,9 @@ fn can_retrieve_subnet_metrics() {
     let body = prepare_read_state(
         &sender,
         &[Path::new(vec![
-            CryptoTreeHashLabel::from("subnet"),
+            Label::from("subnet"),
             ByteBuf::from(subnet_id.get().to_vec()).into(),
-            CryptoTreeHashLabel::from("metrics"),
+            Label::from("metrics"),
         ])],
         Blob(sender.get_principal_id().to_vec()),
     )
@@ -902,9 +901,9 @@ fn subnet_metrics_not_supported_via_canister_read_state() {
     let body = prepare_read_state(
         &sender,
         &[Path::new(vec![
-            CryptoTreeHashLabel::from("subnet"),
+            Label::from("subnet"),
             ByteBuf::from(subnet_id.get().to_vec()).into(),
-            CryptoTreeHashLabel::from("metrics"),
+            Label::from("metrics"),
         ])],
         Blob(sender.get_principal_id().to_vec()),
     )
@@ -1072,10 +1071,173 @@ fn test_http_1_requests_are_accepted() {
     assert_eq!(response.version(), reqwest::Version::HTTP_11);
 }
 
+/// Test that the V3 call endpoint returns early without submitting the ingress message to the
+/// unvalidated pool if the message is already in the certified state. The endpoint should also
+/// return the certificate in the response with a 200 status code.
+#[test]
+fn test_call_handler_returns_early_for_ingress_message_already_in_certified_state() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut mock_state_manager = MockStateManager::new();
+    mock_state_manager
+        .expect_get_latest_state()
+        .returning(default_get_latest_state);
+
+    mock_state_manager
+        .expect_read_certified_state()
+        .returning(default_read_certified_state);
+
+    mock_state_manager
+        .expect_latest_certified_height()
+        .returning(default_latest_certified_height);
+
+    // Inject the mock certified state snapshot
+    mock_state_manager
+        .expect_get_certified_state_snapshot()
+        .return_once(move || {
+            struct FakeCertifiedStateSnapshot;
+
+            impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
+                type State = ReplicatedState;
+
+                fn get_state(&self) -> &ReplicatedState {
+                    unimplemented!();
+                }
+
+                fn get_height(&self) -> Height {
+                    unimplemented!();
+                }
+
+                fn read_certified_state(
+                    &self,
+                    paths: &LabeledTree<()>,
+                ) -> Option<(MixedHashTree, Certification)> {
+                    let message_id = match paths {
+                        LabeledTree::SubTree(flat_map) => {
+                            let request_status =
+                                flat_map.get(&Label::from("request_status")).unwrap();
+
+                            match request_status {
+                                LabeledTree::Leaf(_) => panic!("request status can not be leaf"),
+                                LabeledTree::SubTree(flat_map) => flat_map.keys().first().unwrap(),
+                            }
+                        }
+                        _ => panic!("Must be subtree."),
+                    };
+
+                    let hash_tree = MixedHashTree::Labeled(
+                        Label::from(b"request_status"),
+                        Box::new(MixedHashTree::Labeled(
+                            message_id.clone(),
+                            Box::new(MixedHashTree::Labeled(
+                                Label::from(b"status"),
+                                Box::new(MixedHashTree::Leaf(
+                                    b"hello world canister response.".to_vec(),
+                                )),
+                            )),
+                        )),
+                    );
+
+                    let (certificate, _, _) = CertificateBuilder::new(CertificateData::CustomTree(
+                        LabeledTree::Leaf(b"test".to_vec()),
+                    ))
+                    .build();
+
+                    let certification = Certification {
+                        height: Height::from(1),
+                        signed: Signed {
+                            signature: ThresholdSignature {
+                                signer: NiDkgId {
+                                    start_block_height: Height::from(0),
+                                    dealer_subnet: subnet_test_id(0),
+                                    dkg_tag: NiDkgTag::HighThreshold,
+                                    target_subnet: NiDkgTargetSubnet::Local,
+                                },
+                                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(
+                                    certificate.signature().to_vec(),
+                                )),
+                            },
+                            content: CertificationContent::new(CryptoHashOfPartialState::from(
+                                CryptoHash(hash_tree.digest().to_vec()),
+                            )),
+                        },
+                    };
+
+                    Some((hash_tree, certification))
+                }
+            }
+
+            Some(Box::new(FakeCertifiedStateSnapshot))
+        });
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(mock_state_manager)
+        .run();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let message = IngressMessage::default();
+
+        let response = test_agent::Call::V3.call(addr, message).await;
+
+        assert_eq!(
+            StatusCode::OK,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE).unwrap(),
+            APPLICATION_CBOR,
+        );
+
+        let response_body = response.bytes().await.unwrap();
+        let response =
+            serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
+
+        let CBOR::Map(response_map) = response else {
+            panic!("Expected a map, got {:?}", response);
+        };
+
+        assert_eq!(
+            response_map.get(&CBOR::Text("status".to_string())),
+            Some(&CBOR::Text("replied".to_string()))
+        );
+
+        let certificate = match response_map.get(&CBOR::Text("certificate".to_string())) {
+            Some(CBOR::Bytes(certificate)) => certificate,
+            Some(content) => panic!("Expected bytes for Certificate. Got {:?} instead", content),
+            _ => panic!("Reply is missing."),
+        };
+
+        let _: Certificate = serde_cbor::from_slice(certificate).expect("Valid certificate");
+
+        assert!(
+            handlers.ingress_rx.is_empty(),
+            "No ingress messages should be sent to unvalidated pool."
+        );
+    });
+}
+
 /// Test that the V3 call endpoint handles multiple requests with the same ingress message,
 /// by returning `202` for subsequent concurrent requests.
 #[test]
-fn test_duplicate_requests_are_handled() {
+fn test_duplicate_concurrent_requests_return_early() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {

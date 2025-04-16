@@ -1,5 +1,5 @@
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -9,26 +9,20 @@ use std::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{
-    body::Body,
-    extract::{ConnectInfo, State},
-    middleware::Next,
-    response::IntoResponse,
-};
+use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
 use dashmap::DashMap;
 use http::Request;
-use moka::sync::{Cache, CacheBuilder};
+use ic_bn_lib::http::ConnInfo;
 use prometheus::{
     register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram, IntGaugeVec,
     Registry,
 };
-use ratelimit::Ratelimiter;
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    cli::BouncerConfig,
+    cli,
+    rate_limiting::sharded::ShardedRatelimiter,
     routes::{ErrorCause, RateLimitCause},
-    socket::TcpConnectInfo,
 };
 
 // Common firewall backend operations required by the bouncer
@@ -41,16 +35,12 @@ pub trait Firewall: Send + Sync {
 }
 
 // Ban decision for a single IP
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct Decision {
     pub ip: IpAddr,
     pub when: Instant,
     // Length can be used by a firewall implementation to do TTL (e.g. nftables sets)
     pub length: Duration,
-}
-
-struct Bucket {
-    limiter: Ratelimiter,
 }
 
 struct Metrics {
@@ -60,11 +50,9 @@ struct Metrics {
 
 pub struct Bouncer {
     firewall: Arc<dyn Firewall>,
-    buckets: Cache<IpAddr, Arc<Bucket>>,
+    shards: ShardedRatelimiter<IpAddr>,
     decisions: DashMap<IpAddr, Decision>,
     ban_time: Duration,
-    burst_size: u64,
-    refill_interval: Duration,
     // Generations are used to track changes to `decisions` and to apply firewall only when needed
     gen_current: AtomicU64,
     gen_applied: AtomicU64,
@@ -74,10 +62,10 @@ pub struct Bouncer {
 impl Bouncer {
     fn new(
         rate_per_second: u32,
-        burst_size: u64,
+        burst_size: u32,
         ban_time: Duration,
-        max_buckets: u64,
-        bucket_expiry: Duration,
+        max_shards: u64,
+        shard_tti: Duration,
         firewall: Arc<dyn Firewall>,
         registry: &Registry,
     ) -> Result<Self, Error> {
@@ -85,14 +73,9 @@ impl Bouncer {
             return Err(anyhow!("rate_per_second should be > 0"));
         }
 
-        if burst_size < rate_per_second as u64 {
+        if burst_size < rate_per_second {
             return Err(anyhow!("burst_size should be >= rate_per_second"));
         }
-
-        let buckets = CacheBuilder::new(max_buckets)
-            // Expire buckets when they're not queried for some time, this bounds memory usage
-            .time_to_idle(bucket_expiry)
-            .build();
 
         let metrics = Metrics {
             decisions: register_int_gauge_vec_with_registry!(
@@ -110,25 +93,19 @@ impl Bouncer {
         };
 
         Ok(Self {
-            burst_size,
             firewall,
-            buckets,
+            shards: ShardedRatelimiter::new(
+                rate_per_second,
+                burst_size,
+                Duration::from_secs(1),
+                shard_tti,
+                max_shards,
+            ),
             decisions: DashMap::new(),
             ban_time,
-            refill_interval: Duration::from_secs(1).checked_div(rate_per_second).unwrap(),
             gen_current: AtomicU64::new(0),
             gen_applied: AtomicU64::new(0),
             metrics,
-        })
-    }
-
-    fn new_bucket(&self) -> Arc<Bucket> {
-        Arc::new(Bucket {
-            limiter: Ratelimiter::builder(1, self.refill_interval)
-                .max_tokens(self.burst_size)
-                .initial_available(self.burst_size)
-                .build()
-                .unwrap(),
         })
     }
 
@@ -144,12 +121,7 @@ impl Bouncer {
             return false;
         }
 
-        // Get bucket or create a new one
-        // Moka guarantees that concurrent requests for the same key would lead to only a single one value created
-        let bucket = self.buckets.get_with(ip, || self.new_bucket());
-
-        // Try to acquire a token
-        if bucket.limiter.try_wait().is_ok() {
+        if self.shards.acquire(ip) {
             return true;
         }
 
@@ -262,7 +234,7 @@ impl Bouncer {
     }
 }
 
-pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
+pub fn setup(cli: &cli::Bouncer, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
     let executor = Arc::new(exec::Executor::new(
         cli.bouncer_sudo,
         cli.bouncer_sudo_path.clone(),
@@ -284,9 +256,9 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
         Bouncer::new(
             cli.bouncer_ratelimit,
             cli.bouncer_burst_size,
-            Duration::from_secs(cli.bouncer_ban_seconds),
+            cli.bouncer_ban_time,
             cli.bouncer_max_buckets,
-            Duration::from_secs(cli.bouncer_bucket_ttl),
+            cli.bouncer_bucket_ttl,
             firewall,
             registry,
         )
@@ -295,7 +267,7 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
 
     // Start background task
     let bouncer_task = bouncer.clone();
-    let interval = Duration::from_secs(cli.bouncer_apply_interval);
+    let interval = cli.bouncer_apply_interval;
     tokio::spawn(async move {
         bouncer_task.clone().run(interval).await;
     });
@@ -306,18 +278,13 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
 pub async fn middleware(
     State(bouncer): State<Arc<Bouncer>>,
     request: Request<Body>,
-    next: Next<Body>,
+    next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
     // Attempt to extract client's IP from the request
     let ip = request
         .extensions()
-        .get::<ConnectInfo<TcpConnectInfo>>()
-        .map(|x| (x.0).0)
-        .or(request
-            .extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|x| x.0))
-        .map(|x| x.ip());
+        .get::<Arc<ConnInfo>>()
+        .map(|x| x.remote_addr.ip());
 
     if let Some(v) = ip {
         if !bouncer.acquire_token(v) {

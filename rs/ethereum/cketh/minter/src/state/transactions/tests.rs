@@ -1,4 +1,5 @@
 use crate::checked_amount::CheckedAmountOf;
+use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -6,7 +7,7 @@ use crate::numeric::{
     BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::transactions::{
-    create_transaction, Erc20WithdrawalRequest, EthTransactions, EthWithdrawalRequest, Subaccount,
+    create_transaction, Erc20WithdrawalRequest, EthTransactions, EthWithdrawalRequest,
     WithdrawalRequest,
 };
 use crate::tx::{
@@ -1841,6 +1842,7 @@ mod eth_transactions {
 
     mod transaction_status {
         use crate::endpoints::{RetrieveEthStatus, TxFinalizedStatus};
+        use crate::eth_logs::LedgerSubaccount;
         use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce};
         use crate::state::transactions::tests::{
             ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
@@ -1887,7 +1889,10 @@ mod eth_transactions {
                     .withdrawal_status(&WithdrawalSearchParameter::BySenderAccount(
                         icrc_ledger_types::icrc1::account::Account {
                             owner: request.from(),
-                            subaccount: request.from_subaccount().as_ref().map(|x| x.0)
+                            subaccount: request
+                                .from_subaccount()
+                                .cloned()
+                                .map(LedgerSubaccount::to_bytes)
                         }
                     ))
                     .into_iter()
@@ -2490,8 +2495,9 @@ pub mod arbitrary {
     use crate::checked_amount::CheckedAmountOf;
     use crate::numeric::{GasAmount, TransactionNonce, WeiPerGas};
     use crate::state::transactions::{
-        Erc20WithdrawalRequest, EthWithdrawalRequest, Subaccount, WithdrawalRequest,
+        Erc20WithdrawalRequest, EthWithdrawalRequest, WithdrawalRequest,
     };
+    use crate::test_fixtures::arb::arb_ledger_subaccount;
     use crate::tx::{
         AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
         SignedEip1559TransactionRequest, StorageKey, TransactionPrice,
@@ -2526,10 +2532,6 @@ pub mod arbitrary {
         pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
     }
 
-    fn arb_subaccount() -> impl Strategy<Value = Subaccount> {
-        uniform32(any::<u8>()).prop_map(Subaccount)
-    }
-
     pub fn arb_withdrawal_request() -> BoxedStrategy<WithdrawalRequest> {
         prop_oneof![
             arb_cketh_withdrawal_request().prop_map(|req| req.into()),
@@ -2544,7 +2546,7 @@ pub mod arbitrary {
             arb_address(),
             arb_u64_id(),
             arb_principal(),
-            proptest::option::of(arb_subaccount()),
+            arb_ledger_subaccount(),
             proptest::option::of(any::<u64>()),
         )
             .prop_map(
@@ -2578,7 +2580,7 @@ pub mod arbitrary {
             arb_principal(),
             arb_u64_id(),
             arb_principal(),
-            proptest::option::of(arb_subaccount()),
+            arb_ledger_subaccount(),
             any::<u64>(),
         )
             .prop_map(
@@ -2701,7 +2703,7 @@ fn cketh_withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> Et
         destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
         withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
         created_at: Some(DEFAULT_CREATED_AT),
     }
 }
@@ -2720,7 +2722,7 @@ fn ckerc20_withdrawal_request_with_index(
         ckerc20_ledger_burn_index,
         withdrawal_amount: Erc20Value::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
         created_at: DEFAULT_CREATED_AT,
     }
 }

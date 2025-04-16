@@ -1,6 +1,6 @@
 [Unit]
 Description=Write node generation status
-After=node_exporter.service
+Before=node_exporter.service
 
 [Service]
 Type=oneshot

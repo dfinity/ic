@@ -1,7 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING", "rust_fuzz_test_binary", "rust_fuzz_test_binary_afl")
 
-package(default_visibility = ["//visibility:private"])
+package(default_visibility = [
+    "__subpackages__",
+    "//rs/execution_environment/fuzz:__subpackages__",
+])
 
 MACRO_DEPENDENCIES = []
 
@@ -29,21 +32,25 @@ rust_library(
         "//rs/monitoring/metrics",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/system_api",
         "//rs/test_utilities",
         "//rs/test_utilities/embedders",
         "//rs/test_utilities/state",
         "//rs/test_utilities/time",
         "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
+        "@crate_index//:futures",
         "@crate_index//:lazy_static",
         "@crate_index//:libfuzzer-sys",
+        "@crate_index//:num-traits",
+        "@crate_index//:tempfile",
         "@crate_index//:tokio",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasm-smith",
         "@crate_index//:wasmparser",
+        "@crate_index//:wasmtime",
     ],
 )
 
@@ -56,27 +63,18 @@ rust_binary(
     name = "ws2wasm",
     testonly = True,
     srcs = [
-        "src/ic_wasm.rs",
         "src/ws2wasm.rs",
     ],
     proc_macro_deps = [],
     version = "0.1.0",
-    deps = [
+    deps = [":wasm_fuzzers"] + [
         # Keep sorted.
         "//rs/config",
         "//rs/embedders",
         "//rs/monitoring/logger",
         "//rs/replicated_state",
-        "//rs/test_utilities",
-        "//rs/types/types",
-        "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
-        "@crate_index//:clap_3_2_25",
-        "@crate_index//:lazy_static",
-        "@crate_index//:libflate",
-        "@crate_index//:wasm-encoder",
-        "@crate_index//:wasm-smith",
-        "@crate_index//:wasmparser",
+        "@crate_index//:clap",
         "@crate_index//:wasmprinter",
     ],
 )
@@ -126,7 +124,7 @@ rust_fuzz_test_binary_afl(
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
 
-rust_fuzz_test_binary(
+rust_fuzz_test_binary_afl(
     name = "compile_wasm_using_embedder",
     srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,

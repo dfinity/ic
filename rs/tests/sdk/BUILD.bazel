@@ -35,16 +35,19 @@ BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
 
 system_test_nns(
     name = "dfx_smoke_test",
-    flaky = True,
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + BOUNDARY_NODE_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "sdk-system-tests",
         "//rs/registry/subnet_type",
-        "//rs/tests",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
@@ -52,7 +55,9 @@ system_test_nns(
 
 system_test(
     name = "dfx_check_old_wallet_version_test",
-    flaky = True,
+    env = {
+        "WALLET_CANISTER_0_7_2_WASM": "$(rootpath @wallet_canister_0.7.2//file)",
+    },
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + [
         "@wallet_canister_0.7.2//file",

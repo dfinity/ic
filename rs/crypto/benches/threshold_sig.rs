@@ -26,12 +26,12 @@ criterion_main!(benches);
 criterion_group!(
     benches,
     bench_threshold_sig_1_node_threshold_1,
-    bench_threshold_sig_28_nodes_threshold_10,
+    bench_threshold_sig_34_nodes_threshold_12,
     /* CRP-1176
      * bench_threshold_sig_100_nodes_threshold_34, */
 );
 
-#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
     Local,
     #[default]
@@ -59,15 +59,15 @@ fn bench_threshold_sig_1_node_threshold_1(criterion: &mut Criterion) {
     }
 }
 
-fn bench_threshold_sig_28_nodes_threshold_10(criterion: &mut Criterion) {
+fn bench_threshold_sig_34_nodes_threshold_12(criterion: &mut Criterion) {
     for vault_type in VaultType::iter() {
         let group = &mut criterion.benchmark_group(format!(
-            "crypto_threshold_sig_28_nodes_threshold_10_{vault_type:?}"
+            "crypto_threshold_sig_34_nodes_threshold_12_{vault_type:?}"
         ));
         group.sample_size(25);
         group.measurement_time(Duration::from_secs(7));
         for message_size in [32, 1_000_000] {
-            bench_threshold_sig_n_nodes(group, 28, 10, message_size, vault_type);
+            bench_threshold_sig_n_nodes(group, 34, 12, message_size, vault_type);
         }
     }
 }
@@ -109,7 +109,7 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
     for &node_id in &nodes_in_subnet {
         load_transcript(&transcript, &env.crypto_components, node_id);
     }
-    let dkg_id = transcript.dkg_id;
+    let dkg_id = &transcript.dkg_id;
 
     bench_threshold_sign(
         group,
@@ -162,7 +162,7 @@ fn bench_threshold_sign<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -185,7 +185,7 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement, R: Rng +
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     transcript: &NiDkgTranscript,
     message_size: usize,
     rng: &mut R,
@@ -234,7 +234,7 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement, R: Rng +
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -280,7 +280,7 @@ fn bench_combine_threshold_sig_shares<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -310,7 +310,7 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -355,7 +355,7 @@ fn random_nodes<R: Rng + CryptoRng>(nodes: &[NodeId], n: usize, rng: &mut R) -> 
 /// dummy transcripts derived from `transcript` until the maximum storage
 /// capacity is reached.
 fn purge_dkg_id_from_data_store(
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     node: &TempCryptoComponentGeneric<ChaCha20Rng>,
     transcript: &NiDkgTranscript,
 ) {
@@ -368,7 +368,7 @@ fn purge_dkg_id_from_data_store(
         .expect("overflow")
     {
         dummy_transcript.dkg_id.start_block_height += Height::from(1);
-        assert_ne!(dummy_transcript.dkg_id, dkg_id);
+        assert_ne!(&dummy_transcript.dkg_id, dkg_id);
 
         assert!(node.load_transcript(&dummy_transcript).is_ok());
     }

@@ -9,6 +9,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
+use ic_bn_lib::http::Client;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SumTreeSMA, SMA};
@@ -22,14 +23,13 @@ use url::Url;
 
 use crate::{
     core::Run,
-    http::HttpClient,
     metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
     snapshot::RegistrySnapshot,
     snapshot::{Node, Subnet},
 };
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum CheckError {
     Generic(String),
     Network(String),  // Unable to make HTTP request
@@ -68,7 +68,7 @@ impl fmt::Display for CheckError {
 const WINDOW_SIZE: usize = 10;
 type LatencyMovAvg = SumTreeSMA<f64, f64, WINDOW_SIZE>;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 struct NodeState {
     healthy: bool,
     height: u64,
@@ -575,12 +575,12 @@ pub trait Check: Send + Sync {
 }
 
 pub struct Checker {
-    http_client: Arc<dyn HttpClient>,
+    http_client: Arc<dyn Client>,
     timeout: Duration,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<dyn HttpClient>, timeout: Duration) -> Self {
+    pub fn new(http_client: Arc<dyn Client>, timeout: Duration) -> Self {
         Self {
             http_client,
             timeout,

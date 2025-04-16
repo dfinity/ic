@@ -2,15 +2,13 @@ use crate::flag_status::FlagStatus;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct LsmtConfig {
-    /// Whether LSMT is enabled or not.
-    pub lsmt_status: FlagStatus,
     /// Number of pages per shard in sharded overlays; u64::MAX if unlimited.
     pub shard_num_pages: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub state_root: PathBuf,
     /// A feature flag that enables/disables the file backed memory allocator.
@@ -47,7 +45,6 @@ fn file_backed_memory_allocator_default() -> FlagStatus {
 
 pub fn lsmt_config_default() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Enabled,
         // 40GiB
         // DO NOT CHANGE after LSMT is enabled, as it would crash the new replica trying to merge
         // old data.

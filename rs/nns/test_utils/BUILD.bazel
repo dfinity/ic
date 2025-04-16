@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,30 +14,38 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/utils/ni_dkg",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icp/index:ic-icp-index",
+    "//rs/ledger_suite/icrc1",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/common/test_utils",
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/governance/init",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/lifeline/interface",
+    "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icrc1",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http",
-    "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/sns/governance",
+    "//rs/sns/init",
     "//rs/sns/swap",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
@@ -59,33 +67,18 @@ BASE_DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:tokio",
-    "@crate_index//:walrus",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance",
-    "//rs/nns/governance/api",
-    "//rs/nns/governance/init",
     "//rs/nns/gtc",
-    "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
-    "//rs/sns/governance",
-    "//rs/sns/init",
-    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/gtc:gtc--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
-    "//rs/sns/governance:governance--test_feature",
-    "//rs/sns/init:init--test_feature",
-    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -95,7 +88,7 @@ ALIASES = {}
 rust_library(
     name = "test_utils",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -106,11 +99,18 @@ rust_library(
 rust_library(
     name = "test_utils--test_feature",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
+)
+
+rust_test(
+    name = "gtc_helper_tests",
+    srcs = ["src/gtc_helpers.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )

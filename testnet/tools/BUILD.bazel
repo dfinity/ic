@@ -1,3 +1,8 @@
+package_group(
+    name = "icos_deploy-pkg",
+    packages = ["//testnet/tools/..."],
+)
+
 genrule(
     name = "icos_deploy",
     testonly = True,
@@ -8,6 +13,7 @@ genrule(
         "//ic-os/guestos/envs/prod:upload_update-img",
         "//ic-os/boundary-guestos/envs/dev:upload_disk-img",
         "//ic-os/boundary-guestos/envs/prod:upload_disk-img",
+        "build-guestos-configs.sh",
         "//publish/binaries:legacy_upload",
         "//publish/canisters:upload",
     ],
@@ -35,5 +41,4 @@ cd "\\$$BUILD_WORKSPACE_DIRECTORY"
 EOF
     """,
     executable = True,
-    tags = ["manual"],
 )

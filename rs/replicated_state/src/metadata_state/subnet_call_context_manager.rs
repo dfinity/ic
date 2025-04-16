@@ -1,16 +1,18 @@
 use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+use ic_management_canister_types_private::{
+    EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId,
+};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    registry::crypto::v1 as pb_crypto,
     state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
+    types::v1 as pb_types,
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     consensus::idkg::PreSigId,
-    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
+    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
     RegistryVersion, Time,
@@ -34,7 +36,7 @@ const NONCE_SIZE: usize = 32;
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
-    IDkgDealings(IDkgDealingsContext),
+    ReshareChainKey(ReshareChainKeyContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
     SignWithThreshold(SignWithThresholdContext),
@@ -45,7 +47,7 @@ impl SubnetCallContext {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => &context.request,
             SubnetCallContext::CanisterHttpRequest(context) => &context.request,
-            SubnetCallContext::IDkgDealings(context) => &context.request,
+            SubnetCallContext::ReshareChainKey(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
             SubnetCallContext::SignWithThreshold(context) => &context.request,
@@ -56,7 +58,7 @@ impl SubnetCallContext {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => context.time,
             SubnetCallContext::CanisterHttpRequest(context) => context.time,
-            SubnetCallContext::IDkgDealings(context) => context.time,
+            SubnetCallContext::ReshareChainKey(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
             SubnetCallContext::SignWithThreshold(context) => context.batch_time,
@@ -72,7 +74,7 @@ pub type InstallCodeCallId = Id<InstallCodeCallIdTag, u64>;
 ///
 /// During a subnet split, these messages will be automatically rejected if
 /// the targeted canister has moved to a new subnet.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct InstallCodeCallManager {
     next_call_id: u64,
     install_code_calls: BTreeMap<InstallCodeCallId, InstallCodeCall>,
@@ -117,7 +119,7 @@ impl InstallCodeCallManager {
 ///
 /// During a subnet split, these messages will be automatically rejected if
 /// the target canister has moved to a new subnet.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct StopCanisterCallManager {
     next_call_id: u64,
     stop_canister_calls: BTreeMap<StopCanisterCallId, StopCanisterCall>,
@@ -164,7 +166,7 @@ impl StopCanisterCallManager {
 /// It is responsible for keeping track of all subnet messages that
 /// do not require work to be done by another IC layer and
 /// cannot finalize the execution in a single round.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct CanisterManagementCalls {
     install_code_call_manager: InstallCodeCallManager,
     stop_canister_call_manager: StopCanisterCallManager,
@@ -203,7 +205,7 @@ impl CanisterManagementCalls {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetCallContextManager {
     /// Should increase monotonically. This property is used to determine if a request
     /// corresponds to a future state.
@@ -211,7 +213,7 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
-    pub idkg_dealings_contexts: BTreeMap<CallbackId, IDkgDealingsContext>,
+    pub reshare_chain_key_contexts: BTreeMap<CallbackId, ReshareChainKeyContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
@@ -240,8 +242,8 @@ impl SubnetCallContextManager {
                 self.canister_http_request_contexts
                     .insert(callback_id, context);
             }
-            SubnetCallContext::IDkgDealings(context) => {
-                self.idkg_dealings_contexts.insert(callback_id, context);
+            SubnetCallContext::ReshareChainKey(context) => {
+                self.reshare_chain_key_contexts.insert(callback_id, context);
             }
             SubnetCallContext::BitcoinGetSuccessors(context) => {
                 self.bitcoin_get_successors_contexts
@@ -285,16 +287,17 @@ impl SubnetCallContextManager {
                     })
             })
             .or_else(|| {
-                self.idkg_dealings_contexts
+                self.reshare_chain_key_contexts
                     .remove(&callback_id)
                     .map(|context| {
                         info!(
                             logger,
-                            "Received the response for ComputeInitialIDkgDealings request with key_id {:?} from {:?}",
+                            "Received the response for ReshareChainKey request with key_id {:?} and callback id {:?} from {:?}",
                             context.key_id,
+                            context.request.sender_reply_callback,
                             context.request.sender
                         );
-                        SubnetCallContext::IDkgDealings(context)
+                        SubnetCallContext::ReshareChainKey(context)
                     })
             })
             .or_else(|| {
@@ -433,6 +436,9 @@ impl SubnetCallContextManager {
                 (MasterPublicKeyId::Schnorr(schnorr_key_id), ThresholdArguments::Schnorr(args)) => {
                     args.key_id == *schnorr_key_id
                 }
+                (MasterPublicKeyId::VetKd(vetkd_key_id), ThresholdArguments::VetKd(args)) => {
+                    args.key_id == *vetkd_key_id
+                }
                 _ => false,
             })
             .count()
@@ -450,6 +456,14 @@ impl SubnetCallContextManager {
         self.sign_with_threshold_contexts
             .iter()
             .filter(|(_, context)| context.is_schnorr())
+            .map(|(cid, context)| (*cid, context.clone()))
+            .collect()
+    }
+
+    pub fn vetkd_derive_key_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| context.is_vetkd())
             .map(|(cid, context)| (*cid, context.clone()))
             .collect()
     }
@@ -544,11 +558,11 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .iter()
                 .map(|context| context.into())
                 .collect(),
-            idkg_dealings_contexts: item
-                .idkg_dealings_contexts
+            reshare_chain_key_contexts: item
+                .reshare_chain_key_contexts
                 .iter()
                 .map(
-                    |(callback_id, context)| pb_metadata::IDkgDealingsContextTree {
+                    |(callback_id, context)| pb_metadata::ReshareChainKeyContextTree {
                         callback_id: callback_id.get(),
                         context: Some(context.into()),
                     },
@@ -587,12 +601,12 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut idkg_dealings_contexts = BTreeMap::<CallbackId, IDkgDealingsContext>::new();
-        for entry in item.idkg_dealings_contexts {
+        let mut reshare_chain_key_contexts = BTreeMap::<CallbackId, ReshareChainKeyContext>::new();
+        for entry in item.reshare_chain_key_contexts {
             let pb_context =
-                try_from_option_field(entry.context, "SystemMetadata::IDkgDealingsContext")?;
-            let context = IDkgDealingsContext::try_from((time, pb_context))?;
-            idkg_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
+                try_from_option_field(entry.context, "SystemMetadata::ReshareChainKeyContext")?;
+            let context = ReshareChainKeyContext::try_from((time, pb_context))?;
+            reshare_chain_key_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
         let mut bitcoin_get_successors_contexts =
@@ -667,12 +681,12 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 stop_canister_call_manager,
             },
             raw_rand_contexts,
-            idkg_dealings_contexts,
+            reshare_chain_key_contexts,
         })
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SetupInitialDkgContext {
     pub request: Request,
     pub nodes_in_target_subnet: BTreeSet<NodeId>,
@@ -752,7 +766,7 @@ fn try_into_array_nonce(bytes: Vec<u8>) -> Result<[u8; NONCE_SIZE], ProxyDecodeE
     try_into_array::<NONCE_SIZE>(bytes, "nonce")
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EcdsaArguments {
     pub key_id: EcdsaKeyId,
     pub message_hash: [u8; MESSAGE_HASH_SIZE],
@@ -777,10 +791,11 @@ impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SchnorrArguments {
     pub key_id: SchnorrKeyId,
     pub message: Arc<Vec<u8>>,
+    pub taproot_tree_root: Option<Arc<Vec<u8>>>,
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
@@ -788,6 +803,7 @@ impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
         Self {
             key_id: Some((&args.key_id).into()),
             message: args.message.to_vec(),
+            taproot_tree_root: args.taproot_tree_root.as_ref().map(|v| v.to_vec()),
         }
     }
 }
@@ -798,14 +814,50 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
         Ok(SchnorrArguments {
             key_id: try_from_option_field(context.key_id, "SchnorrArguments::key_id")?,
             message: Arc::new(context.message),
+            taproot_tree_root: context.taproot_tree_root.map(Arc::new),
         })
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct VetKdArguments {
+    pub key_id: VetKdKeyId,
+    pub input: Arc<Vec<u8>>,
+    pub transport_public_key: Vec<u8>,
+    pub ni_dkg_id: NiDkgId,
+    pub height: Height,
+}
+
+impl From<&VetKdArguments> for pb_metadata::VetKdArguments {
+    fn from(args: &VetKdArguments) -> Self {
+        Self {
+            key_id: Some((&args.key_id).into()),
+            input: args.input.to_vec(),
+            transport_public_key: args.transport_public_key.to_vec(),
+            ni_dkg_id: Some((args.ni_dkg_id.clone()).into()),
+            height: args.height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::VetKdArguments> for VetKdArguments {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::VetKdArguments) -> Result<Self, Self::Error> {
+        Ok(VetKdArguments {
+            key_id: try_from_option_field(context.key_id, "VetKdArguments::key_id")?,
+            input: Arc::new(context.input),
+            transport_public_key: context.transport_public_key,
+            ni_dkg_id: try_from_option_field(context.ni_dkg_id, "VetKdArguments::ni_dkg_id")?,
+            height: Height::from(context.height),
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdArguments {
     Ecdsa(EcdsaArguments),
     Schnorr(SchnorrArguments),
+    VetKd(VetKdArguments),
 }
 
 impl ThresholdArguments {
@@ -814,6 +866,7 @@ impl ThresholdArguments {
         match self {
             ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
             ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+            ThresholdArguments::VetKd(args) => MasterPublicKeyId::VetKd(args.key_id.clone()),
         }
     }
 }
@@ -826,6 +879,9 @@ impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
             }
             ThresholdArguments::Schnorr(args) => {
                 pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args.into())
+            }
+            ThresholdArguments::VetKd(args) => {
+                pb_metadata::threshold_arguments::ThresholdScheme::Vetkd(args.into())
             }
         };
         Self {
@@ -848,15 +904,59 @@ impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
             pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args) => Ok(
                 ThresholdArguments::Schnorr(SchnorrArguments::try_from(args)?),
             ),
+            pb_metadata::threshold_arguments::ThresholdScheme::Vetkd(args) => {
+                Ok(ThresholdArguments::VetKd(VetKdArguments::try_from(args)?))
+            }
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct IDkgSignWithThresholdContext<'a>(&'a SignWithThresholdContext);
+
+impl<'a> TryFrom<&'a SignWithThresholdContext> for IDkgSignWithThresholdContext<'a> {
+    type Error = ();
+
+    fn try_from(val: &'a SignWithThresholdContext) -> Result<Self, Self::Error> {
+        if !val.is_idkg() {
+            Err(())
+        } else {
+            Ok(Self(val))
+        }
+    }
+}
+
+impl<'a> From<IDkgSignWithThresholdContext<'a>> for &'a SignWithThresholdContext {
+    fn from(val: IDkgSignWithThresholdContext<'a>) -> Self {
+        val.0
+    }
+}
+
+impl IDkgSignWithThresholdContext<'_> {
+    pub fn inner(&self) -> &SignWithThresholdContext {
+        self.0
+    }
+}
+
+impl std::ops::Deref for IDkgSignWithThresholdContext<'_> {
+    type Target = SignWithThresholdContext;
+
+    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
+        self.inner()
+    }
+}
+
+impl std::borrow::Borrow<SignWithThresholdContext> for IDkgSignWithThresholdContext<'_> {
+    fn borrow(&self) -> &SignWithThresholdContext {
+        self.inner()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
-    pub derivation_path: Vec<Vec<u8>>,
+    pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
     pub batch_time: Time,
     pub matched_pre_signature: Option<(PreSigId, Height)>,
@@ -869,6 +969,7 @@ impl SignWithThresholdContext {
         match &self.args {
             ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
             ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+            ThresholdArguments::VetKd(args) => MasterPublicKeyId::VetKd(args.key_id.clone()),
         }
     }
 
@@ -882,6 +983,19 @@ impl SignWithThresholdContext {
         matches!(&self.args, ThresholdArguments::Schnorr(_))
     }
 
+    /// Returns true if arguments are for VetKd.
+    pub fn is_vetkd(&self) -> bool {
+        matches!(&self.args, ThresholdArguments::VetKd(_))
+    }
+
+    /// Returns true if arguments are for a context handled by IDKG.
+    pub fn is_idkg(&self) -> bool {
+        match &self.args {
+            ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => true,
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
     /// Returns ECDSA arguments.
     /// Panics if arguments are not for ECDSA.
     /// Should only be called if `is_ecdsa` returns true.
@@ -891,6 +1005,26 @@ impl SignWithThresholdContext {
             _ => panic!("ECDSA arguments not found."),
         }
     }
+
+    /// Returns Schnorr arguments.
+    /// Panics if arguments are not for Schnorr
+    /// Should only be called if `is_schnorr` returns true.
+    pub fn schnorr_args(&self) -> &SchnorrArguments {
+        match &self.args {
+            ThresholdArguments::Schnorr(args) => args,
+            _ => panic!("Schnorr arguments not found."),
+        }
+    }
+
+    /// Returns VetKd arguments.
+    /// Panics if arguments are not for VetKd
+    /// Should only be called if `is_vetkd` returns true.
+    pub fn vetkd_args(&self) -> &VetKdArguments {
+        match &self.args {
+            ThresholdArguments::VetKd(args) => args,
+            _ => panic!("VetKd arguments not found."),
+        }
+    }
 }
 
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
@@ -898,7 +1032,7 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
         Self {
             request: Some((&context.request).into()),
             args: Some((&context.args).into()),
-            derivation_path_vec: context.derivation_path.clone(),
+            derivation_path_vec: context.derivation_path.to_vec(),
             pseudo_random_id: context.pseudo_random_id.to_vec(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
             pre_signature_id: context.matched_pre_signature.as_ref().map(|q| q.0.id()),
@@ -918,7 +1052,7 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
         Ok(SignWithThresholdContext {
             request,
             args,
-            derivation_path: context.derivation_path_vec,
+            derivation_path: Arc::new(context.derivation_path_vec),
             pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             matched_pre_signature: context
@@ -931,20 +1065,21 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IDkgDealingsContext {
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct ReshareChainKeyContext {
     pub request: Request,
     pub key_id: MasterPublicKeyId,
     pub nodes: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
     pub time: Time,
+    pub target_id: NiDkgTargetId,
 }
 
-impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
-    fn from(context: &IDkgDealingsContext) -> Self {
+impl From<&ReshareChainKeyContext> for pb_metadata::ReshareChainKeyContext {
+    fn from(context: &ReshareChainKeyContext) -> Self {
         Self {
             request: Some(pb_queues::Request::from(&context.request)),
-            key_id: Some(pb_crypto::MasterPublicKeyId::from(&context.key_id)),
+            key_id: Some(pb_types::MasterPublicKeyId::from(&context.key_id)),
             nodes: context
                 .nodes
                 .iter()
@@ -954,18 +1089,22 @@ impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
             time: Some(pb_metadata::Time {
                 time_nanos: context.time.as_nanos_since_unix_epoch(),
             }),
+            target_id: context.target_id.to_vec(),
         }
     }
 }
 
-impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
+impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyContext {
     type Error = ProxyDecodeError;
     fn try_from(
-        (time, context): (Time, pb_metadata::IDkgDealingsContext),
+        (time, context): (Time, pb_metadata::ReshareChainKeyContext),
     ) -> Result<Self, Self::Error> {
+        let key_id: MasterPublicKeyId =
+            try_from_option_field(context.key_id, "ReshareChainKeyContext::key_id")?;
+
         Ok(Self {
-            request: try_from_option_field(context.request, "IDkgDealingsContext::request")?,
-            key_id: try_from_option_field(context.key_id, "IDkgDealingsContext::key_id")?,
+            request: try_from_option_field(context.request, "ReshareChainKeyContext::request")?,
+            key_id,
             nodes: context
                 .nodes
                 .into_iter()
@@ -975,11 +1114,28 @@ impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
             time: context
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+            target_id: {
+                // The target id is empty, if we have a legacy IDkgDealingContext
+                // Since we don't need the target id for Idkg, this is safe
+                // TODO(CRP-2613): remove this case
+                if context.target_id.is_empty() {
+                    NiDkgTargetId::new([0; 32])
+                } else {
+                    match ni_dkg_target_id(context.target_id.as_slice()) {
+                        Ok(target_id) => target_id,
+                        Err(_) => {
+                            return Err(Self::Error::Other(
+                                "target_id is not 32 bytes.".to_string(),
+                            ))
+                        }
+                    }
+                }
+            },
         })
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BitcoinGetSuccessorsContext {
     pub request: Request,
     pub payload: GetSuccessorsRequestInitial,
@@ -1017,7 +1173,7 @@ impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for BitcoinGetSuc
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BitcoinSendTransactionInternalContext {
     pub request: Request,
     pub payload: SendTransactionRequest,
@@ -1059,7 +1215,7 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct InstallCodeCall {
     pub call: CanisterCall,
     pub time: Time,
@@ -1142,7 +1298,7 @@ impl TryFrom<(Time, pb_metadata::InstallCodeCall)> for InstallCodeCall {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct StopCanisterCall {
     pub call: CanisterCall,
     pub effective_canister_id: CanisterId,
@@ -1201,7 +1357,7 @@ impl TryFrom<(Time, pb_metadata::StopCanisterCall)> for StopCanisterCall {
 }
 
 /// Struct for tracking the required information needed for creating a response.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RawRandContext {
     pub request: Request,
     pub time: Time,
@@ -1267,7 +1423,7 @@ mod testing {
             setup_initial_dkg_contexts: Default::default(),
             sign_with_threshold_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
-            idkg_dealings_contexts: Default::default(),
+            reshare_chain_key_contexts: Default::default(),
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),
             canister_management_calls,

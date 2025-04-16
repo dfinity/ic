@@ -16,6 +16,7 @@ mod common;
 mod keygen;
 mod sign;
 mod tls;
+mod vetkd;
 
 use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{
@@ -44,7 +45,7 @@ use std::sync::Arc;
 /// Defines the maximum number of entries contained in the
 /// `ThresholdSigDataStore` per tag, where tag is of type `NiDkgTag`.
 pub const THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG: usize =
-    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG;
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY;
 
 /// A type alias for `CryptoComponentImpl<Csp>`.
 /// See the Rust documentation of `CryptoComponentImpl`.

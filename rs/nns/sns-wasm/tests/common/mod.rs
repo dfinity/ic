@@ -1,6 +1,5 @@
 use candid::Encode;
 use canister_test::Project;
-use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -52,7 +51,6 @@ pub fn get_deployed_sns_by_proposal_id(
         machine,
         SNS_WASM_CANISTER_ID,
         "get_deployed_sns_by_proposal_id",
-        candid_one,
         GetDeployedSnsByProposalIdRequest { proposal_id },
         PrincipalId::new_anonymous(),
     )

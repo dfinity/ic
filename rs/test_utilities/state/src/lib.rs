@@ -1,29 +1,28 @@
 use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
-use ic_management_canister_types::{
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibility, MasterPublicKeyId, SchnorrAlgorithm,
-    SchnorrKeyId,
+use ic_management_canister_types_private::{
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
+    OnLowWasmMemoryHookStatus, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{
-            CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
+        execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+        system_state::{CyclesUseCase, TaskQueue},
+        testing::new_canister_output_queues_for_test,
+    },
+    metadata_state::{
+        subnet_call_context_manager::{
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
-        system_state::CyclesUseCase,
-        testing::new_canister_queues_for_test,
+        Stream, SubnetMetrics,
     },
-    metadata_state::subnet_call_context_manager::{
-        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
-    },
-    metadata_state::{Stream, SubnetMetrics},
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
-    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology,
-    SystemState,
+    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
+    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
@@ -34,19 +33,20 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     batch::RawQueryStats,
-    messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
+    messages::{CallbackId, Ingress, Request, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NodeId, NumBytes,
-    PrincipalId, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
 use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
+    ops::RangeInclusive,
     sync::Arc,
 };
 use strum::IntoEnumIterator;
@@ -57,6 +57,16 @@ pub use history::MockIngressHistory;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+
+/// Valid, but minimal wasm code.
+const EMPTY_WASM: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
+    0x01, 0x00,
+];
+
+pub fn empty_wasm() -> Arc<WasmBinary> {
+    WasmBinary::new(CanisterModule::new(EMPTY_WASM.to_vec()))
+}
 
 pub struct ReplicatedStateBuilder {
     canisters: Vec<CanisterState>,
@@ -142,7 +152,7 @@ impl ReplicatedStateBuilder {
                 nodes: self.node_ids.into_iter().collect(),
                 subnet_type: self.subnet_type,
                 subnet_features: self.subnet_features,
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
         );
 
@@ -211,7 +221,7 @@ pub struct CanisterStateBuilder {
     inputs: Vec<RequestOrResponse>,
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
-    log_visibility: LogVisibility,
+    log_visibility: LogVisibilityV2,
 }
 
 impl CanisterStateBuilder {
@@ -300,7 +310,7 @@ impl CanisterStateBuilder {
         self
     }
 
-    pub fn with_log_visibility(mut self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(mut self, log_visibility: LogVisibilityV2) -> Self {
         self.log_visibility = log_visibility;
         self
     }
@@ -335,29 +345,9 @@ impl CanisterStateBuilder {
             system_state.queues_mut().push_ingress(ingress)
         }
 
-        // Set call contexts. Because there is no way pass in a `CallContext`
-        // object to `CallContextManager`, we have to construct them in this
-        // bizarre way.
+        // Set call contexts.
         for call_context in self.call_contexts.into_iter() {
-            let call_context_manager = system_state.call_context_manager_mut().unwrap();
-            let call_context_id = call_context_manager.new_call_context(
-                call_context.call_origin().clone(),
-                call_context.available_cycles(),
-                call_context.time(),
-                call_context.metadata().clone(),
-            );
-
-            if call_context.has_responded() {
-                call_context_manager
-                    .mark_responded(call_context_id)
-                    .unwrap();
-            }
-            let call_context_in_call_context_manager = call_context_manager
-                .call_context_mut(call_context_id)
-                .unwrap();
-            if call_context.is_deleted() {
-                call_context_in_call_context_manager.mark_deleted();
-            }
+            system_state.with_call_context(call_context);
         }
 
         // Add inputs to the input queue.
@@ -417,7 +407,7 @@ impl Default for CanisterStateBuilder {
             inputs: Vec::default(),
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
-            log_visibility: LogVisibility::default(),
+            log_visibility: Default::default(),
         }
     }
 }
@@ -472,6 +462,38 @@ impl SystemStateBuilder {
         self
     }
 
+    pub fn wasm_memory_limit(mut self, wasm_memory_limit: Option<NumBytes>) -> Self {
+        self.system_state.wasm_memory_limit = wasm_memory_limit;
+        self
+    }
+
+    pub fn empty_task_queue_with_on_low_wasm_memory_hook_status(
+        mut self,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) -> Self {
+        self.system_state.task_queue = TaskQueue::default();
+        match on_low_wasm_memory_hook_status {
+            // Default hook status is `ConditionNotSatisfied`.
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => (),
+            // To make hook status `Ready`, we should enqueue `ExecutionTask::OnLowWasmMemory`.
+            OnLowWasmMemoryHookStatus::Ready => self
+                .system_state
+                .task_queue
+                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory),
+            // To make hook status `Executed`, we should enqueue `ExecutionTask::OnLowWasmMemory`,
+            // followed by `pop_front()`, which from the standpoint of `TaskQueue` is equivalent to
+            // executing task.
+            OnLowWasmMemoryHookStatus::Executed => {
+                self.system_state
+                    .task_queue
+                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                self.system_state.task_queue.pop_front();
+            }
+        };
+
+        self
+    }
+
     pub fn freeze_threshold(mut self, threshold: NumSeconds) -> Self {
         self.system_state.freeze_threshold = threshold;
         self
@@ -515,7 +537,7 @@ impl CallContextBuilder {
             false,
             Cycles::zero(),
             self.time,
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
     }
 }
@@ -552,18 +574,15 @@ impl Default for ExecutionStateBuilder {
         let wasm_metadata = WasmMetadata::new(metadata);
 
         ExecutionStateBuilder {
-            execution_state: ExecutionState {
-                canister_root: "NOT_USED".into(),
-                session_nonce: None,
-                wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
-                wasm_memory: Memory::new_for_testing(),
-                stable_memory: Memory::new_for_testing(),
-                exported_globals: vec![],
-                exports: ExportedFunctions::new(BTreeSet::new()),
-                metadata: wasm_metadata,
-                last_executed_round: ExecutionRound::from(0),
-                next_scheduled_method: NextScheduledMethod::default(),
-            },
+            execution_state: ExecutionState::new(
+                "NOT_USED".into(),
+                WasmBinary::new(CanisterModule::new(vec![])),
+                ExportedFunctions::new(BTreeSet::new()),
+                Memory::new_for_testing(),
+                Memory::new_for_testing(),
+                vec![],
+                wasm_metadata,
+            ),
         }
     }
 }
@@ -575,6 +594,11 @@ impl ExecutionStateBuilder {
 
     pub fn with_wasm_metadata(mut self, metadata: WasmMetadata) -> Self {
         self.execution_state.metadata = metadata;
+        self
+    }
+
+    pub fn with_wasm_binary(mut self, wasm_binary: Arc<WasmBinary>) -> Self {
+        self.execution_state.wasm_binary = wasm_binary;
         self
     }
 
@@ -674,13 +698,6 @@ pub fn get_stopped_canister_with_controller(
     }
 }
 
-/// Convert a running canister into a stopped canister. This functionality
-/// is added here since it is only allowed in tests.
-pub fn running_canister_into_stopped(mut canister: CanisterState) -> CanisterState {
-    canister.system_state.status = CanisterStatus::Stopped;
-    canister
-}
-
 /// Returns a `ReplicatedState` with SubnetType::Application, variable amount of canisters, input
 /// messages per canister and methods that are to be called.
 pub fn get_initial_state(canister_num: u64, message_num_per_canister: u64) -> ReplicatedState {
@@ -774,6 +791,25 @@ pub fn new_canister_state(
     CanisterState::new(system_state, None, scheduler_state)
 }
 
+pub fn new_canister_state_with_execution(
+    canister_id: CanisterId,
+    controller: PrincipalId,
+    initial_cycles: Cycles,
+    freeze_threshold: NumSeconds,
+) -> CanisterState {
+    let scheduler_state = SchedulerState::default();
+    let system_state = SystemState::new_running_for_testing(
+        canister_id,
+        controller,
+        initial_cycles,
+        freeze_threshold,
+    );
+    let execution_state = ExecutionStateBuilder::default()
+        .with_wasm_binary(empty_wasm())
+        .build();
+    CanisterState::new(system_state, Some(execution_state), scheduler_state)
+}
+
 /// Helper function to register a callback.
 pub fn register_callback(
     canister_state: &mut CanisterState,
@@ -781,29 +817,31 @@ pub fn register_callback(
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
-    let call_context_manager = canister_state
+    let call_context_id = canister_state
         .system_state
-        .call_context_manager_mut()
+        .new_call_context(
+            CallOrigin::SystemTask,
+            Cycles::zero(),
+            Time::from_nanos_since_unix_epoch(0),
+            Default::default(),
+        )
         .unwrap();
-    let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::SystemTask,
-        Cycles::zero(),
-        Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
-    );
 
-    call_context_manager.register_callback(Callback::new(
-        call_context_id,
-        originator,
-        respondent,
-        Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
-        WasmClosure::new(0, 2),
-        WasmClosure::new(0, 2),
-        None,
-        deadline,
-    ))
+    canister_state
+        .system_state
+        .register_callback(Callback::new(
+            call_context_id,
+            originator,
+            respondent,
+            Cycles::zero(),
+            Cycles::new(42),
+            Cycles::new(84),
+            WasmClosure::new(0, 2),
+            WasmClosure::new(0, 2),
+            None,
+            deadline,
+        ))
+        .unwrap()
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
@@ -826,26 +864,36 @@ pub fn insert_dummy_canister(
 }
 
 prop_compose! {
-    /// Produces a strategy that generates an arbitrary `signals_end` and between
-    /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize, reject_reasons: Vec<RejectReason>)(
-        sig_start in 0..10000_u64,
-        reject_signals_map in prop::collection::btree_map(
-            0..(100 + max_signal_count),
-            proptest::sample::select(reject_reasons),
-            min_signal_count..=max_signal_count,
-        ),
-        signals_end_delta in 0..10u64,
+    /// Produces a strategy that generates arbitrary stream signals.
+    ///
+    /// Signals start at `signal_start` from which there are `signal_count` signals.
+    /// Of these signals, `ceil(sqrt(signal_count))` are randomly distributed reject signals.
+    ///
+    /// `signals_end` comes after the signal range, i.e. `signal_start + signal_count + 1`.
+    pub fn arb_stream_signals(
+        signal_start_range: RangeInclusive<u64>,
+        signal_count_range: RangeInclusive<usize>,
+        with_reject_reasons: Vec<RejectReason>
+    )(
+        signal_start in signal_start_range,
+        (signal_count, reject_signals_map) in signal_count_range
+            .prop_flat_map(move |signal_count| {
+                let reject_signals_count = (signal_count as f64).sqrt().ceil() as usize;
+                (
+                    Just(signal_count),
+                    prop::collection::btree_map(
+                        0..=signal_count,
+                        proptest::sample::select(with_reject_reasons.clone()),
+                        reject_signals_count,
+                    ),
+                )
+            })
     ) -> (StreamIndex, VecDeque<RejectSignal>) {
         let reject_signals = reject_signals_map
-            .iter()
-            .map(|(index, reason)| RejectSignal::new(*reason, (*index as u64 + sig_start).into()))
+            .into_iter()
+            .map(|(index, reason)| RejectSignal::new(reason, (index as u64 + signal_start).into()))
             .collect::<VecDeque<RejectSignal>>();
-        let signals_end = reject_signals
-            .back()
-            .map(|signal| signal.index)
-            .unwrap_or(0.into())
-            .increment() + signals_end_delta.into();
+        let signals_end = (signal_start + signal_count as u64 + 1).into();
         (signals_end, reject_signals)
     }
 }
@@ -856,20 +904,20 @@ prop_compose! {
     /// `[min_signal_count, max_signal_count]` reject signals using `with_reject_reasons` to
     /// determine the type of reject signal.
     pub fn arb_stream_with_config(
-        min_size: usize,
-        max_size: usize,
-        min_signal_count: usize,
-        max_signal_count: usize,
+        msg_start_range: RangeInclusive<u64>,
+        size_range: RangeInclusive<usize>,
+        signal_start_range: RangeInclusive<u64>,
+        signal_count_range: RangeInclusive<usize>,
         with_reject_reasons: Vec<RejectReason>,
     )(
-        msg_start in 0..10000u64,
+        msg_start in msg_start_range,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response_with_config(true, true),
-            min_size..=max_size
+            arbitrary::request_or_response_with_config(true),
+            size_range,
         ),
-        (signals_end, reject_signals) in arb_reject_signals(
-            min_signal_count,
-            max_signal_count,
+        (signals_end, reject_signals) in arb_stream_signals(
+            signal_start_range,
+            signal_count_range,
             with_reject_reasons,
         ),
         responses_only_flag in any::<bool>(),
@@ -893,13 +941,11 @@ prop_compose! {
     /// `[min_signal_count, max_signal_count]` reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
         stream in arb_stream_with_config(
-            min_size,
-            max_size,
-            min_signal_count,
-            max_signal_count,
-            // TODO: MR-590 Include all `RejectReason` variants once
-            // the canonical representation supports them.
-            vec![RejectReason::CanisterMigrating],
+            0..=10000,
+            min_size..=max_size,
+            0..=10000,
+            min_signal_count..=max_signal_count,
+            RejectReason::all(),
         )
     ) -> Stream {
         stream
@@ -930,12 +976,15 @@ prop_compose! {
         min_signal_count: usize,
         max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
-        with_responses_only_flag: Vec<bool>,
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
-        responses_only in proptest::sample::select(with_responses_only_flag),
+        (signals_end, reject_signals) in arb_stream_signals(
+            0..=10000,
+            min_signal_count..=max_signal_count,
+            with_reject_reasons
+        ),
+        responses_only in any::<bool>(),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);
         let end = StreamIndex::from(msg_start + msg_len);
@@ -1064,7 +1113,7 @@ prop_compose! {
 ///
 /// Returns the generated `ReplicatedState`; the requests grouped by canister,
 /// in expected iteration order; and the total number of requests.
-fn new_replicated_state_for_test(
+fn new_replicated_state_with_output_queues(
     own_subnet_id: SubnetId,
     mut output_requests: Vec<Vec<Request>>,
     num_receivers: usize,
@@ -1077,8 +1126,11 @@ fn new_replicated_state_for_test(
     let mut requests = VecDeque::new();
 
     let subnet_queues = if let Some(reqs) = output_requests.pop() {
-        let (queues, raw_requests) =
-            new_canister_queues_for_test(reqs, CanisterId::from(own_subnet_id), num_receivers);
+        let (queues, raw_requests) = new_canister_output_queues_for_test(
+            reqs,
+            CanisterId::from(own_subnet_id),
+            num_receivers,
+        );
         total_requests += raw_requests.len();
         requests.push_back(raw_requests);
         Some(queues)
@@ -1094,8 +1146,11 @@ fn new_replicated_state_for_test(
             let mut canister = CanisterStateBuilder::new()
                 .with_canister_id(canister_id)
                 .build();
-            let (queues, raw_requests) =
-                new_canister_queues_for_test(reqs, canister_test_id(i as u64), num_receivers);
+            let (queues, raw_requests) = new_canister_output_queues_for_test(
+                reqs,
+                canister_test_id(i as u64),
+                num_receivers,
+            );
             canister.system_state.put_queues(queues);
             total_requests += raw_requests.len();
             requests.push_back(raw_requests);
@@ -1126,7 +1181,7 @@ fn new_replicated_state_for_test(
 }
 
 prop_compose! {
-     pub fn arb_replicated_state_with_queues(
+     pub fn arb_replicated_state_with_output_queues(
         own_subnet_id: SubnetId,
         max_canisters: usize,
         max_requests_per_canister: usize,
@@ -1139,7 +1194,7 @@ prop_compose! {
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaChaRng;
 
-        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers);
+        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_with_output_queues(own_subnet_id, request_queues, num_receivers);
 
         // We pseudorandomly rotate the queues to match the rotation applied by the iterator.
         // Note that subnet queues are always at the front which is why we need to pop them

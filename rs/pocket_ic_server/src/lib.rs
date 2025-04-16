@@ -38,8 +38,10 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
-use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
-use axum::async_trait;
+use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmaker};
+use async_trait::async_trait;
+use candid::Principal;
+use ic_types::{NodeId, PrincipalId, SubnetId};
 use pocket_ic::PocketIc;
 use serde::Deserialize;
 
@@ -75,68 +77,27 @@ pub trait BlobStore: Send + Sync {
 // ================================================================================================================= //
 // Helpers
 
-pub fn copy_dir(
-    src: impl AsRef<std::path::Path>,
-    dst: impl AsRef<std::path::Path>,
-) -> std::io::Result<()> {
-    std::fs::create_dir_all(&dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
+#[derive(Clone, Debug)]
+pub struct SubnetBlockmaker {
+    pub subnet: SubnetId,
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pocket_ic::{CanisterCall, ExecuteIngressMessage, PocketIc};
-    use crate::state_api::state::*;
-    use ::pocket_ic::WasmResult;
-    use candid::{decode_args, encode_args};
-    use ic_cdk::api::management_canister::main::CreateCanisterArgument;
-    use ic_cdk::api::management_canister::provisional::CanisterIdRecord;
-    use ic_types::{CanisterId, PrincipalId};
-    use std::time::Duration;
-    use tokio::runtime::Runtime;
+impl From<RawSubnetBlockmaker> for SubnetBlockmaker {
+    fn from(raw: RawSubnetBlockmaker) -> Self {
+        let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
+        let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
+        let failed_blockmakers: Vec<NodeId> = raw
+            .failed_blockmakers
+            .into_iter()
+            .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
+            .collect();
 
-    #[test]
-    fn test_pocket_ic() {
-        let rt = Runtime::new().unwrap();
-        let pocket_ic = PocketIc::default();
-        let api_state = PocketIcApiStateBuilder::new()
-            .add_initial_instance(pocket_ic)
-            .build();
-        let instance_id = 0;
-        let msg1 = ExecuteIngressMessage(CanisterCall {
-            sender: PrincipalId::default(),
-            canister_id: CanisterId::ic_00(),
-            method: "provisional_create_canister_with_cycles".to_string(),
-            payload: encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
-            effective_principal: pocket_ic::EffectivePrincipal::None,
-        });
-
-        let timeout = Some(Duration::from_secs(30));
-        let res = rt
-            .block_on(api_state.update_with_timeout(msg1.into(), instance_id, timeout))
-            .unwrap();
-
-        match res {
-            UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reply(bytes)))) => {
-                let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
-                assert!(!canister_id.to_text().is_empty());
-            }
-            UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reject(x)))) => {
-                panic!("unexpected reject: {:?}", x);
-            }
-            e => {
-                panic!("unexpected result: {:?}", e);
-            }
+        SubnetBlockmaker {
+            subnet,
+            blockmaker,
+            failed_blockmakers,
         }
     }
 }

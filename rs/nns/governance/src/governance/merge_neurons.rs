@@ -3,18 +3,19 @@ use crate::{
     neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
     neuron_store::NeuronStore,
     pb::v1::{
-        governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron_response::MergeResponse, GovernanceError, Neuron as NeuronProto, NeuronState,
-        ProposalData, ProposalStatus,
+        governance_error::ErrorType,
+        manage_neuron::{Merge, NeuronIdOrSubaccount},
+        GovernanceError, NeuronState, ProposalData, ProposalStatus, VotingPowerEconomics,
     },
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::pb::v1::manage_neuron_response::MergeResponse;
 use icp_ledger::Subaccount;
 use std::collections::BTreeMap;
 
 /// All possible effect of merging 2 neurons.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MergeNeuronsEffect {
     /// The source neuron id.
     source_neuron_id: NeuronId,
@@ -81,7 +82,7 @@ impl MergeNeuronsEffect {
 }
 
 /// The effect of merge neurons on the source neuron (other than the ones involving ledger).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MergeNeuronsSourceEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     subtract_maturity: u64,
@@ -99,7 +100,7 @@ impl MergeNeuronsSourceEffect {
 }
 
 /// The effect of merge neurons on the target neuron (other than the ones involving ledger).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MergeNeuronsTargetEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     add_maturity: u64,
@@ -117,7 +118,7 @@ impl MergeNeuronsTargetEffect {
 }
 
 /// All possible errors that can occur when merging neurons
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum MergeNeuronsError {
     SourceAndTargetSame,
     NoSourceNeuronId,
@@ -344,12 +345,18 @@ pub fn validate_merge_neurons_before_commit(
 pub fn build_merge_neurons_response(
     source: &Neuron,
     target: &Neuron,
+    voting_power_economics: &VotingPowerEconomics,
     now_seconds: u64,
+    requester: PrincipalId,
 ) -> MergeResponse {
-    let source_neuron = Some(NeuronProto::from(source.clone()));
-    let target_neuron = Some(NeuronProto::from(target.clone()));
-    let source_neuron_info = Some(source.get_neuron_info(now_seconds));
-    let target_neuron_info = Some(target.get_neuron_info(now_seconds));
+    let source_neuron = Some(source.clone().into_api(now_seconds, voting_power_economics));
+    let target_neuron = Some(target.clone().into_api(now_seconds, voting_power_economics));
+
+    let source_neuron_info =
+        Some(source.get_neuron_info(voting_power_economics, now_seconds, requester));
+    let target_neuron_info =
+        Some(target.get_neuron_info(voting_power_economics, now_seconds, requester));
+
     MergeResponse {
         source_neuron,
         target_neuron,
@@ -1481,8 +1488,7 @@ mod tests {
         );
     }
 
-    use proptest::prelude::*;
-    use proptest::proptest;
+    use proptest::{prelude::*, proptest};
 
     // In cached stake, maturity and staked maturity are all large enough we might get overflows. We
     // choose a large enough value to be comprehensive but not too large to cause overflows.
@@ -1506,6 +1512,7 @@ mod tests {
             target_aging_since_timestamp_seconds in 0..=NOW_SECONDS,
             transaction_fees_e8s in 0..u64::MAX,
         ) {
+            reset_stable_memory();
             let mut neuron_store = NeuronStore::new(BTreeMap::new());
 
             let source_neuron = create_model_neuron_builder(1)

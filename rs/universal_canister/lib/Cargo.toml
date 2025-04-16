@@ -8,11 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-hex-literal = "0.4.1"
+lazy_static = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
 universal-canister = { path = "../impl" }
-ic-types = { path = "../../types/types" }
-
-[dev-dependencies]
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-types = { path = "../../types/types" }

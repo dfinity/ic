@@ -1,10 +1,13 @@
 [package]
 name = "ic-subnet-splitting"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
@@ -13,18 +16,18 @@ ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_d
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../" }
+ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replay = { path = "../../replay" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-tool = { path = "../../state_tool" }
-ic-registry-routing-table = { path = "../../registry/routing_table" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-url = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-tmpdir = { path = "../../test_utilities/tmpdir" }

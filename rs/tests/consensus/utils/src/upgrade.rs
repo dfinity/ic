@@ -19,7 +19,7 @@ use prost::Message;
 use slog::{info, Logger};
 use std::{convert::TryFrom, fs, io::Read, path::Path};
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum UpdateImageType {
     Image,
     ImageTest,
@@ -124,12 +124,22 @@ pub fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<String
     Ok(version)
 }
 
-/// Waits until the node is healthy and running the given replica version.
-/// Panics if the timeout is reached while waiting.
 pub fn assert_assigned_replica_version(
     node: &IcNodeSnapshot,
     expected_version: &str,
     logger: Logger,
+) {
+    assert_assigned_replica_version_with_time(node, expected_version, logger, 600, 10)
+}
+
+/// Waits until the node is healthy and running the given replica version.
+/// Panics if the timeout is reached while waiting.
+pub fn assert_assigned_replica_version_with_time(
+    node: &IcNodeSnapshot,
+    expected_version: &str,
+    logger: Logger,
+    total_secs: u64,
+    backoff_secs: u64,
 ) {
     info!(
         logger,
@@ -154,8 +164,8 @@ pub fn assert_assigned_replica_version(
             expected_version
         ),
         logger.clone(),
-        secs(600),
-        secs(10),
+        secs(total_secs),
+        secs(backoff_secs),
         || match get_assigned_replica_version(node) {
             Ok(ver) if ver == expected_version => {
                 state = State::Finished;
@@ -242,8 +252,8 @@ async fn bless_replica_version_with_sha(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
-        replica_version,
-        sha256.clone(),
+        Some(replica_version),
+        Some(sha256.clone()),
         upgrade_url,
         vec![],
     )
@@ -331,8 +341,8 @@ pub async fn bless_replica_version_with_urls(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
-        replica_version,
-        sha256,
+        Some(replica_version),
+        Some(sha256),
         release_package_urls,
         vec![],
     )

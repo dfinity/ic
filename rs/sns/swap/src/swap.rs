@@ -1,4 +1,3 @@
-use crate::pb::v1::Params;
 use crate::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterEnvironment,
@@ -20,7 +19,7 @@ use crate::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, NotifyPaymentFailureResponse, Participant,
+        NewSaleTicketResponse, NotifyPaymentFailureResponse, Params, Participant,
         RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
         SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
@@ -28,25 +27,26 @@ use crate::{
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
-use dfn_core::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
+use ic_cdk::api::call::RejectionCode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
+use ic_nervous_system_common::{
+    i2d, ledger::compute_neuron_staking_subaccount_bytes, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+};
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
-use ic_sns_governance::pb::v1::claim_swap_neurons_request::{
-    neuron_recipe, NeuronRecipe, NeuronRecipes,
-};
-use ic_sns_governance::pb::v1::NeuronIds;
 use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
     claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
     governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
-    SetMode, SetModeResponse,
+    NeuronIds, SetMode, SetModeResponse,
 };
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{storable::Blob, GrowFailed, Storable};
+use ic_stable_structures::{
+    storable::{Blob, Bound},
+    GrowFailed, Storable,
+};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use itertools::{Either, Itertools};
@@ -83,7 +83,7 @@ const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 /// Range of allowed memos for neurons distributed via an SNS swap. This range is used to choose
-/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for Airdrop
+/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for developer
 /// neurons) do not conflict with the neuron basket memos.
 pub const NEURON_BASKET_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
@@ -104,6 +104,15 @@ pub const CLAIM_SWAP_NEURONS_BATCH_SIZE: usize = 500;
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
         Self { code, description }
+    }
+}
+
+impl From<(RejectionCode, String)> for CanisterCallError {
+    fn from(value: (RejectionCode, String)) -> Self {
+        Self {
+            code: Some(value.0 as i32),
+            description: value.1,
+        }
     }
 }
 
@@ -418,8 +427,9 @@ impl Swap {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
+            direct_participation_icp_e8s: Some(0),
+            neurons_fund_participation_icp_e8s: Some(0),
+            timers: None,
         };
         if init.validate_swap_init_for_one_proposal_flow().is_ok() {
             // Automatically fill out the fields that the (legacy) open request
@@ -512,7 +522,6 @@ impl Swap {
     /// The maximum direct participation amount (in ICP e8s).
     pub fn max_direct_participation_e8s(&self) -> u64 {
         self.params
-            .clone()
             .expect("Expected params to be set")
             .max_direct_participation_icp_e8s
             .expect("Expected params.max_direct_participation_icp_e8s to be set")
@@ -663,6 +672,16 @@ impl Swap {
         self.lifecycle().is_terminal()
     }
 
+    /// Determines if Swap still has work that might need to be done in periodic tasks.
+    ///
+    /// See also: `Swap.run_periodic_tasks`.
+    pub fn requires_periodic_tasks(&self) -> bool {
+        // Practically, already_tried_to_auto_finalize should never be None, unless a Swap has not
+        // been updated since this field had been introduced. We default this field to `true` to
+        // capture those old Swaps (which were finalized manually).
+        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(true)
+    }
+
     //
     // --- state transition functions ------------------------------------------
     //
@@ -673,8 +692,8 @@ impl Swap {
         if !self.can_open(now_seconds) {
             return false;
         }
-        // set the purge_old_ticket last principal so that the routine can start
-        // in the next heartbeat
+        // set the purge_old_ticket last principal so that the next periodic task can start
+        // the routine.
         self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
         self.update_derived_fields();
         self.set_lifecycle(Lifecycle::Open);
@@ -995,15 +1014,14 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
-    /// Runs those tasks that should be run on canister heartbeat.
+    /// Runs those tasks that should be run periodically.
     ///
-    /// The argument 'now_fn' is a function that returns the current time
-    /// for bookkeeping of transfers. For easier testing, it is given
-    /// an argument that is 'false' to get the timestamp when a
-    /// transfer is initiated and 'true' to get the timestamp when a
-    /// transfer is successful.
-    pub async fn heartbeat(&mut self, now_fn: fn(bool) -> u64) {
-        let heartbeat_start_seconds = now_fn(false);
+    /// The argument 'now_fn' is a function that returns the current time for bookkeeping
+    /// of transfers. For easier testing, it is given an argument that is 'false' to get
+    /// the timestamp when a transfer is initiated and 'true' to get the timestamp when a transfer
+    /// is successful.
+    pub async fn run_periodic_tasks(&mut self, now_fn: fn(bool) -> u64) {
+        let periodic_task_start_seconds = now_fn(false);
 
         // Purge old tickets
         const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
@@ -1011,38 +1029,42 @@ impl Swap {
         const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;
 
         self.try_purge_old_tickets(
-            dfn_core::api::time_nanos,
+            ic_cdk::api::time,
             NUMBER_OF_TICKETS_THRESHOLD,
             TWO_DAYS_IN_NANOSECONDS,
             MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
         );
 
-        // Automatically transition the state. Only one state transition per heartbeat.
+        // Automatically transition the state. Only one state transition per periodic task.
 
         // Auto-open the swap
-        if self.try_open(heartbeat_start_seconds) {
-            log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
+        if self.try_open(periodic_task_start_seconds) {
+            log!(
+                INFO,
+                "Swap opened at timestamp {}",
+                periodic_task_start_seconds
+            );
         }
         // Auto-commit the swap
-        else if self.try_commit(heartbeat_start_seconds) {
+        else if self.try_commit(periodic_task_start_seconds) {
             log!(
                 INFO,
                 "Swap committed at timestamp {}",
-                heartbeat_start_seconds
+                periodic_task_start_seconds
             );
         }
         // Auto-abort the swap
-        else if self.try_abort(heartbeat_start_seconds) {
+        else if self.try_abort(periodic_task_start_seconds) {
             log!(
                 INFO,
                 "Swap aborted at timestamp {}",
-                heartbeat_start_seconds
+                periodic_task_start_seconds
             );
         }
         // Auto-finalize the swap
-        // We discard the error, if there is one, because to log it would mean
-        // it would be logged every heartbeat where we fall through to this
-        // point (and we don't want to spam the logs).
+        // We discard the error, if there is one, because to log it would mean it would be logged
+        // every time a periodic task is executed where we fall through to this point (and we don't
+        // want to spam the logs).
         else if self.can_auto_finalize().is_ok() {
             // First, record when the finalization started, in case this function is
             // refactored to `await` before this point.
@@ -1159,6 +1181,30 @@ impl Swap {
         let params = &self.params.as_ref().expect("Expected params to be set");
         // Subtraction safe because of the preceding if-statement.
         let max_increment_e8s = self.available_direct_participation_e8s();
+
+        // Check that the maximum number of participants has not been reached yet.
+        {
+            let num_direct_participants = self.buyers.len() as u64;
+            let num_sns_neurons_per_basket = params
+                .neuron_basket_construction_parameters
+                .as_ref()
+                .expect("neuron_basket_construction_parameters must be specified")
+                .count;
+            if (num_direct_participants + 1) * num_sns_neurons_per_basket
+                > MAX_NEURONS_FOR_DIRECT_PARTICIPANTS
+            {
+                return Err(format!(
+                    "The swap has reached the maximum number of direct participants ({}) and does \
+                     not accept new participants; existing participants may still increase their \
+                     ICP participation amount. This constraint ensures that SNS neuron baskets can \
+                     be created for all existing participants (SNS neuron basket size: {}, \
+                     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: {}).",
+                    num_direct_participants,
+                    num_sns_neurons_per_basket,
+                    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+                ));
+            }
+        }
 
         // Check that the minimum amount has been transferred before
         // actually creating an entry for the buyer.
@@ -1368,7 +1414,10 @@ impl Swap {
         let result = self.restore_dapp_controllers(sns_root_client).await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(INFO, "Successfully restored dapp controllers, {:?}", result);
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -1386,7 +1435,14 @@ impl Swap {
             .await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(
+                    INFO,
+                    "Successfully took sole control of dapp controllers, {:?}",
+                    result
+                );
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -1650,7 +1706,7 @@ impl Swap {
             }
         }
 
-        // If neuron_parameters is empty, all recipes are either Invalid or Skipped and there
+        // If neuron_recipes is empty, all recipes are either Invalid or Skipped and there
         // is no work to do.
         if neuron_recipes.is_empty() {
             return sweep_result;
@@ -1697,10 +1753,8 @@ impl Swap {
                 batch_count,
             );
 
-            #[allow(deprecated)] // Remove once neuron_parameters is removed
             let reply = sns_governance_client
                 .claim_swap_neurons(ClaimSwapNeuronsRequest {
-                    neuron_parameters: vec![],
                     neuron_recipes: Some(NeuronRecipes::from(batch)),
                 })
                 .await;
@@ -2415,7 +2469,7 @@ impl Swap {
             .map(|(nf_neuron_nns_controller, cf_neurons)| CfParticipant {
                 controller: Some(nf_neuron_nns_controller),
                 // TODO(NNS1-3198): Remove once hotkey_principal is removed
-                hotkey_principal: nf_neuron_nns_controller.to_string(),
+                hotkey_principal: format!("Field `hotkey_principal` is obsolete as a misnomer, as it used to hold the *controller* principal ID of the (Neurons' Fund-participating) NNS neuron, and not NNS neuron hotkeys. Please use field `controller` instead for the NNS neuron controller. If you must know now, the NNS neuron's controller of this neuron is `{}`.", nf_neuron_nns_controller),
                 cf_neurons,
             })
             .collect();
@@ -2481,7 +2535,7 @@ impl Swap {
         if request
             .subaccount
             .as_ref()
-            .map_or(false, |subaccount| subaccount.len() != 32)
+            .is_some_and(|subaccount| subaccount.len() != 32)
         {
             return NewSaleTicketResponse::err_invalid_subaccount();
         }
@@ -2585,10 +2639,9 @@ impl Swap {
                 max_number_to_inspect,
             ) {
                 Some(new_next_principal) => {
-                    // If a principal is returned then there are some principals
-                    // that haven't been checked yet by purge_old_tickets. We record
-                    // the next principal so that the next heartbeat can continue the
-                    // work.
+                    // If a principal is returned then there are some principals that haven't been
+                    // checked yet by purge_old_tickets. We record the next principal so that
+                    // the next periodic task can continue the work.
                     self.purge_old_tickets_next_principal = Some(new_next_principal);
                     Some(false)
                 }
@@ -3056,7 +3109,7 @@ impl Swap {
         &self,
         _request: &GetSaleParametersRequest,
     ) -> GetSaleParametersResponse {
-        let params = self.params.clone();
+        let params = self.params;
         GetSaleParametersResponse { params }
     }
 
@@ -3346,7 +3399,10 @@ fn create_sns_neuron_basket_for_neurons_fund_participant(
                 hotkeys: Some(Principals::from(hotkeys.clone())),
                 nns_neuron_id,
                 // TODO(NNS1-3198): Remove
-                hotkey_principal: controller.to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
             })),
             neuron_attributes: Some(NeuronAttributes {
                 memo,
@@ -3712,7 +3768,7 @@ impl<'a> SwapDigest<'a> {
     }
 }
 
-impl<'a> fmt::Debug for SwapDigest<'a> {
+impl fmt::Debug for SwapDigest<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         let Swap {
             lifecycle,
@@ -3727,6 +3783,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             purge_old_tickets_next_principal,
             already_tried_to_auto_finalize,
             auto_finalize_swap_response,
+            timers,
 
             // These are (potentially large) collections. To avoid an
             // overwhelmingly large log message, we need summarize and/or
@@ -3785,6 +3842,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
                 "neurons_fund_participation_icp_e8s",
                 neurons_fund_participation_icp_e8s,
             )
+            .field("timers", timers)
             .finish()
     }
 }
@@ -3792,11 +3850,13 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{
-        new_sale_ticket_response::Ok, CfNeuron, CfParticipant, NeuronBasketConstructionParameters,
-        Params,
+    use crate::{
+        pb::v1::{
+            new_sale_ticket_response::Ok, CfNeuron, CfParticipant,
+            NeuronBasketConstructionParameters, Params,
+        },
+        swap_builder::SwapBuilder,
     };
-    use crate::swap_builder::SwapBuilder;
     use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
@@ -4066,22 +4126,34 @@ mod tests {
         let cf_participants = vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(992899)),
-                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(1, 698047, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(800257)),
-                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(2, 678574, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(818371)),
-                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(3, 305256, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(657894)),
-                hotkey_principal: PrincipalId::new_user_test_id(657894).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(4, 339747, Vec::new()).unwrap()],
             },
         ];
@@ -4660,8 +4732,8 @@ mod tests {
             .with_swap_start_due(None, Some(10_000_000))
             .build();
 
-        let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {
-            match sale.try_purge_old_tickets(
+        let try_purge_old_tickets = |swap: &mut Swap, time: u64| loop {
+            match swap.try_purge_old_tickets(
                 || time,
                 NUMBER_OF_TICKETS_THRESHOLD,
                 MAX_AGE_IN_NANOSECONDS,
@@ -4880,7 +4952,10 @@ mod tests {
         let cf_participants = vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(992899)),
-                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![
                     CfNeuron::try_new(1, 698047, Vec::new()).unwrap(),
                     CfNeuron::try_new(2, 303030, Vec::new()).unwrap(),
@@ -4888,12 +4963,18 @@ mod tests {
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(800257)),
-                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(3, 678574, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(818371)),
-                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![
                     CfNeuron::try_new(4, 305256, Vec::new()).unwrap(),
                     CfNeuron::try_new(5, 100000, Vec::new()).unwrap(),

@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b",
+  "image": "ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -14,7 +14,11 @@
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
-  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache ~/.local/share/fish && touch ~/.zsh_history ~/.bash_history",
+  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.local/share/fish && touch ~/.zsh_history ~/.bash_history",
+  "containerEnv": {
+    "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
+    "USER": "${localEnv:USER}"
+  },
   "mounts": [
     {
       "source": "${localEnv:HOME}/.cache",
@@ -54,8 +58,17 @@
         "vadimcn.vscode-lldb",
         "bazelbuild.vscode-bazel",
         "stackbuild.bazel-stack-vscode",
-        "bungcip.better-toml"
-      ]
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        // Exclude bazel output directories from search
+        "search.exclude": {
+          "bazel-bin/": true,
+          "bazel-ic/": true,
+          "bazel-out/": true,
+          "targets/": true
+        }
+      }
     }
   }
 }

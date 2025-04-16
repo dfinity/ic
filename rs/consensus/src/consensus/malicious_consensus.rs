@@ -6,7 +6,7 @@ use crate::consensus::{
     notary::Notary,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, HeightRange};
+use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::{
     consensus::{
@@ -18,9 +18,9 @@ use ic_types::{
 };
 use std::time::Duration;
 
-/// Return a `ChangeSet` that moves all block proposals in the range to the
+/// Return a `Mutations` that moves all block proposals in the range to the
 /// validated pool.
-fn maliciously_validate_all_blocks(pool_reader: &PoolReader, logger: &ReplicaLogger) -> ChangeSet {
+fn maliciously_validate_all_blocks(pool_reader: &PoolReader, logger: &ReplicaLogger) -> Mutations {
     trace!(logger, "maliciously_validate_all_blocks");
     let mut change_set = Vec::new();
 
@@ -87,7 +87,9 @@ fn maliciously_propose_blocks(
         .get_block_maker_rank(height, &beacon, my_node_id)
     {
         Ok(Some(rank)) => Some(rank),
-        Ok(None) => Some(Rank(0)),
+        // TODO: introduce a malicious flag which will instruct a malicious node to propose a block
+        // when it's not elected a block maker; implement a system test which uses the flag.
+        Ok(None) => None,
         Err(_) => None,
     };
 
@@ -116,7 +118,7 @@ fn maliciously_propose_blocks(
                                 hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
                             let metadata = BlockMetadata::from_block(
                                 &hashed_block,
-                                &block_maker.replica_config,
+                                block_maker.replica_config.subnet_id,
                             );
                             if let Ok(signature) = block_maker.crypto.sign(
                                 &metadata,
@@ -165,8 +167,8 @@ fn maliciously_propose_empty_block(
     parent: HashedBlock,
 ) -> Option<BlockProposal> {
     let height = parent.height().increment();
-    let certified_height = block_maker.state_manager.latest_certified_height();
-    let context = parent.as_ref().context.clone();
+    let mut context = parent.as_ref().context.clone();
+    context.certified_height = block_maker.state_manager.latest_certified_height();
 
     // Note that we will skip blockmaking if registry versions or replica_versions
     // are missing or temporarily not retrievable.
@@ -185,7 +187,6 @@ fn maliciously_propose_empty_block(
         context,
         parent,
         height,
-        certified_height,
         rank,
         registry_version,
         &subnet_records,
@@ -212,8 +213,7 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
         .get_by_height_range(range);
     for proposal in proposals {
         if !notary.is_proposal_already_notarized_by_me(pool, &proposal) {
-            let block = proposal.as_ref();
-            if let Some(share) = notary.notarize_block(pool, block) {
+            if let Some(share) = notary.notarize_block(pool, &proposal.content) {
                 notarization_shares.push(share);
             }
         }
@@ -233,7 +233,6 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
 
 /// Generate finalization shares for each notarized block in the validated
 /// pool.
-
 fn maliciously_finalize_all(
     finalizer: &Finalizer,
     pool: &PoolReader<'_>,
@@ -309,14 +308,14 @@ fn maliciously_finalize_block(
 #[allow(unused, clippy::too_many_arguments)]
 pub fn maliciously_alter_changeset(
     pool: &PoolReader,
-    honest_changeset: ChangeSet,
+    honest_changeset: Mutations,
     malicious_flags: &MaliciousFlags,
     block_maker: &BlockMaker,
     finalizer: &Finalizer,
     notary: &Notary,
     logger: &ReplicaLogger,
     timestamp: Time,
-) -> ChangeSet {
+) -> Mutations {
     let mut changeset = honest_changeset;
 
     if malicious_flags.maliciously_propose_equivocating_blocks

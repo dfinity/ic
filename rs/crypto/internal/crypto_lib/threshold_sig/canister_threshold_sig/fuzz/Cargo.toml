@@ -1,0 +1,30 @@
+[package]
+name = "canister-threshold-sig-fuzz"
+version = "0.0.0"
+publish = false
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+hex = { workspace = true }
+libfuzzer-sys = "0.4"
+num-bigint = { workspace = true }
+subtle = { workspace = true }
+
+[dependencies.ic-crypto-internal-threshold-sig-canister-threshold-sig]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "scalar"
+path = "fuzz_targets/scalar.rs"
+test = false
+doc = false

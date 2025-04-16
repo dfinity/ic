@@ -4,11 +4,12 @@ use ic_ckbtc_kyt::{
     Alert, AlertLevel, DepositRequest, Error as KytError, ExposureType, FetchAlertsResponse,
     InitArg, KytMode, LifecycleArg, SetApiKeyArg,
 };
-use ic_state_machine_tests::{
-    CanisterHttpRequestContext, CanisterHttpResponsePayload, Cycles, IngressState, IngressStatus,
-    StateMachine, WasmResult,
-};
+use ic_management_canister_types_private::CanisterHttpResponsePayload;
+use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_types::canister_http::CanisterHttpRequestContext;
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::Cycles;
 
 const MAX_TICKS: usize = 10;
 

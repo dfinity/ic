@@ -20,3 +20,4 @@ ic-agent = { workspace = true }
 ic-cbor = { workspace = true }
 ic-certification = { workspace = true }
 icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.1.2" }
+leb128 = { workspace = true }

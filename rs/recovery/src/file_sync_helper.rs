@@ -4,8 +4,8 @@ use crate::{
     error::{RecoveryError, RecoveryResult},
     ssh_helper,
 };
-use core::time;
 use ic_http_utils::file_downloader::FileDownloader;
+use ic_replay::consent_given;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
@@ -13,7 +13,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::Command,
-    thread,
+    time::Duration,
 };
 
 /// Given the name and replica version of a binary, download the artifact to the
@@ -32,8 +32,14 @@ pub async fn download_binary(
 
     let mut file = target_dir.join(format!("{}.gz", binary_name));
 
-    info!(logger, "Downloading {} to {:?}...", binary_name, file);
-    let file_downloader = FileDownloader::new(None);
+    info!(
+        logger,
+        "Downloading {} to {}...",
+        binary_name,
+        file.display()
+    );
+    let file_downloader =
+        FileDownloader::new_with_timeout(Some(logger.clone().into()), Duration::from_secs(60));
     file_downloader
         .download_file(&binary_url, &file, None)
         .await
@@ -60,6 +66,7 @@ pub async fn download_binary(
     Ok(file)
 }
 
+/// If auto-retry is set to false, the user will be prompted for retries on rsync failures.
 pub fn rsync_with_retries(
     logger: &Logger,
     excludes: Vec<&str>,
@@ -67,9 +74,10 @@ pub fn rsync_with_retries(
     target: &str,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
-    retries: usize,
+    auto_retry: bool,
+    max_retries: usize,
 ) -> RecoveryResult<Option<String>> {
-    for _ in 0..retries {
+    for _ in 0..max_retries {
         match rsync(
             logger,
             excludes.clone(),
@@ -79,13 +87,20 @@ pub fn rsync_with_retries(
             key_file,
         ) {
             Err(e) => {
-                warn!(logger, "Rsync failed: {:?}, retrying...", e);
+                warn!(logger, "Rsync failed: {:?}", e);
+                if auto_retry {
+                    // In non-interactive cases, we wait a short while
+                    // before re-trying rsync.
+                    info!(logger, "Retrying in 10 seconds...");
+                    std::thread::sleep(Duration::from_secs(10));
+                } else if !consent_given("Do you want to retry the  download for this node?") {
+                    return Err(RecoveryError::RsyncFailed);
+                }
             }
             success => return success,
         }
-        thread::sleep(time::Duration::from_secs(10));
     }
-    Err(RecoveryError::UnexpectedError("All retries failed".into()))
+    Err(RecoveryError::RsyncFailed)
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.
@@ -173,6 +188,26 @@ pub fn path_exists(path: &Path) -> RecoveryResult<bool> {
 pub fn remove_dir(path: &Path) -> RecoveryResult<()> {
     if path_exists(path)? {
         fs::remove_dir_all(path).map_err(|e| RecoveryError::dir_error(path, e))
+    } else {
+        Ok(())
+    }
+}
+
+pub fn clear_dir(path: &Path) -> RecoveryResult<()> {
+    if path_exists(path)? {
+        for entry in fs::read_dir(path).map_err(|e| RecoveryError::dir_error(path, e))? {
+            let entry = entry.map_err(|e| RecoveryError::dir_error(path, e))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| RecoveryError::dir_error(path, e))?;
+            if file_type.is_dir() {
+                fs::remove_dir_all(entry.path())
+            } else {
+                fs::remove_file(entry.path())
+            }
+            .map_err(|e| RecoveryError::dir_error(entry.path().as_path(), e))?
+        }
+        Ok(())
     } else {
         Ok(())
     }

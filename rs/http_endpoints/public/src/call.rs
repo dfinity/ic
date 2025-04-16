@@ -1,10 +1,8 @@
 //! Module that deals with ingress messages
-mod call_v2;
-mod call_v3;
+pub mod call_v2;
+pub mod call_v3;
 mod ingress_watcher;
 
-pub use call_v2::CallServiceV2;
-pub use call_v3::CallServiceV3;
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
@@ -15,8 +13,9 @@ use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -29,7 +28,6 @@ use ic_types::{
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
     },
-    time::current_time,
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use ic_validator::HttpRequestVerifier;
@@ -40,10 +38,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
-    log: Option<ReplicaLogger>,
+    log: ReplicaLogger,
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
+    time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
@@ -53,6 +52,7 @@ pub struct IngressValidatorBuilder {
 
 impl IngressValidatorBuilder {
     pub fn builder(
+        log: ReplicaLogger,
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
@@ -62,10 +62,11 @@ impl IngressValidatorBuilder {
         ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
-            log: None,
+            log,
             node_id,
             subnet_id,
             malicious_flags: None,
+            time_source: None,
             ingress_verifier,
             registry_client,
             ingress_filter,
@@ -74,23 +75,24 @@ impl IngressValidatorBuilder {
         }
     }
 
-    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
-        self.log = Some(log);
-        self
-    }
-
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
         self.malicious_flags = Some(malicious_flags);
         self
     }
 
+    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+        self.time_source = Some(time_source);
+        self
+    }
+
     pub fn build(self) -> IngressValidator {
-        let log = self.log.unwrap_or(no_op_logger());
+        let log = self.log;
         IngressValidator {
             log: log.clone(),
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
+            time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
@@ -170,6 +172,7 @@ pub struct IngressValidator {
     node_id: NodeId,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
+    time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
@@ -191,6 +194,7 @@ impl IngressValidator {
             node_id,
             subnet_id,
             registry_client,
+            time_source,
             validator,
             ingress_filter,
             ingress_throttler,
@@ -249,7 +253,11 @@ impl IngressValidator {
         let request_c = msg.as_ref().clone();
 
         tokio::task::spawn_blocking(move || {
-            validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+            validator.validate_request(
+                &request_c,
+                time_source.get_relative_time(),
+                &root_of_trust_provider,
+            )
         })
         .await
         .map_err(|_| HttpError {
@@ -257,7 +265,7 @@ impl IngressValidator {
             message: "".into(),
         })?
         .map_err(|validation_error| {
-            validation_error_to_http_error(message_id, validation_error, &log)
+            validation_error_to_http_error(msg.as_ref(), validation_error, &log)
         })?;
 
         let ingress_filter = ingress_filter.lock().unwrap().clone();

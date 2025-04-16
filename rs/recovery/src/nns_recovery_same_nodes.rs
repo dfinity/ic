@@ -1,9 +1,10 @@
 use crate::{
-    cli::{print_height_info, read_optional, read_optional_version},
-    error::RecoveryError,
+    cli::{print_height_info, read_optional, read_optional_data_location, read_optional_version},
+    error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
+    util::DataLocation,
     RecoveryArgs, RecoveryResult, CUPS_DIR,
 };
 use clap::Parser;
@@ -11,7 +12,7 @@ use ic_base_types::SubnetId;
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
-use std::{iter::Peekable, net::IpAddr, path::PathBuf};
+use std::{iter::Peekable, net::IpAddr, net::Ipv6Addr, path::PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumMessage, EnumString};
 use url::Url;
@@ -19,7 +20,7 @@ use url::Url;
 use crate::{Recovery, Step};
 
 #[derive(
-    Debug, Copy, Clone, EnumIter, EnumMessage, EnumString, PartialEq, Deserialize, Serialize,
+    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
 )]
 pub enum StepType {
     StopReplica,
@@ -38,15 +39,15 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Debug, Clone, PartialEq, Parser, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 #[clap(version = "1.0")]
 pub struct NNSRecoverySameNodesArgs {
     /// Id of the broken subnet
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// Replica version to upgrade the broken subnet to
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_version: Option<ReplicaVersion>,
 
     #[clap(long)]
@@ -54,20 +55,22 @@ pub struct NNSRecoverySameNodesArgs {
     pub replay_until_height: Option<u64>,
 
     /// URL of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_url: Option<Url>,
 
     /// SHA256 hash of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
     /// IP address of the node to download the subnet state from. Should be different to node used in nns-url.
     #[clap(long)]
     pub download_node: Option<IpAddr>,
 
-    /// IP address of the node to upload the new subnet state to
-    #[clap(long)]
-    pub upload_node: Option<IpAddr>,
+    /// The method of uploading state. Possible values are either `local` (for a
+    /// local recovery on the admin node) or the ipv6 address of the target node.
+    /// Local recoveries allow us to skip a potentially expensive data transfer.
+    #[clap(long, value_parser=crate::util::data_location_from_str)]
+    pub upload_method: Option<DataLocation>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
@@ -96,10 +99,10 @@ impl NNSRecoverySameNodes {
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         let new_state_dir = recovery.work_dir.join("new_ic_state");
-        create_dir(&new_state_dir).expect("Failed to create state directory for upload.");
+        create_dir(&new_state_dir).expect_graceful("Failed to create state directory for upload.");
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_args,
@@ -158,8 +161,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::WaitForCUP => {
-                if self.params.upload_node.is_none() {
-                    self.params.upload_node = read_optional(&self.logger, "Enter upload IP:");
+                if self.params.upload_method.is_none() {
+                    self.params.upload_method = read_optional_data_location(
+                        &self.logger,
+                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                    );
                 }
             }
 
@@ -177,10 +183,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::DownloadCertifications => Ok(Box::new(
-                self.recovery
-                    .get_download_certs_step(self.params.subnet_id, true),
-            )),
+            StepType::DownloadCertifications => {
+                Ok(Box::new(self.recovery.get_download_certs_step(
+                    self.params.subnet_id,
+                    true,
+                    !self.interactive(),
+                )))
+            }
 
             StepType::MergeCertificationPools => {
                 Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
@@ -257,7 +266,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             )),
 
             StepType::WaitForCUP => {
-                if let Some(node_ip) = self.params.upload_node {
+                if let Some(method) = self.params.upload_method {
+                    let node_ip = match method {
+                        DataLocation::Remote(ip) => ip,
+                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -265,10 +278,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::UploadState => {
-                if let Some(node_ip) = self.params.upload_node {
+                if let Some(method) = self.params.upload_method {
                     Ok(Box::new(
                         self.recovery.get_upload_and_restart_step_with_data_src(
-                            node_ip,
+                            method,
                             self.new_state_dir.clone(),
                         ),
                     ))

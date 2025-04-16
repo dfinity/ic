@@ -2,15 +2,26 @@
 
 set -euo pipefail
 
-if [ -n "${IN_NIX_SHELL:-}" ]; then
-    echo "Please do not run $0 inside of nix-shell." >&2
-    exit 1
-fi
+#########
+# USAGE #
+#########
 
-if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
-    cat <<EOF >&2
-    usage:
+function title() {
+    echo "Repin Bazel Crates"
+}
 
+function usage() {
+    cat <<EOF
+Usage:
+  $0 [--force] [PACKAGE...]
+
+Options:
+  --force       will repin even if repin is not deemed necessary
+EOF
+}
+
+function help() {
+    cat <<EOF
     All packages:
         $0                    # cargo update --workspace
 
@@ -28,15 +39,51 @@ if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
 
     Details: https://bazelbuild.github.io/rules_rust/crate_universe.html#repinning--updating-dependencies
 EOF
+
+}
+
+FORCE_REPIN=0
+CRATES=()
+
+# ARGUMENT PARSING
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h | --help)
+            title && echo && usage && echo && help
+            exit 0
+            ;;
+        --force)
+            FORCE_REPIN=1
+            shift
+            ;;
+        --*)
+            echo "ERROR: unknown argument $1" && echo
+            usage && echo
+            echo "Use '$0 --help' for more information."
+            exit 1
+            ;;
+        *)
+            CRATES+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [ $FORCE_REPIN != "1" ] && bazel query @crate_index//:all >/dev/null; then
+    # If this isn't a forced repin and if rules_rust still evaluates successfully (using
+    # bazel query as a proxy) then we don't need to do anything
+    echo "Nothing to repin. Use '$0 --force' to force repin."
     exit 0
 fi
 
-if [[ $# -eq 0 ]]; then
+if [ "${CRATES:-}" == "" ]; then
     echo "Repinning all crates"
     CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
     SANITIZERS_ENABLED=1 CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
 else
-    for crate in "$@"; do
+    echo "Repinning ${#CRATES[@]} crates"
+    for crate in "${CRATES[@]}"; do
         echo "Repinning crate: ${crate}"
         CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
         SANITIZERS_ENABLED=1 CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index

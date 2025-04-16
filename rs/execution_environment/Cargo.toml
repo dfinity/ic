@@ -1,10 +1,10 @@
 [package]
-name = "ic-execution-environment"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-execution-environment"
+version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
@@ -13,18 +13,18 @@ ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
-ic-constants = { path = "../constants" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
-ic-error-types = { path = "../types/error_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-query-stats = { path = "../query_stats" }
@@ -35,13 +35,15 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
+ic-utils-thread = { path = "../utils/thread" }
+ic-vetkd-utils = { path = "../../packages/ic-vetkd-utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
+more-asserts = "0.3.1"
 num-rational = "0.2.2"
 num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
@@ -53,19 +55,21 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
+tempfile = { workspace = true }
 threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
+wasmparser = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
-ic-btc-test-utils = { workspace = true }
+ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
@@ -77,14 +81,13 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
-libflate = "1.1.2"
+libflate = { workspace = true }
 maplit = "1.0.2"
-more-asserts = "0.3.1"
-proptest = "1.0"
-tempfile = { workspace = true }
+proptest = { workspace = true }
+regex = { workspace = true }
+rstest = { workspace = true }
 test-strategy = "0.3.1"
-wasmparser = "0.201.0"
-wat = "1.0.52"
+wat = { workspace = true }
 
 [build-dependencies]
 escargot = "0.5"
@@ -119,6 +122,10 @@ path = "benches/wasm_instructions/main.rs"
 [[bench]]
 harness = false
 name = "scheduler"
+
+[[bench]]
+harness = false
+name = "load_simulator_canisters"
 
 [[bench]]
 harness = false

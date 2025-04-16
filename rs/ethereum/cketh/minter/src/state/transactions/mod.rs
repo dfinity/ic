@@ -2,6 +2,7 @@
 mod tests;
 
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
+use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
@@ -75,10 +76,10 @@ impl WithdrawalRequest {
         }
     }
 
-    pub fn from_subaccount(&self) -> &Option<Subaccount> {
+    pub fn from_subaccount(&self) -> Option<&LedgerSubaccount> {
         match self {
-            WithdrawalRequest::CkEth(request) => &request.from_subaccount,
-            WithdrawalRequest::CkErc20(request) => &request.from_subaccount,
+            WithdrawalRequest::CkEth(request) => request.from_subaccount.as_ref(),
+            WithdrawalRequest::CkErc20(request) => request.from_subaccount.as_ref(),
         }
     }
 
@@ -97,7 +98,9 @@ impl WithdrawalRequest {
             ByWithdrawalId(index) => &self.cketh_ledger_burn_index() == index,
             ByRecipient(address) => &self.payee() == address,
             BySenderAccount(Account { owner, subaccount }) => {
-                &self.from() == owner && self.from_subaccount() == &subaccount.map(Subaccount)
+                &self.from() == owner
+                    && self.from_subaccount()
+                        == subaccount.and_then(LedgerSubaccount::from_bytes).as_ref()
             }
         }
     }
@@ -116,7 +119,7 @@ impl From<Erc20WithdrawalRequest> for WithdrawalRequest {
 }
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct EthWithdrawalRequest {
     /// The ETH amount that the receiver will get, not accounting for the Ethereum transaction fees.
     #[n(0)]
@@ -128,18 +131,18 @@ pub struct EthWithdrawalRequest {
     #[cbor(n(2), with = "crate::cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
     /// The owner of the account from which the minter burned ckETH.
-    #[cbor(n(3), with = "crate::cbor::principal")]
+    #[cbor(n(3), with = "icrc_cbor::principal")]
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(4)]
-    pub from_subaccount: Option<Subaccount>,
+    pub from_subaccount: Option<LedgerSubaccount>,
     /// The IC time at which the withdrawal request arrived.
     #[n(5)]
     pub created_at: Option<u64>,
 }
 
 /// ERC-20 withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct Erc20WithdrawalRequest {
     /// Amount of burn ckETH that can be used to pay for the Ethereum transaction fees.
     #[n(0)]
@@ -157,23 +160,23 @@ pub struct Erc20WithdrawalRequest {
     #[n(4)]
     pub erc20_contract_address: Address,
     /// The ckERC20 ledger on which the minter burned the ckERC20 tokens.
-    #[cbor(n(5), with = "crate::cbor::principal")]
+    #[cbor(n(5), with = "icrc_cbor::principal")]
     pub ckerc20_ledger_id: Principal,
     /// The transaction ID of the ckERC20 burn operation on the ckERC20 ledger.
     #[cbor(n(6), with = "crate::cbor::id")]
     pub ckerc20_ledger_burn_index: LedgerBurnIndex,
     /// The owner of the account from which the minter burned ckETH.
-    #[cbor(n(7), with = "crate::cbor::principal")]
+    #[cbor(n(7), with = "icrc_cbor::principal")]
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(8)]
-    pub from_subaccount: Option<Subaccount>,
+    pub from_subaccount: Option<LedgerSubaccount>,
     /// The IC time at which the withdrawal request arrived.
     #[n(9)]
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
 pub enum ReimbursementIndex {
     #[n(0)]
     CkEth {
@@ -186,7 +189,7 @@ pub enum ReimbursementIndex {
         #[cbor(n(0), with = "crate::cbor::id")]
         cketh_ledger_burn_index: LedgerBurnIndex,
         /// The ckERC20 ledger canister ID identifying the ledger on which the burn to be reimbursed was made.
-        #[cbor(n(1), with = "crate::cbor::principal")]
+        #[cbor(n(1), with = "icrc_cbor::principal")]
         ledger_id: Principal,
         /// Burn index on the ckERC20 ledger
         #[cbor(n(2), with = "crate::cbor::id")]
@@ -230,7 +233,7 @@ impl ReimbursementIndex {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ReimbursementRequest {
     /// Burn index on the ledger that should be reimbursed.
     #[cbor(n(0), with = "crate::cbor::id")]
@@ -238,10 +241,10 @@ pub struct ReimbursementRequest {
     /// The amount that should be reimbursed in the smallest denomination.
     #[n(1)]
     pub reimbursed_amount: CkTokenAmount,
-    #[cbor(n(2), with = "crate::cbor::principal")]
+    #[cbor(n(2), with = "icrc_cbor::principal")]
     pub to: Principal,
     #[n(3)]
-    pub to_subaccount: Option<Subaccount>,
+    pub to_subaccount: Option<LedgerSubaccount>,
     /// Transaction hash of the failed ETH transaction.
     /// We use this hash to link the mint reimbursement transaction
     /// on the ledger with the failed ETH transaction.
@@ -249,7 +252,7 @@ pub struct ReimbursementRequest {
     pub transaction_hash: Option<Hash>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct Reimbursed {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub reimbursed_in_block: LedgerMintIndex,
@@ -264,7 +267,7 @@ pub struct Reimbursed {
 
 pub type ReimbursedResult = Result<Reimbursed, ReimbursedError>;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ReimbursedError {
     /// Whether reimbursement was minted or not is unknown,
     /// most likely because there was an unexpected panic in the callback.
@@ -273,21 +276,14 @@ pub enum ReimbursedError {
     Quarantined,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
-#[cbor(transparent)]
-pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
+struct DisplayOption<'a, T>(&'a Option<T>);
 
-impl fmt::Debug for Subaccount {
+impl<T: fmt::Display> fmt::Display for DisplayOption<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", hex::encode(self.0))
-    }
-}
-
-struct DebugPrincipal<'a>(&'a Principal);
-
-impl fmt::Debug for DebugPrincipal<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.0)
+        match self.0 {
+            Some(t) => write!(f, "Some({})", t),
+            None => write!(f, "None"),
+        }
     }
 }
 
@@ -305,8 +301,11 @@ impl fmt::Debug for EthWithdrawalRequest {
             .field("withdrawal_amount", withdrawal_amount)
             .field("destination", destination)
             .field("ledger_burn_index", ledger_burn_index)
-            .field("from", &DebugPrincipal(from))
-            .field("from_subaccount", from_subaccount)
+            .field("from", &format_args!("{}", from))
+            .field(
+                "from_subaccount",
+                &format_args!("{}", DisplayOption(from_subaccount)),
+            )
             .field("created_at", created_at)
             .finish()
     }
@@ -332,10 +331,13 @@ impl fmt::Debug for Erc20WithdrawalRequest {
             .field("erc20_contract_address", erc20_contract_address)
             .field("destination", destination)
             .field("cketh_ledger_burn_index", cketh_ledger_burn_index)
-            .field("ckerc20_ledger_id", &DebugPrincipal(ckerc20_ledger_id))
+            .field("ckerc20_ledger_id", &format_args!("{}", ckerc20_ledger_id))
             .field("ckerc20_ledger_burn_index", ckerc20_ledger_burn_index)
-            .field("from", &DebugPrincipal(from))
-            .field("from_subaccount", from_subaccount)
+            .field("from", &format_args!("{}", from))
+            .field(
+                "from_subaccount",
+                &format_args!("{}", DisplayOption(from_subaccount)),
+            )
             .field("created_at", created_at)
             .finish()
     }
@@ -355,7 +357,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    The others sent transactions for that nonce were never mined and can be discarded.
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EthTransactions {
     pub(in crate::state) pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
     // Processed withdrawal requests (transaction created, sent, or finalized).
@@ -374,7 +376,7 @@ pub struct EthTransactions {
     pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CreateTransactionError {
     InsufficientTransactionFee {
         cketh_ledger_burn_index: LedgerBurnIndex,
@@ -383,7 +385,7 @@ pub enum CreateTransactionError {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ResubmitTransactionError {
     InsufficientTransactionFee {
         ledger_burn_index: LedgerBurnIndex,
@@ -1177,7 +1179,7 @@ pub fn create_transaction(
 // First 4 bytes of keccak256(transfer(address,uint256))
 const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum TransactionCallData {
     Erc20Transfer { to: Address, value: Erc20Value },
 }

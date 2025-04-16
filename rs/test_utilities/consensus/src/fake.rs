@@ -8,11 +8,15 @@ use ic_interfaces::{
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     batch::*,
-    consensus::certification::*,
-    consensus::dkg::{Dealings, Summary},
-    consensus::*,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::{threshold_sig::ni_dkg::NiDkgTranscript, *},
+    consensus::{
+        certification::*,
+        dkg::{DkgDataPayload, Summary},
+        *,
+    },
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript},
+        *,
+    },
     signature::*,
     *,
 };
@@ -25,7 +29,7 @@ pub trait Fake {
 impl Fake for SummaryPayload {
     fn fake() -> Self {
         Self {
-            dkg: ic_types::consensus::dkg::Summary::fake(),
+            dkg: dkg::Summary::fake(),
             idkg: None,
         }
     }
@@ -35,7 +39,7 @@ impl Fake for DataPayload {
     fn fake() -> Self {
         Self {
             batch: BatchPayload::default(),
-            dealings: dkg::Dealings::new_empty(Height::from(0)),
+            dkg: DkgDataPayload::new_empty(Height::from(0)),
             idkg: None,
         }
     }
@@ -263,8 +267,8 @@ impl FromParent for Block {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
-                    dealings: Dealings::new_empty(dkg_start),
-                    idkg: None,
+                    dkg: DkgDataPayload::new_empty(dkg_start),
+                    idkg: parent.payload.as_ref().as_idkg().cloned(),
                 }),
             ),
             parent.height.increment(),
@@ -287,7 +291,7 @@ pub trait FakeVersion {
     fn fake_version(&self, version: ReplicaVersion) -> Self;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 struct FakeBlock {
     version: ReplicaVersion,
     pub parent: CryptoHashOf<Block>,
@@ -315,7 +319,7 @@ fn test_fake_block_is_binary_compatible() {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
+                dkg: DkgDataPayload::new_empty(Height::from(1)),
                 idkg: None,
             }),
         ),
@@ -342,7 +346,7 @@ fn test_fake_block() {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
+                dkg: DkgDataPayload::new_empty(Height::from(1)),
                 idkg: None,
             }),
         ),

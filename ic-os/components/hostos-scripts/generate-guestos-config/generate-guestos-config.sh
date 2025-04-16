@@ -4,10 +4,8 @@ set -e
 
 # Generate the GuestOS configuration.
 
-# Source the functions required for writing metrics
+source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
-
-SCRIPT="$(basename $0)[$$]"
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -66,16 +64,6 @@ INPUT="${INPUT:=/opt/ic/share/guestos.xml.template}"
 MEDIA="${MEDIA:=/run/ic-node/config.img}"
 OUTPUT="${OUTPUT:=/var/lib/libvirt/guestos.xml}"
 
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
-
 function read_variables() {
     # Read limited set of keys. Be extra-careful quoting values as it could
     # otherwise lead to executing arbitrary shell code!
@@ -87,6 +75,7 @@ function read_variables() {
             "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "domain") domain="${value}" ;;
+            "node_reward_type") node_reward_type="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -94,7 +83,6 @@ function read_variables() {
 function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
-    cmd+=(--elasticsearch_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain" ]]; then
@@ -102,8 +90,11 @@ function assemble_config_media() {
         cmd+=(--ipv4_gateway "${ipv4_gateway}")
         cmd+=(--domain "${domain}")
     fi
-    cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
-    cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
+    if [[ -n "$node_reward_type" ]]; then
+        cmd+=(--node_reward_type "${node_reward_type}")
+    fi
+    cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
+    cmd+=(--nns_urls "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
     if [ -f "/boot/config/node_operator_private_key.pem" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
@@ -116,20 +107,34 @@ function assemble_config_media() {
 function generate_guestos_config() {
     RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
     MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
+    RESOURCES_NR_OF_VCPUS="$(jq -r ".resources.nr_of_vcpus" ${DEPLOYMENT})"
     # NOTE: `fetch-property` will error if the target is not found. Here we
     # only want to act when the field is set.
     CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})
 
-    CPU_DOMAIN="kvm"
-    CPU_SPEC="/opt/ic/share/kvm-cpu.xml"
+    # Generate inline CPU spec based on mode
+    CPU_SPEC=$(mktemp)
     if [ "${CPU_MODE}" == "qemu" ]; then
         CPU_DOMAIN="qemu"
-        CPU_SPEC="/opt/ic/share/qemu-cpu.xml"
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-model'/>
+EOF
+    else
+        CPU_DOMAIN="kvm"
+        CORE_COUNT=$((RESOURCES_NR_OF_VCPUS / 4))
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-passthrough' migratable='off'>
+  <cache mode='passthrough'/>
+  <topology sockets='2' cores='${CORE_COUNT}' threads='2'/>
+  <feature policy="require" name="topoext"/>
+</cpu>
+EOF
     fi
 
     if [ ! -f "${OUTPUT}" ]; then
         mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
+            -e "s@{{ nr_of_vcpus }}@${RESOURCES_NR_OF_VCPUS:-64}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
@@ -147,6 +152,8 @@ function generate_guestos_config() {
             "HostOS generate GuestOS config" \
             "gauge"
     fi
+
+    rm -f "${CPU_SPEC}"
 }
 
 function main() {

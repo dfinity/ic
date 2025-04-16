@@ -46,7 +46,7 @@ impl<'a> DemuxImpl<'a> {
     }
 }
 
-impl<'a> Demux for DemuxImpl<'a> {
+impl Demux for DemuxImpl<'_> {
     fn process_payload(
         &self,
         state: ReplicatedState,

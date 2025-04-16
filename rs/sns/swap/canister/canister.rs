@@ -1,19 +1,22 @@
-use candid::candid_method;
-use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{
-    api::{caller, id, now},
-    over, over_async, over_init, CanisterId,
-};
-use ic_base_types::PrincipalId;
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk::{api::time, caller, id, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_timers::TimerId;
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
     management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
 };
 use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_proto::pb::v1::{
+    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
+};
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_sns_swap::{
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
@@ -34,9 +37,15 @@ use ic_sns_swap::{
 use ic_stable_structures::{writer::Writer, Memory};
 use prost::Message;
 use std::{
+    cell::RefCell,
     str::FromStr,
     time::{Duration, SystemTime},
 };
+
+const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(60);
+
+/// This guarantees that timers cannot be restarted more often than once every 10 intervals.
+const RESET_TIMERS_COOL_DOWN_INTERVAL: Duration = Duration::from_secs(600);
 
 // TODO(NNS1-1589): Unhack.
 // use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
@@ -47,6 +56,10 @@ use std::{
 
 /// The global state of the this canister.
 static mut SWAP: Option<Swap> = None;
+
+thread_local! {
+    static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
+}
 
 /// Returns an immutable reference to the global state.
 ///
@@ -64,60 +77,45 @@ fn swap_mut() -> &'static mut Swap {
     unsafe { SWAP.as_mut().expect("Canister not initialized!") }
 }
 
+/// Returns caller as PrincipalId
+fn caller_principal_id() -> PrincipalId {
+    PrincipalId::from(caller())
+}
+
+/// This canister id
+fn this_canister_id() -> CanisterId {
+    // We know the CanisterId is always valid.
+    CanisterId::unchecked_from_principal(PrincipalId::from(id()))
+}
+
 // =============================================================================
 // ===               Canister's public interface                             ===
 // =============================================================================
 
 /// See `GetStateResponse`.
-#[export_name = "canister_query get_state"]
-fn get_state() {
-    over(candid_one, get_state_)
-}
-
-/// See `GetStateResponse`.
-#[candid_method(query, rename = "get_state")]
-fn get_state_(_arg: GetStateRequest) -> GetStateResponse {
+#[query]
+fn get_state(_arg: GetStateRequest) -> GetStateResponse {
     swap().get_state()
 }
 
 /// Get the state of a buyer. This will return a `GetBuyerStateResponse`
 /// with an optional `BuyerState` struct if the Swap Canister has
 /// been successfully notified of a buyer's ICP transfer.
-#[export_name = "canister_query get_buyer_state"]
-fn get_buyer_state() {
-    over(candid_one, get_buyer_state_)
-}
-
-/// Get the state of a buyer. This will return a `GetBuyerStateResponse`
-/// with an optional `BuyerState` struct if the Swap Canister has
-/// been successfully notified of a buyer's ICP transfer.
-#[candid_method(query, rename = "get_buyer_state")]
-fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
+#[query]
+fn get_buyer_state(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
     log!(INFO, "get_buyer_state");
     swap().get_buyer_state(&request)
 }
 
 /// Get Params.
-#[export_name = "canister_query get_sale_parameters"]
-fn get_sale_parameters() {
-    over(candid_one, get_sale_parameters_)
-}
-
-/// Get Params.
-#[candid_method(query, rename = "get_sale_parameters")]
-fn get_sale_parameters_(request: GetSaleParametersRequest) -> GetSaleParametersResponse {
+#[query]
+fn get_sale_parameters(request: GetSaleParametersRequest) -> GetSaleParametersResponse {
     swap().get_sale_parameters(&request)
 }
 
 /// List Community Fund participants.
-#[export_name = "canister_query list_community_fund_participants"]
-fn list_community_fund_participants() {
-    over(candid_one, list_community_fund_participants_);
-}
-
-/// List Community Fund participants.
-#[candid_method(query, rename = "list_community_fund_participants")]
-fn list_community_fund_participants_(
+#[query]
+fn list_community_fund_participants(
     request: ListCommunityFundParticipantsRequest,
 ) -> ListCommunityFundParticipantsResponse {
     log!(INFO, "list_community_fund_participants");
@@ -125,23 +123,17 @@ fn list_community_fund_participants_(
 }
 
 /// See `Swap.refresh_buyer_token_e8`.
-#[export_name = "canister_update refresh_buyer_tokens"]
-fn refresh_buyer_tokens() {
-    over_async(candid_one, refresh_buyer_tokens_)
-}
-
-/// See `Swap.refresh_buyer_token_e8`.
-#[candid_method(update, rename = "refresh_buyer_tokens")]
-async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTokensResponse {
+#[update]
+async fn refresh_buyer_tokens(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTokensResponse {
     log!(INFO, "refresh_buyer_tokens");
     let p: PrincipalId = if arg.buyer.is_empty() {
-        caller()
+        caller_principal_id()
     } else {
         PrincipalId::from_str(&arg.buyer).unwrap()
     };
     let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
     match swap_mut()
-        .refresh_buyer_token_e8s(p, arg.confirmation_text, id(), &icp_ledger)
+        .refresh_buyer_token_e8s(p, arg.confirmation_text, this_canister_id(), &icp_ledger)
         .await
     {
         Ok(r) => r,
@@ -154,14 +146,8 @@ fn now_fn(_: bool) -> u64 {
 }
 
 /// See Swap.finalize.
-#[export_name = "canister_update finalize_swap"]
-fn finalize_swap() {
-    over_async(candid_one, finalize_swap_)
-}
-
-/// See Swap.finalize.
-#[candid_method(update, rename = "finalize_swap")]
-async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
+#[update]
+async fn finalize_swap(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     log!(INFO, "finalize_swap");
     let mut clients = swap()
         .init_or_panic()
@@ -171,25 +157,21 @@ async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     swap_mut().finalize(now_fn, &mut clients).await
 }
 
-#[export_name = "canister_update error_refund_icp"]
-fn error_refund_icp() {
-    over_async(candid_one, error_refund_icp_)
-}
-
-#[candid_method(update, rename = "error_refund_icp")]
-async fn error_refund_icp_(request: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
+#[update]
+async fn error_refund_icp(request: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
     let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
-    swap().error_refund_icp(id(), &request, &icp_ledger).await
+    swap()
+        .error_refund_icp(this_canister_id(), &request, &icp_ledger)
+        .await
 }
 
-#[export_name = "canister_update get_canister_status"]
-fn get_canister_status() {
-    over_async(candid_one, get_canister_status_)
-}
-
-#[candid_method(update, rename = "get_canister_status")]
-async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
-    do_get_canister_status(id(), &ManagementCanisterClientImpl::<DfnRuntime>::new(None)).await
+#[update]
+async fn get_canister_status(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
+    do_get_canister_status(
+        this_canister_id(),
+        &ManagementCanisterClientImpl::<CdkRuntime>::new(None),
+    )
+    .await
 }
 
 async fn do_get_canister_status(
@@ -209,37 +191,19 @@ async fn do_get_canister_status(
 }
 
 /// Returns the total amount of ICP deposited by participants in the swap.
-#[export_name = "canister_update get_buyers_total"]
-fn get_buyers_total() {
-    over_async(candid_one, get_buyers_total_)
-}
-
-/// Returns the total amount of ICP deposited by participants in the swap.
-#[candid_method(update, rename = "get_buyers_total")]
-async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalResponse {
+#[update]
+async fn get_buyers_total(_request: GetBuyersTotalRequest) -> GetBuyersTotalResponse {
     swap().get_buyers_total()
 }
 
-/// Return the current lifecycle stage (e.g. Open, Committed, etc)
-#[export_name = "canister_query get_lifecycle"]
-fn get_lifecycle() {
-    over(candid_one, get_lifecycle_)
-}
-
-#[candid_method(query, rename = "get_lifecycle")]
-fn get_lifecycle_(request: GetLifecycleRequest) -> GetLifecycleResponse {
+#[query]
+fn get_lifecycle(request: GetLifecycleRequest) -> GetLifecycleResponse {
     log!(INFO, "get_lifecycle");
     swap().get_lifecycle(&request)
 }
 
-/// Return the status of auto-finalization
-#[export_name = "canister_query get_auto_finalization_status"]
-fn get_auto_finalization_status() {
-    over(candid_one, get_auto_finalization_status_)
-}
-
-#[candid_method(query, rename = "get_auto_finalization_status")]
-fn get_auto_finalization_status_(
+#[query]
+fn get_auto_finalization_status(
     request: GetAutoFinalizationStatusRequest,
 ) -> GetAutoFinalizationStatusResponse {
     log!(INFO, "get_auto_finalization_status");
@@ -247,126 +211,166 @@ fn get_auto_finalization_status_(
 }
 
 /// Returns the initialization data of the canister
-#[export_name = "canister_query get_init"]
-fn get_init() {
-    over_async(candid_one, get_init_)
-}
-
-/// Returns the initialization data of the canister
-#[candid_method(query, rename = "get_init")]
-async fn get_init_(request: GetInitRequest) -> GetInitResponse {
+#[query]
+async fn get_init(request: GetInitRequest) -> GetInitResponse {
     log!(INFO, "get_init");
     swap().get_init(&request)
 }
 
 /// Return the current derived state of the Swap
-#[export_name = "canister_query get_derived_state"]
-fn get_derived_state() {
-    over_async(candid_one, get_derived_state_)
-}
-
-/// Return the current derived state of the Swap
-#[candid_method(query, rename = "get_derived_state")]
-async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
+#[query]
+async fn get_derived_state(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
     log!(INFO, "get_derived_state");
     swap().derived_state().into()
 }
 
-#[export_name = "canister_query get_open_ticket"]
-fn get_open_ticket() {
-    over_async(candid_one, get_open_ticket_)
-}
-
-#[candid_method(query, rename = "get_open_ticket")]
-async fn get_open_ticket_(request: GetOpenTicketRequest) -> GetOpenTicketResponse {
+#[query]
+async fn get_open_ticket(request: GetOpenTicketRequest) -> GetOpenTicketResponse {
     log!(INFO, "get_open_ticket");
-    swap().get_open_ticket(&request, caller())
+    swap().get_open_ticket(&request, caller_principal_id())
 }
 
-#[export_name = "canister_update new_sale_ticket"]
-fn new_sale_ticket() {
-    over_async(candid_one, new_sale_ticket_)
-}
-
-#[candid_method(update, rename = "new_sale_ticket")]
-async fn new_sale_ticket_(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
+#[update]
+async fn new_sale_ticket(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
     log!(INFO, "new_sale_ticket");
-    swap_mut().new_sale_ticket(&request, caller(), dfn_core::api::time_nanos())
+    swap_mut().new_sale_ticket(&request, caller_principal_id(), time())
 }
 
 /// Lists direct participants in the Swap.
-#[export_name = "canister_query list_direct_participants"]
-fn list_direct_participants() {
-    over_async(candid_one, list_direct_participants_)
-}
-
-/// Lists direct participants in the Swap.
-#[candid_method(query, rename = "list_direct_participants")]
-async fn list_direct_participants_(
+#[query]
+async fn list_direct_participants(
     request: ListDirectParticipantsRequest,
 ) -> ListDirectParticipantsResponse {
     log!(INFO, "list_direct_participants");
     swap().list_direct_participants(request)
 }
 
-#[export_name = "canister_query list_sns_neuron_recipes"]
-fn list_sns_neuron_recipes() {
-    over(candid_one, list_sns_neuron_recipes_)
-}
-
-#[candid_method(query, rename = "list_sns_neuron_recipes")]
-fn list_sns_neuron_recipes_(request: ListSnsNeuronRecipesRequest) -> ListSnsNeuronRecipesResponse {
+#[query]
+fn list_sns_neuron_recipes(request: ListSnsNeuronRecipesRequest) -> ListSnsNeuronRecipesResponse {
     log!(INFO, "list_neuron_recipes");
     swap().list_sns_neuron_recipes(request)
 }
 
-#[export_name = "canister_update notify_payment_failure"]
-fn notify_payment_failure() {
-    over(candid_one, notify_payment_failure_)
-}
-
-#[candid_method(update, rename = "notify_payment_failure")]
-fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPaymentFailureResponse {
+#[update]
+fn notify_payment_failure(_request: NotifyPaymentFailureRequest) -> NotifyPaymentFailureResponse {
     log!(INFO, "notify_payment_failure");
-    swap_mut().notify_payment_failure(&caller())
+    swap_mut().notify_payment_failure(&caller_principal_id())
 }
 
 // =============================================================================
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================
 
-/// Tries to commit or abort the swap if the parameters have been satisfied.
-#[export_name = "canister_heartbeat"]
-fn canister_heartbeat() {
-    let future = swap_mut().heartbeat(now_fn);
-
-    // The canister_heartbeat must be synchronous, so we cannot .await the future.
-    dfn_core::api::futures::spawn(future);
+fn now_nanoseconds() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
+    }
 }
 
 fn now_seconds() -> u64 {
-    now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or(Duration::ZERO)
-        .as_secs()
+    Duration::from_nanos(now_nanoseconds()).as_secs()
 }
 
 /// Returns a real ledger stub that communicates with the specified
 /// canister, which is assumed to be the ICP production ledger or a
 /// canister that implements that same interface.
-fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::IcpLedgerCanister {
-    ic_nervous_system_common::ledger::IcpLedgerCanister::new(id)
+fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
+    IcpLedgerCanister::<CdkRuntime>::new(id)
 }
 
-#[export_name = "canister_init"]
-fn canister_init() {
-    over_init(|CandidOne(arg)| canister_init_(arg))
+async fn run_periodic_tasks() {
+    if let Some(ref mut timers) = swap_mut().timers {
+        timers.last_spawned_timestamp_seconds.replace(now_seconds());
+    };
+
+    swap_mut().run_periodic_tasks(now_fn).await;
+
+    if !swap().requires_periodic_tasks() {
+        if let Some(ref mut timers) = swap_mut().timers {
+            timers.requires_periodic_tasks.replace(false);
+        };
+        TIMER_ID.with(|saved_timer_id| {
+            let saved_timer_id = saved_timer_id.borrow();
+            if let Some(saved_timer_id) = *saved_timer_id {
+                ic_cdk_timers::clear_timer(saved_timer_id);
+            }
+        });
+        log!(
+            INFO,
+            "All work that needs to be done in Swap's periodic tasks has been completed. \
+             Stop scheduling new periodic tasks."
+        );
+    }
+}
+
+#[query]
+fn get_timers(arg: GetTimersRequest) -> GetTimersResponse {
+    let GetTimersRequest {} = arg;
+    let timers = swap().timers;
+    GetTimersResponse { timers }
+}
+
+fn init_timers() {
+    let last_reset_timestamp_seconds = Some(now_seconds());
+    let requires_periodic_tasks = swap().requires_periodic_tasks();
+
+    swap_mut().timers.replace(Timers {
+        requires_periodic_tasks: Some(requires_periodic_tasks),
+        last_reset_timestamp_seconds,
+        ..Default::default()
+    });
+
+    if requires_periodic_tasks {
+        let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
+            ic_cdk::spawn(run_periodic_tasks())
+        });
+        TIMER_ID.with(|saved_timer_id| {
+            let mut saved_timer_id = saved_timer_id.borrow_mut();
+            if let Some(saved_timer_id) = *saved_timer_id {
+                ic_cdk_timers::clear_timer(saved_timer_id);
+            }
+            saved_timer_id.replace(new_timer_id);
+        });
+    } else {
+        log!(
+            INFO,
+            "Periodic tasks are not required for this Swap anymore."
+        );
+    }
+}
+
+#[update]
+fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
+    let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
+
+    if let Some(timers) = swap_mut().timers {
+        if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
+            if now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                < reset_timers_cool_down_interval_seconds
+            {
+                panic!(
+                    "Reset has already been called within the past {:?} seconds",
+                    reset_timers_cool_down_interval_seconds
+                );
+            }
+        }
+    }
+
+    init_timers();
+
+    ResetTimersResponse {}
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.
-#[candid_method(init)]
-fn canister_init_(init_payload: Init) {
-    dfn_core::printer::hook();
+#[init]
+fn canister_init(init_payload: Init) {
     let swap = Swap::new(init_payload);
     unsafe {
         assert!(
@@ -375,13 +379,14 @@ fn canister_init_(init_payload: Init) {
         );
         SWAP = Some(swap);
     }
+    init_timers();
     log!(INFO, "Initialized");
 }
 
 /// Serialize and write the state to stable memory so that it is
 /// preserved during the upgrade and can be deserialized again in
 /// `canister_post_upgrade`.
-#[export_name = "canister_pre_upgrade"]
+#[pre_upgrade]
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
 
@@ -407,9 +412,8 @@ fn canister_pre_upgrade() {
 
 /// Deserialize what has been written to stable memory in
 /// canister_pre_upgrade and initialising the state with it.
-#[export_name = "canister_post_upgrade"]
+#[post_upgrade]
 fn canister_post_upgrade() {
-    dfn_core::printer::hook();
     fn set_state(proto: Swap) {
         unsafe {
             assert!(
@@ -460,16 +464,13 @@ fn canister_post_upgrade() {
             err
         )
     });
-}
 
-/// Resources to serve for a given http_request
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    over(candid_one, serve_http)
+    init_timers();
 }
 
 /// Serve an HttpRequest made to this canister
-pub fn serve_http(request: HttpRequest) -> HttpResponse {
+#[query(hidden = true, decoding_quota = 10000)]
+pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
@@ -496,7 +497,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_cycle_balance",
-        dfn_core::api::canister_cycle_balance() as f64,
+        ic_cdk::api::canister_balance() as f64,
         "Cycle balance on the sale canister.",
     )?;
     w.encode_gauge(
@@ -543,106 +544,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-/// When run on native, this prints the candid service definition of this
-/// canister, from the methods annotated with `candid_method` above.
-///
-/// Note that `cargo test` calls `main`, and `export_service` (which defines
-/// `__export_service` in the current scope) needs to be called exactly once. So
-/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-/// to avoid calling `export_service` in tests.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
-/// Empty main for test target.
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_nervous_system_clients::{
-        canister_status::{
-            CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
-            DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
-            LogVisibility,
-        },
-        management_canister_client::{
-            MockManagementCanisterClient, MockManagementCanisterClientReply,
-        },
-    };
-
-    /// A test that fails if the API was updated but the candid definition was not.
-    #[test]
-    fn check_swap_candid_file() {
-        let did_path = format!(
-            "{}/canister/swap.did",
-            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-        );
-        let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-        // See comments in main above
-        candid::export_service!();
-        let expected = __export_service();
-
-        if did_contents != expected {
-            panic!(
-                "Generated candid definition does not match canister/swap.did. \
-                 Run `bazel run :generate_did > canister/swap.did` (no nix and/or direnv) or \
-                 `cargo run --bin sns-swap-canister > canister/swap.did` in \
-                 rs/sns/swap to update canister/swap.did."
-            )
-        }
-    }
-
-    #[tokio::test]
-    async fn test_get_canister_status() {
-        let expected_canister_status_result = CanisterStatusResultV2 {
-            status: CanisterStatusType::Running,
-            module_hash: Some(vec![0_u8]),
-            settings: DefiniteCanisterSettingsArgs {
-                controllers: vec![PrincipalId::new_user_test_id(0)],
-                compute_allocation: candid::Nat::from(0_u32),
-                memory_allocation: candid::Nat::from(0_u32),
-                freezing_threshold: candid::Nat::from(0_u32),
-            },
-            memory_size: candid::Nat::from(0_u32),
-            cycles: candid::Nat::from(0_u32),
-            idle_cycles_burned_per_day: candid::Nat::from(0_u32),
-        };
-
-        let management_canister_client = MockManagementCanisterClient::new(vec![
-            MockManagementCanisterClientReply::CanisterStatus(Ok(
-                CanisterStatusResultFromManagementCanister {
-                    status: CanisterStatusType::Running,
-                    module_hash: Some(vec![0_u8]),
-                    memory_size: candid::Nat::from(0_u32),
-                    settings: DefiniteCanisterSettingsFromManagementCanister {
-                        controllers: vec![PrincipalId::new_user_test_id(0_u64)],
-                        compute_allocation: candid::Nat::from(0_u32),
-                        memory_allocation: candid::Nat::from(0_u32),
-                        freezing_threshold: candid::Nat::from(0_u32),
-                        reserved_cycles_limit: candid::Nat::from(0_u32),
-                        wasm_memory_limit: candid::Nat::from(0_u32),
-                        log_visibility: LogVisibility::Controllers,
-                    },
-                    cycles: candid::Nat::from(0_u32),
-                    idle_cycles_burned_per_day: candid::Nat::from(0_u32),
-                    reserved_cycles: candid::Nat::from(0_u32),
-                },
-            )),
-        ]);
-
-        let actual_canister_status_result =
-            do_get_canister_status(CanisterId::from_u64(1), &management_canister_client).await;
-        assert_eq!(
-            actual_canister_status_result,
-            expected_canister_status_result
-        );
-    }
-}
+mod tests;

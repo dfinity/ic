@@ -275,6 +275,9 @@ message Swap {
 
   // Amount of contributions from the Neurons' Fund committed to this SNS so far.
   optional uint64 neurons_fund_participation_icp_e8s = 20;
+
+  // Information about the timers that perform periodic tasks of this Swap canister.
+  optional ic_nervous_system.pb.v1.Timers timers = 22;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -528,7 +531,7 @@ message CfParticipant {
   repeated CfNeuron cf_neurons = 2;
 
   // The principal that can vote on behalf of these Neurons' Fund neurons.
-  // Deprecated. Please use `controller` instead (not `hotkeys`!)
+  // Deprecated. Please use `controller` instead
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -701,7 +704,7 @@ message CfInvestment {
 
   fixed64 nns_neuron_id = 2;
 
-  // Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+  // Deprecated. Please use `controller` instead (not `hotkeys`!)
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -726,7 +729,7 @@ message SnsNeuronRecipe {
     // in the SNS Ledger.
     // See `nervous_system_common::compute_neuron_staking_subaccount`.
     // The memo is used along with the a principal_id of the "controller" of
-    // the neuron. In the case of the decentralization sale, that will either be
+    // the neuron. In the case of the decentralization swap, that will either be
     // the PrincipalId of NNS Governance canister for Neurons' Fund investors,
     // or the PrincipalId of the direct investor.
     uint64 memo = 1;
@@ -766,8 +769,7 @@ message SnsNeuronRecipe {
     CLAIMED_STATUS_FAILED = 3;
 
     // The Neuron is invalid and was not created in SNS Governance. This neuron
-    // cannot be retried without manual intervention to update its
-    // `NeuronParameters`.
+    // cannot be retried without manual intervention to update its `NeuronRecipe`.
     CLAIMED_STATUS_INVALID = 4;
   }
 }
@@ -1194,9 +1196,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    // TODO(NNS1-3198): Remove
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.

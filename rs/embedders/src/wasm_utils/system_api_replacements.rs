@@ -17,29 +17,27 @@ use crate::{
     InternalErrorCode,
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
-use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
 use ic_wasm_transform::Body;
 use wasmparser::{BlockType, FuncType, Operator, ValType};
-use wasmtime_environ::WASM_PAGE_SIZE;
 
 use ic_types::NumBytes;
 
 use super::{instrumentation::SpecialIndices, SystemApiFunc};
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 pub(super) fn replacement_functions(
     special_indices: SpecialIndices,
-    subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
 ) -> Vec<(SystemApiFunc, (FuncType, Body<'static>))> {
-    let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
-    let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
-    let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix.unwrap();
+    let count_clean_pages_fn_index = special_indices.count_clean_pages_fn;
+    let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix;
+    let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix;
     let stable_memory_index = special_indices.stable_memory_index;
     let decr_instruction_counter_fn = special_indices.decr_instruction_counter_fn;
 
@@ -72,7 +70,6 @@ pub(super) fn replacement_functions(
                     instructions: vec![
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         I64Const {
                             value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -90,7 +87,6 @@ pub(super) fn replacement_functions(
                         End,
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         I32WrapI64,
                         End,
@@ -107,7 +103,6 @@ pub(super) fn replacement_functions(
                     instructions: vec![
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         End,
                     ],
@@ -124,7 +119,6 @@ pub(super) fn replacement_functions(
                         // Call try_grow_stable_memory API.
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalGet { local_index: 0 },
                         I64ExtendI32U,
@@ -148,7 +142,6 @@ pub(super) fn replacement_functions(
                         I64ExtendI32U,
                         MemoryGrow {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
                         // If result is -1 then grow instruction failed - this
@@ -186,7 +179,6 @@ pub(super) fn replacement_functions(
                         // Call try_grow_stable_memory API.
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalGet { local_index: 0 },
                         I32Const {
@@ -208,7 +200,6 @@ pub(super) fn replacement_functions(
                         LocalGet { local_index: 0 },
                         MemoryGrow {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
                         // If result is -1 then grow instruction failed - this
@@ -250,14 +241,8 @@ pub(super) fn replacement_functions(
                         locals: vec![(5, ValType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator, should call first read api
                         instructions: vec![
                             // Decrement instruction counter by the size of the copy
-                            // and fixed overhead.  On system subnets this charge is
-                            // skipped.
-                            match subnet_type {
-                                SubnetType::System => I32Const { value: 0 },
-                                SubnetType::Application | SubnetType::VerifiedApplication => {
-                                    LocalGet { local_index: LEN }
-                                }
-                            },
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
                             I64ExtendI32U,
                             I64Const {
                                 value: overhead_native::STABLE_READ.get() as i64,
@@ -282,7 +267,6 @@ pub(super) fn replacement_functions(
                             // If memory is too big for 32bit api, we trap
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -306,7 +290,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -509,14 +492,8 @@ pub(super) fn replacement_functions(
                         locals: vec![(5, ValType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator, should call first read api
                         instructions: vec![
                             // Decrement instruction counter by the size of the copy
-                            // and fixed overhead.  On system subnets this charge is
-                            // skipped.
-                            match subnet_type {
-                                SubnetType::System => I64Const { value: 0 },
-                                SubnetType::Application | SubnetType::VerifiedApplication => {
-                                    LocalGet { local_index: LEN }
-                                }
-                            },
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
                             I64Const {
                                 value: overhead_native::STABLE64_READ.get() as i64,
                             },
@@ -559,7 +536,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -794,14 +770,8 @@ pub(super) fn replacement_functions(
                         locals: vec![(4, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
                         instructions: vec![
                             // Decrement instruction counter by the size of the copy
-                            // and fixed overhead.  On system subnets this charge is
-                            // skipped.
-                            match subnet_type {
-                                SubnetType::System => I32Const { value: 0 },
-                                SubnetType::Application | SubnetType::VerifiedApplication => {
-                                    LocalGet { local_index: LEN }
-                                }
-                            },
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
                             I64ExtendI32U,
                             I64Const {
                                 value: overhead_native::STABLE_WRITE.get() as i64,
@@ -814,7 +784,6 @@ pub(super) fn replacement_functions(
                             // If memory is too big for 32bit api, we trap
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -838,7 +807,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -1022,14 +990,8 @@ pub(super) fn replacement_functions(
                         locals: vec![(4, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
                         instructions: vec![
                             // Decrement instruction counter by the size of the copy
-                            // and fixed overhead.  On system subnets this charge is
-                            // skipped.
-                            match subnet_type {
-                                SubnetType::System => I64Const { value: 0 },
-                                SubnetType::Application | SubnetType::VerifiedApplication => {
-                                    LocalGet { local_index: LEN }
-                                }
-                            },
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
                             I64Const {
                                 value: overhead_native::STABLE64_WRITE.get() as i64,
                             },
@@ -1072,7 +1034,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,

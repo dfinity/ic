@@ -1,20 +1,19 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    enable_new_canister_management_topics,
     pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
     proposals::call_canister::CallCanister,
 };
 
 use candid::{CandidType, Deserialize, Encode};
 use ic_base_types::CanisterId;
-use ic_management_canister_types::CanisterInstallMode as RootCanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use serde::Serialize;
 
 // When calling lifeline's upgrade_root method, this is the request. Keep this in sync with
 // `rs/nns/handlers/lifeline/impl/lifeline.mo`.
-#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 struct UpgradeRootProposalPayload {
     wasm_module: Vec<u8>,
     module_arg: Vec<u8>,
@@ -23,15 +22,10 @@ struct UpgradeRootProposalPayload {
 
 impl InstallCode {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !enable_new_canister_management_topics() {
-            return Err(invalid_proposal_error(
-                "InstallCode proposal is not yet supported",
-            ));
-        }
-
         let _ = self.valid_canister_id()?;
         let _ = self.valid_install_mode()?;
         let _ = self.valid_wasm_module()?;
+        let _ = self.valid_arg()?;
         let _ = self.valid_topic()?;
         let _ = self.canister_and_function()?;
 
@@ -75,6 +69,12 @@ impl InstallCode {
             .ok_or(invalid_proposal_error("Wasm module is required"))
     }
 
+    fn valid_arg(&self) -> Result<&Vec<u8>, GovernanceError> {
+        self.arg
+            .as_ref()
+            .ok_or(invalid_proposal_error("Argument is required"))
+    }
+
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         Ok(topic_to_manage_canister(&canister_id))
@@ -98,7 +98,7 @@ impl InstallCode {
         let mode = self.valid_install_mode()?;
         let canister_id = self.valid_canister_id()?;
         let wasm_module = self.valid_wasm_module()?.clone();
-        let arg = self.arg.clone().unwrap_or_default();
+        let arg = self.valid_arg()?.clone();
         let compute_allocation = None;
         let memory_allocation = None;
 
@@ -110,8 +110,16 @@ impl InstallCode {
             arg,
             compute_allocation,
             memory_allocation,
+            chunked_canister_wasm: None,
         })
         .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+    }
+
+    pub fn allowed_when_resources_are_low(&self) -> bool {
+        let Ok(canister_id) = self.valid_canister_id() else {
+            return false;
+        };
+        topic_to_manage_canister(&canister_id) == Topic::ProtocolCanisterManagement
     }
 }
 
@@ -163,34 +171,11 @@ mod tests {
 
     use crate::pb::v1::governance_error::ErrorType;
 
-    use ic_nns_constants::REGISTRY_CANISTER_ID;
-
-    #[cfg(feature = "test")]
     use candid::Decode;
+    use ic_base_types::CanisterId;
+    use ic_crypto_sha2::Sha256;
+    use ic_nns_constants::{REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn test_install_code_disabled() {
-        let install_code = InstallCode {
-            canister_id: Some(REGISTRY_CANISTER_ID.get()),
-            wasm_module: Some(vec![1, 2, 3]),
-            install_mode: Some(CanisterInstallMode::Upgrade as i32),
-            arg: None,
-            skip_stopping_before_installing: None,
-        };
-
-        assert_eq!(
-            install_code.validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Proposal invalid because of InstallCode proposal is not yet \
-                 supported"
-                    .to_string(),
-            ))
-        );
-    }
-
-    #[cfg(feature = "test")]
     #[test]
     fn test_invalid_install_code_proposal() {
         let valid_install_code = InstallCode {
@@ -199,12 +184,14 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
-            let error = install_code
-                .validate()
-                .expect_err("Expecting validation error for {install_code:?} but got Ok(())");
+            let error = install_code.validate().expect_err(&format!(
+                "Expecting validation error for {install_code:?} but got Ok(())"
+            ));
             assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
             for keyword in keywords {
                 let error_message = error.error_message.to_lowercase();
@@ -259,6 +246,14 @@ mod tests {
 
         is_invalid_proposal_with_keywords(
             InstallCode {
+                arg: None,
+                ..valid_install_code.clone()
+            },
+            vec!["argument", "required"],
+        );
+
+        is_invalid_proposal_with_keywords(
+            InstallCode {
                 canister_id: Some(ROOT_CANISTER_ID.get()),
                 install_mode: Some(CanisterInstallMode::Install as i32),
                 ..valid_install_code.clone()
@@ -284,7 +279,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_upgrade_non_root_protocol_canister() {
         let install_code = InstallCode {
@@ -293,6 +287,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -304,6 +300,7 @@ mod tests {
             install_code.canister_and_function(),
             Ok((ROOT_CANISTER_ID, "change_nns_canister"))
         );
+        assert!(install_code.allowed_when_resources_are_low());
         let decoded_payload =
             Decode!(&install_code.payload().unwrap(), ChangeCanisterRequest).unwrap();
         assert_eq!(
@@ -316,11 +313,11 @@ mod tests {
                 arg: vec![4, 5, 6],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_upgrade_root_protocol_canister() {
         let install_code = InstallCode {
@@ -329,6 +326,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -340,6 +339,7 @@ mod tests {
             install_code.canister_and_function(),
             Ok((LIFELINE_CANISTER_ID, "upgrade_root"))
         );
+        assert!(install_code.allowed_when_resources_are_low());
         let decoded_payload =
             Decode!(&install_code.payload().unwrap(), UpgradeRootProposalPayload).unwrap();
         assert_eq!(
@@ -352,26 +352,28 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
-    fn test_reinstall_code_non_root_protocol_canister() {
+    fn test_reinstall_code_non_protocol_canister() {
         let install_code = InstallCode {
-            canister_id: Some(LIFELINE_CANISTER_ID.get()),
+            canister_id: Some(SNS_WASM_CANISTER_ID.get()),
             wasm_module: Some(vec![1, 2, 3]),
             install_mode: Some(CanisterInstallMode::Reinstall as i32),
-            arg: None,
+            arg: Some(vec![]),
             skip_stopping_before_installing: Some(true),
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
         assert_eq!(
             install_code.valid_topic(),
-            Ok(Topic::ProtocolCanisterManagement)
+            Ok(Topic::ServiceNervousSystemManagement)
         );
         assert_eq!(
             install_code.canister_and_function(),
             Ok((ROOT_CANISTER_ID, "change_nns_canister"))
         );
+        assert!(!install_code.allowed_when_resources_are_low());
         let decoded_payload =
             Decode!(&install_code.payload().unwrap(), ChangeCanisterRequest).unwrap();
         assert_eq!(
@@ -379,21 +381,18 @@ mod tests {
             ChangeCanisterRequest {
                 stop_before_installing: false,
                 mode: RootCanisterInstallMode::Reinstall,
-                canister_id: LIFELINE_CANISTER_ID,
+                canister_id: SNS_WASM_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_upgrade_canisters_topic_mapping() {
-        use ic_base_types::CanisterId;
-        use ic_nns_constants::SNS_WASM_CANISTER_ID;
-
         let test_cases = vec![
             (REGISTRY_CANISTER_ID, Topic::ProtocolCanisterManagement),
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
@@ -410,6 +409,8 @@ mod tests {
                 install_mode: Some(CanisterInstallMode::Upgrade as i32),
                 arg: Some(vec![4, 5, 6]),
                 skip_stopping_before_installing: None,
+                wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
             };
 
             assert_eq!(install_code.validate(), Ok(()));

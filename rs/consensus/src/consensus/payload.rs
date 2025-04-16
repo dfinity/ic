@@ -43,6 +43,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     SelfValidating(Arc<dyn SelfValidatingPayloadBuilder>),
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
     QueryStats(Arc<dyn BatchPayloadBuilder>),
+    VetKd(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -63,6 +64,49 @@ impl BatchPayloadSectionBuilder {
         proposal_context: &ProposalContext,
         max_size: NumBytes,
         past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
+        metrics: &PayloadBuilderMetrics,
+        logger: &ReplicaLogger,
+    ) -> NumBytes {
+        let byte_size = self.build_payload_impl(
+            payload,
+            height,
+            proposal_context,
+            max_size,
+            past_payloads,
+            payload_priority,
+            metrics,
+            logger,
+        );
+        metrics
+            .payload_section_size_bytes
+            .with_label_values(&[self.section()])
+            .observe(byte_size.get() as f64);
+        byte_size
+    }
+
+    /// Returns the name of this section, for use as e.g. a metric label value.
+    fn section(&self) -> &str {
+        match self {
+            Self::Ingress(_) => "ingress",
+            Self::XNet(_) => "xnet",
+            Self::SelfValidating(_) => "self_validating",
+            Self::CanisterHttp(_) => "canister_http",
+            Self::QueryStats(_) => "query_stats",
+            Self::VetKd(_) => "vetkd",
+        }
+    }
+
+    /// Internal implementation of `build_payload()`, to make it easier to
+    /// instrument the result.
+    fn build_payload_impl(
+        &self,
+        payload: &mut BatchPayload,
+        height: Height,
+        proposal_context: &ProposalContext,
+        max_size: NumBytes,
+        past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
         metrics: &PayloadBuilderMetrics,
         logger: &ReplicaLogger,
     ) -> NumBytes {
@@ -162,6 +206,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context.validation_context,
                     &past_payloads,
                     max_size,
+                    payload_priority,
                 );
 
                 // As a safety measure, the payload is validated, before submitting it.
@@ -277,6 +322,44 @@ impl BatchPayloadSectionBuilder {
                     }
                 }
             }
+            Self::VetKd(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.vetkd)
+                        }
+                    });
+
+                let vetkd = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
+                let size = NumBytes::new(vetkd.len() as u64);
+
+                // Check validation as safety measure
+                match builder.validate_payload(height, proposal_context, &vetkd, &past_payloads) {
+                    Ok(()) => {
+                        payload.vetkd = vetkd;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "VetKd payload did not pass validation, this is a bug, {:?} @{}",
+                            err,
+                            CRITICAL_ERROR_VALIDATION_NOT_PASSED
+                        );
+
+                        metrics.critical_error_validation_not_passed.inc();
+                        payload.vetkd = vec![];
+                        NumBytes::new(0)
+                    }
+                }
+            }
         }
     }
 
@@ -362,6 +445,25 @@ impl BatchPayloadSectionBuilder {
 
                 Ok(NumBytes::new(payload.query_stats.len() as u64))
             }
+            Self::VetKd(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.vetkd)
+                        }
+                    });
+
+                builder.validate_payload(
+                    height,
+                    proposal_context,
+                    &payload.vetkd,
+                    &past_payloads,
+                )?;
+
+                Ok(NumBytes::new(payload.vetkd.len() as u64))
+            }
         }
     }
 }
@@ -432,6 +534,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(4 * 1024 * 1024),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );
@@ -450,6 +553,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(20_000),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );

@@ -18,7 +18,7 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:20.04 as download
+FROM ubuntu:24.04 as download
 
 USER root:root
 
@@ -41,14 +41,13 @@ RUN cd /tmp/ && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
-
 #
 # Second build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 USER root:root
 
@@ -60,11 +59,17 @@ ENV TZ=UTC
 # For the dev image, use both "packages.common" and "packages.dev" -- this can
 # be set via docker build args (see above).
 ARG PACKAGE_FILES=packages.common
+# The kernel is installed here to keep the extra modules in sync.
+# Unfortunately, there is no metapackage to track the extra modules that does
+# not also include firmware.
+ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-24.04
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 RUN apt-get -y update && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
+        ${_KERNEL_PACKAGE} \
+        linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
     rm /tmp/packages.*
 
 # Install filebeat

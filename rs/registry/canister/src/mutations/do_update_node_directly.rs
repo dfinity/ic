@@ -4,7 +4,6 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use prost::Message;
 
-use candid::{CandidType, Deserialize};
 use dfn_core::api::now;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -12,6 +11,7 @@ use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
 use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
+use ic_registry_canister_api::UpdateNodeDirectlyPayload;
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::update;
 use ic_types::{crypto::KeyPurpose, PrincipalId};
@@ -194,12 +194,6 @@ impl Registry {
     }
 }
 
-/// The payload of an request to update keys of the existing node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateNodeDirectlyPayload {
-    pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -210,7 +204,7 @@ mod test {
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_test_utilities_types::ids::subnet_test_id;

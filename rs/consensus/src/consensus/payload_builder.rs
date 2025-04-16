@@ -25,6 +25,7 @@ use ic_types::{
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
     Height, NodeId, NumBytes, SubnetId, Time,
 };
+use num_traits::SaturatingSub;
 use std::sync::Arc;
 
 /// Implementation of PayloadBuilder.
@@ -48,6 +49,7 @@ impl PayloadBuilderImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -57,33 +59,7 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
             BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
-        ];
-
-        Self {
-            subnet_id,
-            node_id,
-            registry_client,
-            section_builder,
-            metrics: PayloadBuilderMetrics::new(metrics),
-            logger,
-        }
-    }
-
-    /// Helper to create PayloadBuilder for testing
-    pub fn new_for_testing(
-        subnet_id: SubnetId,
-        node_id: NodeId,
-        registry_client: Arc<dyn RegistryClient>,
-        ingress_selector: Arc<dyn IngressSelector>,
-        xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
-        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
-        metrics: MetricsRegistry,
-        logger: ReplicaLogger,
-    ) -> Self {
-        let section_builder = vec![
-            BatchPayloadSectionBuilder::Ingress(ingress_selector),
-            BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
-            BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
+            BatchPayloadSectionBuilder::VetKd(vetkd_payload_builder),
         ];
 
         Self {
@@ -124,28 +100,26 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.get_max_block_payload_size_bytes(&subnet_records.context_version);
 
         let mut batch_payload = BatchPayload::default();
-        let mut accumulated_size = 0;
+        let mut accumulated_size = NumBytes::new(0);
 
-        for section_id in section_select {
-            accumulated_size += self.section_builder[section_id]
-                .build_payload(
-                    &mut batch_payload,
-                    height,
-                    &ProposalContext {
-                        proposer: self.node_id,
-                        validation_context: context,
-                    },
-                    NumBytes::new(
-                        max_block_payload_size
-                            .get()
-                            .saturating_sub(accumulated_size),
-                    ),
-                    past_payloads,
-                    &self.metrics,
-                    &self.logger,
-                )
-                .get();
+        for (priority, section_id) in section_select.into_iter().enumerate() {
+            accumulated_size += self.section_builder[section_id].build_payload(
+                &mut batch_payload,
+                height,
+                &ProposalContext {
+                    proposer: self.node_id,
+                    validation_context: context,
+                },
+                max_block_payload_size.saturating_sub(&accumulated_size),
+                past_payloads,
+                priority,
+                &self.metrics,
+                &self.logger,
+            );
         }
+        self.metrics
+            .payload_size_bytes
+            .observe(accumulated_size.get() as f64);
 
         batch_payload
     }
@@ -300,6 +274,7 @@ pub(crate) mod test {
         let canister_http_payload_builder =
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let vetkd_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -310,6 +285,7 @@ pub(crate) mod test {
             Arc::new(self_validating_payload_builder),
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
+            Arc::new(vetkd_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )

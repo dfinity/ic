@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -8,7 +9,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
@@ -16,24 +17,27 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/validation",
     "//rs/nervous_system/governance",
+    "//rs/nervous_system/linear_map",
     "//rs/nervous_system/lock",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/timestamp",
     "//rs/nns/constants",
     "//rs/protobuf",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
+    "//rs/sns/governance/api",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
     "//rs/sns/governance/token_valuation",
@@ -43,10 +47,14 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:candid",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:comparable",
+    "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:num-traits",
@@ -56,13 +64,16 @@ DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
     "@crate_index//:strum",
+    "@crate_index//:thiserror",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
@@ -84,7 +95,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/compare_dirs",
     "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
-    "@crate_index//:futures",
+    "@crate_index//:candid_parser",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
@@ -123,38 +134,16 @@ rust_library(
 )
 
 rust_library(
-    name = "governance--test_feature",
+    name = "governance--canbench_feature",
     srcs = LIB_SRCS,
     aliases = ALIASES,
-    crate_features = ["test"],
+    crate_features = ["canbench-rs"],
     crate_name = "ic_sns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [
         ":build_script",
-    ],
-)
-
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":governance",
-    ],
-)
-
-rust_binary(
-    name = "generate_test_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance_test.did"],
-    crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":governance--test_feature",
+        "@crate_index//:canbench-rs",
     ],
 )
 
@@ -179,38 +168,52 @@ rust_canister(
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
-    deps = DEPENDENCIES + [":governance--test_feature"] + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+    ],
 )
 
 rust_test(
     name = "governance_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 rust_test(
-    name = "canister_unit_test",
-    crate = ":_wasm_sns-governance-canister",
-    data = ["canister/governance.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/sns/governance",
-    },
+    name = "governance_test--test-feature",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 rust_test(
+    name = "canister_unit_test",
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+    ],
+)
+
+rust_test(
     name = "canister_test_unit_test",
-    crate = ":_wasm_sns-governance-canister-test",
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
-    data = ["canister/governance_test.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/sns/governance",
-    },
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+    ],
 )
 
 rust_test_suite_with_extra_srcs(
@@ -229,7 +232,7 @@ rust_test_suite_with_extra_srcs(
         "tests/fixtures/environment_fixture.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(
@@ -237,9 +240,9 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**"]) + [
         ":protos",
+        "//rs/ledger_suite/icp:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/protobuf:protos",
-        "//rs/rosetta-api/icp_ledger:protos",
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/governance",
@@ -248,5 +251,38 @@ generated_files_check(
         "//rs/sns/governance/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
+    ],
+)
+
+# Usage
+# =====
+#
+# For benchmarking (see `canbench/canbench_results.yml`):
+# ```
+# bazel run //rs/sns/governance:governance-canbench
+# ```
+#
+# For updating the results file:
+# ```
+# bazel run //rs/sns/governance:governance-canbench_update
+# ```
+#
+# To run the test:
+# ```
+# bazel test //rs/sns/governance:governance_canbench_test
+# ```
+#
+# Currently, updating the results file is not automated, and there are no tests to avoid
+# regression. For now, we can use it as an example for benchmarking as part
+# of an investigation of potential performance issues, or when we make a change that can affect
+# the performance measured in this benchmark.
+rust_canbench(
+    name = "governance-canbench",
+    srcs = ["canbench/main.rs"],
+    add_test = True,
+    results_file = "canbench/canbench_results.yml",
+    deps = [
+        # Keep sorted.
+        ":governance--canbench_feature",
     ],
 )

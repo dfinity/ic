@@ -9,7 +9,6 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
 axum = { workspace = true }
 clap = { workspace = true }
 http = { workspace = true }

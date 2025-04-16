@@ -4,13 +4,13 @@ use std::io::{Read, Write};
 use std::process::{ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, SystemTime};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 enum Request {
     Time,
     AdvanceTime(Duration),
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize)]
 enum Response {
     Ok,
     Time(SystemTime),
@@ -40,6 +40,10 @@ fn test() {
         time.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
         Duration::from_nanos(1_620_329_630_000_000_000)
     );
+
+    // Kill the task to avoid zombie process.
+    child.kill().unwrap();
+    child.wait().unwrap();
 }
 
 fn call_state_machine<T: DeserializeOwned>(

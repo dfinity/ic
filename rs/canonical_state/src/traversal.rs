@@ -47,16 +47,15 @@ mod tests {
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_certification_version::{all_supported_versions, CertificationVersion::*};
+    use ic_certification_version::all_supported_versions;
+    use ic_management_canister_types_private::Global;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{
-                CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
-            },
-            ExecutionState, ExportedFunctions, Global, NumWasmPages,
+            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+            ExecutionState, ExportedFunctions, NumWasmPages,
         },
         metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
         page_map::PageMap,
@@ -69,7 +68,7 @@ mod tests {
     };
     use ic_types::{
         xnet::{StreamFlags, StreamHeader},
-        CanisterId, Cycles, ExecutionRound,
+        CanisterId, Cycles,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
@@ -104,7 +103,7 @@ mod tests {
 
             let expected_traversal = vec![
                 Some(vec![E::StartSubtree]), // global
-                (certification_version >= V16).then_some(vec![
+                Some(vec![
                     edge("api_boundary_nodes"),
                     E::StartSubtree,
                     E::EndSubtree, // api_boundary_nodes
@@ -115,7 +114,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: (certification_version <= V9).then_some(0),
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -169,7 +168,7 @@ mod tests {
 
             let expected_traversal = vec![
                 Some(vec![E::StartSubtree]), // global
-                (certification_version >= V16).then_some(vec![
+                Some(vec![
                     edge("api_boundary_nodes"),
                     E::StartSubtree,
                     E::EndSubtree, // api_boundary_nodes
@@ -180,11 +179,7 @@ mod tests {
                     E::EnterEdge(canister_id.get().into_vec()),
                     E::StartSubtree,
                 ]),
-                (V1..V13).contains(&certification_version).then_some(vec![
-                    edge("controller"),
-                    E::VisitBlob(controller.get().to_vec()),
-                ]),
-                (certification_version >= V2).then_some(vec![
+                Some(vec![
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
@@ -193,7 +188,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: (certification_version <= V9).then_some(0),
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -248,18 +243,15 @@ mod tests {
             String::from("dummy3") => CustomSection::new(CustomSectionType::Public, vec![8, 9]),
         };
 
-        let execution_state = ExecutionState {
-            canister_root: "NOT_USED".into(),
-            session_nonce: None,
+        let execution_state = ExecutionState::new(
+            "NOT_USED".into(),
             wasm_binary,
+            ExportedFunctions::new(BTreeSet::new()),
             wasm_memory,
-            stable_memory: Memory::new_for_testing(),
-            exported_globals: vec![Global::I32(1)],
-            exports: ExportedFunctions::new(BTreeSet::new()),
-            metadata: WasmMetadata::new(metadata),
-            last_executed_round: ExecutionRound::from(0),
-            next_scheduled_method: NextScheduledMethod::default(),
-        };
+            Memory::new_for_testing(),
+            vec![Global::I32(1)],
+            WasmMetadata::new(metadata),
+        );
 
         canister_state.execution_state = Some(execution_state);
 
@@ -272,7 +264,7 @@ mod tests {
 
             let expected_traversal = vec![
                 Some(vec![E::StartSubtree]), // global
-                (certification_version >= V16).then_some(vec![
+                Some(vec![
                     edge("api_boundary_nodes"),
                     E::StartSubtree,
                     E::EndSubtree, // api_boundary_nodes
@@ -285,15 +277,11 @@ mod tests {
                     edge("certified_data"),
                     E::VisitBlob(vec![]),
                 ]),
-                (V1..V13).contains(&certification_version).then_some(vec![
-                    edge("controller"),
-                    E::VisitBlob(controller.get().to_vec()),
-                ]),
-                (certification_version >= V2).then_some(vec![
+                Some(vec![
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
-                (certification_version >= V6).then_some(vec![
+                Some(vec![
                     edge("metadata"),
                     E::StartSubtree,
                     edge("dummy1"),
@@ -304,7 +292,7 @@ mod tests {
                     E::VisitBlob(vec![8, 9]),
                     E::EndSubtree,
                 ]),
-                (certification_version >= V1).then_some(vec![
+                Some(vec![
                     edge("module_hash"),
                     E::VisitBlob(wasm_binary_hash.to_vec()),
                 ]),
@@ -313,7 +301,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: (certification_version <= V9).then_some(0),
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -373,7 +361,7 @@ mod tests {
 
             let expected_traversal = vec![
                 Some(vec![E::StartSubtree]), // global
-                (certification_version >= V16).then_some(vec![
+                Some(vec![
                     edge("api_boundary_nodes"),
                     E::StartSubtree,
                     E::EndSubtree, // api_boundary_nodes
@@ -384,7 +372,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: (certification_version <= V9).then_some(0),
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -535,8 +523,7 @@ mod tests {
                     edge(message_test_id(4)),
                     E::StartSubtree,
                 ]),
-                (certification_version >= V11)
-                    .then_some(vec![edge("error_code"), E::VisitBlob(b"IC0101".to_vec())]),
+                Some(vec![edge("error_code"), E::VisitBlob(b"IC0101".to_vec())]),
                 Some(vec![
                     edge("reject_code"),
                     leb_num(1),
@@ -557,8 +544,7 @@ mod tests {
                     edge(message_test_id(6)),
                     E::StartSubtree,
                 ]),
-                (certification_version >= V11)
-                    .then_some(vec![edge("error_code"), E::VisitBlob(b"IC0406".to_vec())]),
+                Some(vec![edge("error_code"), E::VisitBlob(b"IC0406".to_vec())]),
                 Some(vec![
                     edge("reject_code"),
                     leb_num(4),
@@ -596,14 +582,14 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.metadata.batch_time += Duration::new(1, 123456789);
 
-        // Test all certification versions.
+        // Test all supported certification versions.
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
                 Some(vec![E::StartSubtree]), // global
-                (certification_version >= V16).then_some(vec![
+                Some(vec![
                     edge("api_boundary_nodes"),
                     E::StartSubtree,
                     E::EndSubtree, // api_boundary_nodes
@@ -614,7 +600,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: (certification_version <= V9).then_some(0),
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -654,14 +640,14 @@ mod tests {
                 nodes: BTreeSet::new(),
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             }
         };
         fn id_range(from: u64, to: u64) -> CanisterIdRange {
@@ -688,7 +674,7 @@ mod tests {
 
             let expected_traversal = vec![
                 Some(vec![E::StartSubtree]), // global
-                (certification_version >= V16).then_some(vec![
+                Some(vec![
                     edge("api_boundary_nodes"),
                     E::StartSubtree,
                     E::EndSubtree, // api_boundary_nodes
@@ -699,7 +685,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: (certification_version <= V9).then_some(0),
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -713,7 +699,7 @@ mod tests {
                     E::EnterEdge(subnet_test_id(0).get().into_vec()),
                     E::StartSubtree,
                 ]),
-                (certification_version >= V3).then_some(vec![
+                Some(vec![
                     edge("canister_ranges"),
                     //D9 D9F7                          # tag(55799)
                     //   82                            # array(2)
@@ -736,7 +722,7 @@ mod tests {
                     E::EnterEdge(subnet_test_id(1).get().into_vec()),
                     E::StartSubtree,
                 ]),
-                (certification_version >= V3).then_some(vec![
+                Some(vec![
                     edge("canister_ranges"),
                     // D9 D9F7                          # tag(55799)
                     //    81                            # array(1)
@@ -747,7 +733,7 @@ mod tests {
                     //             00000000000000140101 # "\x00\x00\x00\x00\x00\x00\x00\x14\x01\x01"
                     E::VisitBlob(hex::decode("d9d9f781824a000000000000000b01014a00000000000000140101").unwrap()),
                 ]),
-                (certification_version >= V15).then_some(vec![
+                Some(vec![
                     edge("metrics"),
                     // A4       # map(4)
                     //    00    # unsigned(0)
@@ -764,7 +750,7 @@ mod tests {
                     //    00    # unsigned(0)
                     E::VisitBlob(hex::decode("a40000010002a2000001000300").unwrap()),
                 ]),
-                (certification_version >= V12).then_some(vec![
+                Some(vec![
                     edge("node"),
                     E::StartSubtree,
                     E::EnterEdge(node_test_id(2).get().into_vec()),
@@ -815,14 +801,14 @@ mod tests {
             },
         };
 
-        // Test all certification versions.
+        // Test all supported certification versions.
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
                 Some(vec![E::StartSubtree]), // global
-                (certification_version >= V16).then_some(vec![
+                Some(vec![
                     edge("api_boundary_nodes"),
                     E::StartSubtree,
                     E::EnterEdge(node_test_id(11).get().into_vec()),
@@ -857,7 +843,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: (certification_version <= V9).then_some(0),
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),

@@ -1,6 +1,9 @@
-use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
+use ic_consensus_idkg::metrics::{
+    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
+    KEY_ID_LABEL,
+};
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
-use ic_interfaces::ingress_manager::IngressSelector;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -11,17 +14,12 @@ use ic_types::{
         idkg::{CompletedReshareRequest, CompletedSignature, IDkgPayload, KeyTranscriptCreation},
         Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
-    CountBytes, Height,
+    CountBytes, Height, Time,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 use std::sync::RwLock;
-
-use crate::idkg::metrics::{
-    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
-    KEY_ID_LABEL,
-};
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -32,9 +30,10 @@ pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
 pub(crate) const CRITICAL_ERROR_SUBNET_RECORD_ISSUE: &str = "consensus_subnet_record_issue";
 
-pub struct BlockMakerMetrics {
-    pub get_payload_calls: IntCounterVec,
-    pub block_size_bytes_estimate: IntGaugeVec,
+pub(crate) struct BlockMakerMetrics {
+    pub(crate) get_payload_calls: IntCounterVec,
+    pub(crate) block_size_bytes_estimate: IntGaugeVec,
+    pub(crate) dynamic_delay_triggered: IntCounter,
 }
 
 impl BlockMakerMetrics {
@@ -48,20 +47,22 @@ impl BlockMakerMetrics {
             block_size_bytes_estimate: metrics_registry.int_gauge_vec(
                 "consensus_block_size_bytes_estimate",
                 "An estimate about the block size produced by the block maker.",
-                &["payload_type"])
+                &["payload_type"]),
+            dynamic_delay_triggered: metrics_registry.int_counter(
+                "consensus_block_maker_dynamic_delay_triggered",
+                "The number of times the dynamic delay has been triggered",
+                ),
         }
     }
 
     /// Reports byte estimate metrics.
     pub fn report_byte_estimate_metrics(&self, xnet_bytes: usize, ingress_bytes: usize) {
-        let _ = self
-            .block_size_bytes_estimate
-            .get_metric_with_label_values(&["xnet"])
-            .map(|gauge| gauge.set(xnet_bytes as i64));
-        let _ = self
-            .block_size_bytes_estimate
-            .get_metric_with_label_values(&["ingress"])
-            .map(|gauge| gauge.set(ingress_bytes as i64));
+        self.block_size_bytes_estimate
+            .with_label_values(&["xnet"])
+            .set(xnet_bytes as i64);
+        self.block_size_bytes_estimate
+            .with_label_values(&["ingress"])
+            .set(ingress_bytes as i64);
     }
 }
 
@@ -91,7 +92,7 @@ impl ConsensusMetrics {
             ),
             on_state_change_change_set_size: metrics_registry.histogram_vec(
                 "consensus_on_state_change_change_set_size",
-                "The size of the ChangeSet returned by on_state_change()",
+                "The size of the Mutations returned by on_state_change()",
                 // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
                 &["sub_component"],
@@ -114,6 +115,7 @@ impl ConsensusMetrics {
 pub struct BlockStats {
     pub block_hash: String,
     pub block_height: u64,
+    pub block_time: Time,
     pub block_context_certified_height: u64,
     pub idkg_stats: Option<IDkgStats>,
 }
@@ -121,8 +123,9 @@ pub struct BlockStats {
 impl From<&Block> for BlockStats {
     fn from(block: &Block) -> Self {
         Self {
-            block_hash: get_block_hash_string(block),
+            block_hash: format!("{:?}", ic_types::crypto::crypto_hash(block)),
             block_height: block.height().get(),
+            block_time: block.context.time,
             block_context_certified_height: block.context.certified_height.get(),
             idkg_stats: block.payload.as_ref().as_idkg().map(IDkgStats::from),
         }
@@ -153,7 +156,7 @@ impl BatchStats {
         self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
-            .extend_from_slice(&payload.ingress.message_ids());
+            .extend(payload.ingress.message_ids().cloned());
     }
 }
 
@@ -221,6 +224,8 @@ impl From<&IDkgPayload> for IDkgStats {
 pub struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
+    pub batch_delivery_interval: Histogram,
+    pub batch_delivery_latency: Histogram,
     pub ingress_messages_delivered: Histogram,
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
@@ -249,6 +254,18 @@ impl FinalizerMetrics {
             batch_height: metrics_registry.int_gauge(
                 "consensus_batch_height",
                 "The height of batches sent to Message Routing",
+            ),
+            batch_delivery_interval: metrics_registry.histogram(
+                "consensus_batch_delivery_interval_seconds",
+                "Time elapsed since the delivery of the previous batch, in seconds",
+                // 1ms, 2ms, 5ms, ..., 10s, 20s, 50s
+                decimal_buckets(-3, 1),
+            ),
+            batch_delivery_latency: metrics_registry.histogram(
+                "consensus_batch_delivery_latency_seconds",
+                "Wall time duration between block making and batch delivery, in seconds",
+                // 10ms, 20ms, 50ms, ..., 10s, 20s, 50s
+                decimal_buckets(-2, 2),
             ),
             finalization_certified_state_difference: metrics_registry.int_gauge(
                 "consensus_finalization_certified_state_difference",
@@ -411,6 +428,8 @@ pub struct PayloadBuilderMetrics {
     pub get_payload_duration: Histogram,
     pub validate_payload_duration: Histogram,
     pub past_payloads_length: Histogram,
+    pub payload_size_bytes: Histogram,
+    pub payload_section_size_bytes: HistogramVec,
 
     /// Critical error for payloads above the maximum supported size
     pub critical_error_payload_too_large: IntCounter,
@@ -444,6 +463,17 @@ impl PayloadBuilderMetrics {
                 "The length of past_payloads in payload selection",
                 linear_buckets(0.0, 1.0, 6),
             ),
+            payload_size_bytes: metrics_registry.histogram(
+                "consensus_payload_size_bytes",
+                "Consensus block payload size, in bytes.",
+                decimal_buckets(0, 6),
+            ),
+            payload_section_size_bytes: metrics_registry.histogram_vec(
+                "consensus_payload_section_size_bytes",
+                "Consensus payload section (ingress, XNet, etc.) size, in bytes.",
+                decimal_buckets(0, 6),
+                &["section"],
+            ),
             critical_error_payload_too_large: metrics_registry
                 .error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE),
             critical_error_validation_not_passed: metrics_registry
@@ -468,10 +498,6 @@ pub struct ValidatorMetrics {
     pub(crate) validation_share_batch_size: HistogramVec,
     // Payload metrics
     pub(crate) ingress_messages: Histogram,
-    // The number of messages in a block which are not (yet) present in the Ingress Pool.
-    // This is a temporary metrics needed for a hashes in blocks experiment.
-    // TODO(CON-1312): Delete this once not necessary anymore
-    pub(crate) missing_ingress_messages: Histogram,
 }
 
 impl ValidatorMetrics {
@@ -534,21 +560,10 @@ impl ValidatorMetrics {
                 // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
             ),
-            missing_ingress_messages: metrics_registry.histogram(
-                "consensus_missing_ingress_messages_in_block",
-                "The number of ingress messages in a validated block \
-                which are not present in the ingress pool",
-                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
-                decimal_buckets_with_zero(0, 3),
-            ),
         }
     }
 
-    pub(crate) fn observe_data_payload(
-        &self,
-        proposal: &BlockProposal,
-        ingress_selector: Option<&dyn IngressSelector>,
-    ) {
+    pub(crate) fn observe_data_payload(&self, proposal: &BlockProposal) {
         let BlockPayload::Data(payload) = proposal.as_ref().payload.as_ref() else {
             // Skip if it's a summary block.
             return;
@@ -556,19 +571,6 @@ impl ValidatorMetrics {
 
         let total_ingress_messages = payload.batch.ingress.message_count();
         self.ingress_messages.observe(total_ingress_messages as f64);
-
-        if let Some(ingress_selector) = ingress_selector {
-            let missing_ingress_messages = payload
-                .batch
-                .ingress
-                .message_ids()
-                .iter()
-                .filter(|message_id| !ingress_selector.has_message(message_id))
-                .count();
-
-            self.missing_ingress_messages
-                .observe(missing_ingress_messages as f64);
-        }
     }
 
     pub(crate) fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {

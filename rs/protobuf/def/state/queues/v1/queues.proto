@@ -41,13 +41,11 @@ message StreamFlags {
 message Stream {
   uint64 messages_begin = 1;
   repeated RequestOrResponse messages = 2;
-  reserved 3, 4;
-  reserved "signals_begin", "signals";
   uint64 signals_end = 5;
-  // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-  repeated uint64 deprecated_reject_signals = 6;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
+  reserved 3, 4, 6;
+  reserved "signals_begin", "signals", "deprecated_reject_signals";
 }
 
 message StreamEntry {
@@ -56,8 +54,8 @@ message StreamEntry {
 }
 
 message RequestMetadata {
-  optional uint64 call_tree_depth = 1;
-  optional uint64 call_tree_start_time_nanos = 2;
+  uint64 call_tree_depth = 1;
+  uint64 call_tree_start_time_nanos = 2;
   // A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
   // its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
   // does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
@@ -114,25 +112,6 @@ message MessageDeadline {
   uint64 index = 2;
 }
 
-message InputOutputQueue {
-  repeated RequestOrResponse queue = 1;
-  uint64 begin = 2;
-  uint64 capacity = 3;
-  uint64 num_slots_reserved = 4;
-  // Ordered ranges of messages having the same request deadline. Each range
-  // is represented as a deadline and its end index (the `QueueIndex` just
-  // past the last request where the deadline applies). Both the deadlines and
-  // queue indices are strictly increasing.
-  repeated MessageDeadline deadline_range_ends = 5;
-  // Queue index from which request timing out will resume.
-  uint64 timeout_index = 6;
-}
-
-message QueueEntry {
-  types.v1.CanisterId canister_id = 1;
-  InputOutputQueue queue = 2;
-}
-
 // A pool holding all of a canister's incoming and outgoing canister messages.
 message MessagePool {
   // A pool entry: a message keyed by its ID.
@@ -159,34 +138,18 @@ message MessagePool {
 }
 
 message CanisterQueue {
-  message QueueItem {
-    oneof r {
-      // A reference into the message pool (a pool assigned ID).
-      uint64 reference = 1;
-
-      // A marker for a transient reject response for the given callback ID.
-      // uint64 transient_reject_for_callback_id = 2;
-      // A marker for an unknown reject response for the given callback ID.
-      // uint64 unknown_reject_for_callback_id = 3;
-    }
-  }
-
-  // FIFO queue of references into the pool and reject response markers.
-  repeated QueueItem queue = 1;
+  // FIFO queue of references into the pool or the compact reject response maps.
+  repeated uint64 queue = 4;
   // Maximum number of requests or responses that can be enqueued at any one time.
   uint64 capacity = 2;
   // Number of slots used by or reserved for responses.
   uint64 response_slots = 3;
+
+  reserved 1;
 }
 
 message CanisterQueues {
-  reserved 1, 4;
-  reserved "canister_id", "input_schedule";
-
   repeated ingress.v1.Ingress ingress_queue = 2;
-
-  repeated QueueEntry input_queues = 3;
-  repeated QueueEntry output_queues = 5;
 
   // Input queue from and output queue to `canister_id`.
   message CanisterQueuePair {
@@ -197,16 +160,29 @@ message CanisterQueues {
   repeated CanisterQueuePair canister_queues = 9;
   MessagePool pool = 10;
 
+  // A reference to a callback, used as a compact reject response (e.g. an
+  // expired best-effort callback; or one whose response was shed while in an
+  // input queue.
+  message CallbackReference {
+    uint64 id = 1;
+    uint64 callback_id = 2;
+  }
+  repeated CallbackReference expired_callbacks = 13;
+  repeated CallbackReference shed_responses = 12;
+
   enum NextInputQueue {
     NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
     NEXT_INPUT_QUEUE_LOCAL_SUBNET = 1;
     NEXT_INPUT_QUEUE_INGRESS = 2;
     NEXT_INPUT_QUEUE_REMOTE_SUBNET = 3;
   }
-  NextInputQueue next_input_queue = 6;
+  NextInputQueue next_input_source = 6;
 
-  repeated types.v1.CanisterId local_subnet_input_schedule = 7;
-  repeated types.v1.CanisterId remote_subnet_input_schedule = 8;
+  repeated types.v1.CanisterId local_sender_schedule = 7;
+  repeated types.v1.CanisterId remote_sender_schedule = 8;
 
   uint64 guaranteed_response_memory_reservations = 11;
+
+  reserved 1, 3, 4, 5;
+  reserved "canister_id", "input_queues", "input_schedule", "output_queues";
 }

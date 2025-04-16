@@ -11,22 +11,20 @@ use crate::state_sync::types::{
     decode_manifest, encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
     FILE_GROUP_CHUNK_ID_OFFSET,
 };
-use crate::DirtyPages;
 
 use bit_vec::BitVec;
-use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CheckpointLayout, CANISTER_FILE};
+use ic_state_layout::{CheckpointLayout, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
 use maplit::btreemap;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::{fs, panic};
 use strum::IntoEnumIterator;
 
 const NUM_THREADS: u32 = 3;
@@ -330,6 +328,52 @@ fn test_simple_manifest_computation() {
 }
 
 #[test]
+fn test_manifest_computation_skips_marker_file() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+
+    let root = dir.path();
+    fs::write(root.join("root.bin"), vec![0u8; 1000]).expect("failed to create file 'test.bin'");
+    fs::File::create(root.join(UNVERIFIED_CHECKPOINT_MARKER))
+        .expect("failed to create marker file");
+
+    let subdir = root.join("subdir");
+    fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
+    fs::write(subdir.join("memory"), vec![1u8; 2048]).expect("failed to create file 'memory'");
+    fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("metadata"), vec![2u8; 1050]).expect("failed to create file 'queue'");
+
+    let mut thread_pool = scoped_threadpool::Pool::new(1);
+
+    let manifest_with_marker_present = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        StateSyncVersion::V1,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        1024,
+        None,
+    )
+    .expect("failed to compute manifest");
+
+    fs::remove_file(root.join(UNVERIFIED_CHECKPOINT_MARKER)).expect("failed to remove marker file");
+
+    let manifest_with_marker_removed = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        StateSyncVersion::V1,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        1024,
+        None,
+    )
+    .expect("failed to compute manifest");
+    // The manifest computation should ignore the marker files and produce identical manifest.
+    assert_eq!(manifest_with_marker_present, manifest_with_marker_removed);
+}
+
+#[test]
 fn test_meta_manifest_computation() {
     for version in versions_from(StateSyncVersion::V2) {
         let (file_table, chunk_table) = simple_file_table_and_chunk_table(version);
@@ -355,8 +399,7 @@ fn test_validate_sub_manifest() {
     let meta_manifest = build_meta_manifest(&manifest);
 
     let encoded_manifest = encode_manifest(&manifest);
-    let num =
-        (encoded_manifest.len() + DEFAULT_CHUNK_SIZE as usize - 1) / DEFAULT_CHUNK_SIZE as usize;
+    let num = encoded_manifest.len().div_ceil(DEFAULT_CHUNK_SIZE as usize);
     assert!(
         num > 1,
         "This test does not cover the case where the encoded manifest is divided into multiple pieces."
@@ -1086,13 +1129,11 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
             base_manifest,
             base_height: Height::new(0),
             target_height: Height::new(1),
-            dirty_memory_pages: Vec::new(),
             base_checkpoint: CheckpointLayout::new_untracked(
                 checkpoint0.to_path_buf(),
                 Height::new(0),
             )
             .unwrap(),
-            lsmt_status: FlagStatus::Enabled,
         },
         &CheckpointLayout::new_untracked(checkpoint1.to_path_buf(), Height::new(1)).unwrap(),
         &[
@@ -1333,10 +1374,8 @@ fn all_same_inodes_are_detected() {
         base_manifest: Manifest::new(StateSyncVersion::V0, vec![], vec![]),
         base_height: Height::new(0),
         target_height: Height::new(1),
-        dirty_memory_pages: DirtyPages::default(),
         base_checkpoint: CheckpointLayout::new_untracked(base.path().to_path_buf(), Height::new(0))
             .unwrap(),
-        lsmt_status: FlagStatus::Enabled,
     };
 
     let mut files = Vec::new();

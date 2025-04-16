@@ -1,0 +1,29 @@
+[package]
+name = "ic-icp-archive"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ciborium = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-metrics-encoder = "1"
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-stable-structures = { workspace = true }
+icp-ledger = { path = "../" }
+lazy_static = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-ledger-test-utils = { path = "../test_utils" }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
+serde_bytes = { workspace = true }

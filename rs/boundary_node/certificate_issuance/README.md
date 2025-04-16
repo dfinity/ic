@@ -82,25 +82,13 @@ symmetric key, which is shared among all the boundary nodes.
 
 ### Serving Traffic
 
-In order for the boundary nodes to serve the custom domains, the domains need to
-be added to the `nginx` configuration and `nginx` needs to have access to the
-certificates and corresponding keys.
-
 The `certificate-issuer` running on the boundary nodes periodically retrieves
 all certificates and keys from the `certificate-orchestrator`, and keeps a local
 copy.
 
-The `certificate-syncer` is a service running on the boundary nodes, which obtains
-the certificates and keys from the `certificate-issuer`, and updates the `nginx`
-configuration to include all registered custom domains.
-
 ## Directory Organization
 
-This directory contains all the code related to custom domains with the exception
-of the [`nginx` configuration](../../../ic-os/components/boundary-guestos/etc/nginx/):
-
 - [`certificate_issuer`](certificate_issuer/) contains the boundary node service, which handles all registration requests, processes registration tasks and interfaces with the `certificate-orchestrator`.
-- [`certificate_syncer`](certificate_syncer/) contains the boundary node service, which ensures that `nginx` has access to all certificates and keys, and is configured to serve the custom domains.
 - [`certificate_orchestrator`](certificate_orchestrator/) contains the orchestration canister, which runs on the Internet Computer and coordinates the work among the boundary nodes.
 - [`certificate_orchestrator_interface`](certificate_orchestrator_interface/) contains the interface used between the `certificate-issuer` and the `certificate-orchestrator`.
 - [`create_acme_account`](create_acme_account/) contains helper code to setup an account with Let's Encrypt.
@@ -111,7 +99,7 @@ In the following, we go through all the steps necessary to provide custom domain
 on a boundary node. First, we explain all the preparatory steps that need to be
 done once. Then, we explain all the steps necessary to deploy the `certificate-orchestrator`
 canister on the Internet Computer. Finally, we explain the steps necessary to
-run the `certificate-issuer` and `certificate-syncer` on the boundary nodes.
+run the `certificate-issuer` on the boundary nodes.
 
 ### Preparation
 
@@ -277,7 +265,7 @@ dfx canister call --network ic --identity <ROOT_IDENTITY> --candid interface.did
 
 ### Prepare BN Services
 
-In order to run the `certificate-issuer` and `certificate-syncer` on a
+In order to run the `certificate-issuer` on a
 boundary node, you need to provide it with the proper configuration through the
 virtual USB-stick.
 
@@ -306,12 +294,3 @@ The `certificate-issuer` relies on the following services and setup scripts:
 * [setup-certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/setup-certificate-issuer.service)
 * [setup-certificate-issuer.sh](../../../ic-os/components/boundary-guestos/opt/ic/bin/setup-certificate-issuer.sh)
 * [certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/certificate-issuer.service)
-
-The `certificate-syncer` relies on the following services and setup scripts:
-* [setup-certificate-syncer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/setup-certificate-syncer.service)
-* [setup-certificate-syncer.sh](../../../ic-os/components/boundary-guestos/opt/ic/bin/setup-certificate-syncer.sh)
-* [certificate-syncer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/certificate-syncer.service)
-
-In addition, the `certificate-syncer` needs a [configuration template](/ic-os/components/boundary-guestos/etc/certificate-syncer/domain.tmpl) to dynamically include all
-custom domains in the `nginx` configuration. It is part of the boundary node
-root filesystem and is maintained along with this codebase.

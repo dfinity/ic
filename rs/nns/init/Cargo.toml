@@ -9,20 +9,20 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-local-store = { path = "../../registry/local_store" }
-ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
-ic-registry-transport = { path = "../../registry/transport" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-governance-api = { path = "../governance/api" }
-ic-test-identity = { path = "../../test_utilities/identity" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-local-store = { path = "../../registry/local_store" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-registry-transport = { path = "../../registry/transport" }
 ic-sys = { path = "../../sys" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+ic-test-identity = { path = "../../test_utilities/identity" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 prost = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

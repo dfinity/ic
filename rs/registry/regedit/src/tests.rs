@@ -134,6 +134,8 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             public_api: SocketAddr::from_str("0.0.0.0:8080").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
+            domain: None,
+            node_reward_type: None,
         },
     );
 

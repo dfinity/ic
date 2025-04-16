@@ -22,6 +22,16 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "helper_contracts",
+    srcs = [
+        "DepositHelperWithSubaccount.sol",
+        "ERC20DepositHelper.sol",
+        "EthDepositHelper.sol",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "minter",
     srcs = glob(
@@ -41,12 +51,12 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
+        "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
-        "//rs/crypto/sha3",
         "//rs/ethereum/evm-rpc-client",
-        "//rs/ethereum/types",
         "//rs/phantom_newtype",
         "//rs/types/management_canister_types",
         "//rs/utils/ensure",
@@ -59,6 +69,7 @@ rust_library(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-sha3",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
@@ -132,6 +143,7 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
+        "templates/pagination.html",
         "templates/principal_to_bytes.js",
     ],
     crate_features = features,
@@ -144,10 +156,10 @@ rust_test(
     deps = [
         # Keep sorted.
         ":minter",
+        "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
-        "//rs/ethereum/types",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
@@ -184,30 +196,30 @@ rust_binary(
         name = "integration_tests" + name_suffix,
         srcs = glob(["tests/**/*.rs"]),
         data = [
-            ":cketh_minter_debug.wasm",
-            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm",
-            "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
-            "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
-            "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
+            ":cketh_minter_debug.wasm.gz",
+            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+            "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+            "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         ] + extra_data,
         env = {
             "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
-            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
-            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm)",
-            "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
-            "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
-            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
+            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
+            "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+            "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
         } | extra_env,
         proc_macro_deps = [],
         deps = [
             # Keep sorted.
             ":minter",
+            "//packages/ic-ethereum-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/ethereum/cketh/test_utils",
             "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-            "//rs/ethereum/types",
             "//rs/state_machine_tests",
             "//rs/types/base_types",
+            "//rs/types/management_canister_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:ethers-core",
@@ -217,14 +229,20 @@ rust_binary(
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
             "@crate_index//:serde_json",
-        ],
+        ] + extra_deps,
     )
-    for (name_suffix, extra_data, extra_env) in [
-        ("", [], {}),
+    for (name_suffix, extra_data, extra_env, extra_deps) in [
+        (
+            "",
+            [],
+            {},
+            ["//rs/ethereum/cketh/test_utils"],
+        ),
         (
             "_evm_rpc",
             ["@evm_rpc.wasm.gz//file"],
             {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)"},
+            ["//rs/ethereum/cketh/test_utils:test_utils_evm_rpc"],
         ),
     ]
 ]
@@ -232,11 +250,23 @@ rust_binary(
 closure_js_library(
     name = "principal_to_bytes",
     srcs = ["templates/principal_to_bytes.js"],
+    # We don't automatically build this because the build is unreliable.
+    tags = ["manual"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 closure_js_test(
     name = "principal_to_bytes_test",
     srcs = ["tests/principal_to_bytes_test.js"],
+    # We don't automatically build this because the build is unreliable.
+    tags = ["manual"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         # Keep sorted.
         ":principal_to_bytes",

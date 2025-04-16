@@ -32,7 +32,7 @@ impl Registry {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct DeployGuestosToAllUnassignedNodesPayload {
     pub elected_replica_version: String,
 }

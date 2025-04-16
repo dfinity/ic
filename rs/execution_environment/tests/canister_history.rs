@@ -2,11 +2,12 @@ use ic00::{
     CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
     TakeCanisterSnapshotArgs,
 };
+use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, InstallCodeArgs, Method,
     Payload, UpdateSettingsArgs,
@@ -15,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
     CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
 };
-use ic_state_machine_tests::{PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
@@ -140,7 +141,7 @@ fn canister_history_tracks_create_install_reinstall() {
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
@@ -170,7 +171,7 @@ fn canister_history_tracks_create_install_reinstall() {
     .unwrap();
     // check canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -198,7 +199,7 @@ fn canister_history_tracks_create_install_reinstall() {
         InstallCodeArgs::new(
             Reinstall,
             canister_id,
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             None,
@@ -208,10 +209,10 @@ fn canister_history_tracks_create_install_reinstall() {
     .unwrap();
     // check canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Reinstall, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Reinstall, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -263,7 +264,7 @@ fn canister_history_tracks_upgrade() {
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
@@ -281,7 +282,7 @@ fn canister_history_tracks_upgrade() {
     .unwrap();
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -307,10 +308,10 @@ fn canister_history_tracks_upgrade() {
     .unwrap();
     // check canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -362,7 +363,7 @@ fn canister_history_tracks_uninstall() {
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
@@ -380,7 +381,7 @@ fn canister_history_tracks_uninstall() {
     .unwrap();
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -399,7 +400,7 @@ fn canister_history_tracks_uninstall() {
     .unwrap();
     // check canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::CanisterCodeUninstall,
@@ -454,7 +455,7 @@ fn canister_history_tracks_controllers_change() {
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
@@ -481,7 +482,7 @@ fn canister_history_tracks_controllers_change() {
         .unwrap();
         // check canister history
         reference_change_entries.push(CanisterChange::new(
-            now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+            now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
             i,
             CanisterChangeOrigin::from_user(user_id2),
             CanisterChangeDetails::controllers_change(new_controllers),
@@ -538,7 +539,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
@@ -564,7 +565,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     .unwrap();
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -610,7 +611,7 @@ fn canister_history_tracks_changes_from_canister() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -647,7 +648,7 @@ fn canister_history_tracks_changes_from_canister() {
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the canister is created in the next round after the ingress message is received
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
         0,
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
@@ -677,7 +678,7 @@ fn canister_history_tracks_changes_from_canister() {
     env.execute_ingress(ucan, "update", ucan_payload).unwrap();
     // check canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the canister is installed in the next round after the ingress message is received
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is installed in the next round after the ingress message is received
         1,
         CanisterChangeOrigin::from_canister(ucan.into(), None),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -709,7 +710,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -747,7 +748,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     };
     // update reference canister history
     let reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 3, // the universal canister is created in 1st round, installed in 2nd round, this canister is created in 3rd round
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the universal canister is created in 1st round, installed in 2nd round, this canister is created in 3rd round
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
@@ -760,7 +761,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
         InstallCodeArgs {
             mode: Install,
             canister_id: canister_id.into(),
-            wasm_module: UNIVERSAL_CANISTER_WASM.into(),
+            wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -830,7 +831,7 @@ fn canister_info_retrieval() {
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         0,
         CanisterChangeOrigin::from_user(user_id1),
         CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
@@ -848,7 +849,7 @@ fn canister_info_retrieval() {
     .unwrap();
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
@@ -874,16 +875,16 @@ fn canister_info_retrieval() {
     .unwrap();
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
 
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -903,8 +904,8 @@ fn canister_info_retrieval() {
     assert_eq!(
         res,
         Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            format!("{} cannot be called by a user.", Method::CanisterInfo)
+            ErrorCode::CanisterRejectedMessage,
+            "Only canisters can call ic00 method canister_info"
         ))
     );
 
@@ -975,8 +976,8 @@ fn canister_info_retrieval() {
     .unwrap();
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
-        19,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        18,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::CanisterCodeUninstall,
     ));
@@ -999,9 +1000,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     let (_, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
 
     // Set up StateMachine
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     // Set time of StateMachine to current system time
     env.set_time(now);
 
@@ -1013,7 +1012,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     // Create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -1050,7 +1049,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     };
 
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the canister is created in the next round after the ingress message is received
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
         0,
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
@@ -1072,7 +1071,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     };
     // Check canister history.
     reference_change_entries.push(CanisterChange::new(
-        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         1,
         CanisterChangeOrigin::from_user(ucan.into()),
         CanisterChangeDetails::code_deployment(Install, test_canister_sha256),

@@ -5,7 +5,7 @@ use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, StateReader,
     TransientStateHashError::*,
 };
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
@@ -17,7 +17,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
-    CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
+    CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
 };
 use setup::setup;
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
@@ -32,12 +32,14 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from([0; 32]),
-        idkg_subnet_public_keys: BTreeMap::new(),
+        chain_key_subnet_public_keys: BTreeMap::new(),
         idkg_pre_signature_ids: BTreeMap::new(),
+        ni_dkg_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
     }
 }
 
@@ -48,12 +50,14 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         requires_full_state_hash: true,
         messages: BatchMessages::default(),
         randomness: Randomness::from([0; 32]),
-        idkg_subnet_public_keys: BTreeMap::new(),
+        chain_key_subnet_public_keys: BTreeMap::new(),
         idkg_pre_signature_ids: BTreeMap::new(),
+        ni_dkg_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
     }
 }
 

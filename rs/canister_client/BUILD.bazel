@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 # The package is deprecated, NET-1274.
 package(default_visibility = [
+    "//rs/boundary_node/ic_boundary:__pkg__",
     "//rs/cup_explorer:__pkg__",
     "//rs/http_endpoints/public:__pkg__",
     "//rs/nns/init:__pkg__",
@@ -9,19 +10,17 @@ package(default_visibility = [
     "//rs/registry/admin:__pkg__",
     "//rs/registry/nns_data_provider:__pkg__",
     "//rs/replay:__pkg__",
-    "//rs/rosetta-api:__subpackages__",
     "//rs/rust_canisters/canister_test:__pkg__",
-    "//rs/scenario_tests:__pkg__",
     "//rs/tests:__subpackages__",
-    "//rs/workload_generator:__pkg__",
 ])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-secp256k1",
+    "//rs/canister_client/read_state_response_parser",
     "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/tree_hash",
     "//rs/protobuf",
     "//rs/tree_deserializer",
@@ -29,14 +28,17 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:backoff",
     "@crate_index//:futures-util",
-    "@crate_index//:hyper_0_14_27",
-    "@crate_index//:hyper_rustls_0_24_2",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:hyper-util",
     "@crate_index//:itertools",
     "@crate_index//:prost",
-    "@crate_index//:rustls_0_21_12",
+    "@crate_index//:rustls",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:tokio",
+    "@crate_index//:tower",
     "@crate_index//:url",
 ]
 

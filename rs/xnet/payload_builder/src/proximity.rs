@@ -97,8 +97,10 @@ impl ProximityMap {
         // the replica is running.
         let registry_version = registry.get_latest_version();
         let own_operator = get_node_operator_id(&node, registry.as_ref(), &registry_version, &log)
-            .map(|own_operator| node_operator_to_string(&own_operator))
-            .unwrap_or_else(|| OPERATOR_UNKNOWN.into());
+            .map_or_else(
+                || OPERATOR_UNKNOWN.into(),
+                |own_operator| node_operator_to_string(&own_operator),
+            );
         let metric_rtt_ema = metrics_registry.register(GaugeVec::new(Opts::new(METRIC_RTT_EMA, "Exponential moving average of roundtrip time in seconds as measured by XNetPayloadBuilder, by source and destination DC operator.").const_label(LABEL_FROM, own_operator), &[LABEL_TO]).unwrap());
         let metric_unknown_dcop = metrics_registry.int_counter(
             METRIC_UNKNOWN_DCOP,
@@ -240,8 +242,8 @@ impl ProximityMap {
 /// Returns the string representation of `node_operator` as `PrincipalId`; or
 /// `"unknown"` if the conversion to `PrincipalId` fails.
 fn node_operator_to_string(node_operator: &[u8]) -> String {
-    PrincipalId::try_from(node_operator)
-        .ok()
-        .map(|node_operator| node_operator.to_string())
-        .unwrap_or_else(|| OPERATOR_UNKNOWN.into())
+    PrincipalId::try_from(node_operator).ok().map_or_else(
+        || OPERATOR_UNKNOWN.into(),
+        |node_operator| node_operator.to_string(),
+    )
 }

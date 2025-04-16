@@ -3,7 +3,7 @@
 set -euo pipefail
 set -x
 
-COMMIT_ID=$(curl -s -f https://raw.githubusercontent.com/dfinity/ic/master/rs/rosetta-api/icp_ledger/UPGRADES.md \
+COMMIT_ID=$(curl -s -f https://raw.githubusercontent.com/dfinity/ic/master/rs/ledger_suite/icp/UPGRADES.md \
     | grep "^|.*archive" | awk -F'|' '{print $4}' | sed 's/[` ]\+//g' | tail -n1)
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 TMP_DIR="$SCRIPT_DIR/tmp"

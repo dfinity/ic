@@ -1,0 +1,13 @@
+[package]
+name = "backtrace-canister"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "backtrace-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }

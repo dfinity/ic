@@ -1,14 +1,15 @@
 [Unit]
 Description=Monitor GuestOS virtual machine
-Requires=libvirtd.service
-After=libvirtd.service
-Requires=generate-guestos-config.service
-After=generate-guestos-config.service
 After=guestos.service
+Wants=guestos.service
 
 [Service]
 Type=oneshot
 ExecStart=/opt/ic/bin/monitor-guestos.sh
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2
 
 [Install]
 WantedBy=multi-user.target

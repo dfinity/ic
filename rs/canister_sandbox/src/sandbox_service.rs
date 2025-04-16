@@ -6,12 +6,9 @@ pub trait SandboxService: Send + Sync {
     /// Terminate the sandbox.
     fn terminate(&self, req: TerminateRequest) -> Call<TerminateReply>;
 
-    /// Creates a canister Wasm code object. The wasm code itself or
-    /// the path to it is passed as the RPC payload.
+    /// Creates a canister Wasm code object. The already compiled Wasm module is
+    /// passed in the request.
     fn open_wasm(&self, req: OpenWasmRequest) -> Call<OpenWasmReply>;
-
-    fn open_wasm_serialized(&self, req: OpenWasmSerializedRequest)
-        -> Call<OpenWasmSerializedReply>;
 
     /// Close the indicated canister Wasm code object. Code cannot be
     /// used anymore.
@@ -39,19 +36,12 @@ pub trait SandboxService: Send + Sync {
     /// Abort Wasm execution that was previously paused.
     fn abort_execution(&self, req: AbortExecutionRequest) -> Call<AbortExecutionReply>;
 
-    /// Perform initial parsing and evaluation needed to create the starting
-    /// execution state.
+    /// Perform deserialization of a serialized module needed to create the
+    /// starting execution state.
     fn create_execution_state(
         &self,
         req: CreateExecutionStateRequest,
     ) -> Call<CreateExecutionStateReply>;
-
-    /// Perform deserialization of a serialized module needed to create the
-    /// starting execution state.
-    fn create_execution_state_serialized(
-        &self,
-        req: CreateExecutionStateSerializedRequest,
-    ) -> Call<CreateExecutionStateSerializedReply>;
 }
 
 impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
@@ -61,9 +51,6 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
         match req {
             Request::Terminate(req) => Call::new_wrap(self.terminate(req), Reply::Terminate),
             Request::OpenWasm(req) => Call::new_wrap(self.open_wasm(req), Reply::OpenWasm),
-            Request::OpenWasmSerialized(req) => {
-                Call::new_wrap(self.open_wasm_serialized(req), Reply::OpenWasmSerialized)
-            }
             Request::CloseWasm(req) => Call::new_wrap(self.close_wasm(req), Reply::CloseWasm),
             Request::OpenMemory(req) => Call::new_wrap(self.open_memory(req), Reply::OpenMemory),
             Request::CloseMemory(req) => Call::new_wrap(self.close_memory(req), Reply::CloseMemory),
@@ -79,10 +66,6 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             Request::CreateExecutionState(req) => Call::new_wrap(
                 self.create_execution_state(req),
                 Reply::CreateExecutionState,
-            ),
-            Request::CreateExecutionStateSerialized(req) => Call::new_wrap(
-                self.create_execution_state_serialized(req),
-                Reply::CreateExecutionStateSerialized,
             ),
         }
     }

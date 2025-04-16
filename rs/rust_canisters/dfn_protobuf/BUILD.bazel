@@ -2,11 +2,12 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
     # Keep sorted.
+    "//rs/ledger_suite/icp:__subpackages__",
+    "//rs/nervous_system/canisters:__pkg__",
     "//rs/nervous_system/common:__pkg__",
     "//rs/nns:__subpackages__",
-    "//rs/rosetta-api:__pkg__",
-    "//rs/rosetta-api/icp_ledger:__subpackages__",
-    "//rs/rosetta-api/ledger_canister_blocks_synchronizer:__pkg__",
+    "//rs/rosetta-api/icp:__pkg__",
+    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer:__pkg__",
     "//rs/rust_canisters:__subpackages__",
     "//rs/sns/test_utils:__pkg__",
     "//rs/tests:__subpackages__",
@@ -14,7 +15,7 @@ package(default_visibility = [
 
 rust_library(
     name = "dfn_protobuf",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = [
         # Keep sorted.
         "//rs/rust_canisters/on_wire",

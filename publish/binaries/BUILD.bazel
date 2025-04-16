@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "checksum_rule", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -10,13 +10,10 @@ ALL_BINARIES = {
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica:replica",
-    "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
     "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
-    "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
-    "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
+    "rate-limiting-canister-client": "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
-    "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
     "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
     "ic-starter": "//rs/starter:ic-starter",
@@ -31,24 +28,17 @@ ALL_BINARIES = {
     "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
     "ic-replay": "//rs/replay:ic-replay",
     "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
-    "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
-    "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
     "nfplot": "//rs/nervous_system/neurons_fund/nfplot",
     "orchestrator": "//rs/orchestrator",
     "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
     "sns-audit": "//rs/sns/audit:sns-audit",
-    "sns-test-feature": "//rs/sns/cli:sns--test_feature",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
     "drun": "//rs/drun:drun",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
-    # needed by DRE for release qualification
-    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
-    # needed by DRE for release qualification
-    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
 }
 
 # test binaries or binaries using test utils
@@ -56,18 +46,14 @@ TESTONLY_BINARIES = [
     "drun",
     "e2e-test-driver",
     "ic-admin",
-    "ic-backup",
     "ic-boundary",
     "ic-boundary-tls",
     "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",
-    "ic-recovery",
-    "ic-replay",
     "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
-    "sns-test-feature",
     "types-test",
     "replicated-state-test",
 ]
@@ -129,6 +115,11 @@ TEST_BINARIES = [
 filegroup(
     name = "binaries",
     srcs = [name + ".gz" for name in ALL_BINARIES],
+)
+
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":binaries"],
 )
 
 upload_artifacts(

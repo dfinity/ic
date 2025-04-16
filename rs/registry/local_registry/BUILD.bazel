@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/registry/transport",
     "//rs/types/types",
+    "@crate_index//:parking_lot",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:url",
@@ -19,7 +20,8 @@ DEPENDENCIES = [
 
 rust_library(
     name = "local_registry",
-    srcs = glob(["src/**"]),
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_local_registry",
     version = "0.9.0",
     deps = DEPENDENCIES,
@@ -35,7 +37,6 @@ rust_test(
     crate = ":local_registry",
     deps = [
         # Keep sorted.
-        "//rs/registry/local_store/artifacts",
-        "@crate_index//:tempfile",
+        "//rs/test_utilities/registry",
     ],
 )

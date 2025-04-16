@@ -8,13 +8,13 @@ use crate::vault::local_csp_vault::{
 use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalar, EccScalarBytes,
     IDkgTranscriptInternal, IdkgProtocolAlgorithm, PolynomialCommitment, SimpleCommitment,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::{
-    crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId},
+    crypto::{AlgorithmId, ExtendedDerivationPath},
     Randomness,
 };
 use proptest::{
@@ -296,6 +296,7 @@ mod create_schnorr_sig_share {
                     vault.create_schnorr_sig_share(
                         parameters.derivation_path.clone(),
                         parameters.message.clone(),
+                        parameters.taproot_tree_root.clone(),
                         parameters.nonce,
                         transcript_key,
                         transcript_presig,
@@ -367,6 +368,7 @@ mod utils {
     pub struct SchnorrSignShareParameters {
         pub derivation_path: ExtendedDerivationPath,
         pub message: Vec<u8>,
+        pub taproot_tree_root: Option<Vec<u8>>,
         pub nonce: Randomness,
         pub key: IDkgTranscriptInternal,
         pub key_opening: CspSecretKey,
@@ -390,6 +392,7 @@ mod utils {
                 derivation_path: some_derivation_path(),
                 message: "some message".as_bytes().to_vec(),
                 nonce: Randomness::from([0; 32]),
+                taproot_tree_root: None,
                 key,
                 key_opening,
                 presig,
@@ -406,6 +409,7 @@ mod utils {
             vault.create_schnorr_sig_share(
                 self.derivation_path.clone(),
                 self.message.clone(),
+                self.taproot_tree_root.clone(),
                 self.nonce,
                 transcript_to_bytes(&self.key),
                 transcript_to_bytes(&self.presig),

@@ -11,7 +11,7 @@ use thiserror::Error;
 
 pub const DELETED_MARKER: &str = "(deleted)";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Diff(pub Value);
 
 pub fn make_diff(base_snapshot: Snapshot, new_snapshot: Snapshot) -> Result<Diff> {

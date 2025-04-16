@@ -4,12 +4,10 @@
 # and outputs root hash to a separate file.
 #
 import argparse
-import atexit
 import os
 import re
 import subprocess
 import sys
-import tempfile
 
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
@@ -40,9 +38,10 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
     partition = os.path.join(tmpdir, "partition.img")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     subprocess.run(
         [

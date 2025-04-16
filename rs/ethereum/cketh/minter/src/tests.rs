@@ -48,11 +48,7 @@ fn deserialize_json_reply() {
 }
 
 mod eth_get_logs {
-    use crate::eth_logs::{ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
-    use crate::eth_rpc::LogEntry;
-    use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
-    use candid::Principal;
-    use ic_crypto_sha3::Keccak256;
+    use crate::numeric::{BlockNumber, LogIndex};
     use ic_ethereum_types::Address;
     use std::str::FromStr;
 
@@ -95,136 +91,11 @@ mod eth_get_logs {
             }]
         );
     }
-
-    #[test]
-    fn should_have_correct_topic() {
-        use crate::deposit::RECEIVED_ETH_EVENT_TOPIC;
-
-        //must match event signature in minter.sol
-        let event_signature = "ReceivedEth(address,uint256,bytes32)";
-        let topic = Keccak256::hash(event_signature);
-        assert_eq!(topic, RECEIVED_ETH_EVENT_TOPIC)
-    }
-
-    #[test]
-    fn should_parse_received_eth_event() {
-        let event = r#"{
-            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-            "topics": [
-                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
-                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
-            ],
-            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
-            "blockNumber": "0x3ca487",
-            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-            "transactionIndex": "0x22",
-            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-            "logIndex": "0x27",
-            "removed": false
-        }"#;
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
-        let expected_event = ReceivedEthEvent {
-            transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
-                .parse()
-                .unwrap(),
-            block_number: BlockNumber::new(3974279),
-            log_index: LogIndex::from(39_u8),
-            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
-                .parse()
-                .unwrap(),
-            value: Wei::from(10_000_000_000_000_000_u128),
-            principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
-        }
-        .into();
-
-        assert_eq!(parsed_event, expected_event);
-    }
-
-    #[test]
-    fn should_parse_received_erc20_event() {
-        let event = r#"{
-            "address": "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
-            "topics": [
-                "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b",
-                "0x0000000000000000000000007439e9bb6d8a84dd3a23fe621a30f95403f87fb9",
-                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-                "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
-            ],
-            "data": "0x0000000000000000000000000000000000000000000000008ac7230489e80000",
-            "blockNumber": "0x5146a4",
-            "transactionHash": "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
-            "transactionIndex": "0x22",
-            "blockHash": "0x0cbfb260e2e589ef110e63314279eb3ef2e307e46fa5409f08c101976858f80a",
-            "logIndex": "0x27",
-            "removed": false
-        }"#;
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
-        let expected_event = ReceivedErc20Event {
-            transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
-                .parse()
-                .unwrap(),
-            block_number: BlockNumber::new(5326500),
-            log_index: LogIndex::from(39_u8),
-            from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
-                .parse()
-                .unwrap(),
-            value: Erc20Value::from(10_000_000_000_000_000_000_u128),
-            principal: Principal::from_str(
-                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
-            )
-            .unwrap(),
-            erc20_contract_address: "0x7439e9bb6d8a84dd3a23fe621a30f95403f87fb9"
-                .parse()
-                .unwrap(),
-        }
-        .into();
-
-        assert_eq!(parsed_event, expected_event);
-    }
-
-    #[test]
-    fn should_not_parse_removed_event() {
-        use crate::eth_logs::{EventSource, EventSourceError, ReceivedEventError};
-        let event = r#"{
-            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-            "topics": [
-                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
-                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
-            ],
-            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
-            "blockNumber": "0x3ca487",
-            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-            "transactionIndex": "0x22",
-            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-            "logIndex": "0x27",
-            "removed": true
-        }"#;
-
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap());
-        let expected_error = Err(ReceivedEventError::InvalidEventSource {
-            source: EventSource {
-                transaction_hash:
-                    "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
-                        .parse()
-                        .unwrap(),
-                log_index: LogIndex::from(39_u8),
-            },
-            error: EventSourceError::InvalidEvent(
-                "this event has been removed from the chain".to_string(),
-            ),
-        });
-        assert_eq!(parsed_event, expected_error);
-    }
 }
 
 #[test]
 fn address_from_pubkey() {
-    use ic_crypto_ecdsa_secp256k1::PublicKey;
+    use ic_secp256k1::PublicKey;
 
     // Examples come from https://mycrypto.tools/sample_ethaddresses.html
     const EXAMPLES: &[(&str, &str)] = &[

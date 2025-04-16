@@ -1,3 +1,4 @@
+mod conversions;
 #[allow(clippy::all)]
 #[path = "../sns_root_types.rs"]
 pub mod sns_root_types;

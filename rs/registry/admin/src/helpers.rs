@@ -62,7 +62,7 @@ pub(crate) fn summary_from_string_or_file(
 }
 
 /// Parses the URL of a proposal.
-pub(crate) fn parse_proposal_url(url: Option<Url>) -> String {
+pub(crate) fn parse_proposal_url(url: &Option<Url>) -> String {
     match url {
         Some(url) => {
             if url.scheme() != "https" {

@@ -19,12 +19,12 @@ __dfx() {
 
 source "$NNS_TOOLS_DIR/../lib.sh"
 
-source "$LIB_DIR/boundary_node.sh"
 source "$LIB_DIR/canister_wasms.sh"
 source "$LIB_DIR/canisters.sh"
 source "$LIB_DIR/constants.sh"
 source "$LIB_DIR/functions.sh"
 source "$LIB_DIR/installers.sh"
+source "$LIB_DIR/nns_neurons.sh"
 source "$LIB_DIR/proposals.sh"
 source "$LIB_DIR/sns_upgrades.sh"
 source "$LIB_DIR/topology.sh"

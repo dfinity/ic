@@ -1,0 +1,20 @@
+[package]
+name = "ic-read-state-response-parser"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-canonical-state = { path = "../../canonical_state" }
+ic-certification = { path = "../../certification" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-types = { path = "../../types/types" }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+tree-deserializer = { path = "../../tree_deserializer" }
+
+[dev-dependencies]
+ic-certification-test-utils = { path = "../../certification/test-utils" }
+

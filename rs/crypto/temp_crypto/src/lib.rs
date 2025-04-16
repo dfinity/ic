@@ -1,7 +1,8 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
+use ic_protobuf::types::v1 as pb_types;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -46,7 +47,7 @@ pub mod internal {
         LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
         ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
-        ThresholdSigner,
+        ThresholdSigner, VetKdProtocol,
     };
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
@@ -85,6 +86,10 @@ pub mod internal {
     };
     use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
     use ic_types::crypto::threshold_sig::IcRootOfTrust;
+    use ic_types::crypto::vetkd::{
+        VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
+        VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+    };
     use ic_types::crypto::{
         BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
         CurrentNodePublicKeys, IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf,
@@ -735,6 +740,47 @@ pub mod internal {
         }
     }
 
+    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> VetKdProtocol
+        for TempCryptoComponentGeneric<C, R>
+    {
+        fn create_encrypted_key_share(
+            &self,
+            args: VetKdArgs,
+        ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+            VetKdProtocol::create_encrypted_key_share(&self.crypto_component, args)
+        }
+
+        fn verify_encrypted_key_share(
+            &self,
+            signer: NodeId,
+            key_share: &VetKdEncryptedKeyShare,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyShareVerificationError> {
+            VetKdProtocol::verify_encrypted_key_share(
+                &self.crypto_component,
+                signer,
+                key_share,
+                args,
+            )
+        }
+
+        fn combine_encrypted_key_shares(
+            &self,
+            shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+            args: &VetKdArgs,
+        ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+            VetKdProtocol::combine_encrypted_key_shares(&self.crypto_component, shares, args)
+        }
+
+        fn verify_encrypted_key(
+            &self,
+            key: &VetKdEncryptedKey,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyVerificationError> {
+            VetKdProtocol::verify_encrypted_key(&self.crypto_component, key, args)
+        }
+    }
+
     impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsConfig
         for TempCryptoComponentGeneric<C, R>
     {
@@ -849,7 +895,7 @@ pub mod internal {
             &self,
             signature: &ThresholdSigShareOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
             signer: NodeId,
         ) -> CryptoResult<()> {
             self.crypto_component
@@ -859,7 +905,7 @@ pub mod internal {
         fn combine_threshold_sig_shares(
             &self,
             shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<CombinedThresholdSigOf<T>> {
             self.crypto_component
                 .combine_threshold_sig_shares(shares, dkg_id)
@@ -869,7 +915,7 @@ pub mod internal {
             &self,
             signature: &CombinedThresholdSigOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_threshold_sig_combined(signature, message, dkg_id)
@@ -971,7 +1017,7 @@ pub mod internal {
         fn sign_threshold(
             &self,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<ThresholdSigShareOf<T>> {
             self.crypto_component.sign_threshold(message, dkg_id)
         }
@@ -1037,7 +1083,7 @@ impl EcdsaSubnetConfig {
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 2 * 1024 * 1024,
                 unit_delay_millis: 500,
-                initial_notary_delay_millis: 1500,
+                initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 59,
                 dkg_dealings_per_block: 1,
@@ -1049,18 +1095,15 @@ impl EcdsaSubnetConfig {
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: None,
-                chain_key_config:  Some(ChainKeyConfig {
+                chain_key_config: Some(ChainKeyConfig {
                     key_configs: vec![KeyConfig {
-                        key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
-                            key_id: Some(
-                                ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
-                                    EcdsaKeyId {
-                                        curve: EcdsaCurve::Secp256k1.into(),
-                                        name: "dummy_ecdsa_key_id".to_string(),
-                                    },
-                                ),
-                            ),
+                        key_id: Some(ic_protobuf::types::v1::MasterPublicKeyId {
+                            key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
+                                pb_types::EcdsaKeyId {
+                                    curve: pb_types::EcdsaCurve::Secp256k1.into(),
+                                    name: "dummy_ecdsa_key_id".to_string(),
+                                },
+                            )),
                         }),
                         pre_signatures_to_create_in_advance: Some(1),
                         max_queue_size: Some(20),
@@ -1073,9 +1116,9 @@ impl EcdsaSubnetConfig {
         }
     }
 
-    pub fn new_without_ecdsa_config(subnet_id: SubnetId, node_id: Option<NodeId>) -> Self {
+    pub fn new_without_chain_key_config(subnet_id: SubnetId, node_id: Option<NodeId>) -> Self {
         let mut subnet_config = Self::new(subnet_id, node_id, None);
-        subnet_config.subnet_record.ecdsa_config = None;
+        subnet_config.subnet_record.chain_key_config = None;
         subnet_config
     }
 
@@ -1096,7 +1139,7 @@ impl EcdsaSubnetConfig {
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct NodeKeysToGenerate {
     pub generate_node_signing_keys: bool,
     pub generate_committee_signing_keys: bool,

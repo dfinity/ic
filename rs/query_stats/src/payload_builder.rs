@@ -163,7 +163,7 @@ impl QueryStatsPayloadBuilderImpl {
                     warn!(
                         every_n_seconds => 30,
                         self.log,
-                        "Current stats are uninitalized. This warning should go away after some minutes"
+                        "Current stats are uninitialized. This warning should go away after some minutes if the replica is processing query calls."
                     );
                     vec![]
                 }
@@ -375,12 +375,11 @@ impl QueryStatsPayloadBuilderImpl {
                 // Deserialize the payload
                 .filter_map(|past_payload| {
                     QueryStatsPayload::deserialize(past_payload.payload)
-                        .map_err(|err| {
+                        .inspect_err(|_| {
                             error!(
                                 self.log,
                                 "Failed to deserialize past payload, this is a bug"
                             );
-                            err
                         })
                         .ok()
                         .flatten()

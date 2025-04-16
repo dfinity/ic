@@ -5,6 +5,8 @@ type EthereumNetwork = variant {
     Sepolia;
 };
 
+type Subaccount = blob;
+
 type CanisterStatusResponse = record {
   query_stats : QueryStats;
   status : CanisterStatusType;
@@ -24,6 +26,14 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
   reserved_cycles_limit : nat;
+  log_visibility: LogVisibility;
+  wasm_memory_limit : nat;
+};
+
+type LogVisibility = variant {
+    controllers;
+    public;
+    allowed_viewers : vec principal;
 };
 
 type QueryStats = record {
@@ -101,6 +111,12 @@ type UpgradeArg = record {
     // The principal of the EVM RPC canister that handles the communication
     // with the Ethereum blockchain.
     evm_rpc_id : opt principal;
+
+    // Change the deposit with subaccount helper smart contract address.
+    deposit_with_subaccount_helper_contract_address : opt text;
+
+    // Change the last scraped block number of the deposit with subaccount helper smart contract.
+    last_deposit_with_subaccount_scraped_block_number : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -157,6 +173,9 @@ type MinterInfo = record {
     // Address of the ERC20 helper smart contract
     erc20_helper_contract_address: opt text;
 
+    // Address of the ETH or ERC20 deposit with subaccount helper smart contract.
+    deposit_with_subaccount_helper_contract_address: opt text;
+
     // Information of supported ERC20 tokens.
     supported_ckerc20_tokens: opt vec CkErc20Token;
 
@@ -186,8 +205,15 @@ type MinterInfo = record {
     // Last scraped block number for logs of the ERC20 helper contract.
     last_erc20_scraped_block_number: opt nat;
 
+    // Last scraped block number for logs of the deposit with subaccount helper contract.
+    last_deposit_with_subaccount_scraped_block_number: opt nat;
+
     // Canister ID of the ckETH ledger.
     cketh_ledger_id: opt principal;
+
+    // Canister ID of the EVM RPC canister that handles the communication
+    // with the Ethereum blockchain.
+    evm_rpc_id : opt principal;
 };
 
 
@@ -243,7 +269,16 @@ type RetrieveEthStatus = variant {
     TxFinalized : TxFinalizedStatus;
 };
 
-type WithdrawalArg = record { recipient : text; amount : nat };
+type WithdrawalArg = record {
+    // The address to which the minter should deposit ETH.
+    recipient : text;
+
+    // The amount of ckETH in Wei that the client wants to withdraw.
+    amount : nat;
+
+    // The subaccount to burn ckETH from.
+    from_subaccount : opt Subaccount;
+};
 
 // Details of a withdrawal request and its status.
 type WithdrawalDetail = record {
@@ -331,6 +366,12 @@ type WithdrawErc20Arg = record {
 
     // Ethereum address to withdraw to.
     recipient : text;
+
+    // The subaccount to burn ckETH from to pay for the transaction fee.
+    from_cketh_subaccount : opt Subaccount;
+
+    // The subaccount to burn ckERC20 from.
+    from_ckerc20_subaccount : opt Subaccount;
 };
 
 type RetrieveErc20Request = record {
@@ -420,6 +461,7 @@ type Event = record {
             from_address : text;
             value : nat;
             "principal" : principal;
+            subaccount : opt Subaccount;
         };
         InvalidDeposit : record {
             event_source : EventSource;
@@ -433,6 +475,9 @@ type Event = record {
             block_number : nat;
         };
         SyncedErc20ToBlock : record {
+            block_number : nat;
+        };
+        SyncedDepositWithSubaccountToBlock : record {
             block_number : nat;
         };
         AcceptedEthWithdrawalRequest : record {
@@ -491,6 +536,7 @@ type Event = record {
             value : nat;
             "principal" : principal;
             erc20_contract_address : text;
+            subaccount : opt Subaccount;
         };
         AcceptedErc20WithdrawalRequest : record {
             max_transaction_fee : nat;

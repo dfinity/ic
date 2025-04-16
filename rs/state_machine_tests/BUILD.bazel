@@ -5,16 +5,18 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
+    "//packages/ic-error-types",
+    "//packages/ic-secp256k1",
     "//rs/artifact_pool",
+    "//rs/bitcoin/client",
+    "//rs/bitcoin/consensus",
     "//rs/config",
     "//rs/consensus",
     "//rs/consensus/utils",
-    "//rs/constants",
-    "//rs/crypto/ecdsa_secp256k1",
-    "//rs/crypto/ed25519",
-    "//rs/crypto/extended_bip32",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/test_utils/vetkd",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",
@@ -26,6 +28,7 @@ DEPENDENCIES = [
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/messaging",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -47,7 +50,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/xnet/payload_builder",
@@ -55,6 +57,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:rand",
+    "@crate_index//:rcgen",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
@@ -90,7 +93,7 @@ BIN_DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:ic-test-state-machine-client",
     "@crate_index//:serde",
@@ -106,6 +109,11 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_binary(
     name = "ic-test-state-machine",
     testonly = True,
@@ -117,6 +125,10 @@ rust_binary(
 rust_ic_test(
     name = "state_machine_multi_subnet_test",
     srcs = ["tests/multi_subnet.rs"],
+    data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
+    env = {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -149,9 +161,9 @@ rust_ic_test(
 rust_ic_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         # Keep sorted.
-        "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:proptest",
     ],
 )

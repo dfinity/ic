@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "logging_layer",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_tracing_logging_layer",
+    version = "0.9.0",
+    deps = [
+        "//rs/config",
+        "//rs/types/base_types",
+        "@crate_index//:time",
+        "@crate_index//:tracing",
+        "@crate_index//:tracing-appender",
+        "@crate_index//:tracing-subscriber",
+    ],
+)

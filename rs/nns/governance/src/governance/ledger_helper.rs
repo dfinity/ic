@@ -5,11 +5,16 @@ use crate::{
     pb::v1::{governance_error::ErrorType, GovernanceError},
 };
 
-use ic_nervous_system_common::ledger::IcpLedger;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
 
+#[cfg(feature = "tla")]
+use super::tla::TLA_INSTRUMENTATION_STATE;
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
+
 /// An object that represents the burning of neuron fees.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct BurnNeuronFeesOperation {
     pub neuron_id: NeuronId,
     pub amount_e8s: u64,
@@ -19,6 +24,7 @@ impl BurnNeuronFeesOperation {
     /// Burns the neuron fees by calling ledger and changing the neuron. Recoverable errors are
     /// returned while unrecoverable errors cause a panic. A neuron lock should be held before
     /// calling this.
+    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn burn_neuron_fees_with_ledger(
         self,
         ledger: &dyn IcpLedger,
@@ -69,7 +75,7 @@ impl BurnNeuronFeesOperation {
 }
 
 /// An object that represents the transfer of stake from one neuron to another.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct NeuronStakeTransferOperation {
     pub source_neuron_id: NeuronId,
     pub target_neuron_id: NeuronId,
@@ -80,6 +86,7 @@ pub struct NeuronStakeTransferOperation {
 impl NeuronStakeTransferOperation {
     /// Transfers the stake from one neuron to another by calling ledger and changing the neurons.
     /// Recoverable errors are returned while unrecoverable errors cause a panic.
+    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn transfer_neuron_stake_with_ledger(
         self,
         ledger: &dyn IcpLedger,

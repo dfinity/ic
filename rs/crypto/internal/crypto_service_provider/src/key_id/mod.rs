@@ -1,15 +1,18 @@
 use crate::CspPublicKey;
 use hex::FromHex;
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey, PolynomialCommitment};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    EccCurveType, MEGaPublicKey, PolynomialCommitment,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::AlgorithmId;
 use std::fmt;
 use std::fmt::Formatter;
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";
+const KEY_ID_LARGE_DOMAIN: &str = "ic-key-id-large";
 const COMMITMENT_KEY_ID_DOMAIN: &str = "ic-key-id-idkg-commitment";
 const THRESHOLD_PUBLIC_COEFFICIENTS_KEY_ID_DOMAIN: &str =
     "KeyId from threshold public coefficients";
@@ -26,7 +29,7 @@ mod tests;
 /// It is a critical system invariant that the generated `KeyId` remains stable.
 /// This means that the same inputs should *always* produce instances of `KeyId` with the same value.
 /// This should be ensured via testing, especially if an external library is involved in generating those inputs.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct KeyId([u8; 32]);
 ic_crypto_internal_types::derive_serde!(KeyId, 32);
 
@@ -60,57 +63,50 @@ impl From<[u8; 32]> for KeyId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum KeyIdInstantiationError {
     InvalidArguments(String),
 }
 
-impl From<KeyIdInstantiationError> for CryptoError {
-    fn from(error: KeyIdInstantiationError) -> Self {
-        CryptoError::InvalidArgument {
-            message: format!("Cannot instantiate KeyId: {:?}", error),
+/// Compute a KeyId from an `AlgorithmId` and a slice of bytes.
+impl<B: AsRef<[u8]>> From<(AlgorithmId, &B)> for KeyId {
+    fn from((alg_id, bytes): (AlgorithmId, &B)) -> Self {
+        let bytes = bytes.as_ref();
+        match u32::try_from(bytes.len()) {
+            Ok(bytes_size_u32) => {
+                // bytes < 4 GiB (==u32::MAX==2^32-1)
+                let dom_sep = DomainSeparationContext::new(KEY_ID_DOMAIN.to_string());
+                let mut hash = Sha256::new_with_context(&dom_sep);
+                hash.write(&[u8::from(alg_id)]); // 1 byte
+                hash.write(&bytes_size_u32.to_be_bytes()); // 4 bytes
+                hash.write(bytes);
+                KeyId::from(hash.finish())
+            }
+            Err(_) => {
+                match u64::try_from(bytes.len()) {
+                    Ok(bytes_size_u64) => {
+                        // 4 GiB <= bytes < 16384 PiB (==u64::MAX==2^64-1)
+                        let dom_sep = DomainSeparationContext::new(KEY_ID_LARGE_DOMAIN.to_string());
+                        let mut hash = Sha256::new_with_context(&dom_sep);
+                        hash.write(&[u8::from(alg_id)]); // 1 byte
+                        hash.write(&bytes_size_u64.to_be_bytes()); // 8 bytes
+                        hash.write(bytes);
+                        KeyId::from(hash.finish())
+                    }
+                    Err(_) => {
+                        // bytes >= 16384 PiB (==u64::MAX==2^64-1)
+                        // It is very reasonable to panic here
+                        panic!("bytes >= 16384 PiB (=2^64-1)")
+                    }
+                }
+            }
         }
     }
 }
 
-/// Compute a KeyId from an `AlgorithmId` and a slice of bytes.
-///
-/// The computed KeyId is the result of applying SHA256 to the bytes:
-/// `domain_separator | algorithm_id | size(bytes) | bytes`
-/// where  domain_separator is DomainSeparationContext(KEY_ID_DOMAIN),
-/// algorithm_id is a 1-byte value, and size(pk_bytes) is the size of
-/// pk_bytes as u32 in BigEndian format.
-///
-/// # Errors
-/// * `KeyIdInstantiationError::InvalidArgument`: if the slice of bytes is too large and its size does not fit in a `u32`.
-impl<B> TryFrom<(AlgorithmId, &B)> for KeyId
-where
-    B: AsRef<[u8]>,
-{
-    type Error = KeyIdInstantiationError;
-
-    fn try_from((alg_id, bytes): (AlgorithmId, &B)) -> Result<Self, Self::Error> {
-        let bytes = bytes.as_ref();
-        let bytes_size = u32::try_from(bytes.len()).map_err(|_error| {
-            KeyIdInstantiationError::InvalidArguments(format!(
-                "Bytes array is too large (number of bytes {} does not fit in a u32)",
-                bytes.len()
-            ))
-        })?;
-        let mut hash =
-            Sha256::new_with_context(&DomainSeparationContext::new(KEY_ID_DOMAIN.to_string()));
-        hash.write(&[u8::from(alg_id)]);
-        hash.write(&bytes_size.to_be_bytes());
-        hash.write(bytes);
-        Ok(KeyId::from(hash.finish()))
-    }
-}
-
-impl TryFrom<&CspPublicKey> for KeyId {
-    type Error = KeyIdInstantiationError;
-
-    fn try_from(public_key: &CspPublicKey) -> Result<Self, Self::Error> {
-        KeyId::try_from((public_key.algorithm_id(), &public_key.pk_bytes()))
+impl From<&CspPublicKey> for KeyId {
+    fn from(public_key: &CspPublicKey) -> Self {
+        KeyId::from((public_key.algorithm_id(), &public_key.pk_bytes()))
     }
 }
 
@@ -119,11 +115,10 @@ impl TryFrom<&MEGaPublicKey> for KeyId {
 
     fn try_from(public_key: &MEGaPublicKey) -> Result<Self, Self::Error> {
         match public_key.curve_type() {
-            EccCurveType::K256 => KeyId::try_from((
+            EccCurveType::K256 => Ok(KeyId::from((
                 AlgorithmId::ThresholdEcdsaSecp256k1,
                 &public_key.serialize(),
-            ))
-            .map_err(|error| format!("cannot instantiate KeyId: {:?}", error)),
+            ))),
             c => Err(format!("unsupported curve: {:?}", c)),
         }
     }
@@ -156,11 +151,9 @@ impl From<&PolynomialCommitment> for KeyId {
     }
 }
 
-impl TryFrom<&TlsPublicKeyCert> for KeyId {
-    type Error = KeyIdInstantiationError;
-
-    fn try_from(cert: &TlsPublicKeyCert) -> Result<Self, Self::Error> {
-        KeyId::try_from((AlgorithmId::Tls, cert.as_der()))
+impl From<&TlsPublicKeyCert> for KeyId {
+    fn from(cert: &TlsPublicKeyCert) -> Self {
+        KeyId::from((AlgorithmId::Tls, cert.as_der()))
     }
 }
 

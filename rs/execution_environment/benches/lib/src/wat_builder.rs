@@ -1,6 +1,4 @@
-///
-/// The new WAT builder.
-//
+// The new WAT builder.
 
 /// Default number of loop iterations.
 pub const DEFAULT_LOOP_ITERATIONS: usize = 1_000;
@@ -19,9 +17,10 @@ pub const CONFIRMATION_LOOP_ITERATIONS: usize = 1_000_000;
 /// Note, the maximum compilation complexity is 15K.
 pub const CONFIRMATION_REPEAT_TIMES: usize = 14_000;
 
+use crate::common::Wasm64;
+
 ////////////////////////////////////////////////////////////////////////
 /// WAT Block Builder
-
 /// Represent a block of WAT code with corresponding imports and local variables.
 #[derive(Default)]
 pub struct Block {
@@ -85,23 +84,46 @@ impl Block {
         if code.contains("$empty_return_call") {
             self.import("(func $empty_return_call (result i32) return_call $empty)");
         }
-        if code.contains("$result_i32") {
+        if code.contains("$recursive_call") {
+            self.import(
+                &RECURSIVE
+                    .replace("<NAME>", "$recursive_call")
+                    .replace("<RETURN>", ""),
+            );
+        }
+        if code.contains("$recursive_return_call") {
+            self.import(
+                &RECURSIVE
+                    .replace("<NAME>", "$recursive_return_call")
+                    .replace("<RETURN>", "return_"),
+            );
+        }
+        if code.contains("$result_i32") || code.contains("table.get") || code.contains("table.size")
+        {
             self.import("(type $result_i32 (func (result i32)))")
                 .import("(func $empty_indirect (type $result_i32) (i32.const 0))")
-                .import("(table 10 funcref)")
-                .import("(elem (i32.const 7) $empty_indirect)");
+                .import("(table $table 10 funcref)")
+                .import("(elem (i32.const 7) $empty_indirect)")
+                .import("(elem func 0)");
         }
         self
     }
 
     /// Declare a `black_box` variable with specified `name` and `type`.
     pub fn declare_variable(&mut self, name: &str, ty: &str) -> &mut Self {
+        let memory_var_address = if ty == "i64" {
+            // The address should be somewhere beyond 4 GiB.
+            // This is 5 GB.
+            "5368709120"
+        } else {
+            "16"
+        };
         let init_val = match name {
             "x" => "1000000007",
             "y" => "1337",
             "z" => "2147483647",
             "zero" => "0",
-            "address" => "16",
+            "address" => memory_var_address,
             "one" => "1",
             _ => panic!("Error getting initial value for variable {name}"),
         };
@@ -136,7 +158,6 @@ impl Block {
 
 ////////////////////////////////////////////////////////////////////////
 /// WAT Function Builder
-
 /// Represent a WAT function with corresponding imports.
 #[derive(Default)]
 pub struct Func {
@@ -146,19 +167,15 @@ pub struct Func {
 
 impl Func {
     /// Transform the function into a test module WAT representation.
-    pub fn into_test_module_wat(self) -> String {
+    pub fn into_test_module_wat(self, wasm64_enabled: Wasm64) -> String {
+        let memory = if wasm64_enabled == Wasm64::Enabled {
+            "(memory $mem i64 131072)"
+        } else {
+            "(memory $mem 1)"
+        };
         wrap_lines(
             "(module",
-            [
-                self.imports,
-                vec![
-                    "(table $table 10 funcref)".into(),
-                    "(elem func 0)".into(),
-                    "(memory $mem 1)".into(),
-                ],
-                self.lines,
-            ]
-            .concat(),
+            [self.imports, vec![memory.into()], self.lines].concat(),
             ")",
         )
         .join("\n")
@@ -167,7 +184,6 @@ impl Func {
 
 ////////////////////////////////////////////////////////////////////////
 /// Helper functions
-
 /// Return a new block prepended and appended with the specified lines.
 fn wrap_lines(prefix: &str, lines: Vec<String>, suffix: &str) -> Vec<String> {
     vec![prefix.into()]
@@ -206,3 +222,18 @@ pub fn src_type(op: &str) -> &'static str {
     // Fallback to the destination type, i.e. for `i64.eqz` returns `i64`.
     dst_type(op)
 }
+
+const RECURSIVE: &str = r#"
+(func <NAME> (param $n i32) (result i32)
+    (i32.eqz (local.get $n))
+    (if (result i32)
+      (then
+      	(local.get $n)
+      )
+      (else
+      	(i32.sub (local.get $n) (i32.const 1))
+        (<RETURN>call <NAME>)
+      )
+    )
+)
+"#;

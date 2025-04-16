@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use ic_crypto_tree_hash::MixedHashTree as T;
 use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
 use ic_protobuf::messaging::xnet::v1::{mixed_hash_tree::TreeEnum, MixedHashTree as PbTree};
@@ -6,11 +5,12 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 
 use proptest::prelude::*;
 
-proptest! {
-    #[test]
-    fn encoding_roundtrip(t in arbitrary_mixed_hash_tree()) {
-        prop_assert_eq!(t.clone(), PbTree::proxy_decode(&PbTree::proxy_encode(t)).unwrap())
-    }
+#[test_strategy::proptest]
+fn encoding_roundtrip(#[strategy(arbitrary_mixed_hash_tree())] t: T) {
+    prop_assert_eq!(
+        t.clone(),
+        PbTree::proxy_decode(&PbTree::proxy_encode(t)).unwrap()
+    )
 }
 
 fn encode(t: &PbTree) -> Vec<u8> {

@@ -1,9 +1,10 @@
 //! Contains methods and structs that support settings up the NNS.
 
 use ic_types::hostos_version::HostosVersion;
+use itertools::Itertools;
 use registry_canister::mutations::{
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
 };
 
 use crate::{
@@ -45,13 +46,14 @@ use registry_canister::mutations::{
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
 use slog::{info, Logger};
 use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UpgradeContent {
     All,
     Orchestrator,
@@ -363,8 +365,8 @@ pub async fn vote_execute_proposal_assert_executed(
     // Wait for the proposal to be accepted and executed.
     let proposal_info = vote_and_execute_proposal(governance_canister, proposal_id).await;
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
         "proposal {proposal_id} did not execute: {proposal_info:?}"
     );
 }
@@ -383,7 +385,7 @@ pub async fn vote_execute_proposal_assert_failed(
     let expected_message_substring = expected_message_substring.to_string();
     // Wait for the proposal to be accepted and executed.
     let proposal_info = vote_and_execute_proposal(governance_canister, proposal_id).await;
-    assert_eq!(proposal_info.status(), ProposalStatus::Failed);
+    assert_eq!(proposal_info.status, ProposalStatus::Failed as i32);
     let reason = proposal_info.failure_reason.unwrap_or_default();
     assert!(
        reason
@@ -479,8 +481,8 @@ pub async fn submit_update_elected_replica_versions_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: ReplicaVersion,
-    sha256: String,
+    version: Option<ReplicaVersion>,
+    sha256: Option<String>,
     upgrade_urls: Vec<String>,
     versions_to_unelect: Vec<String>,
 ) -> ProposalId {
@@ -490,17 +492,24 @@ pub async fn submit_update_elected_replica_versions_proposal(
         neuron_id,
         NnsFunction::ReviseElectedGuestosVersions,
         ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: Some(String::from(version.clone())),
-            release_package_sha256_hex: Some(sha256.clone()),
+            replica_version_to_elect: version.clone().map(String::from),
+            release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
-            replica_versions_to_unelect: versions_to_unelect,
+            replica_versions_to_unelect: versions_to_unelect.clone(),
             guest_launch_measurement_sha256_hex: None,
         },
-        format!(
-            "Elect replica version: {} with hash: {}",
-            String::from(version),
-            sha256
-        ),
+        match (version, sha256, versions_to_unelect.is_empty()) {
+            (Some(v), Some(sha), _) => format!(
+                "Elect replica version: {} with hash: {}",
+                String::from(v),
+                sha
+            ),
+            (None, None, false) => format!(
+                "Retiring versions: {}",
+                versions_to_unelect.iter().join(", ")
+            ),
+            _ => panic!("Not valid arguments provided for submitting update elected replica version proposal")
+        },
         "".to_string(),
     )
     .await
@@ -586,7 +595,6 @@ pub async fn submit_create_application_subnet_proposal(
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
@@ -683,8 +691,7 @@ pub async fn submit_update_elected_hostos_versions_proposal(
         sender,
         neuron_id,
         NnsFunction::ReviseElectedHostosVersions,
-        // TODO[NNS1-3000]: Rename Registry APIs for consistency with NNS Governance.
-        UpdateElectedHostosVersionsPayload {
+        ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: Some(String::from(version)),
             release_package_sha256_hex: Some(sha256.clone()),
             release_package_urls: upgrade_urls,
@@ -725,8 +732,7 @@ pub async fn submit_update_nodes_hostos_version_proposal(
         sender,
         neuron_id,
         NnsFunction::DeployHostosToSomeNodes,
-        // TODO[NNS1-3000]: Rename Registry APIs according to NNS1-3000
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids: node_ids.clone(),
             hostos_version_id: Some(String::from(version.clone())),
         },
@@ -739,4 +745,44 @@ pub async fn submit_update_nodes_hostos_version_proposal(
     )
     .await
     .expect("submit_update_nodes_hostos_version_proposal failed")
+}
+
+/// Submits a proposal for updating replica software version of the specified
+/// API boundary nodes.
+///
+/// # Arguments
+///
+/// * `governance`          - Governance canister
+/// * `sender`              - Sender of the proposal
+/// * `neuron_id`           - ID of the proposing neuron. This neuron will
+///   automatically vote in favor of the proposal.
+/// * `node_ids`            - Node IDs of the API BNs that should be upgraded.
+/// * `version`             - Replica software version
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_api_boundary_node_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    node_ids: Vec<NodeId>,
+    version: String,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
+        UpdateApiBoundaryNodesVersionPayload {
+            node_ids: node_ids.clone(),
+            version: version.clone(),
+        },
+        format!(
+            "Update API boundary nodes ({}) to version {}",
+            node_ids.into_iter().join(", "),
+            version.clone()
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_api_boundary_node_version_proposal failed")
 }

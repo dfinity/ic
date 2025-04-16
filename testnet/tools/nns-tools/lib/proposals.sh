@@ -2,15 +2,19 @@
 
 #### Proposal generators
 
-generate_sale_canister_upgrade_proposal_text() {
+generate_swap_canister_upgrade_proposal_text() {
     local LAST_COMMIT=$1
     local NEXT_COMMIT=$2
     local CANISTER_ID=$3
     local OUTPUT_FILE=${4:-}
 
+    PROPOSER=$(git config user.email | sed 's/@/ at /')
+
     WASM_GZ=$(download_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
-    CAPITALIZED_CANISTER_NAME="Swap"
+    SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
+    CANISTER_TYPE="swap"
+    CAPITALIZED_CANISTER_TYPE="Swap"
     LAST_WASM_HASH=$(canister_hash ic $CANISTER_ID)
 
     IC_REPO=$(repo_root)
@@ -19,33 +23,77 @@ generate_sale_canister_upgrade_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION=$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")
 
+    ROOT_CANISTER_ID=$(
+        dfx \
+            --identity default \
+            canister --network ic \
+            call ${CANISTER_ID} get_init '(record {})' \
+            | idl2json \
+            | jq -r ".init[0].sns_root_canister_id"
+    )
+    SNS_PROJECT_NAME=$(curl -s "https://sns-api.internetcomputer.org/api/v1/snses/$ROOT_CANISTER_ID" | jq -r ".name")
+
     OUTPUT=$(
-        cat <<EOF
-## Proposal to Upgrade the Sale Canister for TODO
-### Proposer: DFINITY Foundation
-### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA
-### Target canister: $CANISTER_ID
----
-## Features
-TODO ADD FEATURE NOTES
-## Release Notes
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Upgrade the $SNS_PROJECT_NAME $CAPITALIZED_CANISTER_TYPE Canister to Commit $SHORT_NEXT_COMMIT
+
+__Proposer__: ${PROPOSER}
+
+__Source code__: [$NEXT_COMMIT][new-commit]
+
+__New wasm hash__: $WASM_SHA
+
+__Target canister__: [$CANISTER_ID](https://dashboard.internetcomputer.org/canister/$CANISTER_ID)
+
+[new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+## Summary
+
+TODO add a summary of changes
+
+## New Commits
+
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
-$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- "$CANISTER_CODE_LOCATION")
+$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
-## Wasm Verification
-Verify that the hash of the gzipped WASM matches the proposed hash.
+
+## Current Version
+
+__Current git hash__: $LAST_COMMIT
+
+__Current wasm hash__: $LAST_WASM_HASH
+
+## Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+### WASM Verification
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
+
 \`\`\`
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
 git fetch
 git checkout $NEXT_COMMIT
-./gitlab-ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type swap).wasm.gz
+
+# 2. Build canisters.
+./ci/container/build-ic.sh -c
+
+# 3. Fingerprint the result.
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
 \`\`\`
-## Current Version
-- Current Git Hash: $LAST_COMMIT
-- Current Wasm Hash: $LAST_WASM_HASH
-EOF
+
+This should match \`wasm_module_hash\` field of this proposal.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
     if [ -z "$OUTPUT_FILE" ]; then
@@ -65,9 +113,13 @@ generate_nns_upgrade_proposal_text() {
     local CANDID_ARGS=${4:-}
     local OUTPUT_FILE=${5:-}
 
-    WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$NEXT_COMMIT")
-    WASM_SHA=$(sha_256 "$WASM_GZ")
+    assert_that_a_prebuilt_nns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
+
+    PROPOSER=$(git config user.email | sed 's/@/ at /')
+
+    SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
     CAPITALIZED_CANISTER_NAME="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_NAME:0:1})${CANISTER_NAME:1}"
+
     LAST_WASM_HASH=$(nns_canister_hash ic "$CANISTER_NAME")
 
     IC_REPO=$(repo_root)
@@ -76,6 +128,33 @@ generate_nns_upgrade_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
+    # If the canister has an unrelease_changelog.md file, use that to populate
+    # the "Features & Fixes" section of the upgrade proposal.
+    FEATURES_AND_FIXES="TODO Hand-craft this section."
+    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
+    if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
+        FEATURES_AND_FIXES=$(
+            sed -n '/# Next Upgrade Proposal/,$p' \
+                "${UNRELEASED_CHANGELOG_PATH}" \
+                | tail -n +3 \
+                | filter_out_empty_markdown_sections \
+                | increment_markdown_heading_levels
+        )
+        if [[ -z "${FEATURES_AND_FIXES}" ]]; then
+            print_yellow "The unreleased_changelog.md has nothing interesting in it." >&2
+            print_yellow 'Therefore, Some hand crafting of "Features & Fixes" will be required.' >&2
+            FEATURES_AND_FIXES='TODO Hand-craft this section. unreleased_changelog.md was empty. It might be
+that this is just a "maintenance" release; i.e. we are not trying to ship
+any behavior changes. Instead, we just want the build in production to not
+get too old. One reason to run recent builds is so that the next release
+does not have a huge amount of changes in it.'
+        fi
+    else
+        print_yellow "No unreleased_changelog.md found at ${UNRELEASED_CHANGELOG_PATH} for ${CANISTER_NAME} " >&2
+        print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
+    fi
+
     ARGS_HASH=""
     if [ ! -z "$CANDID_ARGS" ]; then
         FILE=$(encode_candid_args_in_file "$CANDID_ARGS")
@@ -83,40 +162,98 @@ generate_nns_upgrade_proposal_text() {
     fi
 
     OUTPUT=$(
-        cat <<EOF
-## Proposal to Upgrade the $CAPITALIZED_CANISTER_NAME Canister
-### Proposer: DFINITY Foundation
-### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA$([ ! -z "$ARGS_HASH" ] && echo $'\n'"### Upgrade Args Hash: $ARGS_HASH")
-### Target canister: $(nns_canister_id "$CANISTER_NAME")
----
-## Features
-TODO ADD FEATURE NOTES
-## Release Notes
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Upgrade the $CAPITALIZED_CANISTER_NAME Canister to Commit $SHORT_NEXT_COMMIT
+
+__Proposer__: ${PROPOSER}
+
+__Source code__: [$NEXT_COMMIT][new-commit]
+
+[new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+
+## Features & Fixes
+
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
+
+$FEATURES_AND_FIXES
+
+
+## New Commits
+
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
-\`\`\`
-$([ ! -z "$CANDID_ARGS" ] && echo "## Candid Post Upgrade Args
+\`\`\`$(if [ ! -z "$CANDID_ARGS" ]; then
+            echo "
+
+
+## Upgrade Arguments
+
 \`\`\`candid
 $CANDID_ARGS
 \`\`\`
-### Validating Candid Args
-Verify that the encoded version of the plaintext args matches the \`arg_hex\` field in the proposal.
-\`didc encode '$CANDID_ARGS'\`
-")
-## Wasm Verification
-Verify that the hash of the gzipped WASM matches the proposed hash.
+"
+        fi)
+
+
+## Current Version
+
+__Current git hash__: $LAST_COMMIT
+
+__Current wasm hash__: $LAST_WASM_HASH
+
+
+## Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+
+### WASM Verification
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
+
 \`\`\`
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
 git fetch
 git checkout $NEXT_COMMIT
-./gitlab-ci/container/build-ic.sh -c
+
+# 2. Build canisters.
+./ci/container/build-ic.sh -c
+
+# 3. Fingerprint the result.
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
-## Current Version
-- Current Git Hash: $LAST_COMMIT
-- Current Wasm Hash: $LAST_WASM_HASH
-EOF
+
+This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
+            echo "
+
+
+### Upgrade Arguments Verification
+
+[\`didc\`][latest-didc] is required.
+
+[latest-didc]: https://github.com/dfinity/candid/releases/latest
+
+\`\`\`
+didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum
+
+\`\`\`
+
+This should match the \`arg_hash\` field of this proposal.
+"
+        fi)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
     if [ -z "$OUTPUT_FILE" ]; then
@@ -135,8 +272,11 @@ generate_sns_bless_wasm_proposal_text() {
     local CANISTER_TYPE=$3
     local OUTPUT_FILE=${4:-}
 
-    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$NEXT_COMMIT")
-    WASM_SHA=$(sha_256 "$WASM_GZ")
+    assert_that_a_prebuilt_sns_wasm_is_available "$CANISTER_TYPE" "$NEXT_COMMIT"
+
+    PROPOSER=$(git config user.email | sed 's/@/ at /')
+
+    SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
     CAPITALIZED_CANISTER_TYPE="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_TYPE:0:1})${CANISTER_TYPE:1}"
 
     IC_REPO=$(repo_root)
@@ -145,30 +285,88 @@ generate_sns_bless_wasm_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
+    # If the canister has an unrelease_changelog.md file, use that to populate
+    # the "Features & Fixes" section of the proposal.
+    FEATURES_AND_FIXES="TODO Hand-craft this section."
+    PRIMARY_CANISTER_CODE_LOCATION=$(echo "${CANISTER_CODE_LOCATION}" | cut -d' ' -f1)
+    UNRELEASED_CHANGELOG_PATH="${PRIMARY_CANISTER_CODE_LOCATION}/unreleased_changelog.md"
+    if [[ -e "${UNRELEASED_CHANGELOG_PATH}" ]]; then
+        FEATURES_AND_FIXES=$(
+            sed -n '/# Next Upgrade Proposal/,$p' \
+                "${UNRELEASED_CHANGELOG_PATH}" \
+                | tail -n +3 \
+                | filter_out_empty_markdown_sections \
+                | increment_markdown_heading_levels
+        )
+        if [[ -z "${FEATURES_AND_FIXES}" ]]; then
+            print_yellow "The unreleased_changelog.md has nothing interesting in it." >&2
+            print_yellow 'Therefore, Some hand crafting of "Features & Fixes" will be required.' >&2
+            FEATURES_AND_FIXES='TODO Hand-craft this section. unreleased_changelog.md was empty. It might be
+that this is just a "maintenance" release; i.e. we are not trying to ship
+any behavior changes. Instead, we just want the build in production to not
+get too old. One reason to run recent builds is so that the next release
+does not have a huge amount of changes in it.'
+        fi
+    else
+        print_yellow 'No unreleased_changelog.md file for ${CANISTER_NAME}.' >&2
+        print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
+    fi
+
     OUTPUT=$(
-        cat <<EOF
-## Proposal to Publish the SNS $CAPITALIZED_CANISTER_TYPE Canister WASM to SNS-W
-### Proposer: DFINITY Foundation
-### Canister Type: $CANISTER_TYPE
-### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA
----
-## Features
-TODO ADD FEATURE NOTES
-## Release Notes
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at Commit $SHORT_NEXT_COMMIT
+
+__Proposer__: $PROPOSER
+
+__Source code__: [$NEXT_COMMIT][new-commit]
+
+[new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+## Features & Fixes
+
+TODO: Review this section. In particular, make sure that it matches the "New
+Commits" section, and does not contain anything extraneous from previous
+proposals. If it seems alright, simply delete this TODO.
+
+$FEATURES_AND_FIXES
+
+
+## New Commits
+
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
+
+
 ## Wasm Verification
-Verify that the hash of the gzipped WASM matches the proposed hash.
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
+
 \`\`\`
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
 git fetch
 git checkout $NEXT_COMMIT
-./gitlab-ci/container/build-ic.sh -c
+
+# 2. Build canisters.
+./ci/container/build-ic.sh -c
+
+# 3. Fingerprint the result.
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
 \`\`\`
-EOF
+
+This should match \`wasm\` field of this proposal.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
     if [ -z "$OUTPUT_FILE" ]; then
@@ -272,7 +470,9 @@ generate_forum_post_nns_upgrades() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following upgrade proposals this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -304,7 +504,9 @@ generate_forum_post_sns_wasm_publish() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following proposals to publish new versions of SNS canisters to SNS-WASM this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -328,10 +530,16 @@ EOF
 #### Helper functions
 encode_candid_args_in_file() {
     ARGS=$1
-    ENCODED_ARGS_FILE=$(mktemp)
-    didc encode \
-        "$ARGS" \
-        | xxd -r -p >"$ENCODED_ARGS_FILE"
+    ENCODED_ARGS_FILE=$(mktemp) || {
+        echo "Failed to create temp file" >&2
+        return 1
+    }
+
+    if ! didc encode "$ARGS" | xxd -r -p >"$ENCODED_ARGS_FILE"; then
+        echo "Error: Failed to encode arguments. Do you have didc on your PATH?" >&2
+        rm -f "$ENCODED_ARGS_FILE"
+        return 1
+    fi
 
     echo "$ENCODED_ARGS_FILE"
 }
@@ -374,22 +582,62 @@ extract_candid_upgrade_args() {
 # Extracts a proposal header field value if the field title is given.
 # Example:
 #   For file with line like: "### Some Field: foo"
-#   the value of foo can be extracted with "proposal_header_field_value <FILE> 'Some Field:'"
-# Usage: proposal_header_field_value <FILE> <FIELD_NAME>
-proposal_header_field_value() {
+#   the value of foo can be extracted with "old_proposal_header_field_value <FILE> 'Some Field:'"
+# Usage: old_proposal_header_field_value <FILE> <FIELD_NAME>
+#
+# Deprecated; please use `proposal_canister_id_value` instead.
+old_proposal_header_field_value() {
     local FILE=$1
     local FIELD=$2
     cat $FILE | grep "### $FIELD" | sed "s/.*$FIELD[[:space:]]*//"
 }
 
+# If the input starts with `[...`, tries to extract the markdown link's display name.
+# Otherwise, returns the full input string as-is.
+#
+# Example 1:
+# ```
+# extract_first_markdown_link_display_name "[abc](https://dashboard.internetcomputer.org/canister/abc)"
+# abc
+# ```
+#
+# Example 2:
+# extract_first_markdown_link_display_name "user at dfinity.org"
+# user at dfinity.org
+# ```
+extract_first_markdown_link_display_name() {
+    local STRING_POTENTIALLY_WITH_MARKDOWN_LINKS=$1
+    FIRST_MARKDOWN_LINK_DISPLAY_NAME=$(printf "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS" | sed -nre 's/\[([^]]+)\].*/\1/p')
+    if [ -z "$FIRST_MARKDOWN_LINK_DISPLAY_NAME" ]; then
+        printf "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS"
+    else
+        printf "$FIRST_MARKDOWN_LINK_DISPLAY_NAME"
+    fi
+}
+
+# Extracts a proposal header field value if the field title is given.
+# Example:
+#   For file with line like: "__Some Field__: foo"
+#   the value of foo can be extracted with "proposal_field_value <FILE> 'Some Field:'"
+# Usage: proposal_field_value <FILE> <FIELD_NAME>
+proposal_field_value() {
+    local FILE=$1
+    local FIELD=$2
+    VALUE=$(cat $FILE | grep "__${FIELD}__" | sed "s/.*__${FIELD}__:[[:space:]]*//")
+    if [ -z "$VALUE" ]; then
+        echo >&2 "WARNING: Cannot find field '$FIELD' in '$FILE'."
+    fi
+    extract_first_markdown_link_display_name "$VALUE"
+}
+
 nns_upgrade_proposal_canister_raw_name() {
     local FILE=$1
-    cat "$FILE" | grep "## Proposal to Upgrade the" | cut -d' ' -f6
+    cat "$FILE" | grep "# Upgrade the" | cut -d' ' -f4
 }
 
 sns_wasm_publish_proposal_canister_raw_name() {
     local FILE=$1
-    cat "$FILE" | grep "## Proposal to Publish the SNS" | cut -d' ' -f7
+    cat "$FILE" | grep "# Publish SNS" | cut -d' ' -f4
 }
 #### Proposal text validators
 
@@ -449,9 +697,23 @@ _base_validate_version_wasm_sha() {
 #### User interaction helper for proposals
 
 confirm_submit_proposal_command() {
-    echo "Would you like to run the following command?"
+    print_green "Would you like to run the following command?"
     echo
-    print_blue "$@" | sed 's/pin=[0-9]*/pin=\*\*\*\*\*\*/' | fold -w 120 -s | sed -e "s|^|     |g"
+
+    # Preview the command.
+    first=true
+    for arg in "$@"; do
+        # Indent, except the first line.
+        if [ "$first" == false ]; then
+            echo -n '    '
+        fi
+        first=false
+
+        # Quote arguments (in case there is a space).
+        printf '%q \\\n' "$arg" \
+            | sed 's~pin=.*~pin=******~'
+    done
     echo
+
     confirm
 }

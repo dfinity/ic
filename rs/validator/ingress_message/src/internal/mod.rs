@@ -170,7 +170,7 @@ where
 
 fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestValidationError {
     match error {
-        ic_validator::RequestValidationError::InvalidIngressExpiry(msg) => {
+        ic_validator::RequestValidationError::InvalidRequestExpiry(msg) => {
             RequestValidationError::InvalidIngressExpiry(msg)
         }
         ic_validator::RequestValidationError::InvalidDelegationExpiry(msg) => {
@@ -194,13 +194,13 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::CanisterNotInDelegationTargets(canister_id) => {
             RequestValidationError::CanisterNotInDelegationTargets(canister_id)
         }
-        ic_validator::RequestValidationError::TooManyPathsError { length, maximum } => {
+        ic_validator::RequestValidationError::TooManyPaths { length, maximum } => {
             RequestValidationError::TooManyPathsError { length, maximum }
         }
-        ic_validator::RequestValidationError::PathTooLongError { length, maximum } => {
+        ic_validator::RequestValidationError::PathTooLong { length, maximum } => {
             RequestValidationError::PathTooLongError { length, maximum }
         }
-        ic_validator::RequestValidationError::NonceTooBigError { num_bytes, maximum } => {
+        ic_validator::RequestValidationError::NonceTooBig { num_bytes, maximum } => {
             RequestValidationError::NonceTooBigError { num_bytes, maximum }
         }
     }
@@ -273,22 +273,19 @@ impl TimeProvider {
     fn get_relative_time(&self) -> Time {
         match &self {
             TimeProvider::Constant(time) => *time,
-            TimeProvider::SystemTime => {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    Time::from_nanos_since_unix_epoch(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .expect("SystemTime is before UNIX EPOCH!")
-                            .as_nanos() as u64,
-                    )
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
-                }
-            }
+            TimeProvider::SystemTime => Time::from_nanos_since_unix_epoch(time()),
         }
+    }
+}
+
+fn time() -> u64 {
+    #[cfg(all(target_family = "wasm", not(feature = "js")))]
+    {
+        ic_cdk::api::time()
+    }
+    #[cfg(any(not(target_family = "wasm"), feature = "js"))]
+    {
+        time::OffsetDateTime::now_utc().unix_timestamp_nanos() as u64
     }
 }
 

@@ -1,8 +1,4 @@
-use crate::pb::v1::{
-    neuron::DissolveState, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronType,
-};
-use ic_nns_common::pb::v1::NeuronId;
-use std::ops::RangeBounds;
+use crate::pb::v1::{neuron::DissolveState, Neuron as NeuronProto, NeuronState};
 
 pub mod dissolve_state_and_age;
 pub use dissolve_state_and_age::*;
@@ -47,22 +43,6 @@ impl NeuronProto {
     }
 }
 
-/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
-/// that operate on NeuronId ranges with internal u64 representations in data.
-pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
-    let first = match range.start_bound() {
-        std::ops::Bound::Included(start) => start.id,
-        std::ops::Bound::Excluded(start) => start.id + 1,
-        std::ops::Bound::Unbounded => 0,
-    };
-    let last = match range.end_bound() {
-        std::ops::Bound::Included(end) => end.id,
-        std::ops::Bound::Excluded(end) => end.id - 1,
-        std::ops::Bound::Unbounded => u64::MAX,
-    };
-    first..=last
-}
-
 /// Given two quantities of stake with possible associated age, return the
 /// combined stake and the combined age.
 pub fn combine_aged_stakes(
@@ -85,16 +65,6 @@ pub fn combine_aged_stakes(
         // most that can be lost due to rounding from the actual age, is always
         // less than 1 second, so this is not a problem.
         (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
-    }
-}
-
-impl NeuronInfo {
-    pub fn is_seed_neuron(&self) -> bool {
-        self.neuron_type == Some(NeuronType::Seed as i32)
-    }
-
-    pub fn is_ect_neuron(&self) -> bool {
-        self.neuron_type == Some(NeuronType::Ect as i32)
     }
 }
 

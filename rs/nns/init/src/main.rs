@@ -32,13 +32,13 @@ struct CliArgs {
     /// canister.
     ///
     /// Optional: defaults to the current directory.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     wasm_dir: Option<PathBuf>,
 
     /// Path to a .csv file for initialising the `neurons` canister.
     ///
     /// Optional: defaults to creating canisters with test neurons.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     initial_neurons: Option<PathBuf>,
 
     /// Path to the file containing the initial registry required for NNS
@@ -99,12 +99,12 @@ struct CliArgs {
 
     /// Create the ledger with existing accounts with 1_000_000_000 tokens in on
     /// behalf of these principals.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     initialize_ledger_with_test_accounts_for_principals: Vec<PrincipalId>,
 
     /// Create the ledger with existing accounts with 1_000_000_000 tokens on
     /// the specified ledger accounts.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     initialize_ledger_with_test_accounts: Vec<String>,
 
     /// If set, instead of installing the NNS, ic-nns-init will only output
@@ -124,7 +124,7 @@ struct CliArgs {
     months_to_release_ect_gtc_neurons: Option<u8>,
 
     /// The subnets to which SNS may be deployed
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     sns_subnet: Vec<PrincipalId>,
 
     /// Pass specified_id to provisional_create_canister_with_cycles when creating canisters.

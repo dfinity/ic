@@ -3,7 +3,7 @@ use crate::protocol::{ctllaunchersvc, ctlsvc, launchersvc, sbxsvc};
 use serde::{Deserialize, Serialize};
 use std::os::unix::io::RawFd;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub enum Message<Request, Reply> {
     Request(Request),
     Reply(Reply),
@@ -20,7 +20,7 @@ impl<Request: EnumerateInnerFileDescriptors, Reply: EnumerateInnerFileDescriptor
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct WireMessage<Request, Reply> {
     pub cookie: u64,
     pub msg: Message<Request, Reply>,

@@ -19,7 +19,7 @@ use ic_types::{
     batch::BatchPayload,
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
-        dkg::Dealings,
+        dkg::DkgDataPayload,
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
         ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
         Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
@@ -431,7 +431,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 Box::new(move || {
                                     BlockPayload::Data(DataPayload {
                                         batch: BatchPayload::default(),
-                                        dealings: Dealings::new_empty(start_height),
+                                        dkg: DkgDataPayload::new_empty(start_height),
                                         idkg: None,
                                     })
                                 }),
@@ -568,7 +568,7 @@ fn deserialize_consensus_artifact(
 
 impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<ConsensusMessage> {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.lookup_key(msg_id).map_or(false, |key| {
+        self.lookup_key(msg_id).is_some_and(|key| {
             let info = info_for_msg_id(msg_id);
             let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
             check_ok_uw!(self.db.get_pinned_cf(cf_handle, &key)).is_some()
@@ -773,7 +773,7 @@ fn make_compaction_filter_fn(watermark: Watermark) -> impl CompactionFilterFn + 
 
 /// Encapsulates the information needed to build a ColumnFamilyDescriptor,
 /// per type.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ArtifactCFInfo {
     name: &'static str,
 }

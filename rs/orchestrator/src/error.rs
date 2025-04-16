@@ -1,7 +1,7 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
 use ic_types::{
-    registry::RegistryClientError, replica_version::ReplicaVersionParseError, NodeId,
+    registry::RegistryClientError, replica_version::ReplicaVersionParseError, Height, NodeId,
     RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
@@ -34,11 +34,17 @@ pub(crate) enum OrchestratorError {
     /// The genesis or recovery CUP failed to be constructed
     MakeRegistryCupError(SubnetId, RegistryVersion),
 
+    /// The CUP at the given height failed to be deserialized
+    DeserializeCupError(Option<Height>, String),
+
     /// The given replica version does not have an entry in the Registry
     ReplicaVersionMissingError(ReplicaVersion, RegistryVersion),
 
     /// A replica version (of a subnet record) could not be parsed
     ReplicaVersionParseError(ReplicaVersionParseError),
+
+    /// The crypto-config could not be serialized
+    SerializeCryptoConfigError(serde_json::Error),
 
     /// An IO error occurred
     IoError(String, io::Error),
@@ -84,6 +90,10 @@ impl OrchestratorError {
 
     pub(crate) fn key_monitoring_error(msg: impl ToString) -> Self {
         OrchestratorError::ThresholdKeyMonitoringError(msg.to_string())
+    }
+
+    pub(crate) fn deserialize_cup_error(height: Option<Height>, msg: impl ToString) -> Self {
+        OrchestratorError::DeserializeCupError(height, msg.to_string())
     }
 }
 
@@ -138,10 +148,18 @@ impl fmt::Display for OrchestratorError {
             OrchestratorError::ReplicaVersionParseError(e) => {
                 write!(f, "Failed to parse replica version: {}", e)
             }
+            OrchestratorError::SerializeCryptoConfigError(e) => {
+                write!(f, "Failed to serialize crypto-config: {}", e)
+            }
             OrchestratorError::MakeRegistryCupError(subnet_id, registry_version) => write!(
                 f,
                 "Failed to construct the genesis/recovery CUP, subnet_id: {}, registry_version: {}",
                 subnet_id, registry_version,
+            ),
+            OrchestratorError::DeserializeCupError(height, error) => write!(
+                f,
+                "Failed to deserialize the CUP at height {:?}, with error: {}",
+                height, error,
             ),
             OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
             OrchestratorError::NetworkConfigurationError(msg) => {

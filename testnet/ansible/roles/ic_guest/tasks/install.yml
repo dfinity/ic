@@ -41,8 +41,8 @@
     set -exuo pipefail
       echo "Media path: {{ ic_media_path }}"
       echo "Adding canisters from '{{ custom_canister_dir }}'"
-      cp "{{ custom_canister_dir }}"/*.wasm "{{ ic_media_path }}/canisters/"
-      sha256sum "{{ ic_media_path }}"/canisters/*.wasm
+      cp "{{ custom_canister_dir }}"/*.wasm.gz "{{ ic_media_path }}/canisters/"
+      sha256sum "{{ ic_media_path }}"/canisters/*.wasm.gz
   register: nns_canisters
   delegate_to: localhost
   run_once: true
@@ -130,7 +130,7 @@
     file: url_waitfor_connect.yml
   when:
     - "'subnet_unassigned' not in hostvars[item].group_names and 'api' not in hostvars[item].group_names
-        and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
+      and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
   loop: "{{ groups['nodes'] }}"
   loop_control:
     label:

@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect custom metrics every minute
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+Unit=metrics_tool.service
+
+[Install]
+WantedBy=timers.target

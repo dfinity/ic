@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto_lib/basic_sig/ed25519" }
-ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-internal-csp = { path = "../crypto_service_provider" }
+ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" } # Would like to get rid of this but as long as the CSP depends on ic-types we can't really.

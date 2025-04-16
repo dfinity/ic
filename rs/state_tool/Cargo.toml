@@ -13,7 +13,7 @@ name = "state-tool"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
@@ -32,4 +32,5 @@ slog = { workspace = true }
 slog-term = { workspace = true }
 
 [dev-dependencies]
+ic-state-machine-tests = { path = "../state_machine_tests" }
 tempfile = { workspace = true }

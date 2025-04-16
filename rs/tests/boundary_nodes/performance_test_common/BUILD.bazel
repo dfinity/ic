@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "performance_test_common",
+    testonly = True,
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_boundary_nodes_performance_test_common",
+    deps = [
+        # Keep sorted.
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)

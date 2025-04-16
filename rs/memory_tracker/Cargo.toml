@@ -1,10 +1,10 @@
 [package]
-name = "memory_tracker"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "memory_tracker"
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,6 +13,7 @@ bit-vec = "0.6.3"
 ic-logger = { path = "../monitoring/logger" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
+ic-types = { path = "../types/types" }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
@@ -24,10 +25,19 @@ sigsegv_handler_checksum = []
 
 [dev-dependencies]
 criterion = { workspace = true }
-ic-types = { path = "../types/types" }
-proptest = "1.0"
+memmap2 = { workspace = true }
+proptest = { workspace = true }
+rayon = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]
-name = "traps"
 harness = false
+name = "traps"
+
+[[bench]]
+harness = false
+name = "memory_ops"
+
+[[bench]]
+harness = false
+name = "bit_vec"

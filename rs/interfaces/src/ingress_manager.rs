@@ -6,7 +6,7 @@ use crate::{
 use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
     artifact::IngressMessageId,
-    batch::{IngressPayload, IngressPayloadError, ValidationContext},
+    batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::IngressSets,
     messages::MessageId,
@@ -50,10 +50,16 @@ impl IngressSetQuery for IngressSets {
 }
 
 /// Reasons for why an ingress payload might be invalid.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidIngressPayloadReason {
+    /// An [`IngressMessageId`] inside the payload doesn't match the referenced [`SignedIngress`].
+    MismatchedMessageId {
+        expected: IngressMessageId,
+        computed: IngressMessageId,
+    },
+    /// Failed to deserialize an ingress message.
+    IngressMessageDeserializationFailure(IngressMessageId, String),
     IngressValidationError(MessageId, String),
-    IngressPayloadError(IngressPayloadError),
     IngressExpired(MessageId, String),
     IngressMessageTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),
@@ -66,7 +72,7 @@ pub enum InvalidIngressPayloadReason {
 }
 
 /// Reasons for validation failures.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressPayloadValidationFailure {
     StateManagerError(Height, StateManagerError),
     IngressHistoryError(Height, IngressHistoryError),
@@ -153,10 +159,6 @@ pub trait IngressSelector: Send + Sync {
     ///
     /// The actual purge is not required to happen immediately.
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>);
-
-    /// Returns true if and only if the pool has an ingress message with the given id.
-    // TODO(CON-1312): Remove this when no longer necessary
-    fn has_message(&self, message_id: &IngressMessageId) -> bool;
 }
 
 /*

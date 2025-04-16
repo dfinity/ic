@@ -3,16 +3,20 @@ use std::{collections::BTreeMap, sync::Arc};
 use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::{NumBytes, NumOsPages};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 
 use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 
-const PAGES_PER_CHUNK: u64 = 256;
-const CHUNK_SIZE: u64 = PAGES_PER_CHUNK * (PAGE_SIZE as u64);
-
-#[test]
-fn check_chunk_size() {
-    assert_eq!(1024 * 1024, CHUNK_SIZE);
-}
+/// This is the _maximum_ chunk size. A chunk may take up as little space as
+/// a single OS page. However, the cycles cost of maintaining a chunk in the
+/// store is that of the maximum chunk size. Also, the capacity calculation
+/// of the chunk store assumes every chunk is maximal, so that the number of
+/// entries in the chunk store is limited to a small number, i.e.,
+/// 'max_chunk_store_capacity' / CHUNK_SIZE = 100 entries.
+pub const CHUNK_SIZE: u64 = 1024 * 1024;
+/// Depends on the OS, because OS pages have different sizes.
+const PAGES_PER_CHUNK: u64 = CHUNK_SIZE / (PAGE_SIZE as u64);
 
 pub type WasmChunkHash = [u8; 32];
 
@@ -20,7 +24,7 @@ pub fn chunk_size() -> NumBytes {
     NumBytes::from(CHUNK_SIZE)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ChunkInfo {
     /// Corresponds to an index in the list of chunks. The starting byte in the
     /// `PageMap` can be calculated by multiplying the index by the fixed size of
@@ -34,8 +38,9 @@ struct ChunkInfo {
 
 /// Uploaded chunks which can be assembled to create a Wasm module.
 /// It is cheap to clone because the data is stored in a [`PageMap`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct WasmChunkStore {
+    #[validate_eq(Ignore)]
     data: PageMap,
     metadata: WasmChunkStoreMetadata,
 }
@@ -98,6 +103,18 @@ impl WasmChunkStore {
             })
     }
 
+    /// Returns the complete chunk as a single vector.
+    ///
+    /// Use `get_chunk_data` for paginated access.
+    pub fn get_chunk_complete(&self, chunk_hash: &WasmChunkHash) -> Option<Vec<u8>> {
+        self.get_chunk_data(chunk_hash).map(|pages| {
+            pages.fold(vec![], |mut bytes, page| {
+                bytes.extend_from_slice(page);
+                bytes
+            })
+        })
+    }
+
     /// Check all conditions for inserting this chunk are satisfied.  Invariant:
     /// If this returns [`Ok`], then [`Self::insert_chunk`] is guaranteed to
     /// succeed.
@@ -111,8 +128,8 @@ impl WasmChunkStore {
         }
         if self.metadata.chunks.len() as u64 * CHUNK_SIZE >= max_size.get() {
             return Err(format!(
-                "Wasm chunk store has already reached maximum capacity of {} bytes",
-                max_size
+                "Wasm chunk store has already reached maximum capacity of {} bytes or the maximum number of entries, {}",
+                max_size, max_size.get() / CHUNK_SIZE
             ));
         }
         Ok(())
@@ -182,7 +199,9 @@ impl WasmChunkStore {
 
 /// Mapping from chunk hash to location in the store. It is cheap to clone
 /// because the size is limited to 100 entries.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+/// This is because in the size calculation, every chunk is assumed to be
+/// of maximal size (even if the user submitted smaller chunks).
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct WasmChunkStoreMetadata {
     /// Maps each chunk to its chunk index and length.
     chunks: BTreeMap<WasmChunkHash, ChunkInfo>,
@@ -371,23 +390,23 @@ mod tests {
         const MB: usize = 1024 * 1024;
         const MAX_SIZE: NumBytes = NumBytes::new(20 * MB as u64);
 
-        proptest! {
-            #[test]
-            // Try chunks 2x as big as the size limit.
-            // If all inserts below the size limit succeeded, we'd expect 50 *
-            // .5 MiB = 25 MiB total. So set the max size below that to
-            // evenutally hit the size limit.
-            fn insert_result_matches_can_insert(vecs in prop_vec((any::<u8>(), 0..2 * MB), 100)) {
-                let mut store = WasmChunkStore::new_for_testing();
-                for (byte, length) in vecs {
-                    let chunk = vec![byte; length];
-                    let check = store.can_insert_chunk(MAX_SIZE, &chunk);
-                    let hash = store.insert_chunk(MAX_SIZE, &chunk);
-                    if hash.is_ok() {
-                        assert_eq!(check, Ok(()));
-                    } else {
-                        assert_eq!(check.unwrap_err(), hash.unwrap_err());
-                    }
+        #[test_strategy::proptest]
+        // Try chunks 2x as big as the size limit.
+        // If all inserts below the size limit succeeded, we'd expect 50 *
+        // .5 MiB = 25 MiB total. So set the max size below that to
+        // evenutally hit the size limit.
+        fn insert_result_matches_can_insert(
+            #[strategy(prop_vec((any::<u8>(), 0..2 * MB), 100))] vecs: Vec<(u8, usize)>,
+        ) {
+            let mut store = WasmChunkStore::new_for_testing();
+            for (byte, length) in vecs {
+                let chunk = vec![byte; length];
+                let check = store.can_insert_chunk(MAX_SIZE, &chunk);
+                let hash = store.insert_chunk(MAX_SIZE, &chunk);
+                if hash.is_ok() {
+                    prop_assert_eq!(check, Ok(()));
+                } else {
+                    prop_assert_eq!(check.unwrap_err(), hash.unwrap_err());
                 }
             }
         }

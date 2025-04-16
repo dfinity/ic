@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 // TODO(CRP-1240): remove the clippy-exception above.
 // TODO(CRP-1255): add tests with multiple clients.
 // TODO(CRP-1259): add tests with timeouts.

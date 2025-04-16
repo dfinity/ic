@@ -12,7 +12,7 @@ use std::{collections::BTreeMap, convert::TryFrom};
 use crate::{xnet::CertifiedStreamSlice, CountBytes};
 
 /// Payload that contains XNet messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct XNetPayload {
     pub stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
@@ -71,5 +71,11 @@ impl XNetPayload {
                 slice.payload.len() + slice.merkle_proof.len() + slice.certification.count_bytes()
             })
             .sum()
+    }
+
+    /// Returns true if the payload is empty
+    pub fn is_empty(&self) -> bool {
+        let XNetPayload { stream_slices } = &self;
+        stream_slices.is_empty()
     }
 }

@@ -1,12 +1,9 @@
 use super::*;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Error;
-use axum::{
-    body::Body, http::Request, middleware, response::IntoResponse, routing::method_routing::get,
-    Router,
-};
+use axum::{body::Body, http::Request, middleware, routing::method_routing::get, Router};
 use ethnum::u256;
 use http::header::{
     HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
@@ -18,14 +15,13 @@ use ic_types::{
     },
     PrincipalId,
 };
-use prometheus::Registry;
 use tower::{Service, ServiceBuilder};
 use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
 
 use crate::{
-    metrics::{metrics_middleware_status, HttpMetricParamsStatus},
-    persist::test::node,
-    test_utils::setup_test_router,
+    persist::{test::node, Persist, Persister},
+    snapshot::test::test_registry_snapshot,
+    test_utils::{setup_test_router, TestHttpClient},
 };
 
 pub fn test_node(id: u64) -> Arc<Node> {
@@ -66,54 +62,6 @@ fn assert_header(headers: &http::HeaderMap, name: HeaderName, expected_value: &s
     );
 }
 
-#[derive(Clone)]
-struct ProxyRouter {
-    root_key: Vec<u8>,
-    health: Arc<Mutex<ReplicaHealthStatus>>,
-}
-
-impl ProxyRouter {
-    fn set_health(&self, new: ReplicaHealthStatus) {
-        let mut h = self.health.lock().unwrap();
-        *h = new;
-    }
-}
-
-#[async_trait]
-impl Proxy for ProxyRouter {
-    async fn proxy(&self, _request: Request<Body>, _url: Url) -> Result<Response, ErrorCause> {
-        let mut resp = "test_response".into_response();
-
-        let status = StatusCode::OK;
-
-        *resp.status_mut() = status;
-        Ok(resp)
-    }
-}
-
-impl Lookup for ProxyRouter {
-    fn lookup_subnet_by_canister_id(&self, _: &CanisterId) -> Result<Arc<RouteSubnet>, ErrorCause> {
-        Ok(Arc::new(test_route_subnet(1)))
-    }
-    fn lookup_subnet_by_id(&self, _: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause> {
-        Ok(Arc::new(test_route_subnet(1)))
-    }
-}
-
-#[async_trait]
-impl RootKey for ProxyRouter {
-    async fn root_key(&self) -> Option<Vec<u8>> {
-        Some(self.root_key.clone())
-    }
-}
-
-#[async_trait]
-impl Health for ProxyRouter {
-    async fn health(&self) -> ReplicaHealthStatus {
-        *self.health.lock().unwrap()
-    }
-}
-
 #[tokio::test]
 async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     let mut app = Router::new().route(PATH_QUERY, get(|| async {})).layer(
@@ -134,18 +82,13 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let request_id = resp
-        .headers()
-        .get(HEADER_X_REQUEST_ID)
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let request_id = resp.headers().get(X_REQUEST_ID).unwrap().to_str().unwrap();
     assert!(UUID_REGEX.is_match(request_id));
 
     // Check if canister id header is correct
     let canister_id = resp
         .headers()
-        .get(HEADER_IC_CANISTER_ID)
+        .get(X_IC_CANISTER_ID)
         .unwrap()
         .to_str()
         .unwrap();
@@ -156,31 +99,34 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
-        resp.headers().get(HEADER_X_REQUEST_ID).unwrap(),
+        resp.headers().get(X_REQUEST_ID).unwrap(),
         "40a6d613-149e-4bde-8443-33593fd2fd17"
     );
 
     // case 3: 'x-request-id' header contains an invalid uuid
     #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure = format!(
-        "malformed_request: value of '{HEADER_X_REQUEST_ID}' header is not in UUID format\n"
-    );
+    let expected_failure =
+        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
 
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "1")
+        .header(X_REQUEST_ID, "1")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -188,12 +134,16 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -201,12 +151,16 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "")
+        .header(X_REQUEST_ID, "")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -235,43 +189,41 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let request_id = resp
-        .headers()
-        .get(HEADER_X_REQUEST_ID)
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let request_id = resp.headers().get(X_REQUEST_ID).unwrap().to_str().unwrap();
     assert!(UUID_REGEX.is_match(request_id));
 
     // case 2: 'x-request-id' header contains a valid uuid, this uuid is not overwritten by middleware
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
-        resp.headers().get(HEADER_X_REQUEST_ID).unwrap(),
+        resp.headers().get(X_REQUEST_ID).unwrap(),
         "40a6d613-149e-4bde-8443-33593fd2fd17"
     );
 
     // case 3: 'x-request-id' header contains an invalid uuid
     #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure = format!(
-        "malformed_request: value of '{HEADER_X_REQUEST_ID}' header is not in UUID format\n"
-    );
+    let expected_failure =
+        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
 
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "1")
+        .header(X_REQUEST_ID, "1")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -279,12 +231,16 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -292,12 +248,16 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "")
+        .header(X_REQUEST_ID, "")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -306,12 +266,26 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_health() -> Result<(), Error> {
-    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
+    let published_routes = Arc::new(ArcSwapOption::empty());
+    let published_registry_snapshot = Arc::new(ArcSwapOption::empty());
 
-    let proxy_router = Arc::new(ProxyRouter {
-        root_key: root_key.clone(),
-        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
-    });
+    let persister = Persister::new(published_routes.clone());
+
+    let http_client = Arc::new(TestHttpClient(1));
+    let proxy_router = Arc::new(ProxyRouter::new(
+        http_client,
+        published_routes,
+        published_registry_snapshot.clone(),
+        0.51,
+        0.6666,
+    ));
+
+    // Install snapshot
+    let (snapshot, _, _) = test_registry_snapshot(5, 3);
+    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+
+    // Initial state
+    assert_eq!(proxy_router.health(), ReplicaHealthStatus::Starting);
 
     let state_health = proxy_router.clone() as Arc<dyn Health>;
     let mut app = Router::new().route(PATH_HEALTH, get(health).with_state(state_health));
@@ -324,11 +298,13 @@ async fn test_health() -> Result<(), Error> {
         .unwrap();
 
     let resp = app.call(request).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-    // Test starting
-    proxy_router.set_health(ReplicaHealthStatus::Starting);
+    // Check when all nodes healthy
+    persister.persist(snapshot.subnets.clone());
+    assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
 
+    // Test healthy
     let request = Request::builder()
         .method("GET")
         .uri("http://localhost/health")
@@ -336,37 +312,180 @@ async fn test_health() -> Result<(), Error> {
         .unwrap();
 
     let resp = app.call(request).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Check when 3/5 subnets present (> threshold)
+    let subnets = snapshot
+        .subnets
+        .clone()
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| *i <= 2)
+        .map(|x| x.1)
+        .collect::<Vec<_>>();
+
+    persister.persist(subnets);
+    assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
+
+    // Check when 2/5 subnets present (< threshold)
+    let subnets = snapshot
+        .subnets
+        .clone()
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| *i <= 1)
+        .map(|x| x.1)
+        .collect::<Vec<_>>();
+    persister.persist(subnets);
+
+    assert_eq!(
+        proxy_router.health(),
+        ReplicaHealthStatus::CertifiedStateBehind
+    );
+
+    // Check when 2/3 nodes in each subnet are healthy (> threshold)
+    let subnets = snapshot
+        .subnets
+        .clone()
+        .into_iter()
+        .map(|mut x| {
+            x.nodes = x
+                .nodes
+                .into_iter()
+                .enumerate()
+                .filter(|(i, _)| *i <= 1)
+                .map(|x| x.1)
+                .collect::<Vec<_>>();
+            x
+        })
+        .collect::<Vec<_>>();
+
+    persister.persist(subnets);
+    assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
+
+    // Check when 1/3 nodes in each subnet are healthy (< threshold)
+    let subnets = snapshot
+        .subnets
+        .clone()
+        .into_iter()
+        .map(|mut x| {
+            x.nodes = vec![x.nodes[0].clone()];
+            x
+        })
+        .collect::<Vec<_>>();
+    persister.persist(subnets);
+    assert_eq!(
+        proxy_router.health(),
+        ReplicaHealthStatus::CertifiedStateBehind
+    );
+
+    // Check when 2/3 nodes in 3/5 subnets are available (> threshold) and 1/3 nodes in 2/5 subnets (< threshold)
+    let subnets = snapshot
+        .subnets
+        .clone()
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut x)| {
+            if i > 2 {
+                x.nodes = vec![x.nodes[0].clone()];
+            } else {
+                x.nodes = vec![x.nodes[0].clone(), x.nodes[1].clone()];
+            }
+
+            x
+        })
+        .collect::<Vec<_>>();
+    persister.persist(subnets);
+    assert_eq!(proxy_router.health(), ReplicaHealthStatus::Healthy);
+
+    // Check when 1/3 nodes in 3/5 subnets are available (< threshold) and 2/3 nodes in 2/5 subnets (> threshold)
+    let subnets = snapshot
+        .subnets
+        .clone()
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut x)| {
+            if i > 2 {
+                x.nodes = vec![x.nodes[0].clone(), x.nodes[1].clone()];
+            } else {
+                x.nodes = vec![x.nodes[0].clone()];
+            }
+
+            x
+        })
+        .collect::<Vec<_>>();
+    persister.persist(subnets);
+    assert_eq!(
+        proxy_router.health(),
+        ReplicaHealthStatus::CertifiedStateBehind
+    );
+
+    // Install snapshot with zero subnets
+    let (snapshot, _, _) = test_registry_snapshot(0, 0);
+    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+    persister.persist(snapshot.subnets.clone());
+
+    // Make sure it doesn't crash
+    assert_eq!(
+        proxy_router.health(),
+        ReplicaHealthStatus::CertifiedStateBehind
+    );
+
+    // Install snapshot with subnets which have zero nodes
+    let (snapshot, _, _) = test_registry_snapshot(5, 0);
+    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+    persister.persist(snapshot.subnets.clone());
+
+    // Make sure it doesn't crash
+    assert_eq!(
+        proxy_router.health(),
+        ReplicaHealthStatus::CertifiedStateBehind
+    );
 
     Ok(())
 }
 
 #[tokio::test]
 async fn test_status() -> Result<(), Error> {
-    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
+    const ROOT_KEY: &[u8] = &[
+        48, 129, 130, 48, 29, 6, 13, 43, 6, 1, 4, 1, 130, 220, 124, 5, 3, 1, 2, 1, 6, 12, 43, 6, 1,
+        4, 1, 130, 220, 124, 5, 3, 2, 1, 3, 97, 0, 164, 11, 155, 160, 188, 41, 117, 229, 63, 252,
+        167, 119, 29, 30, 227, 98, 237, 74, 46, 188, 146, 183, 47, 146, 73, 22, 138, 98, 134, 4,
+        227, 191, 162, 241, 66, 98, 49, 165, 59, 251, 105, 165, 137, 20, 84, 15, 168, 196, 17, 178,
+        140, 45, 29, 63, 7, 53, 150, 40, 122, 4, 40, 149, 203, 233, 231, 66, 46, 244, 167, 99, 183,
+        61, 131, 19, 223, 201, 237, 51, 94, 24, 59, 178, 188, 224, 198, 44, 183, 41, 121, 43, 119,
+        84, 128, 45, 105, 10,
+    ];
 
-    let proxy_router = Arc::new(ProxyRouter {
-        root_key: root_key.clone(),
-        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
-    });
+    let published_routes = Arc::new(ArcSwapOption::empty());
+    let published_registry_snapshot = Arc::new(ArcSwapOption::empty());
+
+    let persister = Persister::new(published_routes.clone());
+    let (mut snapshot, _, _) = test_registry_snapshot(5, 3);
+    snapshot.nns_public_key = ROOT_KEY.into();
+    published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+
+    let http_client = Arc::new(TestHttpClient(1));
+    let proxy_router = Arc::new(ProxyRouter::new(
+        http_client,
+        published_routes,
+        published_registry_snapshot,
+        0.51,
+        0.6666,
+    ));
+
+    // Mark all nodes healthy
+    persister.persist(snapshot.subnets.clone());
 
     let (state_rootkey, state_health) = (
         proxy_router.clone() as Arc<dyn RootKey>,
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let registry: Registry = Registry::new_custom(None, None)?;
-    let metric_params = HttpMetricParamsStatus::new(&registry);
-
-    let mut app = Router::new()
-        .route(
-            PATH_STATUS,
-            get(status).with_state((state_rootkey, state_health)),
-        )
-        .layer(middleware::from_fn_with_state(
-            metric_params,
-            metrics_middleware_status,
-        ));
+    let mut app = Router::new().route(
+        PATH_STATUS,
+        get(status).with_state((state_rootkey, state_health)),
+    );
 
     // Test healthy
     let request = Request::builder()
@@ -380,41 +499,17 @@ async fn test_status() -> Result<(), Error> {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
 
     let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
     assert_eq!(
         health.replica_health_status,
         Some(ReplicaHealthStatus::Healthy)
     );
-    assert_eq!(health.root_key.as_deref(), Some(&root_key),);
-
-    let headers = parts.headers;
-    assert_header(&headers, CONTENT_TYPE, "application/cbor");
-    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
-    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
-
-    // Test starting
-    proxy_router.set_health(ReplicaHealthStatus::Starting);
-
-    let request = Request::builder()
-        .method("GET")
-        .uri("http://localhost/api/v2/status")
-        .body(Body::from(""))
-        .unwrap();
-
-    let resp = app.call(request).await.unwrap();
-
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let (parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
-
-    let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
-    assert_eq!(
-        health.replica_health_status,
-        Some(ReplicaHealthStatus::Starting)
-    );
+    assert_eq!(health.root_key.as_deref(), Some(&ROOT_KEY.to_vec()));
 
     let headers = parts.headers;
     assert_header(&headers, CONTENT_TYPE, "application/cbor");
@@ -426,7 +521,7 @@ async fn test_status() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_all_call_types() -> Result<(), Error> {
-    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024);
+    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024, None);
     let node = subnets[0].nodes[0].clone();
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
@@ -468,18 +563,21 @@ async fn test_all_call_types() -> Result<(), Error> {
 
     // Check response headers
     let headers = parts.headers;
-    assert_header(&headers, HEADER_IC_NODE_ID, &node.id.to_string());
-    assert_header(&headers, HEADER_IC_SUBNET_ID, &node.subnet_id.to_string());
-    assert_header(&headers, HEADER_IC_SUBNET_TYPE, node.subnet_type.as_ref());
-    assert_header(&headers, HEADER_IC_SENDER, &sender.to_string());
-    assert_header(&headers, HEADER_IC_CANISTER_ID, &canister_id.to_string());
-    assert_header(&headers, HEADER_IC_METHOD_NAME, "foobar");
-    assert_header(&headers, HEADER_IC_REQUEST_TYPE, "query");
+    assert_header(&headers, X_IC_NODE_ID, &node.id.to_string());
+    assert_header(&headers, X_IC_SUBNET_ID, &node.subnet_id.to_string());
+    assert_header(&headers, X_IC_SUBNET_TYPE, node.subnet_type.as_ref());
+    assert_header(&headers, X_IC_SENDER, &sender.to_string());
+    assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
+    assert_header(&headers, X_IC_METHOD_NAME, "foobar");
+    assert_header(&headers, X_IC_REQUEST_TYPE, "query");
     assert_header(&headers, CONTENT_TYPE, "application/cbor");
     assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
     assert_header(&headers, X_FRAME_OPTIONS, "DENY");
 
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -516,7 +614,10 @@ async fn test_all_call_types() -> Result<(), Error> {
     assert_eq!(resp.status(), StatusCode::ACCEPTED);
 
     let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -553,7 +654,10 @@ async fn test_all_call_types() -> Result<(), Error> {
     assert_eq!(resp.status(), StatusCode::ACCEPTED);
 
     let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -592,11 +696,14 @@ async fn test_all_call_types() -> Result<(), Error> {
     // Check response headers
     let headers = parts.headers;
     // Make sure that the canister_id is there even if the CBOR does not have it
-    assert_header(&headers, HEADER_IC_CANISTER_ID, &canister_id.to_string());
+    assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
     assert_header(&headers, CONTENT_TYPE, "application/cbor");
     assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
     assert_header(&headers, X_FRAME_OPTIONS, "DENY");
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -637,11 +744,14 @@ async fn test_all_call_types() -> Result<(), Error> {
     // Check response headers
     let headers = parts.headers;
     // Make sure that the subnet_id is there even if the CBOR does not have it
-    assert_header(&headers, HEADER_IC_SUBNET_ID, &subnet_id.to_string());
+    assert_header(&headers, X_IC_SUBNET_ID, &subnet_id.to_string());
     assert_header(&headers, CONTENT_TYPE, "application/cbor");
     assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
     assert_header(&headers, X_FRAME_OPTIONS, "DENY");
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 

@@ -80,6 +80,39 @@ pub fn get_node_operator_id_for_node(
         )
 }
 
+pub fn get_node_provider_id_for_operator_id(
+    registry: &Registry,
+    node_operator_id: PrincipalId,
+) -> Result<PrincipalId, String> {
+    let node_operator_key = make_node_operator_record_key(node_operator_id);
+    registry
+        .get(node_operator_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err(format!(
+                "Node Operator Id {:} not found in the registry.",
+                node_operator_key
+            )),
+            |result| {
+                PrincipalId::try_from(
+                    NodeOperatorRecord::decode(result.value.as_slice())
+                        .map_err(|_| {
+                            format!(
+                                "Could not decode node_operator_record for Node Operator Id {}",
+                                node_operator_id
+                            )
+                        })?
+                        .node_provider_principal_id,
+                )
+                .map_err(|_| {
+                    format!(
+                        "Could not decode node_provider_id from the Node Operator Record for the Id {}",
+                        node_operator_id
+                    )
+                })
+            },
+        )
+}
+
 pub fn get_node_operator_record(
     registry: &Registry,
     node_operator_id: PrincipalId,
@@ -222,10 +255,25 @@ pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
 
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
 /// tuples, (ID, value).
-fn get_key_family<T: prost::Message + Default>(
+pub(crate) fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
 ) -> Vec<(String, T)> {
+    get_key_family_iter(registry, prefix).collect()
+}
+
+pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
+    registry: &'a Registry,
+    prefix: &'a str,
+) -> impl Iterator<Item = (String, T)> + 'a {
+    get_key_family_iter_at_version(registry, prefix, registry.latest_version())
+}
+
+pub fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
+    registry: &'a Registry,
+    prefix: &'a str,
+    version: u64,
+) -> impl Iterator<Item = (String, T)> + 'a {
     let prefix_bytes = prefix.as_bytes();
     let start = prefix_bytes.to_vec();
 
@@ -233,7 +281,12 @@ fn get_key_family<T: prost::Message + Default>(
         .store
         .range(start..)
         .take_while(|(k, _)| k.starts_with(prefix_bytes))
-        .map(|(k, v)| (k, v.back().unwrap()))
+        .filter_map(move |(k, v)| {
+            v.iter()
+                .rev()
+                .find(|v| v.version <= version)
+                .map(|v| (k, v))
+        })
         // ...skipping any that have been deleted...
         .filter(|(_, v)| !v.deletion_marker)
         // ...and repack them into a tuple of (ID, value).
@@ -247,5 +300,4 @@ fn get_key_family<T: prost::Message + Default>(
 
             (id, value)
         })
-        .collect()
 }

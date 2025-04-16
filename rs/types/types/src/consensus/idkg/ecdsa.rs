@@ -1,16 +1,15 @@
 //! Threshold ECDSA transcripts and references related definitions.
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::{
     canister_threshold_sig::error::{
         EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
     },
-    canister_threshold_sig::{
-        EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigInputs,
-    },
+    canister_threshold_sig::{EcdsaPreSignatureQuadruple, ThresholdEcdsaSigInputs},
 };
 use crate::{Height, Randomness};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types_private::EcdsaKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
@@ -24,7 +23,7 @@ use super::{
 };
 
 /// ECDSA Quadruple in creation.
-#[derive(Clone, Hash, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct QuadrupleInCreation {
     pub key_id: EcdsaKeyId,
 
@@ -252,7 +251,7 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
 
 /// Counterpart of PreSignatureQuadruple that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureQuadrupleRef {
     pub key_id: EcdsaKeyId,
@@ -397,7 +396,7 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
 
 /// Counterpart of ThresholdEcdsaSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdEcdsaSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,

@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
@@ -35,7 +36,7 @@ use crate::{
 // Some magical prefix that the public key should have
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -73,7 +74,7 @@ impl Node {
             RequestType::Unknown => {
                 panic!("can't construct url for unknown request type")
             }
-            RequestType::CallV3 => Url::from_str(&format!(
+            RequestType::SyncCall => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v3/canister/{principal}/call",
             )),
             RequestType::ReadStateSubnet => Url::from_str(&format!(
@@ -86,13 +87,20 @@ impl Node {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
+pub struct ApiBoundaryNode {
+    pub _id: Principal,
+    pub _addr: IpAddr,
+    pub _port: u16,
+}
+
+#[derive(Clone, Debug)]
 pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Subnet {
     pub id: Principal,
     pub subnet_type: SubnetType,
@@ -131,13 +139,14 @@ pub trait Snapshot: Send + Sync {
     fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RegistrySnapshot {
     pub version: u64,
     pub timestamp: u64,
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     pub nodes: HashMap<String, Arc<Node>>,
+    pub api_bns: Vec<ApiBoundaryNode>,
 }
 
 pub struct Snapshotter {
@@ -192,6 +201,38 @@ impl Snapshotter {
         self.persister = Some(persister);
     }
 
+    fn get_api_boundary_nodes(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<Vec<ApiBoundaryNode>, Error> {
+        let node_ids = self
+            .registry_client
+            .get_api_boundary_node_ids(version)
+            .context("unable to get API BN node ids")?;
+
+        let nodes = node_ids
+            .into_iter()
+            .map(|x| -> Result<_, Error> {
+                let node = self
+                    .registry_client
+                    .get_node_record(x, version)
+                    .context("unable to get node record")?
+                    .context("node not available")?;
+
+                let http_endpoint = node.http.context("http endpoint not available")?;
+
+                Ok(ApiBoundaryNode {
+                    _id: x.get().0,
+                    _addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
+                        .context("unable to parse IP address")?,
+                    _port: http_endpoint.port as u16,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(nodes)
+    }
+
     // Creates a snapshot of the registry for given version
     fn get_snapshot(&self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
@@ -242,6 +283,11 @@ impl Snapshotter {
             .get_subnet_ids(version)
             .context("failed to get subnet ids")? // Result
             .context("subnet ids not available")?; // Option
+
+        // Fetch a list of API BNs
+        let api_bns = self
+            .get_api_boundary_nodes(version)
+            .context("unable to get API BNs")?;
 
         let subnets = subnet_ids
             .into_iter()
@@ -337,6 +383,7 @@ impl Snapshotter {
             nns_public_key: nns_key_with_prefix,
             subnets,
             nodes: nodes_map,
+            api_bns,
         })
     }
 }
@@ -463,6 +510,7 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
         nns_public_key: vec![],
         subnets,
         nodes,
+        api_bns: vec![],
     }
 }
 

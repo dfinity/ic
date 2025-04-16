@@ -1,13 +1,17 @@
 use ic_error_types::ErrorCode;
 use ic_logger::replica_logger::LogEntryLogger;
-use ic_management_canister_types::{CanisterUpgradeOptions, EmptyBlob, Payload};
-use ic_replicated_state::{canister_state::NextExecution, CanisterState};
-use ic_state_machine_tests::{IngressState, WasmResult};
+use ic_management_canister_types_private::{CanisterUpgradeOptions, EmptyBlob, Payload};
+use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, canister_state::NextExecution,
+    CanisterState,
+};
+use ic_state_machine_tests::WasmResult;
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::ingress::IngressState;
 use ic_types::Cycles;
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use maplit::btreeset;
@@ -45,7 +49,7 @@ const LOOP_10K_WAT: &str = r#"
 // Helpers
 
 /// Function to generate WAT for
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 enum Function {
     PreUpgrade,
     Start,
@@ -53,7 +57,7 @@ enum Function {
 }
 
 /// WAT successful or failed execution
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 enum Execution {
     /// Short successful execution
     Short,
@@ -219,9 +223,11 @@ fn upgrade_fails_on_invalid_input() {
 fn upgrade_fails_on_not_enough_cycles() {
     let mut test = execution_test_with_max_rounds(1);
     // Should be enough cycles to create the canister, but not enough to upgrade it
-    let balance_cycles = test
-        .cycles_account_manager()
-        .execution_cost((MAX_INSTRUCTIONS_PER_SLICE * 3).into(), test.subnet_size());
+    let balance_cycles = test.cycles_account_manager().execution_cost(
+        (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
+        test.subnet_size(),
+        WasmExecutionMode::Wasm32,
+    );
 
     let (canister_memory_usage, canister_message_memory_usage) = {
         // Create a dummy canister just to get its memory usage.

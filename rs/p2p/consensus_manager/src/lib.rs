@@ -7,7 +7,7 @@ use crate::{
 };
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::{artifact_manager::ArtifactProcessorEvent, consensus::ArtifactAssembler};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
@@ -16,7 +16,7 @@ use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
     sync::{
-        mpsc::{Receiver, UnboundedSender},
+        mpsc::{Receiver, Sender},
         watch,
     },
 };
@@ -26,38 +26,54 @@ mod receiver;
 mod sender;
 
 type StartConsensusManagerFn =
-    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Shutdown>;
+    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
-pub struct ConsensusManagerBuilder {
+/// Same order of magnitude as the number of active artifacts.
+/// Please note that we put fairly big number mainly for perfomance reasons so either side of a channel doesn't await.
+/// The replica code should be designed in such a way that if we put a channel of size 1, the protocol should still work.
+const MAX_IO_CHANNEL_SIZE: usize = 100_000;
+
+pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
+pub type AbortableBroadcastReceiver<T> = Receiver<UnvalidatedArtifactMutation<T>>;
+
+pub struct AbortableBroadcastChannel<T: IdentifiableArtifact> {
+    pub outbound_tx: AbortableBroadcastSender<T>,
+    pub inbound_rx: AbortableBroadcastReceiver<T>,
+}
+
+pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     rt_handle: Handle,
-    clients: Vec<StartConsensusManagerFn>,
+    managers: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
 }
 
-impl ConsensusManagerBuilder {
+impl AbortableBroadcastChannelBuilder {
     pub fn new(log: ReplicaLogger, rt_handle: Handle, metrics_registry: MetricsRegistry) -> Self {
         Self {
             log,
             metrics_registry,
             rt_handle,
-            clients: Vec::new(),
+            managers: Vec::new(),
             router: None,
         }
     }
 
-    pub fn add_client<
+    /// Creates a channel for the corresponding artifact. The channel is used to broadcast artifacts within the subnet.
+    pub fn abortable_broadcast_channel<
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
         F: FnOnce(Arc<dyn Transport>) -> D + 'static,
         D: ArtifactAssembler<Artifact, WireArtifact>,
     >(
         &mut self,
-        outbound_artifacts_rx: Receiver<ArtifactProcessorEvent<Artifact>>,
-        inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
-    ) {
+        slot_limit: usize,
+    ) -> AbortableBroadcastChannel<Artifact> {
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_IO_CHANNEL_SIZE);
+
         assert!(uri_prefix::<WireArtifact>()
             .chars()
             .all(char::is_alphabetic));
@@ -72,12 +88,13 @@ impl ConsensusManagerBuilder {
                 log,
                 &metrics_registry,
                 rt_handle,
-                outbound_artifacts_rx,
+                outbound_rx,
                 adverts_from_peers_rx,
-                inbound_artifacts_tx,
+                inbound_tx,
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
+                slot_limit,
             )
         };
 
@@ -89,21 +106,25 @@ impl ConsensusManagerBuilder {
                 .merge(assembler_router),
         );
 
-        self.clients.push(Box::new(builder));
+        self.managers.push(Box::new(builder));
+        AbortableBroadcastChannel {
+            outbound_tx,
+            inbound_rx,
+        }
     }
 
-    pub fn router(&mut self) -> Router {
-        self.router.take().unwrap_or_default()
+    pub fn router(&self) -> Router {
+        self.router.clone().unwrap_or_default()
     }
 
-    pub fn run(
+    pub fn start(
         self,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) -> Vec<Shutdown> {
         let mut ret = vec![];
-        for client in self.clients {
-            ret.push(client(transport.clone(), topology_watcher.clone()));
+        for m in self.managers {
+            ret.append(&mut m(transport.clone(), topology_watcher.clone()));
         }
         ret
     }
@@ -114,14 +135,15 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
-    adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
-    // Adverts received from peers
-    adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
-    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
+    // Slot updates received from peers
+    slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
+    sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
     assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
-) -> Shutdown
+    slot_limit: usize,
+) -> Vec<Shutdown>
 where
     Artifact: IdentifiableArtifact,
     WireArtifact: PbArtifact,
@@ -129,44 +151,45 @@ where
 {
     let metrics = ConsensusManagerMetrics::new::<WireArtifact>(metrics_registry);
 
-    let shutdown = ConsensusManagerSender::<Artifact, WireArtifact, _>::run(
+    let shutdown_send_side = ConsensusManagerSender::<Artifact, WireArtifact, _>::run(
         log.clone(),
         metrics.clone(),
         rt_handle.clone(),
         transport.clone(),
-        adverts_to_send,
+        outbound_transmits,
         assembler.clone(),
     );
 
-    ConsensusManagerReceiver::run(
+    let shutdown_receive_side = ConsensusManagerReceiver::run(
         log,
         metrics,
         rt_handle,
-        adverts_received,
+        slot_updates_rx,
         assembler,
         sender,
         topology_watcher,
+        slot_limit,
     );
-    shutdown
+    vec![shutdown_send_side, shutdown_receive_side]
 }
 
-pub(crate) struct SlotUpdate<Artifact: PbArtifact> {
+struct SlotUpdate<Artifact: PbArtifact> {
     slot_number: SlotNumber,
     commit_id: CommitId,
     update: Update<Artifact>,
 }
 
-pub(crate) enum Update<Artifact: PbArtifact> {
+enum Update<Artifact: PbArtifact> {
     Artifact(Artifact),
-    Advert((Artifact::Id, Artifact::Attribute)),
+    Id(Artifact::Id),
 }
 
-pub fn uri_prefix<Artifact: PbArtifact>() -> String {
+fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
 struct SlotNumberTag;
-pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
+type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
-pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
+type CommitId = AmountOf<CommitIdTag, u64>;

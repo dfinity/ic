@@ -1,23 +1,28 @@
 use backoff::backoff::Backoff;
+use candid::Principal;
 use core::future::Future;
-use dfn_candid::{candid, candid_multi_arity};
+use dfn_candid::{candid, candid_multi_arity, candid_one};
 use ic_canister_client::{Agent, Sender};
 use ic_config::Config;
-use ic_management_canister_types::CanisterStatusType::Stopped;
-pub use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
-};
-use ic_registry_transport::pb::v1::RegistryMutation;
-pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
-use on_wire::{FromWire, IntoWire, NewType};
-
 use ic_management_canister_types::{
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs,
+    CanisterSettings, CanisterStatusArgs, CanisterStatusResult, CanisterStatusType,
+    CreateCanisterResult, DeleteCanisterArgs, ProvisionalCreateCanisterWithCyclesArgs,
+    StartCanisterArgs, StopCanisterArgs, UpdateSettingsArgs,
 };
+// The below should eventually be replaced with imports from the
+// public version of the crate above. For now, they're kept as
+// changing them would propagate to changes to state machine tests
+// which would be a bit more involved.
+pub use ic_management_canister_types_private::{
+    self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, IC_00,
+};
+use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusResultV2};
+use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::{canister_test_async, LocalTestRuntime};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_state_machine_tests::StateMachine;
+pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
+use on_wire::{FromWire, IntoWire, NewType};
 use std::{
     convert::{AsRef, TryFrom},
     env, fmt,
@@ -362,16 +367,18 @@ impl<'a> Runtime {
         num_cycles: Option<u128>,
         specified_id: Option<PrincipalId>,
     ) -> Result<Canister<'a>, String> {
-        let canister_id_record: Result<CanisterIdRecord, String> = match specified_id {
+        let create_canister_result: Result<CreateCanisterResult, String> = match specified_id {
             Some(canister_id) => {
                 self.get_management_canister_with_effective_canister_id(canister_id)
                     .update_(
                         ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
                         candid,
-                        (ProvisionalCreateCanisterWithCyclesArgs::new(
-                            num_cycles,
-                            specified_id,
-                        ),),
+                        (ProvisionalCreateCanisterWithCyclesArgs {
+                            amount: num_cycles.map(candid::Nat::from),
+                            settings: None,
+                            specified_id: specified_id.map(Principal::from),
+                            sender_canister_version: None,
+                        },),
                     )
                     .await
             }
@@ -380,19 +387,21 @@ impl<'a> Runtime {
                     .update_(
                         ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
                         candid,
-                        (ProvisionalCreateCanisterWithCyclesArgs::new(
-                            num_cycles,
-                            specified_id,
-                        ),),
+                        (ProvisionalCreateCanisterWithCyclesArgs {
+                            amount: num_cycles.map(candid::Nat::from),
+                            settings: None,
+                            specified_id: specified_id.map(Principal::from),
+                            sender_canister_version: None,
+                        },),
                     )
                     .await
             }
         };
-        let canister_id = canister_id_record?.get_canister_id();
+        let canister_id = create_canister_result?.canister_id;
         Ok(Canister {
             runtime: self,
             effective_canister_id: canister_id.into(),
-            canister_id,
+            canister_id: CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
             wasm: None,
         })
     }
@@ -425,6 +434,18 @@ impl<'a> Runtime {
         execute_with_retries(|| self.create_canister_at_id(specified_id))
             .await
             .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
+    }
+
+    pub async fn tick(&'a self) {
+        match self {
+            Runtime::Remote(_) | Runtime::Local(_) => {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+            Runtime::StateMachine(state_machine) => {
+                state_machine.tick();
+                state_machine.advance_time(Duration::from_millis(1000));
+            }
+        }
     }
 }
 
@@ -520,7 +541,7 @@ pub struct Canister<'a> {
     wasm: Option<Wasm>,
 }
 
-impl<'a> Canister<'a> {
+impl Canister<'_> {
     pub fn is_runtime_local(&self) -> bool {
         match self.runtime {
             Runtime::Remote(_) => false,
@@ -530,7 +551,7 @@ impl<'a> Canister<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Canister<'a> {
+impl fmt::Debug for Canister<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "client-side view of canister {}", self.canister_id)
     }
@@ -727,34 +748,25 @@ impl<'a> Canister<'a> {
         self.wasm = Some(Wasm::from_bytes(wasm));
     }
 
-    pub async fn add_controller(&self, additional_controller: PrincipalId) -> Result<(), String> {
-        let status_res: CanisterStatusResultV2 = self
-            .runtime
-            .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("canister_status", candid, (self.as_record(),))
-            .await?;
-
-        let mut controllers = status_res.controllers();
-        controllers.push(additional_controller);
-
-        self.runtime
-            .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_(
-                ic00::Method::UpdateSettings.to_string(),
-                dfn_candid::candid_multi_arity,
-                (UpdateSettingsArgs {
-                    canister_id: self.canister_id.into(),
-                    settings: CanisterSettingsArgsBuilder::new()
-                        .with_controllers(controllers)
-                        .build(),
-                    sender_canister_version: None,
-                },),
-            )
-            .await
-    }
-
     pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
         self.set_controllers(vec![new_controller]).await
+    }
+
+    /// Get the controllers of the canister
+    pub async fn get_controllers(&self) -> Result<Vec<PrincipalId>, String> {
+        let status: CanisterStatusResultV2 = self
+            .runtime
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
+            .update_(
+                ic00::Method::CanisterStatus.to_string(),
+                candid_one,
+                CanisterStatusArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
+            .await?;
+
+        Ok(status.controllers())
     }
 
     pub async fn set_controllers(&self, new_controllers: Vec<PrincipalId>) -> Result<(), String> {
@@ -763,12 +775,21 @@ impl<'a> Canister<'a> {
             .update_(
                 ic00::Method::UpdateSettings.to_string(),
                 candid_multi_arity,
-                (UpdateSettingsArgs::new(
-                    self.canister_id,
-                    CanisterSettingsArgsBuilder::new()
-                        .with_controllers(new_controllers)
-                        .build(),
-                ),),
+                (UpdateSettingsArgs {
+                    canister_id: Principal::from(self.canister_id),
+                    settings: CanisterSettings {
+                        controllers: Some(
+                            new_controllers.into_iter().map(Principal::from).collect(),
+                        ),
+                        compute_allocation: None,
+                        memory_allocation: None,
+                        freezing_threshold: None,
+                        reserved_cycles_limit: None,
+                        log_visibility: None,
+                        wasm_memory_limit: None,
+                    },
+                    sender_canister_version: None,
+                },),
             )
             .await
     }
@@ -792,17 +813,29 @@ impl<'a> Canister<'a> {
         let stop_res: Result<(), String> = self
             .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("stop_canister", candid_multi_arity, (self.as_record(),))
+            .update_(
+                "stop_canister",
+                candid_one,
+                StopCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
             .await;
         stop_res?;
         loop {
             let status_res: Result<CanisterStatusResult, String> = self
                 .runtime
                 .get_management_canister_with_effective_canister_id(self.canister_id().into())
-                .update_("canister_status", candid, (self.as_record(),))
+                .update_(
+                    "canister_status",
+                    candid_one,
+                    CanisterStatusArgs {
+                        canister_id: Principal::from(self.canister_id()),
+                    },
+                )
                 .await;
             let status = status_res?;
-            if status.status() == Stopped {
+            if status.status == CanisterStatusType::Stopped {
                 break;
             }
         }
@@ -811,9 +844,16 @@ impl<'a> Canister<'a> {
 
     /// Tries to delete this canister.
     pub async fn delete(&self) -> Result<(), String> {
-        self.runtime
+        () = self
+            .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("delete_canister", candid_multi_arity, (self.as_record(),))
+            .update_(
+                "delete_canister",
+                candid_one,
+                DeleteCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
             .await?;
         Ok(())
     }
@@ -838,7 +878,13 @@ impl<'a> Canister<'a> {
         let start_res: Result<(), String> = self
             .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
-            .update_("start_canister", candid_multi_arity, (self.as_record(),))
+            .update_(
+                "start_canister",
+                candid_one,
+                StartCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
             .await;
         start_res?;
         Ok(())
@@ -878,7 +924,7 @@ pub struct Install<'a> {
     pub num_cycles: Option<u128>,
 }
 
-impl<'a> Query<'a> {
+impl Query<'_> {
     pub async fn bytes(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let canister = self.canister;
         match canister.runtime {
@@ -959,7 +1005,7 @@ impl<'a> Query<'a> {
     }
 }
 
-impl<'a> Update<'a> {
+impl Update<'_> {
     pub async fn bytes(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let canister = self.canister;
         match canister.runtime {

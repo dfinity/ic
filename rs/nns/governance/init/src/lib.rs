@@ -95,6 +95,17 @@ impl GovernanceCanisterInitPayloadBuilder {
             TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
         };
         use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+        use std::time::SystemTime;
+
+        // This assumption here is that with_current_time is used.
+        // Alternatively, we could use u64::MAX, but u64::MAX is not as
+        // realistic.
+        let voting_power_refreshed_timestamp_seconds = Some(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
 
         let mut neuron1 = {
             let neuron_id = NeuronIdProto::from(self.new_neuron_id());
@@ -109,6 +120,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                                                          * TEST_NEURON_TOTAL_STAKE_E8S */
                 account: subaccount,
                 not_for_profit: true,
+                voting_power_refreshed_timestamp_seconds,
                 ..Default::default()
             }
         };
@@ -135,6 +147,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 aging_since_timestamp_seconds: 1,
                 account: subaccount,
                 not_for_profit: false,
+                voting_power_refreshed_timestamp_seconds,
                 ..Default::default()
             }
         };
@@ -153,6 +166,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 aging_since_timestamp_seconds: 10,
                 account: subaccount,
                 not_for_profit: false,
+                voting_power_refreshed_timestamp_seconds,
                 ..Default::default()
             }
         };
@@ -251,9 +265,11 @@ impl GovernanceCanisterInitPayloadBuilder {
                     "neuron_id",
                     "owner_id",
                     "created_ts_ns",
+                    "dissolve_delay_s",
                     "staked_icpt",
                     "follows",
-                    "not_for_profit"
+                    "not_for_profit",
+                    "maturity_e8s_equivalent",
                 ]
             );
         }
@@ -274,10 +290,13 @@ impl GovernanceCanisterInitPayloadBuilder {
             let creation_ts_ns = record[2]
                 .parse::<u64>()
                 .expect("couldn't read the neuron's creation time");
-            let staked_icpt = record[3]
+            let dissolve_delay_seconds = record[3]
+                .parse::<u64>()
+                .expect("couldn't read the neuron's dissolve delay");
+            let staked_icpt = record[4]
                 .parse::<u64>()
                 .expect("couldn't read the neuron's staked icpt amount");
-            let followees: Vec<NeuronIdProto> = record[4]
+            let followees: Vec<NeuronIdProto> = record[5]
                 .split_terminator(',')
                 .map(|x| NeuronIdProto {
                     id: x.parse::<u64>().expect("could not parse followee"),
@@ -289,29 +308,17 @@ impl GovernanceCanisterInitPayloadBuilder {
 
             let neuron_id = NeuronIdProto::from(neuron_id);
 
-            let not_for_profit = record[5]
+            let not_for_profit = record[6]
                 .parse::<bool>()
                 .expect("couldn't read the neuron's not-for-profit flag");
 
-            let memo = if record.len() < 9 {
-                self.rng.next_u64()
-            } else {
-                record[6].parse::<u64>().expect("could not parse memo")
-            };
+            let memo = self.rng.next_u64();
 
-            let maturity_e8s_equivalent = if record.len() < 10 {
-                0
-            } else {
-                record[7].parse::<u64>().expect("could not parse maturity")
-            };
+            let maturity_e8s_equivalent = record[7]
+                .parse::<u64>()
+                .expect("could not parse maturity_e8s_equivalent");
 
-            let kyc_verified = if record.len() < 11 {
-                false
-            } else {
-                record[8]
-                    .parse::<bool>()
-                    .expect("could not parse kyc_verified")
-            };
+            let kyc_verified = false;
 
             let neuron = Neuron {
                 id: Some(neuron_id),
@@ -324,7 +331,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 kyc_verified,
                 maturity_e8s_equivalent,
                 not_for_profit,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
                 followees: [(Topic::Unspecified as i32, Followees { followees })]
                     .iter()
                     .cloned()

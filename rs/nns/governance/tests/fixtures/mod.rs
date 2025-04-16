@@ -12,7 +12,9 @@ use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -20,28 +22,40 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
+        governance_minting_account, neuron_subaccount, Environment, Governance,
+        HeapGrowthPotential, RngError,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
         manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
-        manage_neuron_response,
-        manage_neuron_response::MergeMaturityResponse,
         neuron,
         neuron::DissolveState,
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
-        ProposalData, RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
+        Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal, ProposalData,
+        RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
     },
+    storage::reset_stable_memory,
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::{self, MergeMaturityResponse},
+    ManageNeuronResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
 };
+
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{
+    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+};
+use ic_nns_governance::governance::RandomnessGenerator;
+use ic_nns_governance::{tla_log_request, tla_log_response};
 
 pub mod environment_fixture;
 
@@ -94,7 +108,7 @@ pub fn prorated_neuron_age(
 }
 
 /// The LedgerFixture allows for independent testing of Ledger functionality.
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct LedgerFixture {
     accounts: LedgerMap,
 }
@@ -171,7 +185,7 @@ impl Default for EnvironmentBuilder {
         EnvironmentBuilder {
             environment_fixture_state: EnvironmentFixtureState {
                 now: 0,
-                rng: StdRng::seed_from_u64(9539),
+                rng: Some(ChaCha20Rng::from_seed([1u8; 32])),
                 observed_canister_calls: VecDeque::new(),
                 mocked_canister_replies: VecDeque::new(),
             },
@@ -379,6 +393,7 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
             neuron_type: self.neuron_type,
+            recent_ballots_next_entry_index: Some(0),
             ..Neuron::default()
         }
     }
@@ -438,6 +453,18 @@ impl IcpLedger for NNSFixture {
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
             from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
         );
+        tla_log_request!(
+            "WaitForTransfer",
+            Destination::new("ledger"),
+            "Transfer",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("amount".to_string(), amount_e8s.to_tla_value()),
+                ("fee".to_string(), fee_e8s.to_tla_value()),
+                ("from".to_string(), account_to_tla(from_account)),
+                ("to".to_string(), account_to_tla(to_account)),
+            ]))
+        );
+
         let accounts = &mut self.nns_state.try_lock().unwrap().ledger.accounts;
 
         let from_e8s = accounts
@@ -457,6 +484,14 @@ impl IcpLedger for NNSFixture {
         }
 
         *accounts.entry(to_account).or_default() += amount_e8s;
+
+        tla_log_response!(
+            Destination::new("ledger"),
+            tla::TlaValue::Variant {
+                tag: "TransferOk".to_string(),
+                value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+            }
+        );
 
         Ok(0)
     }
@@ -479,22 +514,40 @@ impl IcpLedger for NNSFixture {
     }
 }
 
-#[async_trait]
-impl Environment for NNSFixture {
-    fn now(&self) -> u64 {
-        self.nns_state.try_lock().unwrap().environment.now()
-    }
-
-    fn random_u64(&mut self) -> u64 {
+impl RandomnessGenerator for NNSFixture {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         self.nns_state.try_lock().unwrap().environment.random_u64()
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         self.nns_state
             .try_lock()
             .unwrap()
             .environment
             .random_byte_array()
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .seed_rng(seed)
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .get_rng_seed()
+    }
+}
+
+#[async_trait]
+impl Environment for NNSFixture {
+    fn now(&self) -> u64 {
+        self.nns_state.try_lock().unwrap().environment.now()
     }
 
     fn execute_nns_function(
@@ -518,7 +571,7 @@ impl Environment for NNSFixture {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,
@@ -535,7 +588,7 @@ impl Environment for NNSFixture {
 
 #[async_trait]
 impl CMC for NNSFixture {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(100)
     }
 }
@@ -614,6 +667,8 @@ impl ProposalNeuronBehavior {
                     ..Default::default()
                 },
             )
+            .now_or_never()
+            .unwrap()
             .unwrap();
         // Vote
         for (voter, vote) in &self.votes {
@@ -706,18 +761,21 @@ impl NNS {
         self
     }
 
+    // Must be mut because clone_proto must be mut, but should not affect state
     pub(crate) fn get_state(&self) -> NNSState {
+        let accounts = self
+            .fixture
+            .nns_state
+            .try_lock()
+            .unwrap()
+            .ledger
+            .accounts
+            .clone();
+        let governance_proto = self.governance.__get_state_for_test();
         NNSState {
             now: self.now(),
-            accounts: self
-                .fixture
-                .nns_state
-                .try_lock()
-                .unwrap()
-                .ledger
-                .accounts
-                .clone(),
-            governance_proto: self.governance.clone_proto(),
+            accounts,
+            governance_proto,
             latest_gc_num_proposals: self.governance.latest_gc_num_proposals,
         }
     }
@@ -794,6 +852,8 @@ impl NNS {
                     ..Default::default()
                 },
             )
+            .now_or_never()
+            .unwrap()
             .unwrap()
     }
 
@@ -829,7 +889,7 @@ impl NNS {
             .unwrap();
 
         match result {
-            manage_neuron_response::Command::Error(e) => Err(e),
+            manage_neuron_response::Command::Error(e) => Err(GovernanceError::from(e)),
             manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
             _ => panic!("Merge maturity command returned unexpected response"),
         }
@@ -936,18 +996,27 @@ impl IcpLedger for NNS {
     }
 }
 
+impl RandomnessGenerator for NNS {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        self.fixture.random_u64()
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        self.fixture.random_byte_array()
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.fixture.seed_rng(seed)
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        unimplemented!()
+    }
+}
 #[async_trait]
 impl Environment for NNS {
     fn now(&self) -> u64 {
         self.fixture.now()
-    }
-
-    fn random_u64(&mut self) -> u64 {
-        self.fixture.random_u64()
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        self.fixture.random_byte_array()
     }
 
     fn execute_nns_function(
@@ -963,7 +1032,7 @@ impl Environment for NNS {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         _target: CanisterId,
         _method_name: &str,
         _request: Vec<u8>,
@@ -972,8 +1041,8 @@ impl Environment for NNS {
     }
 }
 
-pub type LedgerTransform = Box<dyn FnOnce(Box<dyn IcpLedger>) -> Box<dyn IcpLedger>>;
-pub type EnvironmentTransform = Box<dyn FnOnce(Box<dyn Environment>) -> Box<dyn Environment>>;
+pub type LedgerTransform = Box<dyn FnOnce(Arc<dyn IcpLedger>) -> Arc<dyn IcpLedger>>;
+pub type EnvironmentTransform = Box<dyn FnOnce(Arc<dyn Environment>) -> Arc<dyn Environment>>;
 
 /// The NNSBuilder permits the declarative construction of an NNS fixture. All
 /// of the methods concern setting or querying what this initial state will
@@ -1008,22 +1077,25 @@ impl NNSBuilder {
     }
 
     pub fn create(self) -> NNS {
+        reset_stable_memory();
+
         let fixture = NNSFixture::new(NNSFixtureState {
             ledger: self.ledger_builder.create(),
             environment: self.environment_builder.create(),
         });
-        let cmc: Box<dyn CMC> = Box::new(fixture.clone());
-        let mut ledger: Box<dyn IcpLedger> = Box::new(fixture.clone());
+        let cmc: Arc<dyn CMC> = Arc::new(fixture.clone());
+        let mut ledger: Arc<dyn IcpLedger> = Arc::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
         }
-        let mut environment: Box<dyn Environment> = Box::new(fixture.clone());
+        let mut environment: Arc<dyn Environment> = Arc::new(fixture.clone());
         for t in self.environment_transforms {
             environment = t(environment);
         }
+        let randomness = Box::new(fixture.clone());
         let mut nns = NNS {
             fixture: fixture.clone(),
-            governance: Governance::new(self.governance, environment, ledger, cmc),
+            governance: Governance::new(self.governance, environment, ledger, cmc, randomness),
             initial_state: None,
         };
         nns.capture_state();

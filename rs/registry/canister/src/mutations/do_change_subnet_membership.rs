@@ -75,7 +75,7 @@ impl Registry {
 }
 
 /// The payload of a proposal to change the membership of nodes in an existing subnet.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct ChangeSubnetMembershipPayload {
     /// The subnet ID to mutate.
     pub subnet_id: PrincipalId,

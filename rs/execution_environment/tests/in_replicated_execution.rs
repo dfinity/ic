@@ -1,4 +1,4 @@
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
@@ -13,7 +13,7 @@ fn setup() -> (StateMachine, CanisterId) {
         .with_checkpoints_enabled(false)
         .build();
     let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(100_000_000_000_u128), None);
+        env.create_canister_with_cycles(None, Cycles::from(301_000_000_000_u128), None);
     env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,

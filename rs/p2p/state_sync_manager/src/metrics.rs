@@ -9,7 +9,7 @@ use crate::ongoing::DownloadChunkError;
 const CHUNK_DOWNLOAD_STATUS_LABEL: &str = "status";
 const CHUNK_DOWNLOAD_STATUS_SUCCESS: &str = "success";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct StateSyncManagerMetrics {
     pub state_syncs_total: IntCounter,
     pub adverts_received_total: IntCounter,
@@ -41,7 +41,7 @@ impl StateSyncManagerMetrics {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct StateSyncManagerHandlerMetrics {
     pub compression_ratio: Histogram,
 }
@@ -57,7 +57,7 @@ impl StateSyncManagerHandlerMetrics {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct OngoingStateSyncMetrics {
     pub download_task_monitor: TaskMonitor,
     pub allowed_parallel_downloads: IntGauge,

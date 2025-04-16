@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_proto::pb::v1::Countries;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct SwapBuilder {
     lifecycle: Lifecycle,
     buyers: BTreeMap<String, BuyerState>,

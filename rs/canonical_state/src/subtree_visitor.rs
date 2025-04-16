@@ -5,10 +5,10 @@ use crate::visitor::{Control, Visitor};
 use std::collections::BTreeMap;
 
 /// Pattern defines a rule to filter a tree.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Pattern(PatternKind);
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum PatternKind {
     // Match everything unconditionally.
     All,
@@ -91,7 +91,7 @@ impl<'a, V> SubtreeVisitor<'a, V> {
     }
 }
 
-impl<'a, V> Visitor for SubtreeVisitor<'a, V>
+impl<V> Visitor for SubtreeVisitor<'_, V>
 where
     V: Visitor,
 {

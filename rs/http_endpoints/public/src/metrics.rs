@@ -1,5 +1,5 @@
 use ic_metrics::{
-    buckets::{add_bucket, decimal_buckets},
+    buckets::{add_bucket, decimal_buckets, linear_buckets},
     MetricsRegistry,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
@@ -17,11 +17,16 @@ pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 pub const LABEL_CALL_V3_CERTIFICATE_STATUS: &str = "status";
 
 // Call v3 labels
+// !!! Be careful to update alert queries in k8s repo if changing these constants.!!!
 pub const LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER: &str = "trigger";
 pub const CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str = "ingress_watcher_not_running";
 pub const CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
 pub const CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_timeout";
 pub const CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
+pub const CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
+    "message_already_in_certified_state";
+pub const CALL_V3_STATUS_IS_NOT_LEAF: &str = "not_leaf";
+pub const CALL_V3_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
@@ -170,10 +175,22 @@ impl HttpHandlerMetrics {
             ),
             ingress_watcher_wait_for_certification_duration_seconds: metrics_registry.histogram(
                 "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
-                "The duration the call v3 handler waits for subscribing to a message. I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
-                // We have the final bucket at 10s as that is the maximum time the handler waits for certification
-                // 10ms - 10s.
-                add_bucket(10.0, decimal_buckets(-2, 0)),
+                "The duration the call v3 handler waits for a message to complete execution at some height, h, and for h to become certified.",
+                // 52 buckets
+                // 0.50s - 0.60s - ... - 4.5s - 5.0s - 5.5s - ... - 12s - 14s - 16s
+                {
+                    let mut buckets = linear_buckets(0.5, 0.1, 40);
+                    // Extend the buckets with 5.0s - 12.0s
+                    for value in linear_buckets(5.0, 0.5, 10) {
+                        buckets = add_bucket(value, buckets);
+                    }
+
+                    buckets = add_bucket(14.0, buckets);
+                    buckets = add_bucket(16.0, buckets);
+
+                    buckets
+                },
+
             ),
             call_v3_certificate_status_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_certificate_status_total",
@@ -184,6 +201,41 @@ impl HttpHandlerMetrics {
                 "replica_http_call_v3_early_response_trigger_total",
                 "The count of early response triggers for the /v3/.../call endpoint.",
                 &[LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER],
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct DelegationManagerMetrics {
+    pub(crate) update_duration: Histogram,
+    pub(crate) delegation_size: Histogram,
+    pub(crate) updates: IntCounter,
+    pub(crate) errors: IntCounter,
+}
+
+impl DelegationManagerMetrics {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            updates: metrics_registry.int_counter(
+                "nns_delegation_manager_updates_total",
+                "How many times has the nns delegation been updated",
+            ),
+            update_duration: metrics_registry.histogram(
+                "nns_delegation_manager_update_duration_seconds",
+                "How long it took to update the nns delegation, in seconds",
+                // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
+                decimal_buckets(-3, 1),
+            ),
+            delegation_size: metrics_registry.histogram(
+                "nns_delegation_manager_delegation_size_bytes",
+                "How big is the delegation, in bytes",
+                // (1, 2, 5, ..., 1MB, 2MB, 5MB)
+                decimal_buckets(0, 6),
+            ),
+            errors: metrics_registry.int_counter(
+                "nns_delegation_manager_errors_total",
+                "Number of errors encountered while fetching nns delegations",
             ),
         }
     }

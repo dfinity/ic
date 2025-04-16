@@ -49,6 +49,11 @@ impl CyclesAccountManagerBuilder {
         self
     }
 
+    pub fn with_ten_update_instructions_execution_fee_wasm64(mut self, fee: Cycles) -> Self {
+        self.config.ten_update_instructions_execution_fee_wasm64 = fee;
+        self
+    }
+
     pub fn with_cycles_limit_per_canister(
         mut self,
         cycles_limit_per_canister: Option<Cycles>,

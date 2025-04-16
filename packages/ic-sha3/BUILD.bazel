@@ -1,0 +1,47 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:sha3",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:hex",
+]
+
+rust_library(
+    name = "ic-sha3",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ic-sha3",
+)
+
+rust_test_suite(
+    name = "integration_tests",
+    srcs = glob(
+        ["tests/*.rs"],
+    ),
+    compile_data = [
+        "test_resources/SHAKE256ShortMsg_subset.rsp",
+        "test_resources/SHAKE256VariableOut_subset.rsp",
+    ],
+    deps = [":ic-sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc(
+    name = "doc",
+    crate = ":ic-sha3",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-sha3",
+    deps = [":ic-sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

@@ -25,7 +25,7 @@
     "nns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icp_ledger/ledger.did",
+      "candid": "../ledger_suite/icp/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -69,7 +69,7 @@
     "dragginz-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -80,7 +80,7 @@
     "dragginz-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -124,7 +124,7 @@
     "openchat-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -135,7 +135,7 @@
     "openchat-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -179,7 +179,7 @@
     "kinic-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -190,7 +190,7 @@
     "kinic-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -234,7 +234,7 @@
     "hotornot-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -245,7 +245,7 @@
     "hotornot-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -289,7 +289,7 @@
     "icghost-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -300,7 +300,7 @@
     "icghost-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -344,7 +344,7 @@
     "modclub-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -355,7 +355,7 @@
     "modclub-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -399,7 +399,7 @@
     "boomdao-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -410,7 +410,7 @@
     "boomdao-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -454,7 +454,7 @@
     "catalyze-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -465,7 +465,7 @@
     "catalyze-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -509,7 +509,7 @@
     "icx-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -520,7 +520,7 @@
     "icx-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -564,7 +564,7 @@
     "nuance-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -575,7 +575,7 @@
     "nuance-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -619,7 +619,7 @@
     "sonic-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -630,7 +630,7 @@
     "sonic-sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -647,13 +647,13 @@
     "sns-index": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/index/index.did",
+      "candid": "../ledger_suite/icrc1/index-ng/index-ng.did",
       "type": "custom"
     },
     "sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
+      "candid": "../ledger_suite/icrc1/ledger/ledger.did",
       "type": "custom"
     },
     "sns-root": {

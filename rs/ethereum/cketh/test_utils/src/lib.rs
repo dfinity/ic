@@ -4,7 +4,8 @@ use crate::flow::{
 };
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
-use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -19,11 +20,12 @@ use ic_cketh_minter::{
 };
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use ic_management_canister_types_private::{CanisterHttpResponsePayload, CanisterStatusType};
 use ic_state_machine_tests::{
-    CanisterHttpResponsePayload, CanisterId, CanisterStatusType, Cycles, PayloadBuilder,
-    PrincipalId, StateMachine, StateMachineBuilder, UserError, WasmResult,
+    PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
@@ -34,9 +36,19 @@ use std::time::Duration;
 
 pub mod ckerc20;
 pub mod events;
+#[cfg(feature = "evm-rpc")]
+mod evm_rpc_provider;
 pub mod flow;
 pub mod mock;
+#[cfg(not(feature = "evm-rpc"))]
+mod provider;
 pub mod response;
+
+#[cfg(feature = "evm-rpc")]
+pub use evm_rpc_provider::JsonRpcProvider;
+#[cfg(not(feature = "evm-rpc"))]
+pub use provider::JsonRpcProvider;
+
 #[cfg(test)]
 mod tests;
 
@@ -44,10 +56,14 @@ pub const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 pub const CKETH_MINIMUM_WITHDRAWAL_AMOUNT: u64 = 30_000_000_000_000_000;
 pub const MAX_TICKS: usize = 10;
 pub const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
+pub const DEFAULT_USER_SUBACCOUNT: [u8; 32] = [42; 32];
 pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
+pub const DEFAULT_DEPOSIT_BLOCK_HASH: &str =
+    "0x79cfe76d69337dae199e32c2b6b3d7c2668bfe71a05f303f95385e70031b9ef8";
 pub const DEFAULT_DEPOSIT_FROM_ADDRESS: &str = "0x55654e7405fcb336386ea8f36954a211b2cda764";
 pub const DEFAULT_DEPOSIT_TRANSACTION_HASH: &str =
     "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353";
+pub const DEFAULT_DEPOSIT_TRANSACTION_INDEX: u64 = 0x33;
 pub const DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH: &str =
     "0x2044da6b095d6be2308b868287b8b70d9e01b226c02546b7abcce31dabc34929";
 
@@ -56,7 +72,7 @@ pub const DEFAULT_ERC20_DEPOSIT_LOG_INDEX: u64 = 0x42;
 pub const DEFAULT_BLOCK_HASH: &str =
     "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4";
 pub const LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL: u64 = 3_956_206;
-pub const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
+pub const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec; //4_272_876
 pub const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000 + CKETH_TRANSFER_FEE - 10_u64;
 pub const CKETH_WITHDRAWAL_AMOUNT: u64 = EXPECTED_BALANCE - CKETH_TRANSFER_FEE;
 pub const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
@@ -77,10 +93,14 @@ pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
 pub const ERC20_HELPER_CONTRACT_ADDRESS: &str = "0xe1788e4834c896f1932188645cc36c54d1b80ac1";
+pub const DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS: &str =
+    "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38";
 const RECEIVED_ETH_EVENT_TOPIC: &str =
     "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
 const RECEIVED_ERC20_EVENT_TOPIC: &str =
     "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b";
+const RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC: &str =
+    "0x918adbebdb8f3b36fc337ab76df10b147b2def5c9dd62cb3456d9aeca40e0b07";
 pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
 pub struct CkEthSetup {
@@ -89,6 +109,7 @@ pub struct CkEthSetup {
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
     pub evm_rpc_id: Option<CanisterId>,
+    pub support_subaccount: bool,
 }
 
 impl Default for CkEthSetup {
@@ -133,6 +154,7 @@ impl CkEthSetup {
             ledger_id,
             minter_id,
             evm_rpc_id: None,
+            support_subaccount: false,
         };
 
         assert_eq!(
@@ -162,17 +184,21 @@ impl CkEthSetup {
     }
 
     pub fn maybe_evm_rpc(env: Arc<StateMachine>) -> Self {
-        match std::env::var("EVM_RPC_CANISTER_WASM_PATH") {
-            Ok(_) => CkEthSetup::new_with_evm_rpc(env),
-            Err(_) => CkEthSetup::new(env),
+        if use_evm_rpc_canister() {
+            CkEthSetup::new_with_evm_rpc(env)
+        } else {
+            CkEthSetup::new(env)
         }
     }
 
-    pub fn deposit(self, params: DepositParams) -> DepositFlow {
-        DepositFlow {
-            setup: self,
-            params,
-        }
+    pub fn add_support_for_subaccount(self) -> Self {
+        self.upgrade_minter_to_add_deposit_with_subaccount_helper_contract(
+            DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS.to_string(),
+        )
+    }
+
+    pub fn deposit<T: Into<DepositParams>>(self, params: T) -> DepositFlow {
+        DepositFlow::new(self, params)
     }
 
     pub fn minter_address(&self) -> String {
@@ -384,15 +410,20 @@ impl CkEthSetup {
         }
     }
 
-    pub fn call_minter_withdraw_eth(
+    pub fn call_minter_withdraw_eth<T: Into<Account>>(
         self,
-        from: Principal,
+        from: T,
         amount: Nat,
         recipient: String,
     ) -> WithdrawalFlow {
-        let arg = WithdrawalArg { amount, recipient };
+        let from = from.into();
+        let arg = WithdrawalArg {
+            amount,
+            recipient,
+            from_subaccount: from.subaccount,
+        };
         let message_id = self.env.send_ingress(
-            PrincipalId::from(from),
+            PrincipalId::from(from.owner),
             self.minter_id,
             "withdraw_eth",
             Encode!(&arg).expect("failed to encode withdraw args"),
@@ -548,6 +579,18 @@ impl CkEthSetup {
         self
     }
 
+    pub fn upgrade_minter_to_add_deposit_with_subaccount_helper_contract(
+        mut self,
+        contract_address: String,
+    ) -> Self {
+        self.upgrade_minter(UpgradeArg {
+            deposit_with_subaccount_helper_contract_address: Some(contract_address),
+            ..Default::default()
+        });
+        self.support_subaccount = true;
+        self
+    }
+
     pub fn check_audit_logs_and_upgrade(self, upgrade_arg: UpgradeArg) -> Self {
         self.check_audit_logs_and_upgrade_as_ref(upgrade_arg);
         self
@@ -583,9 +626,9 @@ impl CkEthSetup {
 
     pub fn max_logs_block_range(&self) -> u64 {
         if self.evm_rpc_id.is_none() {
-            799
+            798
         } else {
-            500
+            499
         }
     }
 
@@ -708,17 +751,9 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
 }
 
 fn install_evm_rpc(env: &StateMachine, evm_rpc_id: CanisterId) {
-    let args = EvmRpcInitArgs {
-        nodes_in_subnet: 28,
-    };
+    let args = evm_rpc_types::InstallArgs::default();
     env.install_existing_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap())
         .unwrap();
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct EvmRpcInitArgs {
-    #[serde(rename = "nodesInSubnet")]
-    pub nodes_in_subnet: u32,
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {
@@ -728,4 +763,14 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
             panic!("Expected a successful reply, got a reject: {}", reject)
         }
     }
+}
+
+pub fn use_evm_rpc_canister() -> bool {
+    std::env::var("EVM_RPC_CANISTER_WASM_PATH").is_ok()
+}
+
+pub struct LedgerBalance {
+    pub ledger_id: Principal,
+    pub account: Account,
+    pub balance: Nat,
 }

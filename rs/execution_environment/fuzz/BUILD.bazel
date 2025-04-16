@@ -1,21 +1,80 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING", "rust_fuzz_test_binary")
 
 package(default_visibility = ["//visibility:private"])
 
 MACRO_DEPENDENCIES = []
 
-UPDATE_SETTINGS_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/execution_environment",
-    "//rs/types/management_canister_types",
-    "@crate_index//:libfuzzer-sys",
-]
+rust_library(
+    name = "fuzzer_sandbox",
+    testonly = True,
+    srcs = glob(["src/*.rs"]),
+    crate_features = select({
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
+        "//conditions:default": [],
+    }),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.1.0",
+    deps = [
+        "//rs/canister_sandbox:backend_lib",
+        "@crate_index//:libfuzzer-sys",
+        "@crate_index//:nix",
+    ] + select({
+        "@rules_rust//rust/platform:linux": [
+            "@crate_index//:procfs",
+            "@crate_index//:syscalls",
+        ],
+        "//conditions:default": [],
+    }),
+)
 
 rust_fuzz_test_binary(
     name = "execute_subnet_message_update_settings",
     srcs = [
         "fuzz_targets/execute_subnet_message_update_settings.rs",
     ],
+    allow_main = True,  # To allow the fuzzer to export it's own main fn
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = UPDATE_SETTINGS_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/test_utilities/execution_environment",
+        "//rs/types/management_canister_types",
+        "@crate_index//:libfuzzer-sys",
+    ] + [":fuzzer_sandbox"],
+)
+
+SYSTEM_API_FUZZ_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/embedders/fuzz:wasm_fuzzers",
+    "//rs/test_utilities/execution_environment",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "@crate_index//:libfuzzer-sys",
+]
+
+rust_fuzz_test_binary(
+    name = "execute_with_wasm_executor_ic_wasm",
+    testonly = True,
+    srcs = [
+        "fuzz_targets/execute_ic_wasm.rs",
+    ],
+    allow_main = True,  # To allow the fuzzer to export it's own main fn
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES + [":fuzzer_sandbox"],
+)
+
+rust_fuzz_test_binary(
+    name = "execute_with_wasm_executor_system_api",
+    testonly = True,
+    srcs = [
+        "fuzz_targets/execute_system_api.rs",
+    ],
+    allow_main = True,  # To allow the fuzzer to export it's own main fn
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES + [":fuzzer_sandbox"],
 )

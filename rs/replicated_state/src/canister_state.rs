@@ -5,10 +5,10 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
-use crate::{InputQueueType, StateError};
-pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
-use ic_management_canister_types::{CanisterStatusType, LogVisibility};
+use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use crate::{InputQueueType, MessageMemoryUsage, StateError};
+pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
+use ic_management_canister_types_private::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
@@ -20,16 +20,17 @@ use ic_types::{
     MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY};
 use std::collections::BTreeSet;
-use std::convert::From;
 use std::sync::Arc;
 use std::time::Duration;
 
 use self::execution_state::NextScheduledMethod;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
     /// The last full round that a canister got the chance to execute. This
@@ -109,9 +110,10 @@ impl SchedulerState {
 }
 
 /// The full state of a single canister.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct CanisterState {
     /// See `SystemState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
     pub system_state: SystemState,
 
     /// See `ExecutionState` for documentation.
@@ -120,9 +122,11 @@ pub struct CanisterState {
     /// an actual wasm module. A valid canister is not required to contain a
     /// Wasm module. Canisters without Wasm modules can exist as a store of
     /// ICP; temporarily when they are being upgraded, etc.
+    #[validate_eq(CompareWithValidateEq)]
     pub execution_state: Option<ExecutionState>,
 
     /// See `SchedulerState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
     pub scheduler_state: SchedulerState,
 }
 
@@ -139,12 +143,6 @@ impl CanisterState {
         }
     }
 
-    /// Apply priority credit
-    pub fn apply_priority_credit(&mut self) {
-        self.scheduler_state.accumulated_priority -=
-            std::mem::take(&mut self.scheduler_state.priority_credit);
-    }
-
     pub fn canister_id(&self) -> CanisterId {
         self.system_state.canister_id()
     }
@@ -153,7 +151,7 @@ impl CanisterState {
         &self.system_state.controllers
     }
 
-    pub fn log_visibility(&self) -> &LogVisibility {
+    pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.system_state.log_visibility
     }
 
@@ -184,13 +182,13 @@ impl CanisterState {
     pub fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        subnet_available_memory: &mut i64,
+        subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.system_state.push_input(
             msg,
-            subnet_available_memory,
+            subnet_available_guaranteed_response_memory,
             own_subnet_type,
             input_queue_type,
         )
@@ -319,26 +317,19 @@ impl CanisterState {
         self.system_state.push_ingress(msg)
     }
 
-    /// Inducts messages from the output queue to `self` into the input queue
-    /// from `self` while respecting queue capacity and subnet available memory.
+    /// Inducts messages from the output queue to `self` into the input queue from
+    /// `self` while respecting queue capacity and subnet's available guaranteed
+    /// response memory.
     ///
-    /// `max_canister_memory_size` is the replica's configured maximum canister
-    /// memory usage. The specific canister may have an explicit memory
-    /// allocation, which would override this maximum. Based on the canister's
-    /// specific memory limit we compute the canister's available memory and
-    /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
-    /// have all the data necessary to compute it itself).
-    ///
-    /// `subnet_available_memory` (the subnet's available guaranteed response
-    /// message memory) is updated to reflect the change in memory usage due to
-    /// inducting the messages.
+    /// `subnet_available_guaranteed_response_memory` is updated to reflect the
+    /// change in memory usage due to inducting any guaranteed response messages.
     pub fn induct_messages_to_self(
         &mut self,
-        subnet_available_memory: &mut i64,
+        subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
     ) {
         self.system_state
-            .induct_messages_to_self(subnet_available_memory, own_subnet_type)
+            .induct_messages_to_self(subnet_available_guaranteed_response_memory, own_subnet_type)
     }
 
     pub fn into_parts(self) -> (Option<ExecutionState>, SystemState, SchedulerState) {
@@ -369,12 +360,46 @@ impl CanisterState {
 
     /// The amount of memory currently being used by the canister.
     ///
-    /// This only includes execution memory (heap, stable, globals, Wasm),
-    /// canister history memory and wasm chunk storage.
+    /// This includes execution memory (heap, stable, globals, Wasm),
+    /// canister history memory, wasm chunk storage and snapshots that
+    /// belong to this canister.
+    ///
+    /// This amount is used to periodically charge the canister for the memory
+    /// resources it consumes and can be used to calculate the canister's
+    /// idle cycles burn rate and freezing threshold in cycles.
     pub fn memory_usage(&self) -> NumBytes {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
+            + self.snapshots_memory_usage()
+    }
+
+    /// Returns the amount of Wasm memory currently used by the canister in bytes.
+    pub fn wasm_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| es.wasm_memory_usage())
+    }
+
+    /// Returns the amount of stable memory currently used by the canister in bytes.
+    pub fn stable_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.stable_memory_usage())
+    }
+
+    /// Returns the amount of memory currently used by global variables of the canister in bytes.
+    pub fn global_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.global_memory_usage())
+    }
+
+    /// Returns the amount of memory currently used by the wasm binary.
+    pub fn wasm_binary_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.wasm_binary_memory_usage())
     }
 
     /// Returns the amount of execution memory (heap, stable, globals, Wasm)
@@ -382,13 +407,16 @@ impl CanisterState {
     pub fn execution_memory_usage(&self) -> NumBytes {
         self.execution_state
             .as_ref()
-            .map_or(NumBytes::from(0), |es| es.memory_usage())
+            .map_or(NumBytes::new(0), |es| es.memory_usage())
     }
 
-    /// Returns the amount memory used by or reserved for guaranteed response
-    /// canister messages, in bytes.
-    pub fn message_memory_usage(&self) -> NumBytes {
-        self.system_state.guaranteed_response_message_memory_usage()
+    /// Returns the amount of memory used by or reserved for guaranteed response and
+    /// best-effort canister messages, in bytes.
+    pub fn message_memory_usage(&self) -> MessageMemoryUsage {
+        MessageMemoryUsage {
+            guaranteed_response: self.system_state.guaranteed_response_message_memory_usage(),
+            best_effort: self.system_state.best_effort_message_memory_usage(),
+        }
     }
 
     /// Returns the amount of memory used by canisters that have custom Wasm
@@ -396,7 +424,7 @@ impl CanisterState {
     pub fn wasm_custom_sections_memory_usage(&self) -> NumBytes {
         self.execution_state
             .as_ref()
-            .map_or(NumBytes::from(0), |es| es.metadata.memory_usage())
+            .map_or(NumBytes::new(0), |es| es.metadata.memory_usage())
     }
 
     /// Returns the amount of memory used by canister history in bytes.
@@ -405,12 +433,19 @@ impl CanisterState {
     }
 
     /// Returns the memory usage of the wasm chunk store in bytes.
-    pub(super) fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+    pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
         self.system_state.wasm_chunk_store.memory_usage()
     }
 
-    /// Returns the memory usage of a snapshot created based on the current canister's state.
-    pub fn snapshot_memory_usage(&self) -> NumBytes {
+    pub fn snapshots_memory_usage(&self) -> NumBytes {
+        self.system_state.snapshots_memory_usage
+    }
+
+    /// Returns the snapshot size estimation in bytes based on the current canister's state.
+    ///
+    /// It represents the memory usage of a snapshot that would be created at the time of the call
+    /// and would return a different value if the canister's state changes after the call.
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
         let execution_usage = self
             .execution_state
             .as_ref()
@@ -420,14 +455,7 @@ impl CanisterState {
 
         execution_usage
             + self.wasm_chunk_store_memory_usage()
-            + NumBytes::from(self.system_state.certified_data.len() as u64)
-    }
-
-    /// Sets the (transient) size in bytes of responses from this canister
-    /// routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.system_state
-            .set_stream_responses_size_bytes(size_bytes);
+            + NumBytes::new(self.system_state.certified_data.len() as u64)
     }
 
     /// Returns the current memory allocation of the canister.
@@ -494,11 +522,7 @@ impl CanisterState {
     }
 
     pub fn status(&self) -> CanisterStatusType {
-        match self.system_state.status {
-            CanisterStatus::Running { .. } => CanisterStatusType::Running,
-            CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
-            CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
-        }
+        self.system_state.status()
     }
 
     /// Returns next scheduled method.
@@ -538,31 +562,7 @@ impl CanisterState {
             scheduler_state: _,
         } = self;
 
-        // Remove aborted install code task.
-        system_state.task_queue.retain(|task| match task {
-            ExecutionTask::AbortedInstallCode { .. } => false,
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => true,
-        });
-
-        // Roll back `Stopping` canister states to `Running` and drop all their stop
-        // contexts (the calls corresponding to the dropped stop contexts will be
-        // rejected by subnet A').
-        match &system_state.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => {
-                system_state.status = CanisterStatus::Running {
-                    call_context_manager: call_context_manager.clone(),
-                }
-            }
-        }
+        system_state.drop_in_progress_management_calls_after_split();
     }
 
     /// Appends the given log to the canister log.
@@ -586,8 +586,14 @@ impl CanisterState {
     pub fn heap_delta(&self) -> NumBytes {
         self.execution_state
             .as_ref()
-            .map_or(NumBytes::from(0), |es| es.heap_delta())
+            .map_or(NumBytes::new(0), |es| es.heap_delta())
             + self.system_state.wasm_chunk_store.heap_delta()
+    }
+
+    /// Updates status of `OnLowWasmMemory` hook.
+    pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
+        self.system_state
+            .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
     }
 }
 
@@ -599,7 +605,7 @@ impl CanisterState {
 ///   continue it.
 /// - `ContinueInstallCode`: the canister has a long-running execution of
 ///   `install_code` subnet message and will continue it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum NextExecution {
     None,
     StartNew,
@@ -614,18 +620,14 @@ pub type NumWasmPages = AmountOf<NumWasmPagesTag, usize>;
 
 pub const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * 1024; // 64KB
 
-/// A session is represented by an array of bytes and a monotonic
-/// offset and is unique for each execution.
-pub type SessionNonce = ([u8; 32], u64);
-
 pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
     let (bytes, overflow) = pages.get().overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
     if overflow {
         return Err("Could not convert from wasm pages to number of bytes".to_string());
     }
-    Ok(NumBytes::from(bytes as u64))
+    Ok(NumBytes::new(bytes as u64))
 }
 
 pub mod testing {
-    pub use super::queues::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
+    pub use super::queues::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
 }

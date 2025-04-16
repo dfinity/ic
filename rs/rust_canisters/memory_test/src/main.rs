@@ -29,7 +29,7 @@ const PAGE_SIZE: usize = 4096;
 /// * `size` - size of the memory region in bytes.
 /// * `step` - optional interval between reads/writes in bytes (contig. by default).
 /// * `value` - optional value to assert/write (no assertion/random by default)
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 struct Operation {
     repeat: Option<usize>,
     // Note: the WASM target is 32 bit, so we need to explicitly use u64, not usize
@@ -41,7 +41,7 @@ struct Operation {
 
 /// The result of `read` and `read_write` operations. Represents the sum
 /// of all 8 byte words in the given memory region.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct Sum {
     value: u64,
 }
@@ -423,7 +423,7 @@ fn copy() {
     let step = operation.step.unwrap_or(ELEMENT_SIZE) / ELEMENT_SIZE;
     let value = operation.value.unwrap_or_else(|| rand(0, u8::MAX));
     // Address can't exceed 4GiB WASM memory
-    let len = (operation.size as usize + ELEMENT_SIZE - 1) / ELEMENT_SIZE;
+    let len = (operation.size as usize).div_ceil(ELEMENT_SIZE);
     assert!(2 * len <= MEMORY_LEN);
     MEMORY.with(|memory| {
         let mut memory_ref = memory.borrow_mut();

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 /// This module contains the route handlers for the PocketIc server.
 ///
 /// A handler may receive a representation of a PocketIc Operation in the request
@@ -6,10 +7,11 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, DashboardRequest,
-    ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
-    GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory,
-    SetTime, StatusRequest, SubmitIngressMessage, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
+    DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
+    GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query,
+    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
 use aide::{
@@ -32,17 +34,19 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayDetails,
-    InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
-    RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
-    RawSubnetId, RawTime, RawWasmResult, Topology,
+    self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
+    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubnetId, RawTime, TickConfigs, Topology,
 };
-use pocket_ic::WasmResult;
+use pocket_ic::RejectResponse;
 use serde::Serialize;
-use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
+use slog::Level;
+use std::str::FromStr;
+use std::{collections::BTreeMap, fs::File, sync::atomic::AtomicU64, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -57,6 +61,7 @@ const RETRY_TIMEOUT_S: u64 = 300;
 #[derive(Clone)]
 pub struct AppState {
     pub api_state: Arc<ApiState>,
+    pub pending_requests: Arc<AtomicU64>,
     pub min_alive_until: Arc<RwLock<Instant>>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
@@ -72,10 +77,12 @@ where
         .directory_route("/topology", get(handler_topology))
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_canister_http", get(handler_get_canister_http))
+        .directory_route("/get_controllers", post(handler_get_controllers))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
         .directory_route("/get_subnet", post(handler_get_subnet))
         .directory_route("/pub_key", post(handler_pub_key))
+        .directory_route("/ingress_status", post(handler_ingress_status))
 }
 
 pub fn instance_update_routes<S>() -> ApiRouter<S>
@@ -92,11 +99,8 @@ where
             "/await_ingress_message",
             post(handler_await_ingress_message),
         )
-        .directory_route(
-            "/execute_ingress_message",
-            post(handler_execute_ingress_message),
-        )
         .directory_route("/set_time", post(handler_set_time))
+        .directory_route("/set_certified_time", post(handler_set_certified_time))
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
@@ -111,7 +115,7 @@ where
     ApiRouter::new()
         .directory_route("/status", get(handler_status))
         .directory_route(
-            "/canister/:ecid/call",
+            "/canister/{ecid}/call",
             post(handler_call_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -119,7 +123,7 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/canister/:ecid/query",
+            "/canister/{ecid}/query",
             post(handler_query)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -127,8 +131,16 @@ where
                 .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
-            "/canister/:ecid/read_state",
-            post(handler_read_state)
+            "/canister/{ecid}/read_state",
+            post(handler_canister_read_state)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/subnet/{sid}/read_state",
+            post(handler_subnet_read_state)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -142,7 +154,7 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new().directory_route(
-        "/canister/:ecid/call",
+        "/canister/{ecid}/call",
         post(handler_call_v3)
             .layer(RequestBodyLimitLayer::new(
                 4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
@@ -166,30 +178,34 @@ where
         .api_route("/", post(create_instance))
         //
         // Deletes an instance.
-        .directory_route("/:id", delete(delete_instance))
+        .directory_route("/{id}", delete(delete_instance))
         //
         // All the read-only endpoints
-        .nest("/:id/read", instance_read_routes())
+        .nest("/{id}/read", instance_read_routes())
         //
         // All the state-changing endpoints
-        .nest("/:id/update", instance_update_routes())
+        .nest("/{id}/update", instance_update_routes())
         //
         // All the api v2 endpoints
-        .nest("/:id/api/v2", instance_api_v2_routes())
+        .nest("/{id}/api/v2", instance_api_v2_routes())
         //
         // All the api v3 endpoints
-        .nest("/:id/api/v3", instance_api_v3_routes())
+        .nest("/{id}/api/v3", instance_api_v3_routes())
         //
         // The instance dashboard
-        .api_route("/:id/_/dashboard", get(handler_dashboard))
+        .api_route("/{id}/_/dashboard", get(handler_dashboard))
+        // The topology to be retrieved via an HTTP gateway that cannot route `/read/topology`.
+        .api_route("/{id}/_/topology", get(handler_topology))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
-        .api_route("/:id/auto_progress", post(auto_progress))
+        .api_route("/{id}/auto_progress", post(auto_progress))
+        // Returns whether automatic progress is enabled for an IC instance.
+        .api_route("/{id}/auto_progress", get(get_auto_progress))
         //
         // Stop automatic progress (see endpoint `auto_progress`)
         // on an IC instance.
-        .api_route("/:id/stop_progress", post(stop_progress))
+        .api_route("/{id}/stop_progress", post(stop_progress))
         .layer(cors_layer())
 }
 
@@ -205,7 +221,7 @@ where
         // Returns an InstanceId and the HTTP gateway's port.
         .api_route("/", post(create_http_gateway))
         // Stops an HTTP gateway.
-        .api_route("/:id/stop", post(stop_http_gateway))
+        .api_route("/{id}/stop", post(stop_http_gateway))
 }
 
 async fn run_operation<T: Serialize + FromOpOut>(
@@ -283,7 +299,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct OpConversionError;
 
 #[async_trait]
@@ -296,6 +312,12 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<T>) {
         // match errors explicitly to make sure they have a 4xx status code
         match value {
+            OpOut::Error(PocketIcError::Forbidden(msg)) => (
+                StatusCode::FORBIDDEN,
+                ApiResponse::Error {
+                    message: msg.to_string(),
+                },
+            ),
             OpOut::Error(e) => (
                 StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
@@ -350,6 +372,19 @@ impl TryFrom<OpOut> for () {
     }
 }
 
+impl TryFrom<OpOut> for Vec<RawPrincipalId> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::Controllers(controllers) => Ok(controllers
+                .into_iter()
+                .map(|principal_id| principal_id.0.into())
+                .collect()),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 impl TryFrom<OpOut> for RawCycles {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
@@ -376,18 +411,18 @@ impl TryFrom<OpOut> for RawCanisterResult {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::CanisterResult(wasm_result) => {
-                let inner = match wasm_result {
-                    Ok(WasmResult::Reply(wasm_result)) => {
-                        RawCanisterResult::Ok(RawWasmResult::Reply(wasm_result))
-                    }
-                    Ok(WasmResult::Reject(error_message)) => {
-                        RawCanisterResult::Ok(RawWasmResult::Reject(error_message))
-                    }
-                    Err(user_error) => RawCanisterResult::Err(user_error),
-                };
-                Ok(inner)
-            }
+            OpOut::CanisterResult(result) => Ok(result.into()),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
+impl TryFrom<OpOut> for Option<RawCanisterResult> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::CanisterResult(result) => Ok(Some(result.into())),
+            OpOut::NoOutput => Ok(None),
             _ => Err(OpConversionError),
         }
     }
@@ -439,17 +474,15 @@ impl TryFrom<OpOut> for Vec<u8> {
     }
 }
 
-impl TryFrom<OpOut> for RawSubmitIngressResult {
+impl TryFrom<OpOut> for Result<RawMessageId, RejectResponse> {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::MessageId((effective_principal, message_id)) => {
-                Ok(RawSubmitIngressResult::Ok(RawMessageId {
-                    effective_principal: effective_principal.into(),
-                    message_id,
-                }))
-            }
-            OpOut::CanisterResult(Err(user_error)) => Ok(RawSubmitIngressResult::Err(user_error)),
+            OpOut::MessageId((effective_principal, message_id)) => Ok(Ok(RawMessageId {
+                effective_principal: effective_principal.into(),
+                message_id,
+            })),
+            OpOut::CanisterResult(Err(reject_response)) => Ok(Err(reject_response)),
             _ => Err(OpConversionError),
         }
     }
@@ -568,6 +601,28 @@ pub async fn handler_mock_canister_http(
     };
     let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))
+}
+
+pub async fn handler_get_controllers(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw_canister_id): extract::Json<RawCanisterId>,
+) -> (StatusCode, Json<ApiResponse<Vec<RawPrincipalId>>>) {
+    let timeout = timeout_or_default(headers);
+    match CanisterId::try_from(raw_canister_id.canister_id) {
+        Ok(canister_id) => {
+            let get_op = GetControllers { canister_id };
+            let (code, response) = run_operation(api_state, instance_id, timeout, get_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
+    }
 }
 
 pub async fn handler_get_cycles(
@@ -706,15 +761,24 @@ pub async fn handler_query(
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_read_state(
+pub async fn handler_canister_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = ReadStateRequest {
+    let op = CanisterReadStateRequest {
         effective_canister_id,
         bytes,
     };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_subnet_read_state(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = SubnetReadStateRequest { subnet_id, bytes };
     handle_raw(api_state, instance_id, op).await
 }
 
@@ -747,17 +811,11 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
 /// the return type.
 async fn op_out_to_response(op_out: OpOut) -> Response {
     match op_out {
-        OpOut::Pruned => (
-            StatusCode::GONE,
-            Json(ApiResponse::<()>::Error {
-                message: "Pruned".to_owned(),
-            })
-            .into_response(),
-        )
-            .into_response(),
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
-            Json(ApiResponse::Success(Vec::<u8>::try_from(opout).unwrap())),
+            Json(ApiResponse::Success(
+                Result::<RawMessageId, RejectResponse>::try_from(opout).unwrap(),
+            )),
         )
             .into_response(),
         OpOut::NoOutput => (
@@ -787,6 +845,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             )),
         )
             .into_response(),
+        opout @ OpOut::Controllers(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                Vec::<RawPrincipalId>::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
         opout @ OpOut::Cycles(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(RawCycles::try_from(opout).unwrap())),
@@ -809,6 +874,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             Json(ApiResponse::Success(
                 Option::<RawSubnetId>::try_from(opout).unwrap(),
             )),
+        )
+            .into_response(),
+        OpOut::Error(PocketIcError::Forbidden(msg)) => (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::Error {
+                message: msg.to_string(),
+            }),
         )
             .into_response(),
         opout @ OpOut::Error(_) => (
@@ -849,9 +921,7 @@ pub async fn handler_read_graph(
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        if let Some((_new_state_label, op_out)) =
-            ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
-        {
+        if let Some((_new_state_label, op_out)) = api_state.read_graph(&state_label, &op_id) {
             op_out_to_response(op_out).await
         } else {
             (
@@ -886,7 +956,10 @@ pub async fn handler_submit_ingress_message(
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
-) -> (StatusCode, Json<ApiResponse<RawSubmitIngressResult>>) {
+) -> (
+    StatusCode,
+    Json<ApiResponse<Result<RawMessageId, RejectResponse>>>,
+) {
     let timeout = timeout_or_default(headers);
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Ok(canister_call) => {
@@ -925,16 +998,21 @@ pub async fn handler_await_ingress_message(
     }
 }
 
-pub async fn handler_execute_ingress_message(
+pub async fn handler_ingress_status(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
-    extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
-) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
+    extract::Json(raw_ingress_status_args): extract::Json<RawIngressStatusArgs>,
+) -> (StatusCode, Json<ApiResponse<Option<RawCanisterResult>>>) {
     let timeout = timeout_or_default(headers);
-    match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
-        Ok(canister_call) => {
-            let ingress_op = ExecuteIngressMessage(canister_call);
+    match crate::pocket_ic::MessageId::try_from(raw_ingress_status_args.raw_message_id) {
+        Ok(message_id) => {
+            let ingress_op = IngressMessageStatus {
+                message_id,
+                caller: raw_ingress_status_args
+                    .raw_caller
+                    .map(|caller| caller.into()),
+            };
             let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
             (code, Json(response))
         }
@@ -955,6 +1033,20 @@ pub async fn handler_set_time(
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
     let op = SetTime {
+        time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_set_certified_time(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    axum::extract::Json(time): axum::extract::Json<rest::RawTime>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let op = SetCertifiedTime {
         time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
     };
     let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
@@ -985,9 +1077,8 @@ pub async fn handler_add_cycles(
 pub async fn handler_set_stable_memory(
     State(AppState {
         api_state,
-        min_alive_until: _,
-        runtime: _,
         blob_store,
+        ..
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
@@ -1012,9 +1103,12 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
+    axum::extract::Json(ticks_configs): axum::extract::Json<TickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick;
+    let op = Tick {
+        configs: ticks_configs,
+    };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
@@ -1028,80 +1122,99 @@ pub async fn status() -> StatusCode {
 
 fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
     Iterator::any(
-        &mut vec![config.sns, config.ii, config.fiduciary, config.bitcoin]
-            .into_iter()
-            .flatten()
-            .chain(config.system)
-            .chain(config.application),
-        |spec: pocket_ic::common::rest::SubnetSpec| {
-            spec.get_subnet_id().is_some() || !spec.is_supported()
-        },
-    ) || config
-        .nns
-        .map(|spec| !spec.is_supported())
-        .unwrap_or_default()
+        &mut vec![
+            config.nns,
+            config.sns,
+            config.ii,
+            config.fiduciary,
+            config.bitcoin,
+        ]
+        .into_iter()
+        .flatten()
+        .chain(config.system)
+        .chain(config.application)
+        .chain(config.verified_application),
+        |spec| !spec.is_supported(),
+    )
 }
 
 /// Create a new empty IC instance from a given subnet configuration.
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state,
-        min_alive_until: _,
-        runtime,
-        blob_store: _,
+        api_state, runtime, ..
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let subnet_configs = instance_config.subnet_config_set;
-    if (instance_config.state_dir.is_none()
-        || File::open(
-            instance_config
-                .state_dir
-                .clone()
-                .unwrap()
-                .join("topology.json"),
-        )
-        .is_err())
-        && subnet_configs.validate().is_err()
-    {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(rest::CreateInstanceResponse::Error {
-                message: "Bad config".to_owned(),
-            }),
-        );
+
+    let skip_validate_subnet_configs = instance_config
+        .state_dir
+        .as_ref()
+        .map(|state_dir| File::open(state_dir.clone().join("topology.json")).is_ok())
+        .unwrap_or_default();
+    if !skip_validate_subnet_configs {
+        if let Err(e) = subnet_configs.validate() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(rest::CreateInstanceResponse::Error {
+                    message: format!("Subnet config failed to validate: {:?}", e),
+                }),
+            );
+        }
     }
     // TODO: Remove this once the SubnetStateConfig variants are implemented
     if contains_unimplemented(subnet_configs.clone()) {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
-                message: "SubnetStateConfig::FromPath is currently only implemented for NNS. SubnetStateConfig::FromBlobStore is not yet implemented".to_owned(),
+                message: "SubnetStateConfig::FromBlobStore is not yet implemented".to_owned(),
             }),
         );
     }
 
-    let pocket_ic = tokio::task::spawn_blocking(move || {
-        PocketIc::new(
-            runtime,
-            subnet_configs,
-            instance_config.state_dir,
-            instance_config.nonmainnet_features,
-        )
-    })
-    .await
-    .expect("Failed to launch PocketIC");
+    let log_level = if let Some(log_level) = instance_config.log_level {
+        match Level::from_str(&log_level) {
+            Ok(log_level) => Some(log_level),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: format!("Failed to parse log level: {:?}", e),
+                    }),
+                )
+            }
+        }
+    } else {
+        None
+    };
 
-    let topology = pocket_ic.topology().clone();
-    let instance_id = api_state.add_instance(pocket_ic).await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateInstanceResponse::Created {
-            instance_id,
-            topology,
-        }),
-    )
+    match api_state
+        .add_instance(move |seed| {
+            PocketIc::try_new(
+                runtime,
+                seed,
+                subnet_configs,
+                instance_config.state_dir,
+                instance_config.nonmainnet_features,
+                log_level,
+                instance_config.bitcoind_addr,
+            )
+        })
+        .await
+    {
+        Ok((instance_id, topology)) => (
+            StatusCode::CREATED,
+            Json(rest::CreateInstanceResponse::Created {
+                instance_id,
+                topology,
+            }),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error { message: err }),
+        ),
+    }
 }
 
 pub async fn list_instances(
@@ -1132,11 +1245,16 @@ pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    let http_gateway_info = api_state.create_http_gateway(http_gateway_config).await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
-    )
+    match api_state.create_http_gateway(http_gateway_config).await {
+        Ok(http_gateway_info) => (
+            StatusCode::CREATED,
+            Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
+        ),
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(rest::CreateHttpGatewayResponse::Error { message: e }),
+        ),
+    }
 }
 
 /// Stops an HTTP gateway instance.
@@ -1151,9 +1269,27 @@ pub async fn stop_http_gateway(
 pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
+    extract::Json(auto_progress_config): extract::Json<AutoProgressConfig>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    api_state.auto_progress(id).await;
-    (StatusCode::OK, Json(ApiResponse::Success(())))
+    if let Err(e) = api_state
+        .auto_progress(id, auto_progress_config.artificial_delay_ms)
+        .await
+    {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error { message: e }),
+        )
+    } else {
+        (StatusCode::OK, Json(ApiResponse::Success(())))
+    }
+}
+
+pub async fn get_auto_progress(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<bool>>) {
+    let auto_progress = api_state.get_auto_progress(id).await;
+    (StatusCode::OK, Json(ApiResponse::Success(auto_progress)))
 }
 
 pub async fn stop_progress(

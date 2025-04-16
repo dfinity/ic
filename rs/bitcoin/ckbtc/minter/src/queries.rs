@@ -11,7 +11,7 @@ pub struct EstimateFeeArg {
     pub amount: Option<u64>,
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 pub struct WithdrawalFee {
     pub minter_fee: u64,
     pub bitcoin_fee: u64,

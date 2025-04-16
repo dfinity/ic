@@ -1,11 +1,12 @@
 //! Threshold Schnorr transcripts and references related definitions.
 use crate::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
+    SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
 };
+use crate::crypto::ExtendedDerivationPath;
 use crate::{Height, Randomness};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::SchnorrKeyId;
+use ic_management_canister_types_private::SchnorrKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,7 @@ use super::{
 };
 
 /// Schnorr pre-signature in creation.
-#[derive(Hash, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptInCreation {
     pub key_id: SchnorrKeyId,
@@ -113,7 +114,7 @@ impl TryFrom<&pb::TranscriptInCreation> for TranscriptInCreation {
 
 /// Counterpart of PreSignatureTranscript that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureTranscriptRef {
     pub key_id: SchnorrKeyId,
@@ -201,13 +202,14 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
     pub message: Arc<Vec<u8>>,
     pub nonce: Randomness,
     pub presig_transcript_ref: PreSignatureTranscriptRef,
+    pub taproot_tree_root: Option<Arc<Vec<u8>>>,
 }
 
 impl fmt::Debug for ThresholdSchnorrSigInputsRef {
@@ -234,12 +236,14 @@ impl ThresholdSchnorrSigInputsRef {
         message: Arc<Vec<u8>>,
         nonce: Randomness,
         presig_transcript_ref: PreSignatureTranscriptRef,
+        taproot_tree_root: Option<Arc<Vec<u8>>>,
     ) -> Self {
         Self {
             derivation_path,
             message,
             nonce,
             presig_transcript_ref,
+            taproot_tree_root,
         }
     }
 
@@ -258,6 +262,7 @@ impl ThresholdSchnorrSigInputsRef {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
+            self.taproot_tree_root.as_ref().map(|v| &***v),
             self.nonce,
             presig_transcript,
             key_transcript,

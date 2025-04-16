@@ -6,6 +6,7 @@ use crate::vault::api::{
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
     CspTlsSignError, IDkgCreateDealingVaultError, PublicRandomSeedGeneratorError,
     ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::api::{
     CspPublicKeyStoreError, CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
@@ -22,7 +23,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -41,10 +42,11 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
-    ExtendedDerivationPath,
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -507,6 +509,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         derivation_path: ExtendedDerivationPath,
         message: ByteBuf,
+        taproot_tree_root: Option<ByteBuf>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presig_raw: IDkgTranscriptInternalBytes,
@@ -517,10 +520,33 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
             vault.create_schnorr_sig_share(
                 derivation_path,
                 message.into_vec(),
+                taproot_tree_root.map(|v| v.into_vec()),
                 nonce,
                 key_raw,
                 presig_raw,
                 algorithm_id,
+            )
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
+
+    async fn create_encrypted_vetkd_key_share(
+        self,
+        _: context::Context,
+        key_id: KeyId,
+        master_public_key: ByteBuf,
+        transport_public_key: ByteBuf,
+        context: VetKdDerivationContext,
+        input: ByteBuf,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
+        let vault = self.local_csp_vault;
+        let job = move || {
+            vault.create_encrypted_vetkd_key_share(
+                key_id,
+                master_public_key.into_vec(),
+                transport_public_key.into_vec(),
+                context,
+                input.into_vec(),
             )
         };
         execute_on_thread_pool(&self.thread_pool, job).await

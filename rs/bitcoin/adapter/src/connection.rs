@@ -1,5 +1,5 @@
 use crate::addressbook::AddressEntry;
-use bitcoin::network::message::NetworkMessage;
+use bitcoin::p2p::message::NetworkMessage;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
@@ -36,7 +36,7 @@ pub struct ConnectionConfig {
 }
 
 /// This enum represents the various states that the connection could be in.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum ConnectionState {
     /// This variant represents that the connection has not yet been connected.
     Initializing,

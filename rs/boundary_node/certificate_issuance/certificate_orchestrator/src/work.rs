@@ -1,5 +1,6 @@
 use std::{cmp::Reverse, time::Duration};
 
+use anyhow::anyhow;
 use certificate_orchestrator_interface::{Id, Registration};
 use ic_cdk::caller;
 use priority_queue::PriorityQueue;
@@ -179,6 +180,72 @@ impl<T: Peek> Peek for WithMetrics<T> {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum ListError {
+    #[error("Unauthorized")]
+    Unauthorized,
+
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait List {
+    fn list(&self) -> Result<Vec<(String, u64, Registration)>, ListError>;
+}
+
+pub struct Lister {
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
+}
+
+impl Lister {
+    pub fn new(
+        tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
+    ) -> Self {
+        Self {
+            tasks,
+            registrations,
+        }
+    }
+}
+
+impl List for Lister {
+    fn list(&self) -> Result<Vec<(String, u64, Registration)>, ListError> {
+        self.tasks.with(|tasks| {
+            tasks
+                .borrow()
+                .iter()
+                .map(|(id, Reverse(timestamp))| {
+                    match self
+                        .registrations
+                        .with(|rs| rs.borrow().get(&id.to_owned().into()))
+                    {
+                        Some(r) => Ok((id.to_owned(), timestamp.to_owned(), r)),
+                        None => Err(anyhow!(
+                            "invalid state: task id {id} not found in registrations"
+                        )
+                        .into()),
+                    }
+                })
+                .collect()
+        })
+    }
+}
+
+impl<T: List, A: Authorize> List for WithAuthorize<T, A> {
+    fn list(&self) -> Result<Vec<(String, u64, Registration)>, ListError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => ListError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => ListError::UnexpectedError(err),
+            });
+        };
+
+        self.0.list()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum DispenseError {
     #[error("No tasks available")]
     NoTasksAvailable,
@@ -267,6 +334,75 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
                             DispenseError::NoTasksAvailable => "no-tasks-available",
                             DispenseError::Unauthorized => "unauthorized",
                             DispenseError::UnexpectedError(_) => "fail",
+                        },
+                    },
+                })
+                .inc()
+        });
+
+        out
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RemoveError {
+    #[error("Not found")]
+    NotFound,
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait Remove {
+    fn remove(&self, id: &str) -> Result<(), RemoveError>;
+}
+
+pub struct TaskRemover {
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+}
+
+impl TaskRemover {
+    pub fn new(tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>) -> Self {
+        Self { tasks }
+    }
+}
+
+impl Remove for TaskRemover {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        self.tasks.with(|ts| match ts.borrow_mut().remove(id) {
+            Some(_) => Ok(()),
+            None => Err(RemoveError::NotFound),
+        })
+    }
+}
+
+impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => RemoveError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => RemoveError::UnexpectedError(err),
+            });
+        };
+
+        self.0.remove(id)
+    }
+}
+
+impl<T: Remove> Remove for WithMetrics<T> {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        let out = self.0.remove(id);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match &out {
+                        Ok(_) => "ok",
+                        Err(err) => match err {
+                            RemoveError::NotFound => "not-found",
+                            RemoveError::Unauthorized => "unauthorized",
+                            RemoveError::UnexpectedError(_) => "fail",
                         },
                     },
                 })

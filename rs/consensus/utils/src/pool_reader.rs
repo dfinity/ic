@@ -1,17 +1,13 @@
 //! Wrapper to read the consensus pool
 
-use crate::{lookup_replica_version, registry_version_at_height};
+use crate::registry_version_at_height;
 use ic_interfaces::batch_payload::PastPayload;
 use ic_interfaces::consensus_pool::*;
-use ic_interfaces_registry::RegistryClient;
-use ic_logger::ReplicaLogger;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 use ic_types::{
-    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, replica_config::ReplicaConfig,
-    Height, NodeId, RegistryVersion, ReplicaVersion, Time,
+    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, Height, RegistryVersion, Time,
 };
+use std::cmp::Ordering;
 use std::time::Instant;
-use std::{cmp::Ordering, collections::BTreeMap};
 
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
@@ -68,16 +64,14 @@ impl<'a> PoolReader<'a> {
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
     /// `min` and `max`. This assumes the correctness of the state of the pool.
     pub fn get_range(
-        &'a self,
+        &self,
         block: Block,
         min: Height,
         max: Height,
-    ) -> Box<dyn Iterator<Item = Block> + 'a> {
-        Box::new(
-            self.chain_iterator(block)
-                .skip_while(move |block| block.height > max)
-                .take_while(move |block| block.height >= min),
-        )
+    ) -> impl Iterator<Item = Block> + '_ {
+        self.chain_iterator(block)
+            .skip_while(move |block| block.height > max)
+            .take_while(move |block| block.height >= min)
     }
 
     /// Return a `Vec` of all of the `Payload` between the provided `start`
@@ -313,8 +307,8 @@ impl<'a> PoolReader<'a> {
         self.cache.catch_up_package()
     }
 
-    /// Get the DKG summary block with greatest height.
-    pub fn get_highest_summary_block(&self) -> Block {
+    /// Get the finalized DKG summary block with greatest height.
+    pub fn get_highest_finalized_summary_block(&self) -> Block {
         self.cache.summary_block()
     }
 
@@ -549,45 +543,6 @@ impl<'a> PoolReader<'a> {
         None
     }
 
-    /// Returns the set of DKG messages (indexed by the dealer Id) from the
-    /// finalized tip to the highest summary block.
-    pub fn get_dkg_payloads(&self) -> BTreeMap<NodeId, NiDkgDealing> {
-        self.chain_iterator(self.get_finalized_tip())
-            .take_while(|block| !block.payload.is_summary())
-            .flat_map(|block| {
-                block
-                    .payload
-                    .as_ref()
-                    .as_data()
-                    .dealings
-                    .messages
-                    .clone()
-                    .into_iter()
-            })
-            .map(|message| (message.signature.signer, message.content.dealing))
-            .collect()
-    }
-
-    /// Return the replica version as recorded in the block DKG summary of
-    /// the highest catch up package.
-    ///
-    /// Return None in case of registry lookup failure.
-    pub fn get_replica_version_from_highest_catch_up_package(
-        &self,
-        registry_client: &dyn RegistryClient,
-        replica_config: &ReplicaConfig,
-        log: &ReplicaLogger,
-    ) -> Option<ReplicaVersion> {
-        let catch_up_package = self.get_highest_catch_up_package();
-        let registry_version = catch_up_package.content.registry_version();
-        lookup_replica_version(
-            registry_client,
-            replica_config.subnet_id,
-            log,
-            registry_version,
-        )
-    }
-
     /// Returns the height of the next CUP.
     pub fn get_next_cup_height(&self) -> Height {
         self.get_highest_catch_up_package()
@@ -631,6 +586,7 @@ where
 pub mod test {
     use super::*;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_interfaces_registry::RegistryClient;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
@@ -705,7 +661,7 @@ pub mod test {
                 pool_reader.dkg_summary_block_for_finalized_height(block4.height)
             );
             // The summary of block5 should be the highest summary block eventhough no CUP was created at that height.
-            let summary = pool_reader.get_highest_summary_block();
+            let summary = pool_reader.get_highest_finalized_summary_block();
             assert_eq!(
                 Some(summary.clone()),
                 pool_reader.dkg_summary_block(&block5)

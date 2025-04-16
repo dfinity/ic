@@ -10,12 +10,10 @@ use ic_types::{
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamHeader},
     Cycles, Time,
 };
-use std::collections::VecDeque;
 
 pub fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
     use CertificationVersion::*;
     let reject_signals = match certification_version {
-        version if version < V8 => VecDeque::new(),
         version if version < V19 => vec![
             RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
             RejectSignal::new(RejectReason::CanisterMigrating, 200.into()),
@@ -34,16 +32,14 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
         .into(),
     };
     let flags = StreamFlags {
-        deprecated_responses_only: certification_version >= CertificationVersion::V17,
+        deprecated_responses_only: true,
     };
 
     StreamHeader::new(23.into(), 25.into(), 256.into(), reject_signals, flags)
 }
 
 pub fn request(certification_version: CertificationVersion) -> RequestOrResponse {
-    let metadata = (certification_version >= CertificationVersion::V14).then_some(
-        RequestMetadata::new(1, Time::from_nanos_since_unix_epoch(100_000)),
-    );
+    let metadata = RequestMetadata::new(1, Time::from_nanos_since_unix_epoch(100_000));
     let deadline = if certification_version >= CertificationVersion::V18 {
         CoarseTime::from_secs_since_unix_epoch(8)
     } else {

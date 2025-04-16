@@ -29,7 +29,7 @@ pub struct ICRC1Client<R: Runtime> {
 }
 
 // Note (MP): you can check that the bindings are correct by running
-// $ didc bind -t rs rs/rosetta-api/icrc1/ledger/ledger.did
+// $ didc bind -t rs rs/ledger_suite/icrc1/ledger/ledger.did
 // The reason why we don't just generate the bindings is to avoid duplicating
 // the in and out structures as we can use the ones defined in ic_icrc1::endpoints.
 

@@ -2,22 +2,26 @@ use prometheus::{IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 
-pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
+pub(crate) const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
 #[derive(Clone)]
-pub struct OrchestratorMetrics {
-    pub ssh_access_registry_version: IntGauge,
-    pub firewall_registry_version: IntGauge,
-    pub ipv4_registry_version: IntGauge,
-    pub reboot_duration: IntGauge,
-    pub orchestrator_info: IntGaugeVec,
-    pub key_rotation_status: IntGaugeVec,
-    pub master_public_key_changed_errors: IntCounterVec,
-    pub failed_consecutive_upgrade_checks: IntCounter,
+pub(crate) struct OrchestratorMetrics {
+    pub(crate) ssh_access_registry_version: IntGauge,
+    pub(crate) firewall_registry_version: IntGauge,
+    pub(crate) ipv4_registry_version: IntGauge,
+    pub(crate) reboot_duration: IntGauge,
+    pub(crate) orchestrator_info: IntGaugeVec,
+    pub(crate) key_rotation_status: IntGaugeVec,
+    pub(crate) master_public_key_changed_errors: IntCounterVec,
+    pub(crate) failed_consecutive_upgrade_checks: IntCounter,
+    pub(crate) critical_error_cup_deserialization_failed: IntCounter,
+    pub(crate) critical_error_state_removal_failed: IntCounter,
+    pub(crate) fstrim_duration: IntGauge,
+    pub(crate) critical_error_task_failed: IntCounterVec,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
-pub enum KeyRotationStatus {
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
+pub(crate) enum KeyRotationStatus {
     Disabled,
     TooRecent,
     Rotating,
@@ -76,6 +80,24 @@ impl OrchestratorMetrics {
             failed_consecutive_upgrade_checks: metrics_registry.int_counter(
                 "orchestrator_failed_consecutive_upgrade_checks_total",
                 "Number of times the upgrade check failed consecutively",
+            ),
+            critical_error_cup_deserialization_failed: metrics_registry.int_counter(
+                "orchestrator_cup_deserialization_failed_total",
+                "Number of times the deserialization of the locally persisted CUP failed",
+            ),
+            critical_error_state_removal_failed: metrics_registry.int_counter(
+                "orchestrator_state_removal_failed_total",
+                "Number of times removing the local node state failed",
+            ),
+            fstrim_duration: metrics_registry.int_gauge(
+                "orchestrator_fstrim_duration_milliseconds",
+                "The duration of the last fstrim call, in milliseconds",
+            ),
+            critical_error_task_failed: metrics_registry.int_counter_vec(
+                "orchestrator_tasks_failed_total",
+                "Number of times a task failed, \
+                grouped by the task name and the reason of the failure",
+                &["task_name", "reason"],
             ),
         }
     }

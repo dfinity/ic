@@ -20,7 +20,7 @@ use std::fs::Permissions;
 pub const CRYPTO_ROOT_DEFAULT_PATH: &str = "/This/must/not/be/a/real/path";
 
 // (pvec(any::<u8>(), 32), any::<u32>())
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(Arbitrary))]
 #[derive(Default)]
@@ -40,7 +40,7 @@ pub enum CspVaultType {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 #[cfg_attr(test, derive(Arbitrary))]
 /// #

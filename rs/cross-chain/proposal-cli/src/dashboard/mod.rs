@@ -32,4 +32,15 @@ impl DashboardClient {
         let body: CanisterInfo = response.json().await.unwrap();
         body.list_upgrade_proposals()
     }
+
+    pub async fn list_canister_upgrade_proposals_batch(
+        &self,
+        canister_ids: &[Principal],
+    ) -> Vec<BTreeSet<u64>> {
+        let mut fut = Vec::with_capacity(canister_ids.len());
+        for canister_id in canister_ids {
+            fut.push(self.list_canister_upgrade_proposals(canister_id));
+        }
+        futures::future::join_all(fut).await
+    }
 }

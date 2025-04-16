@@ -1,196 +1,320 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha2",
-    "//rs/rosetta-api/ledger_canister_core",
-    "//rs/rosetta-api/ledger_core",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icrc1",
+    "//rs/ledger_suite/icrc1/ledger",
+    "//rs/ledger_suite/icrc1/tokens_u256",
+    "//rs/ledger_suite/icrc1/tokens_u64",
+    "//rs/limits",
+    "//rs/rosetta-api/common/rosetta_core:rosetta-core",
+    "//rs/rosetta-api/icp:rosetta-api",
+    "//rs/sys",
     "//rs/types/base_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
+    "@crate_index//:clap",  # no clap because feature derive
+    "@crate_index//:futures",
     "@crate_index//:hex",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-agent",
+    "@crate_index//:indicatif",
+    "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
+    "@crate_index//:proptest",
+    "@crate_index//:rand",
+    "@crate_index//:reqwest",
+    "@crate_index//:rolling-file",
+    "@crate_index//:rusqlite",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:thiserror",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:strum",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:tower-http",
+    "@crate_index//:tower-request-id",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-appender",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/rosetta-api/icrc1/test_utils",
-    "//rs/rosetta-api/ledger_canister_core",
-    "//rs/rosetta-api/ledger_core",
-    "@crate_index//:candid",
-    "@crate_index//:ciborium",
-    "@crate_index//:leb128",
-    "@crate_index//:proptest",
-    "@crate_index//:rand",
+    ":ic-icrc-rosetta",
+    "//packages/pocket-ic:pocket-ic",
+    "//rs/ledger_suite/icrc1/test_utils",
+    "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+    "//rs/rosetta-api/icp/test_utils",
+    "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
+    "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",
+    "//rs/test_utilities/load_wasm",
+    "@crate_index//:ic-utils",
+    "@crate_index//:once_cell",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:proptest-derive",
 ]
 
+ALIASES = {
+}
+
+ROSETTA_VERSION = "1.2.0"
+
 rust_library(
-    name = "icrc1",
-    srcs = glob(["src/**/*.rs"]),
-    crate_name = "ic_icrc1",
+    name = "ic-icrc-rosetta",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_icrc_rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
+    version = ROSETTA_VERSION,
     deps = DEPENDENCIES,
 )
 
-rust_test(
-    name = "icrc1_unit_test",
-    crate = ":icrc1",
-    deps = DEV_DEPENDENCIES,
-)
-
-rust_doc_test(
-    name = "icrc1_doc_test",
-    crate = ":icrc1",
+rust_binary(
+    name = "ic-icrc-rosetta-bin",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = ROSETTA_VERSION,
+    deps = DEPENDENCIES + [":ic-icrc-rosetta"],
 )
 
 rust_test(
-    name = "icrc1_test",
-    srcs = ["tests/tests.rs"],
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = [
-        # Keep sorted.
-        ":icrc1",
-        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-        "//rs/rosetta-api/icrc1/tokens_u256",
-        "//rs/rosetta-api/icrc1/tokens_u64",
-    ] + DEV_DEPENDENCIES,
+    name = "ic-icrc-rosetta-unit-tests",
+    size = "large",
+    aliases = ALIASES,
+    crate = ":ic-icrc-rosetta",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-# To run this test,
-#
-#     bazel \
-#         test \
-#         --test_env=SSH_AUTH_SOCK \
-#         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test
-#
-# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
-# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
-# is run. This authorizes the test to download the test data.
-#
-# Additionally, the following flags are recommended (but not required):
-#
-# --test_output=streamed
-# --test_arg=--nocapture
-#
-# These let you watch the progress of the test, rather than only being able to see the output only
-# at the end.
-#
-# See the .bazelrc for more configuration information.
-rust_ic_test(
-    name = "icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test",
-    # This uses on the order of 10 GB of disk space.
-    # Therefore, size = "large" is not large enough.
-    size = "enormous",
-    srcs = [
-        "tests/golden_state_upgrade_downgrade.rs",
-    ],
-    data = [
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
-        "IC_ICRC1_LEDGER_U256_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
-    },
-    tags = [
-        "manual",  # CI should not be downloading fiduciary_state.tar.zst or sns_state.tar.zst.
-        "requires-network",  # Because mainnet state is downloaded (and used).
-    ],
-    deps = [
-        # Keep sorted.
-        "//rs/nns/test_utils",
-        "//rs/nns/test_utils/golden_nns_state",
-        "//rs/rosetta-api/icrc1/ledger",
-        "//rs/rosetta-api/icrc1/ledger/sm-tests",
-        "//rs/rust_canisters/canister_test",
-        "//rs/state_machine_tests",
-        "//rs/test_utilities/load_wasm",
-        "//rs/types/base_types",
-        "@crate_index//:candid",
-    ],
-)
-
-[
-    rust_ic_test(
-        name = "upgrade_downgrade" + name_suffix,
-        srcs = ["tests/upgrade_downgrade.rs"],
-        crate_features = features,
-        data = [
-            "//rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
-            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
-            "@" + mainnet_ledger + "//file",
-            "@" + mainnet_index + "//file",
-        ],
-        env = {
-            "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
-            "IC_ICRC1_INDEX_NG_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_index + "//file)",
-            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
-            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_ledger + "//file)",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
-        },
-        deps = [
-            # Keep sorted.
-            "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/registry/subnet_type",
-            "//rs/rosetta-api/icrc1",
-            "//rs/rosetta-api/icrc1/index-ng",
-            "//rs/rosetta-api/icrc1/ledger",
-            "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
-            "//rs/rosetta-api/ledger_canister_core",
-            "//rs/rosetta-api/ledger_core",
-            "//rs/rust_canisters/dfn_http_metrics",
-            "//rs/state_machine_tests",
-            "//rs/test_utilities/load_wasm",
-            "//rs/types/base_types",
-            "@crate_index//:candid",
-            "@crate_index//:cddl",
-            "@crate_index//:hex",
-            "@crate_index//:ic-metrics-encoder",
-            "@crate_index//:leb128",
-            "@crate_index//:num-traits",
-            "@crate_index//:proptest",
-            "@crate_index//:serde_bytes",
-        ] + extra_deps,
-    )
-    for (name_suffix, mainnet_ledger, mainnet_index, features, extra_deps) in [
-        (
-            "",
-            "mainnet_ckbtc_ic-icrc1-ledger",
-            "mainnet_ckbtc-index-ng",
-            [],
-            ["//rs/rosetta-api/icrc1/tokens_u64"],
-        ),
-        (
-            "_u256",
-            "mainnet_cketh_ic-icrc1-ledger-u256",
-            "mainnet_cketh-index-ng",
-            ["u256-tokens"],
-            ["//rs/rosetta-api/icrc1/tokens_u256"],
-        ),
-    ]
+LOCAL_REPLICA_DATA = [
+    "//rs/canister_sandbox",
+    "//rs/canister_sandbox:sandbox_launcher",
+    "//rs/replica",
+    "//rs/ledger_suite/icrc1/archive:archive_canister",
+    "//rs/rosetta-api/icrc1:ic-icrc-rosetta-bin",
+    "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin",
+    "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
+
+LOCAL_REPLICA_ENV = {
+    "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
+    "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
+    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    "REPLICA_BIN": "$(rootpath //rs/replica)",
+    "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1:ic-icrc-rosetta-bin)",
+    "ROSETTA_CLIENT_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin)",
+    "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+}
+
+rust_test_suite_with_extra_srcs(
+    name = "icrc_rosetta_integration",
+    size = "large",
+    srcs = [
+        "tests/integration_tests.rs",
+    ],
+    data = LOCAL_REPLICA_DATA,
+    env = LOCAL_REPLICA_ENV,
+    extra_srcs = glob([
+        "tests/common/*.rs",
+        "tests/integration_test_components/*.rs",
+        "tests/integration_test_components/blocks_synchronizer/*.rs",
+        "tests/integration_test_components/storage/*.rs",
+    ]),
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "icrc_rosetta_system",
+    srcs = [
+        "tests/system_tests.rs",
+    ],
+    data = LOCAL_REPLICA_DATA + glob([
+        "tests/*.json",
+        "tests/*.ros",
+    ]) + [
+        "@rosetta-cli//:rosetta-cli",
+    ],
+    env = LOCAL_REPLICA_ENV | {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/",
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+    },
+    extra_srcs = glob([
+        "tests/common/*.rs",
+    ]),
+    flaky = True,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "icrc_multitoken_rosetta_system",
+    srcs = [
+        "tests/multitoken_system_tests.rs",
+    ],
+    data = LOCAL_REPLICA_DATA + glob([
+        "tests/*.json",
+        "tests/*.ros",
+    ]) + [
+        "@rosetta-cli//:rosetta-cli",
+    ],
+    env = LOCAL_REPLICA_ENV | {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/",
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+        "RUST_TEST_THREADS": "4",
+    },
+    extra_srcs = glob([
+        "tests/common/*.rs",
+    ]),
+    flaky = True,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    tags = ["cpu:4"],
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)
+
+# Rosetta docker image
+
+## The text file with the release version
+
+write_file(
+    name = "version",
+    out = "version.txt",
+    content = [ROSETTA_VERSION],
+)
+
+## Create a layer with a rosetta user
+passwd(
+    name = "passwd",
+    entries = [
+        dict(
+            gecos = ["root"],
+            gid = 0,
+            home = "/root",
+            shell = "/usr/bin/bash",
+            uid = 0,
+            username = "root",
+        ),
+        dict(
+            gecos = ["icrc rosetta node user"],
+            gid = 1002,
+            home = "/home/ic_icrc_rosetta",
+            shell = "/usr/bin/bash",
+            uid = 1002,
+            username = "ic_icrc_rosetta",
+        ),
+    ],
+)
+
+pkg_mkdirs(
+    name = "data_dir",
+    # We make the /data directory rwx for everyone so that "rosetta"
+    # user can write to that directory.
+    attributes = pkg_attributes(
+        mode = "0777",
+        user = "ic_icrc_rosetta",
+    ),
+    dirs = [
+        "/home/ic_icrc_rosetta/log",
+        "/data",
+    ],
+)
+
+pkg_tar(
+    name = "data_tar",
+    srcs = [":data_dir"],
+)
+
+## An intermediate image with the passwd file and empty directories.
+oci_image(
+    name = "ic_icrc_rosetta_image_base",
+    base = "@rust_base",
+    tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    tars = [
+        ":passwd",
+        ":data_tar",
+    ],
+)
+
+## The final image we can publish.
+pkg_tar(
+    name = "ic_icrc_rosetta_image_homedir",
+    srcs = [":ic-icrc-rosetta-bin"],
+    package_dir = "/home/ic_icrc_rosetta",
+)
+
+oci_image(
+    name = "ic_icrc_rosetta_image",
+    base = ":ic_icrc_rosetta_image_base",
+    entrypoint = ["/home/ic_icrc_rosetta/ic-icrc-rosetta-bin"],
+    tags = ["local"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    tars = [":ic_icrc_rosetta_image_homedir"],
+    user = "ic_icrc_rosetta",
+    workdir = "/home/ic_icrc_rosetta",
+)
+
+## Run this target with --embed_label flag[1] to specify the image tag.
+## [1]: https://bazel.build/reference/command-line-reference#flag--embed_label
+
+# Use the value of --embed_label under --stamp, otherwise use a deterministic constant
+# value to ensure cache hits for actions that depend on this.
+expand_template(
+    name = "stamped",
+    out = "_stamped.tags.txt",
+    stamp_substitutions = {"0.0.0": "{{BUILD_EMBED_LABEL}}"},
+    template = [
+        "0.0.0",
+    ],
+)
+
+oci_tar(
+    name = "icrc_rosetta_image.tar",
+    image = ":ic_icrc_rosetta_image",
+    repo_tags = ["icrc-rosetta:local"],
+)
+
+# Push image with:
+#  $ bazel run //<path>:push_ic_icrc_rosetta_image
+#
+# Usage:
+#   https://github.com/bazel-contrib/rules_oci/blob/main/docs/push.md#usage
+oci_push(
+    name = "push_ic_icrc_rosetta_image",
+    image = ":ic_icrc_rosetta_image",
+    remote_tags = ":stamped",
+    repository = "docker.io/dfinity/ic-icrc-rosetta-api",
+    tags = ["manual"],
+)

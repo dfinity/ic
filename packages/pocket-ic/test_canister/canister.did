@@ -1,0 +1,138 @@
+// HTTP gateway interface
+
+type HeaderField = record {
+  text;
+  text;
+};
+type HttpGatewayRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+  certificate_version: opt nat16;
+};
+type HttpGatewayResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+  upgrade : opt bool;
+  streaming_strategy: opt StreamingStrategy;
+};
+type StreamingCallbackHttpResponse = record {
+  body: blob;
+  token: opt Token;
+};
+type Token = record {};
+type StreamingStrategy = variant {
+  Callback: record {
+    callback: func (Token) -> (StreamingCallbackHttpResponse) query;
+    token: Token;
+  };
+};
+
+// Schnorr interface
+
+type SchnorrAlgorithm = variant {
+  bip340secp256k1;
+  ed25519;
+};
+type SchnorrKeyId = record {
+  algorithm: SchnorrAlgorithm;
+  name: text;
+};
+type SchnorrPublicKeyResponse = record {
+  public_key : blob;
+  chain_code : blob;
+};
+type SchnorrPublicKeyResult = variant {
+  Ok : SchnorrPublicKeyResponse;
+  Err : text;
+};
+type SignWithSchnorrResult = variant {
+  Ok : blob;
+  Err : text;
+};
+
+// ECDSA interface
+
+type EcdsaPublicKeyResponse = record {
+  public_key : blob;
+  chain_code : blob;
+};
+type EcdsaPublicKeyResult = variant {
+  Ok : EcdsaPublicKeyResponse;
+  Err : text;
+};
+type SignWithEcdsaResult = variant {
+  Ok : blob;
+  Err : text;
+};
+
+// canister HTTP outcalls
+
+type HttpHeader = record {
+  name : text;
+  value : text;
+};
+type HttpResponse = record {
+  status : nat;
+  headers : vec HttpHeader;
+  body : blob;
+};
+type RejectionCode = variant {
+  NoError;
+  SysFatal;
+  SysTransient;
+  DestinationInvalid;
+  CanisterReject;
+  CanisterError;
+  Unknown;
+};
+type HttpResponseResult = variant {
+  Ok : HttpResponse;
+  Err : record {RejectionCode; text};
+};
+
+type TransformArgs = record {
+  response : HttpResponse;
+  context : blob;
+};
+
+type NodeMetricsHistoryArgs = record {
+    subnet_id: principal;
+    start_at_timestamp_nanos: nat64;
+};
+
+type NodeMetrics = record {
+    node_id: principal;
+    num_blocks_proposed_total: nat64;
+    num_block_failures_total: nat64;
+};
+
+type NodeMetricsHistoryResponse = record {
+  timestamp_nanos: nat64;
+  node_metrics: vec NodeMetrics;
+};
+
+service : {
+  http_request: (request: HttpGatewayRequest) -> (HttpGatewayResponse) query;
+  schnorr_public_key : (opt principal, vec blob, SchnorrKeyId) -> (SchnorrPublicKeyResult);
+  sign_with_schnorr : (blob, vec blob, SchnorrKeyId) -> (SignWithSchnorrResult);
+  ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);
+  sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
+  node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse);
+  canister_http : () -> (HttpResponseResult);
+  canister_http_with_transform : () -> (HttpResponse);
+  transform : (TransformArgs) -> (HttpResponse) query;
+  whoami : () -> (text);
+  whois : (principal) -> (text);
+  blob_len : (blob) -> (nat64);
+  call_with_large_blob : (principal, nat64) -> (nat64);
+  execute_many_instructions : (nat64) -> ();
+  canister_log : (text) -> ();
+  time : () -> (nat64) query;
+  reject_query : () -> () query;
+  reject_update : () -> ();
+  trap_query : () -> () query;
+  trap_update : () -> ();
+}

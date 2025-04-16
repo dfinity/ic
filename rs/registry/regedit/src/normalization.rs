@@ -9,7 +9,7 @@ const BIN_DATA_SHA256: &str = "(binary-data|sha256)";
 const PRINCIPAL_ID: &str = "(principal-id)";
 const BIN_DATA: &str = "(binary-data)";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NormalizedSnapshot(pub Value);
 
 pub fn normalize(mut value: Value) -> (NormalizedSnapshot, Sha256InvMap) {
@@ -38,7 +38,7 @@ pub fn expand(inv_map: &Sha256InvMap, snapshot: NormalizedSnapshot) -> Snapshot 
     Snapshot(value)
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Sha256InvMap {
     m: BTreeMap<[u8; 32], Vec<u8>>,
 }

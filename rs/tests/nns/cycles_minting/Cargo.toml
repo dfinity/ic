@@ -1,0 +1,30 @@
+[package]
+name = "cycles_minting"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+ic-canister-client = { path = "../../../canister_client" }
+ic-canister-client-sender = { path = "../../../canister_client/sender" }
+ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
+icp-ledger = { path = "../../../ledger_suite/icp" }
+cycles-minting-canister = { path = "../../../nns/cmc" }
+ic-nns-constants = { path = "../../../nns/constants" }
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
+on_wire = { path = "../../../rust_canisters/on_wire" }
+ic-types = { path = "../../../types/types" }
+candid = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+url = { workspace = true }
+wat = { workspace = true }
+
+[lib]
+name = "cycles_minting"
+path = "cycles_minting.rs"

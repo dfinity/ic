@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -8,88 +8,96 @@ II_DEV_CANISTER_RUNTIME_DEPS = [
     "@ii_dev_canister//file",
 ]
 
+DEPENDENCIES = [
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/ic_os/fstrim_tool",
+    "//rs/registry/subnet_type",
+    "//rs/tests/consensus/utils",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/types/types",
+    "//rs/universal_canister/lib",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+    "@crate_index//:k256",
+    "@crate_index//:rand",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
 system_test(
     name = "canister_sig_verification_cache_test",
     env = {
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
     },
-    flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + II_DEV_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES,
 )
 
 system_test(
     name = "request_signature_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES,
 )
 
 system_test(
     name = "rpc_csp_vault_reconnection_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_csp_metrics_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_csp_socket_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_csp_umask_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES,
 )
 
 system_test(
     name = "ic_crypto_fstrim_tool_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES,
 )

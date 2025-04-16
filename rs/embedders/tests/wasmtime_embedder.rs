@@ -5,11 +5,18 @@ use ic_config::{
 };
 use ic_embedders::{
     wasm_utils::instrumentation::instruction_to_cost,
-    wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
+    wasm_utils::instrumentation::WasmMemoryType,
+    wasmtime_embedder::{
+        system_api::{sandbox_safe_system_state::CallbackUpdate, ApiType},
+        system_api_complexity, CanisterMemoryType,
+    },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SystemApi, TrapCode};
+use ic_interfaces::execution_environment::{
+    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
+};
+use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::{
@@ -19,6 +26,8 @@ use ic_types::{
     time::UNIX_EPOCH,
     Cycles, NumBytes, NumInstructions,
 };
+
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 #[cfg(target_os = "linux")]
 use ic_types::PrincipalId;
@@ -41,16 +50,16 @@ fn cannot_execute_wasm_without_memory() {
         )
         .build();
 
-    let result = instance.run(ic_types::methods::FuncRef::Method(
-        ic_types::methods::WasmMethod::Update("should_fail_with_contract_violation".to_string()),
-    ));
+    let result = instance.run(FuncRef::Method(WasmMethod::Update(
+        "should_fail_with_contract_violation".to_string(),
+    )));
 
     match result {
         Ok(_) => panic!("Expected a HypervisorError::ContractViolation"),
         Err(err) => {
             assert_eq!(
                 err,
-                ic_interfaces::execution_environment::HypervisorError::ToolchainContractViolation {
+                HypervisorError::ToolchainContractViolation {
                     error: "WebAssembly module must define memory".to_string(),
                 }
             );
@@ -79,7 +88,7 @@ fn correctly_count_instructions() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -87,17 +96,23 @@ fn correctly_count_instructions() {
         .build();
 
     instance
-        .run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_msg_arg_data_copy".to_string()),
-        ))
+        .run(FuncRef::Method(WasmMethod::Update(
+            "test_msg_arg_data_copy".to_string(),
+        )))
         .unwrap();
 
     let instruction_counter = instance.instruction_counter();
     let system_api = &instance.store_data().system_api().unwrap();
     let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     let expected_instructions = 1 // Function is 1 instruction.
             + 3 * const_cost
@@ -129,7 +144,7 @@ fn instruction_limit_traps() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -137,9 +152,9 @@ fn instruction_limit_traps() {
         .with_num_instructions(instruction_limit)
         .build();
 
-    let result = instance.run(ic_types::methods::FuncRef::Method(
-        ic_types::methods::WasmMethod::Update("test_msg_arg_data_copy".to_string()),
-    ));
+    let result = instance.run(FuncRef::Method(WasmMethod::Update(
+        "test_msg_arg_data_copy".to_string(),
+    )));
 
     assert_eq!(
         result.err(),
@@ -151,10 +166,20 @@ fn instruction_limit_traps() {
 fn correctly_report_performance_counter() {
     let data_size = 1024;
 
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let drop_const_cost = instruction_to_cost(&wasmparser::Operator::Drop) + const_cost;
-    let global_set_cost = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let drop_const_cost =
+        instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32) + const_cost;
+    let global_set_cost = instruction_to_cost(
+        &wasmparser::Operator::GlobalSet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     // Note: the instrumentation is a stack machine, which counts and subtracts
     // the number of instructions for the whole block. The "dynamic" part of
@@ -229,7 +254,7 @@ fn correctly_report_performance_counter() {
             )
             .as_str(),
         )
-        .with_api_type(ic_system_api::ApiType::init(
+        .with_api_type(ApiType::init(
             UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
@@ -238,9 +263,9 @@ fn correctly_report_performance_counter() {
         .build();
 
     let res = instance
-        .run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_performance_counter".to_string()),
-        ))
+        .run(FuncRef::Method(WasmMethod::Update(
+            "test_performance_counter".to_string(),
+        )))
         .unwrap();
     let Global::I64(performance_counter1) = res.exported_globals[0] else {
         panic!("Error getting performance_counter1");
@@ -284,18 +309,20 @@ fn stack_overflow_traps() {
                 )
                 .build();
 
-            let result = instance.run(ic_types::methods::FuncRef::Method(
-                ic_types::methods::WasmMethod::Update("f".to_string()),
-            ));
+            let result = instance.run(FuncRef::Method(WasmMethod::Update("f".to_string())));
 
-            assert_eq!(
-                result.err(),
-                Some(
-                    ic_interfaces::execution_environment::HypervisorError::Trapped(
-                        ic_interfaces::execution_environment::TrapCode::StackOverflow
-                    )
-                )
-            );
+            let err = result.err().unwrap();
+            let HypervisorError::Trapped {
+                trap_code,
+                backtrace,
+            } = err
+            else {
+                panic!("Unexpected error {:?}", err);
+            };
+            assert_eq!(trap_code, TrapCode::StackOverflow);
+            for (_index, name) in backtrace.unwrap().0 {
+                assert_eq!(name, Some("f".to_string()));
+            }
         })
         .unwrap();
 
@@ -531,10 +558,10 @@ fn calling_function_by_index() {
     let err = instance
         .run(FuncRef::UpdateClosure(WasmClosure::new(0, 0)))
         .unwrap_err();
-    assert_eq!(
-        err,
-        HypervisorError::CalledTrap(std::str::from_utf8(&[0; 6]).unwrap().to_string())
-    );
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, std::str::from_utf8(&[0; 6]).unwrap().to_string());
 }
 
 #[test]
@@ -552,10 +579,10 @@ fn zero_size_memory() {
     let err = instance
         .run(FuncRef::UpdateClosure(WasmClosure::new(0, 0)))
         .unwrap_err();
-    assert_eq!(
-        err,
-        HypervisorError::CalledTrap(std::str::from_utf8(&[0; 0]).unwrap().to_string())
-    );
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, std::str::from_utf8(&[0; 0]).unwrap().to_string());
 }
 
 #[cfg(target_os = "linux")]
@@ -573,7 +600,7 @@ fn read_before_write_stats() {
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(direct_wat)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -601,7 +628,7 @@ fn read_before_write_stats() {
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(read_then_write_wat)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -645,8 +672,7 @@ fn stable_write_and_read() {
                 )
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -654,7 +680,10 @@ fn stable_write_and_read() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, "Hello".to_string());
 }
 
 #[test]
@@ -686,8 +715,7 @@ fn stable64_write_and_read() {
                 (table funcref (elem $test))
                 (memory (export "memory") 1)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -695,7 +723,10 @@ fn stable64_write_and_read() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, "Hello".to_string());
 }
 
 #[test]
@@ -757,7 +788,7 @@ fn stable_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -765,7 +796,6 @@ fn stable_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -852,7 +882,7 @@ fn stable64_read_accessed_pages_allowance() {
 
     use HypervisorError::*;
 
-    let mut config = Config {
+    let config = Config {
         stable_memory_accessed_page_limit: StableMemoryPageLimit {
             message: ic_types::NumOsPages::new(3),
             upgrade: ic_types::NumOsPages::new(3),
@@ -860,7 +890,6 @@ fn stable64_read_accessed_pages_allowance() {
         },
         ..Default::default()
     };
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
@@ -923,8 +952,7 @@ fn multiple_stable_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -971,8 +999,7 @@ fn multiple_stable64_write() {
                 (table funcref (elem $test))
                 (memory (export "memory") 5)
             )"#;
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -1034,62 +1061,89 @@ fn stable_read_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 #[test]
@@ -1149,73 +1203,106 @@ fn stable64_read_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // Native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 #[test]
@@ -1268,62 +1355,89 @@ fn stable_write_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
-
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 #[test]
@@ -1383,72 +1497,106 @@ fn stable64_write_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
-    // native stable memory
-    let mut config = Config::default();
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    let config = Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(err, Trapped(HeapOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 /// Test that stable memory access past the normal 32-bit range (including
@@ -1498,7 +1646,7 @@ fn wasm_heap_oob_access() {
     let wat = r#"
             (module
                 (type (;0;) (func))
-                (func (;0;) (type 0)
+                (func $foo (type 0)
                     i32.const -943208505
                     i32.load8_s offset=3933426208
                     unreachable
@@ -1511,7 +1659,13 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    assert_eq!(err, HypervisorError::Trapped(TrapCode::HeapOutOfBounds));
+    assert_eq!(
+        err,
+        HypervisorError::Trapped {
+            trap_code: TrapCode::HeapOutOfBounds,
+            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+        }
+    );
 }
 
 #[test]
@@ -1544,8 +1698,14 @@ fn passive_data_segment() {
 
 /// Calculate debug_print instruction cost from the message length.
 fn debug_print_cost(bytes: usize) -> u64 {
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
     3 * const_cost + call_cost + system_api_complexity::overhead::DEBUG_PRINT.get() + bytes as u64
 }
 
@@ -1992,6 +2152,8 @@ fn wasm64_import_system_api_functions() {
 
       (import "ic0" "canister_cycle_balance128"
         (func $ic0_canister_cycle_balance128 (param i64)))
+      (import "ic0" "canister_liquid_cycle_balance128"
+        (func $ic0_canister_liquid_cycle_balance128 (param i64)))
       (import "ic0" "msg_cycles_available128"
         (func $ic0_msg_cycles_available128 (param i64)))
       (import "ic0" "msg_cycles_refunded128"
@@ -2012,6 +2174,11 @@ fn wasm64_import_system_api_functions() {
       (import "ic0" "is_controller"
         (func $ic0_is_controller (param i64) (param i64) (result i32)))
 
+      (import "ic0" "subnet_self_size"
+        (func $ic0_subnet_self_size (result i64)))
+      (import "ic0" "subnet_self_copy"
+        (func $ic0_subnet_self_copy (param i64) (param i64) (param i64)))
+
         (global $g1 (export "g1") (mut i64) (i64.const 0))
         (func $test (export "canister_update test")
             (i64.store (i64.const 0) (memory.grow (i64.const 1)))
@@ -2031,6 +2198,7 @@ fn wasm64_import_system_api_functions() {
             (call $ic0_msg_reject (i64.const 0) (i64.const 5))
             (call $ic0_msg_reject_msg_copy (i64.const 4096) (i64.const 0) (call $ic0_msg_reject_msg_size))
             (call $ic0_canister_cycle_balance128 (i64.const 4096))
+            (call $ic0_canister_liquid_cycle_balance128 (i64.const 4096))
             (call $ic0_debug_print (i64.const 0) (i64.const 5))
             (call $ic0_trap (i64.const 0) (i64.const 5))
             (call $ic0_call_new
@@ -2091,7 +2259,7 @@ fn wasm64_msg_caller_copy() {
 
     let caller = user_test_id(24).get();
     let payload = vec![0u8; 32];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2161,7 +2329,7 @@ fn wasm64_msg_arg_data_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2228,8 +2396,7 @@ fn wasm64_msg_method_name_copy() {
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
     let msg_name = "test".to_string();
-    let api =
-        ic_system_api::ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
+    let api = ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
@@ -2294,7 +2461,7 @@ fn wasm64_msg_reply_data_append() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2345,7 +2512,7 @@ fn wasm64_msg_reject() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload,
         Cycles::zero(),
@@ -2391,7 +2558,7 @@ fn wasm64_reject_msg_copy() {
 
     let caller = user_test_id(24).get();
     let reject_msg = "go away".to_string();
-    let api = ic_system_api::ApiType::reject_callback(
+    let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
         RejectContext::new(
@@ -2466,7 +2633,7 @@ fn wasm64_canister_self_copy() {
 
     let caller = user_test_id(24).get();
     let payload: Vec<u8> = vec![1, 3, 5, 7];
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         payload.clone(),
         Cycles::zero(),
@@ -2520,6 +2687,130 @@ fn wasm64_canister_self_copy() {
 }
 
 #[test]
+fn wasm64_subnet_self_size() {
+    let wat = r#"
+    (module
+      (import "ic0" "subnet_self_size"
+        (func $ic0_subnet_self_size (result i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_subnet_self_size)
+        global.set $g1
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let caller = user_test_id(24).get();
+    let payload: Vec<u8> = vec![1, 3, 5, 7];
+    let api = ApiType::update(
+        UNIX_EPOCH,
+        payload.clone(),
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    assert_eq!(
+        res.exported_globals[0],
+        Global::I64(
+            instance
+                .store_data()
+                .system_api()
+                .unwrap()
+                .ic0_subnet_self_size()
+                .unwrap() as i64
+        )
+    );
+}
+
+#[test]
+fn wasm64_subnet_self_copy() {
+    let wat = r#"
+    (module
+      (import "ic0" "subnet_self_copy"
+        (func $ic0_subnet_self_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "subnet_self_size"
+        (func $ic0_subnet_self_size (result i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_subnet_self_size)
+        global.set $g1
+        (call $ic0_subnet_self_copy (i64.const 0) (i64.const 0) (call $ic0_subnet_self_size))
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let caller = user_test_id(24).get();
+    let payload: Vec<u8> = vec![1, 3, 5, 7];
+    let api = ApiType::update(
+        UNIX_EPOCH,
+        payload.clone(),
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    // Only first os page should have been touched.
+    assert_eq!(res.wasm_dirty_pages, vec![ic_sys::PageIndex::new(0)]);
+
+    // Actual heap is larger, but we can only access first os page, the rest is protected.
+    let dirty_heap_size = ic_sys::PAGE_SIZE;
+
+    let wasm_heap: &[u8] = unsafe {
+        let addr = instance.heap_addr(CanisterMemoryType::Heap);
+        let size_in_bytes =
+            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        assert!(size_in_bytes >= dirty_heap_size);
+        std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
+    };
+
+    let mut expected_heap = vec![0; dirty_heap_size];
+    let subnet_id_size = instance
+        .store_data()
+        .system_api()
+        .unwrap()
+        .ic0_subnet_self_size()
+        .unwrap();
+
+    instance
+        .store_data()
+        .system_api()
+        .unwrap()
+        .ic0_subnet_self_copy(0, 0, subnet_id_size, &mut expected_heap)
+        .unwrap();
+
+    assert_eq!(wasm_heap, expected_heap);
+}
+
+#[test]
 fn wasm64_trap() {
     let wat = r#"
     (module
@@ -2542,7 +2833,7 @@ fn wasm64_trap() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         Vec::new(),
         Cycles::zero(),
@@ -2560,7 +2851,10 @@ fn wasm64_trap() {
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
 
-    assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, "Hello".to_string());
 }
 
 #[test]
@@ -2580,7 +2874,7 @@ fn wasm64_canister_cycle_balance128() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -2632,6 +2926,72 @@ fn wasm64_canister_cycle_balance128() {
 }
 
 #[test]
+fn wasm64_canister_liquid_cycle_balance128() {
+    let wat = r#"
+    (module
+      (import "ic0" "canister_liquid_cycle_balance128"
+        (func $ic0_canister_liquid_cycle_balance128 (param i64)))
+
+      (global $g1 (export "g1") (mut i64) (i64.const 0))
+      (func $test (export "canister_update test")
+        (call $ic0_canister_liquid_cycle_balance128 (i64.const 0))
+      )
+
+      (memory (export "memory") i64 1)
+    )"#;
+
+    let api = ApiType::update(
+        UNIX_EPOCH,
+        vec![],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .with_memory_usage(NumBytes::from(ic_sys::PAGE_SIZE as u64))
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    // After this call, we expect the instance to have a memory with size of 1 wasm page
+    // of which the first OS page was touched and contains relevant data at offset 0
+    assert_eq!(res.wasm_dirty_pages, vec![ic_sys::PageIndex::new(0)]);
+    let dirty_heap_size = ic_sys::PAGE_SIZE;
+    let wasm_heap: &[u8] = unsafe {
+        let addr = instance.heap_addr(CanisterMemoryType::Heap);
+        let size_in_bytes =
+            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        assert!(size_in_bytes >= dirty_heap_size);
+        std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
+    };
+
+    let mut expected_heap = vec![0; dirty_heap_size];
+    instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .ic0_canister_liquid_cycle_balance128(0, &mut expected_heap)
+        .unwrap();
+    assert_eq!(wasm_heap, expected_heap);
+
+    let balance = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .ic0_canister_cycle_balance()
+        .unwrap() as u128;
+    let liquid_balance = u128::from_le_bytes(expected_heap[0..16].try_into().unwrap());
+    assert!(0 < liquid_balance && liquid_balance < balance);
+}
+
+#[test]
 fn wasm64_msg_cycles_refunded128() {
     let wat = r#"
     (module
@@ -2650,7 +3010,7 @@ fn wasm64_msg_cycles_refunded128() {
 
     let caller = user_test_id(24).get();
     let reject_msg = "go away".to_string();
-    let api = ic_system_api::ApiType::reject_callback(
+    let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
         RejectContext::new(
@@ -2719,7 +3079,7 @@ fn wasm64_cycles_burn128() {
       (memory (export "memory") i64 1)
     )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -2767,23 +3127,52 @@ fn wasm64_cycles_burn128() {
 
 #[test]
 fn large_wasm64_memory_allocation_test() {
-    let wat = r#"
-    (module
-        (func $test (export "canister_update test"))
-        (memory i64 0 16777216)
-    )"#;
+    // This test checks if maximum memory size
+    // is capped to the maximum allowed memory size in 64 bit mode.
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let max_heap_size_in_pages = config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
+    let wat = format!(
+        r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i64) (param $size i64)))
+        (func $test (export "canister_update test")
+            ;; store the result of memory.grow at heap address 0
+            (i64.store (i64.const 0) (memory.grow (i64.const 1)))
+            ;; return the result of memory.grow
+            (call $msg_reply_data_append (i64.const 0) (i64.const 1))
+            (call $msg_reply)
+        )
+        ;; declare a memory with initial size max_heap and another max large value
+        (memory i64 {} {})
+    )"#,
+        max_heap_size_in_pages,
+        max_heap_size_in_pages * 100
+    );
+
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_wat(wat)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+        ))
+        .with_wat(&wat)
         .build();
 
-    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
-        Ok(_) => {}
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    let wasm_res = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(result.as_ref().err());
+
+    // The reply is actually the encoding of -1 (the memory grow failed).
+    assert_eq!(wasm_res, Ok(Some(WasmResult::Reply(vec![255]))));
 }
 
 #[test]
@@ -2825,13 +3214,12 @@ fn large_wasm64_stable_read_write_test() {
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
-    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
     // Declare a large heap.
-    config.max_wasm_memory_size = NumBytes::from(10 * gb);
+    config.max_wasm64_memory_size = NumBytes::from(10 * gb);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_api_type(ic_system_api::ApiType::update(
+        .with_api_type(ApiType::update(
             UNIX_EPOCH,
             vec![],
             Cycles::zero(),
@@ -2896,7 +3284,7 @@ fn wasm64_saturate_fun_index() {
             (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let api = ic_system_api::ApiType::update(
+    let api = ApiType::update(
         UNIX_EPOCH,
         vec![],
         Cycles::zero(),
@@ -2913,20 +3301,20 @@ fn wasm64_saturate_fun_index() {
         .build();
     let _res = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
 
-    let system_state_changes = instance
+    let system_state_modifications = instance
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .take_system_state_changes();
+        .take_system_state_modifications();
 
     // call_perform should trigger one callback update
-    let callback_update = system_state_changes
+    let callback_update = system_state_modifications
         .callback_updates
         .first()
         .unwrap()
         .clone();
     match callback_update {
-        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Register(_id, callback) => {
+        CallbackUpdate::Register(_id, callback) => {
             assert_eq!(
                 callback.on_reply,
                 WasmClosure {
@@ -2949,7 +3337,7 @@ fn wasm64_saturate_fun_index() {
                 })
             );
         }
-        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Unregister(_) => {
+        CallbackUpdate::Unregister(_) => {
             panic!("Expected registration of new calback")
         }
     }

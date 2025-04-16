@@ -13,17 +13,18 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:hex",
     "@crate_index//:ic-cdk",
+    "@crate_index//:time",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/certification/test-utils",
-    "//rs/constants",
     "//rs/crypto/test_utils/canister_sigs",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/test_utils/root_of_trust",
     "//rs/crypto/tree_hash",
+    "//rs/limits",
     "//rs/registry/helpers",
     "//rs/validator/http_request_test_utils",
     "@crate_index//:assert_matches",
@@ -42,7 +43,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_validator_ingress_message",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_flags = select({
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,

@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -20,7 +20,7 @@ rust_library(
         "//rs/utils": "utils",
     },
     compile_data = [
-        "//ic-os/components:ic/ic.json5.template",
+        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
         "src/message.wasm",
     ],
     crate_name = "ic_system_test_driver",
@@ -32,7 +32,7 @@ rust_library(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     visibility = [
         "//rs:system-tests-pkg",
-        "//rs/ic_os/launch-single-vm:__pkg__",
+        "//rs/ic_os/dev_test_tools/launch-single-vm:__pkg__",
     ],
     deps = [
         # Keep sorted.
@@ -42,15 +42,21 @@ rust_library(
         "//rs/canister_client/sender",
         "//rs/certification",
         "//rs/config",
-        "//rs/constants",
         "//rs/crypto/sha2",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
+        "//rs/ic_os/config_types",
         "//rs/ic_os/deterministic_ips",
         "//rs/interfaces",
         "//rs/interfaces/registry",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/limits",
         "//rs/nervous_system/clients",
         "//rs/nervous_system/common",
         "//rs/nervous_system/common/test_keys",
@@ -70,6 +76,7 @@ rust_library(
         "//rs/prep",
         "//rs/protobuf",
         "//rs/registry/canister",
+        "//rs/registry/canister/api",
         "//rs/registry/client",
         "//rs/registry/helpers",
         "//rs/registry/keys",
@@ -82,13 +89,8 @@ rust_library(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/registry/transport",
-        "//rs/rosetta-api",
-        "//rs/rosetta-api/icp_ledger",
-        "//rs/rosetta-api/icrc1",
-        "//rs/rosetta-api/icrc1/index-ng",
-        "//rs/rosetta-api/icrc1/ledger",
-        "//rs/rosetta-api/ledger_core",
-        "//rs/rosetta-api/rosetta_core:rosetta-core",
+        "//rs/rosetta-api/common/rosetta_core:rosetta-core",
+        "//rs/rosetta-api/icp:rosetta-api",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
@@ -123,11 +125,10 @@ rust_library(
         "@crate_index//:ed25519-dalek",
         "@crate_index//:futures",
         "@crate_index//:hex",
-        "@crate_index//:http_0_2_12",
+        "@crate_index//:http",
         "@crate_index//:humantime",
         "@crate_index//:humantime-serde",
-        "@crate_index//:hyper-rustls",
-        "@crate_index//:hyper_0_14_27",
+        "@crate_index//:hyper",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
@@ -139,6 +140,7 @@ rust_library(
         "@crate_index//:kube",
         "@crate_index//:lazy_static",
         "@crate_index//:leb128",
+        "@crate_index//:macaddr",
         "@crate_index//:maplit",
         "@crate_index//:nix",
         "@crate_index//:num_cpus",
@@ -155,6 +157,7 @@ rust_library(
         "@crate_index//:ring",
         "@crate_index//:rsa",
         "@crate_index//:rust_decimal",
+        "@crate_index//:schemars",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
@@ -178,4 +181,9 @@ rust_library(
         "@crate_index//:wat",
         "@crate_index//:zstd",
     ],
+)
+
+rust_test(
+    name = "generic_workload_engine",
+    crate = ":ic-system-test-driver",
 )

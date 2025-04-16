@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_proc_macro(
+    name = "validate_eq_derive",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_validate_eq_derive",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:quote",
+        "@crate_index//:syn",
+    ],
+)

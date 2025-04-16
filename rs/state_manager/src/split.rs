@@ -1,6 +1,9 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
-    checkpoint::{load_checkpoint, make_checkpoint},
+    checkpoint::{
+        flush_canister_snapshots_and_page_maps, load_checkpoint, make_unvalidated_checkpoint,
+        validate_and_finalize_checkpoint_and_remove_unverified_marker,
+    },
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -77,7 +80,7 @@ pub fn split(
     let (cp, state) = read_checkpoint(
         &state_layout,
         &mut thread_pool,
-        fd_factory.clone(),
+        Arc::clone(&fd_factory),
         &metrics,
     )?;
 
@@ -89,16 +92,16 @@ pub fn split(
         .map_err(|e| format!("{:?}", e))?;
 
     // Split the state.
-    let split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
+    let mut split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
 
     // Write the split state as a new checkpoint.
     write_checkpoint(
-        &split_state,
+        &mut split_state,
         state_layout,
         &cp,
         &mut thread_pool,
-        fd_factory,
         &config,
+        Arc::clone(&fd_factory),
         &metrics,
         log,
     )
@@ -147,7 +150,9 @@ fn read_checkpoint(
             "No checkpoints found at {}",
             state_layout.raw_path().display()
         ))?;
-    let cp = state_layout.checkpoint(height).map_err(|e| e.to_string())?;
+    let cp = state_layout
+        .checkpoint_verified(height)
+        .map_err(|e| e.to_string())?;
 
     let state = load_checkpoint(
         &cp,
@@ -170,12 +175,12 @@ fn read_checkpoint(
 /// Writes the given `ReplicatedState` into a new checkpoint under
 /// `state_layout`, based off of `old_cp`.
 fn write_checkpoint(
-    state: &ReplicatedState,
+    state: &mut ReplicatedState,
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     config: &Config,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &StateManagerMetrics,
     log: ReplicaLogger,
 ) -> Result<(), String> {
@@ -183,12 +188,7 @@ fn write_checkpoint(
 
     let mut tip_handler = state_layout.capture_tip_handler();
     tip_handler
-        .reset_tip_to(
-            &state_layout,
-            old_cp,
-            config.lsmt_config.lsmt_status,
-            Some(thread_pool),
-        )
+        .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
@@ -199,16 +199,29 @@ fn write_checkpoint(
         MaliciousFlags::default(),
     );
 
-    make_checkpoint(
+    let new_height = old_height.increment();
+
+    // We need to flush to handle the deletion of canister snapshots.
+    flush_canister_snapshots_and_page_maps(state, new_height, &tip_channel);
+
+    let (cp_layout, _has_downgrade) = make_unvalidated_checkpoint(
         state,
-        old_height.increment(),
+        new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
-        thread_pool,
-        fd_factory,
-        config.lsmt_config.lsmt_status,
+        fd_factory.clone(),
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+
+    validate_and_finalize_checkpoint_and_remove_unverified_marker(
+        &cp_layout,
+        None,
+        SubnetType::Application,
+        fd_factory.clone(),
+        &metrics.checkpoint_metrics,
+        Some(thread_pool),
+    )
+    .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
 
     Ok(())
 }

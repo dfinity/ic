@@ -10,6 +10,7 @@ documentation.workspace = true
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
+ic-consensus-dkg = { path = "../../consensus/dkg" }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }

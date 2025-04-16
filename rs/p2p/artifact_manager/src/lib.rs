@@ -1,9 +1,11 @@
+use futures::stream::Stream;
+use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_interfaces::{
     p2p::{
-        artifact_manager::{ArtifactProcessorEvent, JoinGuard},
+        artifact_manager::JoinGuard,
         consensus::{
-            ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact,
-            ValidatedPoolReader,
+            ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool,
+            PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
         },
     },
     time_source::TimeSource,
@@ -12,20 +14,21 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, messages::SignedIngress};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
+    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, RwLock,
     },
+    task::Poll,
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{Sender, UnboundedReceiver},
     time::timeout,
 };
+use tokio_stream::StreamExt;
 use tracing::instrument;
-
-type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -83,8 +86,7 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-/// An abstraction of processing changes for each artifact client.
-pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
+trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
     /// Process changes to the client's state, which includes but not
     /// limited to:
     ///   - newly arrived artifacts (passed as input parameters)
@@ -102,10 +104,10 @@ pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
         &self,
         time_source: &dyn TimeSource,
         new_artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
-    ) -> ChangeResult<A>;
+    ) -> ArtifactTransmits<A>;
 }
 
-/// Manages the life cycle of the client specific artifact processor thread.
+// TODO: remove in favour of the Shutdown struct instead
 pub struct ArtifactProcessorJoinGuard {
     handle: Option<JoinHandle<()>>,
     shutdown: Arc<AtomicBool>,
@@ -131,58 +133,88 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
-pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
+fn run_artifact_processor<
+    Artifact: IdentifiableArtifact,
+    I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
+>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
+    outbound_tx: Sender<ArtifactTransmit<Artifact>>,
+    inbound_rx_stream: I,
     initial_artifacts: Vec<Artifact>,
-) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
-    // Making this channel bounded can be problematic since we don't have true multiplexing
-    // of P2P messages.
-    // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
-    // will result on slow consuption of chunks. Slow consumption of chunks will in turn
-    // result in slower consumptions of adverts. Ideally adverts are consumed at rate
-    // independent of consensus.
-    #[allow(clippy::disallowed_methods)]
-    let (sender, receiver) = unbounded_channel();
+) -> Box<dyn JoinGuard> {
     let shutdown = Arc::new(AtomicBool::new(false));
-
     // Spawn the processor thread
     let shutdown_cl = shutdown.clone();
     let handle = ThreadBuilder::new()
         .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
             for artifact in initial_artifacts {
-                let _ =
-                    send_advert.blocking_send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-                        artifact,
-                        is_latency_sensitive: false,
-                    }));
+                let _ = outbound_tx.blocking_send(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                    artifact,
+                    is_latency_sensitive: false,
+                }));
             }
             process_messages(
                 time_source,
                 client,
-                send_advert,
-                receiver,
+                outbound_tx,
+                inbound_rx_stream,
                 ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string()),
                 shutdown_cl,
             );
         })
         .unwrap();
+    Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown))
+}
 
-    (
-        Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown)),
-        sender,
-    )
+enum StreamState<T> {
+    Value(T),
+    NoNewValueAvailable,
+    EndOfStream,
+}
+
+async fn read_batch<T, S: Stream<Item = T> + Send + Unpin + 'static>(
+    mut stream: Pin<&mut S>,
+    recv_timeout: Duration,
+) -> Option<Vec<T>> {
+    let mut stream = std::pin::Pin::new(&mut stream);
+    match timeout(recv_timeout, stream.next()).await {
+        Ok(Some(first_value)) => {
+            let mut res = vec![first_value];
+            // We ignore the end of stream and empty value states.
+            while let StreamState::Value(value) =
+                std::future::poll_fn(|cx| match stream.as_mut().poll_next(cx) {
+                    Poll::Pending => Poll::Ready(StreamState::NoNewValueAvailable),
+                    Poll::Ready(Some(v)) => Poll::Ready(StreamState::Value(v)),
+                    // Stream has finished because the abortable broadcast/p2p has stopped.
+                    // This is infallible.
+                    Poll::Ready(None) => Poll::Ready(StreamState::EndOfStream),
+                })
+                .await
+            {
+                res.push(value)
+            }
+            Some(res)
+        }
+        // Stream has finished because the abortable broadcast/p2p has stopped.
+        // This is infallible.
+        Ok(None) => None,
+        // First value didn't arrive on time
+        Err(_) => Some(vec![]),
+    }
 }
 
 // The artifact processor thread loop
-fn process_messages<Artifact: IdentifiableArtifact + 'static>(
+fn process_messages<
+    Artifact: IdentifiableArtifact + 'static,
+    I: Stream<Item = UnvalidatedArtifactMutation<Artifact>> + Send + Unpin + 'static,
+>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
-    mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+    send_advert: Sender<ArtifactTransmit<Artifact>>,
+    mut inbound_stream: I,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -202,20 +234,8 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
         };
 
         let batched_artifact_events = current_thread_rt.block_on(async {
-            match timeout(recv_timeout, receiver.recv()).await {
-                Ok(Some(artifact_event)) => {
-                    let mut artifacts = vec![artifact_event];
-                    while let Ok(artifact) = receiver.try_recv() {
-                        artifacts.push(artifact);
-                    }
-                    Some(artifacts)
-                }
-                Ok(None) => {
-                    // p2p is stopped
-                    None
-                }
-                Err(_) => Some(vec![]),
-            }
+            let inbound_stream = std::pin::Pin::new(&mut inbound_stream);
+            read_batch(inbound_stream, recv_timeout).await
         });
         let batched_artifact_events = match batched_artifact_events {
             Some(v) => v,
@@ -223,18 +243,15 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
                 return;
             }
         };
-        let ChangeResult {
-            artifacts_with_opt,
-            purged,
+        let ArtifactTransmits {
+            transmits,
             poll_immediately,
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
-        for artifact_with_opt in artifacts_with_opt {
-            let _ = send_advert.blocking_send(ArtifactProcessorEvent::Artifact(artifact_with_opt));
-        }
 
-        for advert in purged {
-            let _ = send_advert.blocking_send(ArtifactProcessorEvent::Purge(advert));
+        // We must first send the addition to the replication manager because in theory in one batch we can have both an addition and removal of the same artifact.
+        for mutation in transmits {
+            let _ = send_advert.blocking_send(mutation);
         }
         last_on_state_change_result = poll_immediately;
     }
@@ -246,59 +263,59 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
-    send_advert: Sender<ArtifactProcessorEvent<SignedIngress>>,
+    channel: AbortableBroadcastChannel<SignedIngress>,
+    user_ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
-        dyn ChangeSetProducer<
+        dyn PoolMutationsProducer<
                 PoolIngress,
-                ChangeSet = <PoolIngress as MutablePool<SignedIngress>>::ChangeSet,
+                Mutations = <PoolIngress as MutablePool<SignedIngress>>::Mutations,
             > + Send
             + Sync,
     >,
     metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
-    Box<dyn JoinGuard>,
-) {
+) -> Box<dyn JoinGuard> {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
-    let (jh, sender) = run_artifact_processor(
+    let inbound_rx_stream = tokio_stream::wrappers::ReceiverStream::new(channel.inbound_rx);
+    let user_ingress_rx_stream =
+        tokio_stream::wrappers::UnboundedReceiverStream::new(user_ingress_rx);
+    run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
-        send_advert,
+        channel.outbound_tx,
+        inbound_rx_stream.merge(user_ingress_rx_stream),
         vec![],
-    );
-    (sender, jh)
+    )
 }
 
+/// Starts the event loop that polls consensus for updates on what needs to be replicated.
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
-    C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
+    C: PoolMutationsProducer<Pool, Mutations = <Pool as MutablePool<Artifact>>::Mutations> + 'static,
 >(
-    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
+    channel: AbortableBroadcastChannel<Artifact>,
     change_set_producer: C,
     time_source: Arc<dyn TimeSource>,
     pool: Arc<RwLock<Pool>>,
     metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    Box<dyn JoinGuard>,
-) {
-    let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_validated().collect();
+) -> Box<dyn JoinGuard> {
+    let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();
     let client = Processor::new(pool, change_set_producer);
-    let (jh, sender) = run_artifact_processor(
+    let inbound_rx_stream = tokio_stream::wrappers::ReceiverStream::new(channel.inbound_rx);
+    run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
-        send_advert,
+        channel.outbound_tx,
+        inbound_rx_stream,
         inital_artifacts,
-    );
-    (sender, jh)
+    )
 }
 
-pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
+struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
     pool: Arc<RwLock<P>>,
     change_set_producer: C,
     unused: std::marker::PhantomData<A>,
@@ -307,10 +324,10 @@ pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
 impl<
         A: IdentifiableArtifact + Send,
         P: MutablePool<A>,
-        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+        C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
     > Processor<A, P, C>
 {
-    pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
+    fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
         Self {
             pool,
             change_set_producer,
@@ -322,7 +339,7 @@ impl<
 impl<
         A: IdentifiableArtifact + Send,
         P: MutablePool<A> + Send + Sync + 'static,
-        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+        C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
     > ArtifactProcessor<A> for Processor<A, P, C>
 {
     #[instrument(skip_all)]
@@ -330,7 +347,7 @@ impl<
         &self,
         time_source: &dyn TimeSource,
         artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
-    ) -> ChangeResult<A> {
+    ) -> ArtifactTransmits<A> {
         {
             let mut pool = self.pool.write().unwrap();
             for artifact_event in artifact_events {
@@ -350,28 +367,28 @@ impl<
         let change_set = self
             .change_set_producer
             .on_state_change(&self.pool.read().unwrap());
-        self.pool.write().unwrap().apply_changes(change_set)
+        self.pool.write().unwrap().apply(change_set)
     }
 }
 
 /// The ingress `OnStateChange` client.
-pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
+struct IngressProcessor<P: MutablePool<SignedIngress>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
     client: Arc<
-        dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
+        dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
             + Send
             + Sync,
     >,
 }
 
 impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
-    pub fn new(
+    fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
-            dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
+            dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
                 + Send
                 + Sync,
         >,
@@ -392,7 +409,7 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
         &self,
         time_source: &dyn TimeSource,
         artifact_events: Vec<UnvalidatedArtifactMutation<SignedIngress>>,
-    ) -> ChangeResult<SignedIngress> {
+    ) -> ArtifactTransmits<SignedIngress> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact_event in artifact_events {
@@ -412,24 +429,63 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
         let change_set = self
             .client
             .on_state_change(&self.ingress_pool.read().unwrap());
-        self.ingress_pool.write().unwrap().apply_changes(change_set)
+        self.ingress_pool.write().unwrap().apply(change_set)
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use std::{convert::Infallible, sync::Arc};
-
     use ic_interfaces::time_source::SysTimeSource;
     use ic_metrics::MetricsRegistry;
     use ic_types::artifact::UnvalidatedArtifactMutation;
+    use std::{convert::Infallible, sync::Arc};
+    use tokio::sync::mpsc::channel;
+    use tokio_stream::wrappers::ReceiverStream;
 
     use crate::{run_artifact_processor, ArtifactProcessor};
 
+    #[tokio::test]
+    async fn test_read_batch_with_closing_channel_after_consuming_all() {
+        let (tx, rx) = channel(100);
+        let mut rx_stream = ReceiverStream::new(rx);
+        let recv_timeout = Duration::from_secs(100);
+        tx.send(1).await.unwrap();
+        let pinned_rx_stream_1 = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(
+            read_batch(pinned_rx_stream_1, recv_timeout).await,
+            Some(vec![1])
+        );
+        tx.send(2).await.unwrap();
+        tx.send(3).await.unwrap();
+        let pinned_rx_stream_2 = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(
+            read_batch(pinned_rx_stream_2, recv_timeout).await,
+            Some(vec![2, 3])
+        );
+        std::mem::drop(tx);
+        let pinned_rx_stream_3 = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(read_batch(pinned_rx_stream_3, recv_timeout).await, None);
+    }
+
+    #[tokio::test]
+    async fn test_read_batch_with_closing_channel_before_consuming_all() {
+        let (tx, rx) = channel(100);
+        let mut rx_stream = ReceiverStream::new(rx);
+        let recv_timeout = Duration::from_secs(100);
+        tx.send(1).await.unwrap();
+        tx.send(2).await.unwrap();
+        std::mem::drop(tx);
+        let pinned_rx_stream = std::pin::Pin::new(&mut rx_stream);
+        assert_eq!(
+            read_batch(pinned_rx_stream, recv_timeout).await,
+            Some(vec![1, 2])
+        );
+    }
+
     #[test]
     fn send_initial_artifacts() {
-        #[derive(Debug, PartialEq, Eq)]
+        #[derive(Eq, PartialEq, Debug)]
         struct DummyArtifact(u64);
 
         impl From<u64> for DummyArtifact {
@@ -447,9 +503,7 @@ mod tests {
         impl IdentifiableArtifact for DummyArtifact {
             const NAME: &'static str = "dummy";
             type Id = ();
-            type Attribute = ();
             fn id(&self) -> Self::Id {}
-            fn attribute(&self) -> Self::Attribute {}
         }
 
         impl PbArtifact for DummyArtifact {
@@ -457,8 +511,6 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessage = u64;
             type PbMessageError = Infallible;
-            type PbAttribute = ();
-            type PbAttributeError = Infallible;
         }
 
         struct DummyProcessor;
@@ -467,10 +519,9 @@ mod tests {
                 &self,
                 _: &dyn TimeSource,
                 _: Vec<UnvalidatedArtifactMutation<DummyArtifact>>,
-            ) -> ChangeResult<DummyArtifact> {
-                ChangeResult {
-                    purged: Vec::new(),
-                    artifacts_with_opt: Vec::new(),
+            ) -> ArtifactTransmits<DummyArtifact> {
+                ArtifactTransmits {
+                    transmits: vec![],
                     poll_immediately: false,
                 }
             }
@@ -478,17 +529,22 @@ mod tests {
 
         let time_source = Arc::new(SysTimeSource::new());
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
-        run_artifact_processor::<DummyArtifact>(
+        let (_, inbound_rx) = tokio::sync::mpsc::channel(100);
+        run_artifact_processor::<
+            DummyArtifact,
+            ReceiverStream<UnvalidatedArtifactMutation<DummyArtifact>>,
+        >(
             time_source,
             MetricsRegistry::default(),
             Box::new(DummyProcessor),
             send_tx,
+            inbound_rx.into(),
             (0..10).map(Into::into).collect(),
         );
 
         for i in 0..10 {
             match send_rx.blocking_recv().unwrap() {
-                ArtifactProcessorEvent::Artifact(a) => {
+                ArtifactTransmit::Deliver(a) => {
                     assert_eq!(a.artifact.0, i);
                 }
                 _ => panic!("initial events are not purge"),

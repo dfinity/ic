@@ -3,14 +3,14 @@
 
 use assert_matches::assert_matches;
 use canister_test::{local_test_e, Canister, Runtime, Wasm};
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_test_utilities::stable_memory_reader::STABLE_MEMORY_READER_WAT;
 use ic_test_utilities::universal_canister::wasm as universal_canister_argument_builder;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use on_wire::bytes;
 
 async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
-    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
+    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
         .install(runtime)
         .bytes(Vec::new())
         .await

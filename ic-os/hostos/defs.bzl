@@ -32,6 +32,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:vsock_host": "/opt/ic/bin/vsock_host:0755",
             "//rs/ic_os/release:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
+            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
@@ -77,11 +78,14 @@ def image_deps(mode, _malicious = False):
 
     deps.update(image_variants[mode])
 
+    if "dev" in mode:
+        deps["rootfs"].update({"//ic-os/components:hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh": "/opt/ic/bin/generate-guestos-config.sh:0755"})
+
     return deps
 
 # Inject a step building an LVM partition. This depends on boot and root built
 # earlier in the pipeline, and is depended on by the final disk image.
-def _custom_partitions():
+def _custom_partitions(_):
     lvm_image(
         name = "partition-hostlvm.tzst",
         layout = Label("//ic-os/hostos:volumes.csv"),
@@ -93,7 +97,7 @@ def _custom_partitions():
         vg_name = "hostlvm",
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
-        tags = ["manual"],
+        tags = ["manual", "no-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],

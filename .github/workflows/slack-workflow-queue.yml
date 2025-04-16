@@ -12,10 +12,7 @@ on:
 jobs:
   check-queue:
     name: Check Workflow Wait Queue
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/minimal-runner-image:0.1
+    runs-on: ubuntu-latest
     steps:
 
       - name: Check for workflows in wait queue
@@ -43,7 +40,7 @@ jobs:
 
             # exclude workflows with long wait times
             WORKFLOW_NAME=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .name") # Extract name
-            if [ "$WORKFLOW_NAME" = "Schedule Daily" ]; then
+            if [ "$WORKFLOW_NAME" = "Schedule Rust Benchmarks" ]; then
               continue
             fi
 

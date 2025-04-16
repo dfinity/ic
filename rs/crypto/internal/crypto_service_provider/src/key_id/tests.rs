@@ -1,5 +1,7 @@
 use crate::KeyId;
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    EccCurveType, EccPoint, MEGaPublicKey,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
 
 #[test]
@@ -23,8 +25,10 @@ mod stability_tests {
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_2_PK;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_3_PK;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_4_PK;
-    use ic_crypto_internal_threshold_sig_ecdsa::PedersenCommitment;
-    use ic_crypto_internal_threshold_sig_ecdsa::{PolynomialCommitment, SimpleCommitment};
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::PedersenCommitment;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+        PolynomialCommitment, SimpleCommitment,
+    };
     use ic_crypto_internal_types::curves::bls12_381;
     use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
@@ -155,7 +159,7 @@ mod stability_tests {
         ];
 
         for test in &tests {
-            assert_matches!(KeyId::try_from(test.input), Ok(actual) if actual == test.expected_key_id())
+            assert_matches!(KeyId::from(test.input), actual if actual == test.expected_key_id())
         }
     }
 
@@ -193,7 +197,7 @@ mod stability_tests {
         ];
 
         for test in &tests {
-            assert_matches!(KeyId::try_from(&test.input), Ok(actual) if actual == test.expected_key_id())
+            assert_matches!(KeyId::from(&test.input), actual if actual == test.expected_key_id())
         }
     }
 
@@ -335,7 +339,7 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
         }];
 
         for test in &tests {
-            assert_matches!(KeyId::try_from(&test.input), Ok(key_id) if key_id == test.expected_key_id());
+            assert_matches!(KeyId::from(&test.input), key_id if key_id == test.expected_key_id());
         }
     }
 

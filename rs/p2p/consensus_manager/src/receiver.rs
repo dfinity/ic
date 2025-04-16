@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_methods)]
-
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
@@ -12,31 +10,32 @@ use crate::{
 use axum::{
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::any,
     Extension, Router,
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{Aborted, ArtifactAssembler, Peers};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, AssembleResult, Peers};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::p2p::v1 as pb;
-use ic_quic_transport::{ConnId, SubnetTopology};
+use ic_quic_transport::{ConnId, Shutdown, SubnetTopology};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
-use prost::Message;
+use prost::{DecodeError, Message};
 use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{Receiver, Sender, UnboundedSender},
+        mpsc::{Receiver, Sender},
         watch,
     },
     task::JoinSet,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
+type InboundSlotUpdatesSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
 
-#[allow(unused)]
 pub fn build_axum_router<Artifact: PbArtifact>(
     log: ReplicaLogger,
 ) -> (Router, Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>) {
@@ -53,43 +52,68 @@ pub fn build_axum_router<Artifact: PbArtifact>(
     (router, update_rx)
 }
 
+enum UpdateHandlerError<Artifact: PbArtifact> {
+    SlotUpdateDecoding(DecodeError),
+    IdDecoding(DecodeError),
+    IdPbConversion(Artifact::PbIdError),
+    MessageDecoding(DecodeError),
+    MessagePbConversion(Artifact::PbMessageError),
+    MissingUpdate,
+}
+
+impl<Artifact: PbArtifact> IntoResponse for UpdateHandlerError<Artifact> {
+    fn into_response(self) -> axum::response::Response {
+        let r = match self {
+            Self::SlotUpdateDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::IdDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::IdPbConversion(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MessageDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MessagePbConversion(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MissingUpdate => (StatusCode::BAD_REQUEST, "Missing update field".to_string()),
+        };
+        r.into_response()
+    }
+}
+
 async fn update_handler<Artifact: PbArtifact>(
-    State((log, sender)): State<(ReplicaLogger, ReceivedAdvertSender<Artifact>)>,
+    State((log, sender)): State<(ReplicaLogger, InboundSlotUpdatesSender<Artifact>)>,
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
-) -> Result<(), StatusCode> {
-    let pb_slot_update = pb::SlotUpdate::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+) -> Result<(), UpdateHandlerError<Artifact>> {
+    let pb_slot_update = pb::SlotUpdate::decode(payload)
+        .map_err(|e| UpdateHandlerError::SlotUpdateDecoding::<Artifact>(e))?;
 
     let update = SlotUpdate {
         commit_id: CommitId::from(pb_slot_update.commit_id),
         slot_number: SlotNumber::from(pb_slot_update.slot_id),
         update: match pb_slot_update.update {
-            Some(pb::slot_update::Update::Advert(advert)) => {
-                let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
-                    .map(|pb_id| pb_id.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                    .map_err(|_| StatusCode::BAD_REQUEST)??;
-                let attr: Artifact::Attribute =
-                    Artifact::PbAttribute::decode(advert.attribute.as_slice())
-                        .map(|pb_attr| pb_attr.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                        .map_err(|_| StatusCode::BAD_REQUEST)??;
-                Update::Advert((id, attr))
+            Some(pb::slot_update::Update::Id(id)) => {
+                let id: Artifact::Id = Artifact::PbId::decode(id.as_slice())
+                    .map_err(|e| UpdateHandlerError::IdDecoding(e))
+                    .and_then(|pb_id| {
+                        pb_id
+                            .try_into()
+                            .map_err(|e| UpdateHandlerError::IdPbConversion(e))
+                    })?;
+                Update::Id(id)
             }
             Some(pb::slot_update::Update::Artifact(artifact)) => {
                 let message: Artifact = Artifact::PbMessage::decode(artifact.as_slice())
-                    .map(|pb_msg| pb_msg.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                    .map_err(|e| UpdateHandlerError::MessageDecoding(e))
+                    .and_then(|pb_msg| {
+                        pb_msg
+                            .try_into()
+                            .map_err(|e| UpdateHandlerError::MessagePbConversion(e))
+                    })?;
                 Update::Artifact(message)
             }
-            None => return Err(StatusCode::BAD_REQUEST),
+            None => return Err(UpdateHandlerError::MissingUpdate),
         },
     };
 
     if sender.send((update, peer, conn_id)).await.is_err() {
-        error!(
-            log,
-            "Failed to send advert update from handler to event loop"
-        )
+        error!(log, "Failed to send slot update from handler to event loop")
     }
 
     Ok(())
@@ -144,43 +168,33 @@ impl PeerCounter {
     }
 }
 
-#[allow(unused)]
 pub(crate) struct ConsensusManagerReceiver<
     Artifact: IdentifiableArtifact,
-    WireArtifact: IdentifiableArtifact,
+    WireArtifact: IdentifiableArtifact + PbArtifact,
     Assembler,
-    ReceivedAdvert,
 > {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
 
     // Receive side:
-    adverts_received: Receiver<ReceivedAdvert>,
-    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
+    sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
+
     artifact_assembler: Assembler,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<WireArtifact::Id>>>,
     active_assembles: HashMap<WireArtifact::Id, watch::Sender<PeerCounter>>,
 
     #[allow(clippy::type_complexity)]
-    artifact_processor_tasks: JoinSet<(
-        watch::Receiver<PeerCounter>,
-        WireArtifact::Id,
-        WireArtifact::Attribute,
-    )>,
+    artifact_processor_tasks: JoinSet<(watch::Receiver<PeerCounter>, WireArtifact::Id)>,
 
     topology_watcher: watch::Receiver<SubnetTopology>,
+
+    slot_limit: usize,
 }
 
-#[allow(unused)]
-impl<Artifact, WireArtifact, Assembler>
-    ConsensusManagerReceiver<
-        Artifact,
-        WireArtifact,
-        Assembler,
-        (SlotUpdate<WireArtifact>, NodeId, ConnId),
-    >
+impl<Artifact, WireArtifact, Assembler> ConsensusManagerReceiver<Artifact, WireArtifact, Assembler>
 where
     Artifact: IdentifiableArtifact,
     WireArtifact: PbArtifact,
@@ -190,39 +204,52 @@ where
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
-        adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
+        slot_updates_rx: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
         artifact_assembler: Assembler,
-        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
         topology_watcher: watch::Receiver<SubnetTopology>,
-    ) {
+        slot_limit: usize,
+    ) -> Shutdown {
         let receive_manager = Self {
             log,
             metrics,
             rt_handle: rt_handle.clone(),
-            adverts_received,
+            slot_updates_rx,
             artifact_assembler,
             sender,
             active_assembles: HashMap::new(),
             slot_table: HashMap::new(),
             artifact_processor_tasks: JoinSet::new(),
             topology_watcher,
+            slot_limit,
         };
 
-        rt_handle.spawn(receive_manager.start_event_loop());
+        Shutdown::spawn_on_with_cancellation(
+            |cancellation| receive_manager.start_event_loop(cancellation),
+            &rt_handle,
+        )
     }
 
-    /// Event loop that processes advert updates and artifact assembles.
+    /// Event loop that processes slot updates and artifact assembles.
     /// The event loop preserves the invariants checked with `debug_assert`.
-    async fn start_event_loop(mut self) {
+    async fn start_event_loop(mut self, cancellation_token: CancellationToken) {
         loop {
             select! {
-                Some((advert_update, peer_id, conn_id)) = self.adverts_received.recv() => {
-                    self.handle_advert_receive(advert_update, peer_id, conn_id);
+                _ = cancellation_token.cancelled() => {
+                    error!(
+                        self.log,
+                        "Sender event loop for the P2P client `{:?}` terminated. No more slot updates will be sent for this client.",
+                        uri_prefix::<WireArtifact>()
+                    );
+                    break;
+                }
+                Some((slot_update, peer_id, conn_id)) = self.slot_updates_rx.recv() => {
+                    self.handle_slot_update_receive(slot_update, peer_id, conn_id, cancellation_token.clone());
                 }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
                     match result {
-                        Ok((receiver, id, attr)) => {
-                            self.handle_artifact_processor_joined(receiver, id, attr);
+                        Ok((receiver, id)) => {
+                            self.handle_artifact_processor_joined(receiver, id, cancellation_token.clone());
 
                         }
                         Err(err) => {
@@ -247,9 +274,9 @@ where
                 self.artifact_processor_tasks.len()
                     >= HashSet::<WireArtifact::Id>::from_iter(
                         self.slot_table
-                            .iter()
-                            .flat_map(|(k, v)| v.iter())
-                            .map(|(_, s)| s.id.clone())
+                            .values()
+                            .flat_map(HashMap::values)
+                            .map(|s| s.id.clone())
                     )
                     .len(),
                 "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
@@ -261,7 +288,7 @@ where
         &mut self,
         peer_rx: watch::Receiver<PeerCounter>,
         id: WireArtifact::Id,
-        attr: WireArtifact::Attribute,
+        cancellation_token: CancellationToken,
     ) {
         self.metrics.assemble_task_finished_total.inc();
         // Invariant: Peer sender should only be dropped in this task..
@@ -272,15 +299,15 @@ where
             self.metrics.assemble_task_restart_after_join_total.inc();
             self.metrics.assemble_task_started_total.inc();
             self.artifact_processor_tasks.spawn_on(
-                Self::process_advert(
+                Self::process_slot_update(
                     self.log.clone(),
                     id,
-                    attr,
                     None,
                     peer_rx,
                     self.sender.clone(),
                     self.artifact_assembler.clone(),
                     self.metrics.clone(),
+                    cancellation_token.clone(),
                 ),
                 &self.rt_handle,
             );
@@ -289,30 +316,31 @@ where
         }
         debug_assert!(
             self.slot_table
-                .iter()
-                .flat_map(|(k, v)| v.iter())
-                .all(|(k, v)| self.active_assembles.contains_key(&v.id)),
+                .values()
+                .flat_map(HashMap::values)
+                .all(|v| self.active_assembles.contains_key(&v.id)),
             "Every entry in the slot table should have an active assemble task."
         );
     }
 
     #[instrument(skip_all)]
-    pub(crate) fn handle_advert_receive(
+    pub(crate) fn handle_slot_update_receive(
         &mut self,
-        advert_update: SlotUpdate<WireArtifact>,
+        slot_update: SlotUpdate<WireArtifact>,
         peer_id: NodeId,
         connection_id: ConnId,
+        cancellation_token: CancellationToken,
     ) {
         self.metrics.slot_table_updates_total.inc();
         let SlotUpdate {
             slot_number,
             commit_id,
             update,
-        } = advert_update;
+        } = slot_update;
 
-        let (id, attribute, artifact) = match update {
-            Update::Artifact(artifact) => (artifact.id(), artifact.attribute(), Some(artifact)),
-            Update::Advert((id, attribute)) => (id, attribute, None),
+        let (id, artifact) = match update {
+            Update::Artifact(artifact) => (artifact.id(), Some(artifact)),
+            Update::Id(id) => (id, None),
         };
 
         if artifact.is_some() {
@@ -325,12 +353,9 @@ where
             id: id.clone(),
         };
 
-        let (to_add, to_remove) = match self
-            .slot_table
-            .entry(peer_id)
-            .or_default()
-            .entry(slot_number)
-        {
+        let peer_slot_table = self.slot_table.entry(peer_id).or_default();
+        let peer_slot_table_len = peer_slot_table.len();
+        let (to_add, to_remove) = match peer_slot_table.entry(slot_number) {
             Entry::Occupied(mut slot_entry_mut) => {
                 if slot_entry_mut.get().should_be_replaced(&new_slot_entry) {
                     self.metrics.slot_table_overwrite_total.inc();
@@ -341,13 +366,24 @@ where
                     (false, None)
                 }
             }
-            Entry::Vacant(empty_slot) => {
+            // Only insert slot update if we are below peer slot table limit.
+            Entry::Vacant(empty_slot) if peer_slot_table_len < self.slot_limit => {
                 empty_slot.insert(new_slot_entry);
                 self.metrics
                     .slot_table_new_entry_total
                     .with_label_values(&[peer_id.to_string().as_str()])
                     .inc();
                 (true, None)
+            }
+            Entry::Vacant(_) => {
+                self.metrics.slot_table_limit_exceeded_total.inc();
+                warn!(
+                    self.log,
+                    "Peer {} tries to exceed slot limit {}. Dropping slot update",
+                    peer_id,
+                    self.slot_limit
+                );
+                (false, None)
             }
         };
 
@@ -360,21 +396,21 @@ where
                 None => {
                     self.metrics.assemble_task_started_total.inc();
 
-                    let mut peer_counter = PeerCounter::new();
+                    let peer_counter = PeerCounter::new();
                     let (tx, rx) = watch::channel(peer_counter);
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_assembles.insert(id.clone(), tx);
 
                     self.artifact_processor_tasks.spawn_on(
-                        Self::process_advert(
+                        Self::process_slot_update(
                             self.log.clone(),
                             id.clone(),
-                            attribute,
                             artifact.map(|a| (a, peer_id)),
                             rx,
                             self.sender.clone(),
                             self.artifact_assembler.clone(),
                             self.metrics.clone(),
+                            cancellation_token.clone(),
                         ),
                         &self.rt_handle,
                     );
@@ -406,21 +442,17 @@ where
     /// This future waits for all peers that advertise the artifact to delete it.
     /// The artifact is deleted from the unvalidated pool upon completion.
     #[instrument(skip_all)]
-    async fn process_advert(
+    async fn process_slot_update(
         log: ReplicaLogger,
         id: WireArtifact::Id,
-        attr: WireArtifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
-        mut artifact: Option<(WireArtifact, NodeId)>,
+        artifact: Option<(WireArtifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
-        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-        mut artifact_assembler: Assembler,
+        sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
+        artifact_assembler: Assembler,
         metrics: ConsensusManagerMetrics,
-    ) -> (
-        watch::Receiver<PeerCounter>,
-        WireArtifact::Id,
-        WireArtifact::Attribute,
-    ) {
+        cancellation_token: CancellationToken,
+    ) -> (watch::Receiver<PeerCounter>, WireArtifact::Id) {
         let _timer = metrics.assemble_task_duration.start_timer();
 
         let mut peer_rx_clone = peer_rx.clone();
@@ -428,42 +460,52 @@ where
             loop {
                 match peer_rx_clone.changed().await {
                     Err(_) => break,
-                    Ok(x) if peer_rx_clone.borrow().is_empty() => break,
+                    Ok(_) if peer_rx_clone.borrow().is_empty() => break,
                     _ => {}
                 }
             }
         };
 
-        let mut peer_rx_c = peer_rx.clone();
+        let peer_rx_c = peer_rx.clone();
         let id_c = id.clone();
-        let attr_c = attr.clone();
         let assemble_artifact = async move {
             artifact_assembler
-                .assemble_message(id, attr, artifact, PeerWatcher::new(peer_rx_c))
+                .assemble_message(id, artifact, PeerWatcher::new(peer_rx_c))
                 .await
         };
 
         select! {
             assemble_result = assemble_artifact => {
                 match assemble_result {
-                    Ok((artifact, peer_id)) => {
-                        let id = artifact.id();
-                        // Send artifact to pool
-                        sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
+                    AssembleResult::Done { message, peer_id } => {
+                        let id = message.id();
+                        // Sends artifact to the pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
+                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
+                        // part of a select.
+                        if sender.send(UnvalidatedArtifactMutation::Insert((message, peer_id))).await.is_err() {
+
+                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                        }
 
                         // wait for deletion from peers
-                        peer_rx.wait_for(|p| p.is_empty()).await;
+                        // TODO: NET-1774
+                        let _ = peer_rx.wait_for(|p| p.is_empty()).await;
 
-                        // Purge from the unvalidated pool
-                        sender.send(UnvalidatedArtifactMutation::Remove(id));
+                        // Purge artifact from the unvalidated pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
+                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
+                        // part of a select.
+                        if sender.send(UnvalidatedArtifactMutation::Remove(id)).await.is_err() {
+                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                        }
                         metrics
                             .assemble_task_result_total
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_COMPLETED])
                             .inc();
                     }
-                    Err(Aborted) => {
+                    AssembleResult::Unwanted => {
                         // wait for deletion from peers
-                        peer_rx.wait_for(|p| p.is_empty()).await;
+                        // TODO: NET-1774
+                        let _ = peer_rx.wait_for(|p| p.is_empty()).await;
                         metrics
                             .assemble_task_result_total
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_DROP])
@@ -471,6 +513,8 @@ where
 
                     },
                 }
+            }
+            _ = cancellation_token.cancelled() => {
             }
             _ = all_peers_deleted_artifact => {
                 metrics
@@ -480,7 +524,7 @@ where
             },
         };
 
-        (peer_rx, id_c, attr_c)
+        (peer_rx, id_c)
     }
 
     /// Notifies all running tasks about the topology update.
@@ -492,7 +536,8 @@ where
         self.slot_table.retain(|node_id, _| {
             if !new_topology.is_member(node_id) {
                 nodes_leaving_topology.insert(*node_id);
-                self.metrics
+                let _ = self
+                    .metrics
                     .slot_table_new_entry_total
                     .remove_label_values(&[node_id.to_string().as_str()]);
                 false
@@ -502,12 +547,8 @@ where
         });
 
         for peers_sender in self.active_assembles.values() {
-            peers_sender.send_if_modified(|set| {
-                nodes_leaving_topology
-                    .iter()
-                    .map(|n| set.remove(*n))
-                    .any(|r| r)
-            });
+            peers_sender
+                .send_if_modified(|set| nodes_leaving_topology.iter().any(|n| set.remove(*n)));
         }
         debug_assert!(
             self.slot_table.len() <= self.topology_watcher.borrow().iter().count(),
@@ -516,6 +557,7 @@ where
     }
 }
 
+#[derive(Clone)]
 struct PeerWatcher(watch::Receiver<PeerCounter>);
 
 impl PeerWatcher {
@@ -530,7 +572,7 @@ impl Peers for PeerWatcher {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 struct SlotEntry<T> {
     conn_id: ConnId,
     commit_id: CommitId,
@@ -549,7 +591,7 @@ impl<T> SlotEntry<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::{backtrace::Backtrace, convert::Infallible, time::Duration};
+    use std::{convert::Infallible, time::Duration};
 
     use axum::{body::Body, http::Request};
     use ic_logger::replica_logger::no_op_logger;
@@ -558,7 +600,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
-    use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
+    use tokio::time::timeout;
     use tower::util::ServiceExt;
 
     use super::*;
@@ -566,24 +608,21 @@ mod tests {
     const PROCESS_ARTIFACT_TIMEOUT: Duration = Duration::from_millis(1000);
 
     struct ReceiverManagerBuilder {
-        // Adverts received from peers
-        adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
-        sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
+        // Slot updates received from peers
+        slot_updates_rx: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
+        sender: Sender<UnvalidatedArtifactMutation<U64Artifact>>,
         artifact_assembler: MockArtifactAssembler,
         topology_watcher: watch::Receiver<SubnetTopology>,
+        slot_limit: usize,
 
         channels: Channels,
     }
 
-    type ConsensusManagerReceiverForTest = ConsensusManagerReceiver<
-        U64Artifact,
-        U64Artifact,
-        MockArtifactAssembler,
-        (SlotUpdate<U64Artifact>, NodeId, ConnId),
-    >;
+    type ConsensusManagerReceiverForTest =
+        ConsensusManagerReceiver<U64Artifact, U64Artifact, MockArtifactAssembler>;
 
     struct Channels {
-        unvalidated_artifact_receiver: UnboundedReceiver<UnvalidatedArtifactMutation<U64Artifact>>,
+        unvalidated_artifact_receiver: Receiver<UnvalidatedArtifactMutation<U64Artifact>>,
     }
 
     impl ReceiverManagerBuilder {
@@ -598,17 +637,18 @@ mod tests {
         }
 
         fn new() -> Self {
-            let (_, adverts_received) = tokio::sync::mpsc::channel(100);
-            let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (_, slot_updates_rx) = tokio::sync::mpsc::channel(100);
+            let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::channel(1000);
             let (_, topology_watcher) = watch::channel(SubnetTopology::default());
             let artifact_assembler =
                 Self::make_mock_artifact_assembler_with_clone(MockArtifactAssembler::default);
 
             Self {
-                adverts_received,
+                slot_updates_rx,
                 sender,
                 topology_watcher,
                 artifact_assembler,
+                slot_limit: usize::MAX,
                 channels: Channels {
                     unvalidated_artifact_receiver,
                 },
@@ -620,6 +660,11 @@ mod tests {
             topology_watcher: watch::Receiver<SubnetTopology>,
         ) -> Self {
             self.topology_watcher = topology_watcher;
+            self
+        }
+
+        fn with_slot_limit(mut self, slot_limit: usize) -> Self {
+            self.slot_limit = slot_limit;
             self
         }
 
@@ -639,40 +684,35 @@ mod tests {
                         &MetricsRegistry::default(),
                     ),
                     rt_handle: Handle::current(),
-                    adverts_received: self.adverts_received,
+                    slot_updates_rx: self.slot_updates_rx,
                     sender: self.sender,
                     artifact_assembler: self.artifact_assembler,
                     topology_watcher: self.topology_watcher,
                     active_assembles: HashMap::new(),
                     slot_table: HashMap::new(),
                     artifact_processor_tasks: JoinSet::new(),
+                    slot_limit: self.slot_limit,
                 });
 
             (consensus_manager_receiver, self.channels)
         }
     }
 
-    /// Check that all variants of stale adverts to not get added to the slot table.
+    /// Check that all variants of stale slot updates to not get added to the slot table.
     #[tokio::test]
-    async fn receiving_stale_advert_updates() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
+    async fn receiving_stale_slot_updates() {
         let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
 
-        mgr.handle_advert_receive(
+        let cancellation = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         assert_eq!(
             mgr.slot_table
@@ -690,15 +730,16 @@ mod tests {
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
         assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        // Send stale advert with lower commit id.
-        mgr.handle_advert_receive(
+        // Send stale slot update with lower commit id.
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         // Check that slot table did not get updated.
         assert_eq!(
@@ -713,15 +754,16 @@ mod tests {
                 id: 0,
             }
         );
-        // Send stale advert with lower conn id
-        mgr.handle_advert_receive(
+        // Send stale slot update with lower conn id
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
+            cancellation.clone(),
         );
         // Check that slot table did not get updated.
         assert_eq!(
@@ -736,15 +778,16 @@ mod tests {
                 id: 0,
             }
         );
-        // Send stale advert with lower conn id but higher commit id
-        mgr.handle_advert_receive(
+        // Send stale slot update with lower conn id but higher commit id
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(10),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
+            cancellation.clone(),
         );
         // Check that slot table did not get updated.
         assert_eq!(
@@ -759,15 +802,16 @@ mod tests {
                 id: 0,
             }
         );
-        // Send stale advert with lower conn id and lower commit id
-        mgr.handle_advert_receive(
+        // Send stale slot update with lower conn id and lower commit id
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
+            cancellation.clone(),
         );
         // Check that slot table did not get updated.
         assert_eq!(
@@ -788,40 +832,81 @@ mod tests {
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
     }
 
-    /// Check that adverts updates with higher connection ids take precedence.
+    #[tokio::test]
+    async fn slot_table_limit_exceeded() {
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().with_slot_limit(2).build();
+        let cancellation = CancellationToken::new();
+
+        mgr.handle_slot_update_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Id(0),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        mgr.handle_slot_update_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(2),
+                commit_id: CommitId::from(2),
+                update: Update::Id(1),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 2);
+        assert_eq!(mgr.active_assembles.len(), 2);
+        // Send slot update that exceeds limit
+        mgr.handle_slot_update_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(3),
+                commit_id: CommitId::from(3),
+                update: Update::Id(2),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 2);
+        assert_eq!(mgr.active_assembles.len(), 2);
+    }
+
+    /// Check that slot updates with higher connection ids take precedence.
     #[tokio::test]
     async fn overwrite_slot1() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
         fn make_artifact_assembler() -> MockArtifactAssembler {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                .returning(|id, _, _: PeerWatcher| {
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_artifact_assembler_maker(make_artifact_assembler)
             .build();
-
-        mgr.handle_advert_receive(
+        let cancellation = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
-        // Verify that advert is correctly inserted into slot table.
+        // Verify that slot update is correctly inserted into slot table.
         assert_eq!(
             mgr.slot_table
                 .get(&NODE_1)
@@ -838,15 +923,16 @@ mod tests {
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
         assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        // Send advert with higher conn id.
-        mgr.handle_advert_receive(
+        // Send slot update with higher conn id.
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(2),
+            cancellation.clone(),
         );
         // Verify that slot table now only contains newer entry.
         assert_eq!(
@@ -870,44 +956,42 @@ mod tests {
             .expect("Joining artifact processor task failed")
             .expect("Artifact processor task panicked");
 
-        // Check that assemble task for first advert closes.
+        // Check that assemble task for first slot closes.
         assert_eq!(result.1, 0);
     }
 
-    /// Check that adverts updates with higher connection ids take precedence.
+    /// Check that slot updates with higher connection ids take precedence.
     #[tokio::test]
     async fn overwrite_slot_send_remove() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
         fn make_artifact_assembler() -> MockArtifactAssembler {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                .returning(|id, _, _: PeerWatcher| {
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
         let (mut mgr, mut channels) = ReceiverManagerBuilder::new()
             .with_artifact_assembler_maker(make_artifact_assembler)
             .build();
-
-        mgr.handle_advert_receive(
+        let cancellation = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
-        // Verify that advert is correctly inserted into slot table.
+        // Verify that slot updates is correctly inserted into slot table.
         assert_eq!(
             mgr.slot_table
                 .get(&NODE_1)
@@ -929,15 +1013,16 @@ mod tests {
             UnvalidatedArtifactMutation::Insert((U64Artifact::id_to_msg(0, 100), NODE_1))
         );
 
-        // Send advert with higher conn id.
-        mgr.handle_advert_receive(
+        // Send slot update with higher conn id.
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(2),
+            cancellation.clone(),
         );
         // Verify that slot table now only contains newer entry.
         assert_eq!(
@@ -973,41 +1058,35 @@ mod tests {
                     && receiver_unvalidated_1 == UnvalidatedArtifactMutation::Remove(0))
         );
 
-        // Check that assemble task for first advert closes.
+        // Check that assemble task for first slot closes.
         assert_eq!(result.1, 0);
     }
 
-    /// Verify that if two peers advertise the same advert it will get added to the same assemble task.
+    /// Verify that if two peers send the same slot content it will get added to the same assemble task.
     #[tokio::test]
-    async fn two_peers_advertise_same_advert() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
+    async fn two_peers_send_same_slot_content() {
         let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
-
-        mgr.handle_advert_receive(
+        let cancellation = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
-        // Second advert for advert 0.
-        mgr.handle_advert_receive(
+        // Second slot update for slot 1.
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
+            cancellation.clone(),
         );
         // Verify that we only have one assemble task.
         assert_eq!(mgr.slot_table.len(), 2);
@@ -1018,103 +1097,97 @@ mod tests {
 
     /// Verify that a new assemble task is started if we receive a new update for an already finished assemble.
     #[tokio::test]
-    async fn new_advert_while_assemble_finished() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
+    async fn new_slot_update_while_assemble_finished() {
         fn make_artifact_assembler() -> MockArtifactAssembler {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                .returning(|id, _, _: PeerWatcher| {
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_artifact_assembler_maker(make_artifact_assembler)
             .build();
-
-        mgr.handle_advert_receive(
+        let cancellation = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
-        // Overwrite advert to close the assemble task.
-        mgr.handle_advert_receive(
+        // Overwrite slot content to close the assemble task.
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         // Check that the assemble task is closed.
-        let (peer_rx, id, attr) = mgr
+        let (peer_rx, id) = mgr
             .artifact_processor_tasks
             .join_next()
             .await
             .unwrap()
             .unwrap();
-        // Simulate that a new peer was added for this advert while closing.
-        mgr.handle_advert_receive(
+        // Simulate that a new peer was added for this slot while closing.
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
+            cancellation.clone(),
         );
         assert_eq!(mgr.active_assembles.len(), 2);
-        // Verify that we reopened the assemble task for advert 0.
-        mgr.handle_artifact_processor_joined(peer_rx, id, attr);
+        // Verify that we reopened the assemble task for artifact ID 0.
+        mgr.handle_artifact_processor_joined(peer_rx, id, cancellation.clone());
         assert_eq!(mgr.active_assembles.len(), 2);
     }
 
     /// Verify that slot table is pruned if node leaves subnet.
     #[tokio::test]
     async fn topology_update() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
         let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_topology_watcher(pfn_rx)
             .build();
-
-        mgr.handle_advert_receive(
+        let cancellation = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
+            cancellation.clone(),
         );
         let addr = "127.0.0.1:8080".parse().unwrap();
         // Send current topology of two nodes.
@@ -1158,22 +1231,19 @@ mod tests {
     /// Verify that if node leaves subnet all assemble tasks are informed.
     #[tokio::test]
     async fn topology_update_finish_assemble() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
         let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
 
         fn make_artifact_assembler() -> MockArtifactAssembler {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                .returning(|id, _, _: PeerWatcher| {
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
@@ -1181,15 +1251,16 @@ mod tests {
             .with_artifact_assembler_maker(make_artifact_assembler)
             .with_topology_watcher(pfn_rx)
             .build();
-
-        mgr.handle_advert_receive(
+        let cancellation = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         assert_eq!(mgr.active_assembles.len(), 1);
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
@@ -1215,57 +1286,57 @@ mod tests {
 
     #[tokio::test]
     /// Advertise same id on different slots and overwrite both slots with new ids.
-    async fn duplicate_advert_on_different_slots() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
+    async fn duplicate_ids_on_different_slots() {
         fn make_artifact_assembler() -> MockArtifactAssembler {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                .returning(|id, _, _: PeerWatcher| {
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_artifact_assembler_maker(make_artifact_assembler)
             .build();
-
+        let cancellation: CancellationToken = CancellationToken::new();
         // Add id 0 on slot 1.
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         // Add id 0 on slot 2.
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         // Overwrite id 0 on slot 1.
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
 
         // Make sure no assemble task closes since we still have slot entries for 0 and 1.
@@ -1278,14 +1349,15 @@ mod tests {
 
         assert_eq!(mgr.artifact_processor_tasks.len(), 2);
         // Overwrite remaining id 0 at slot 2.
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(4),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
 
         // Make sure the assemble task for 0 closes since both entries got overwritten.
@@ -1305,44 +1377,43 @@ mod tests {
     #[tokio::test]
     /// Advertise same id on different slots where one slot is occupied.
     async fn same_id_different_occupied_slot() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
         fn make_artifact_assembler() -> MockArtifactAssembler {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                .returning(|id, _, _: PeerWatcher| {
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_artifact_assembler_maker(make_artifact_assembler)
             .build();
-
-        mgr.handle_advert_receive(
+        let cancellation: CancellationToken = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         assert_eq!(mgr.artifact_processor_tasks.len(), 2);
 
@@ -1355,14 +1426,15 @@ mod tests {
         .unwrap_err();
 
         // Overwrite id 1 with id 0.
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         // Only assemble task 1 closes because it got overwritten.
         tokio::time::timeout(Duration::from_millis(100), async {
@@ -1379,35 +1451,33 @@ mod tests {
     #[tokio::test]
     /// Advertise same id on same slots. This should be a noop where only the commit id and connection id get updated.
     async fn same_id_same_slot() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
-
         fn make_artifact_assembler() -> MockArtifactAssembler {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
-                    Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
+                .returning(|id, _, _: PeerWatcher| {
+                    Box::pin(async move {
+                        AssembleResult::Done {
+                            message: U64Artifact::id_to_msg(id, 100),
+                            peer_id: NODE_1,
+                        }
+                    })
                 });
             artifact_assembler
         }
         let (mut mgr, _channels) = ReceiverManagerBuilder::new()
             .with_artifact_assembler_maker(make_artifact_assembler)
             .build();
-
-        mgr.handle_advert_receive(
+        let cancellation: CancellationToken = CancellationToken::new();
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         assert_eq!(
             mgr.slot_table
@@ -1422,14 +1492,15 @@ mod tests {
             }
         );
         // Advertise id 0 again on same slot.
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
 
         // Make sure no assemble task closes since we still have entry for 0.
@@ -1460,14 +1531,15 @@ mod tests {
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
 
         // Overwrite id 0.
-        mgr.handle_advert_receive(
+        mgr.handle_slot_update_receive(
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((2, ())),
+                update: Update::Id(2),
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
 
         // Make sure the assemble task for 0 closes.
@@ -1493,14 +1565,12 @@ mod tests {
     async fn large_artifact() {
         use ic_protobuf::p2p::v1 as pb;
 
-        #[derive(PartialEq, Eq, Debug, Clone)]
+        #[derive(Clone, Eq, PartialEq, Debug)]
         pub struct BigArtifact(Vec<u8>);
         impl IdentifiableArtifact for BigArtifact {
             const NAME: &'static str = "big";
             type Id = ();
-            type Attribute = ();
             fn id(&self) -> Self::Id {}
-            fn attribute(&self) -> Self::Attribute {}
         }
         impl From<BigArtifact> for Vec<u8> {
             fn from(value: BigArtifact) -> Self {
@@ -1517,9 +1587,7 @@ mod tests {
             type PbMessage = Vec<u8>;
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
-            type PbAttributeError = Infallible;
             type PbId = ();
-            type PbAttribute = ();
         }
 
         let (router, mut update_rx) = build_axum_router::<BigArtifact>(no_op_logger());

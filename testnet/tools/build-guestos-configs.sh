@@ -179,16 +179,14 @@ function prepare_build_directories() {
 }
 
 function download_registry_canisters() {
-    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+    "${REPO_ROOT}"/ci/src/artifacts/rclone_download.py \
         --git-rev "${GIT_REVISION}" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
-
-    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
 
     rsync -a --delete "${IC_PREP_DIR}/canisters/" "${OUTPUT}/canisters/"
 }
 
 function download_binaries() {
-    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+    "${REPO_ROOT}"/ci/src/artifacts/rclone_download.py \
         --git-rev "${GIT_REVISION}" --remote-path=release --out="${IC_PREP_DIR}/bin"
 
     find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
@@ -273,7 +271,7 @@ function generate_prep_material() {
 
 function build_bootstrap_images() {
     # Collect NNS URLs
-    NNS_URL=()
+    NNS_URLS=()
     for n in ${NODES}; do
         declare -n NODE=$n
         local ipv6_address=${NODE["ipv6_address"]}
@@ -284,11 +282,11 @@ function build_bootstrap_images() {
             continue
         fi
 
-        NNS_URL+=("http://[${ipv6_address}]:8080")
+        NNS_URLS+=("http://[${ipv6_address}]:8080")
     done
-    NNS_URL=$(
+    NNS_URLS=$(
         IFS=,
-        echo "${NNS_URL[*]}"
+        echo "${NNS_URLS[*]}"
     )
 
     for n in ${NODES}; do
@@ -320,8 +318,9 @@ function build_bootstrap_images() {
             "${OUTPUT}/${NODE_PREFIX}.img" \
             ${root_subnet:+"--ic_registry_local_store"} ${root_subnet:+"${IC_PREP_DIR}/ic_registry_local_store"} \
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
-            "--nns_url" "${NNS_URL}" \
+            "--nns_urls" "${NNS_URLS}" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
+            "--node_reward_type type3.1" \
             "--hostname" "${hostname}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
             ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \

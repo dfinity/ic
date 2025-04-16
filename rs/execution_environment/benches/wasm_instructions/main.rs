@@ -6,14 +6,16 @@
 //!     bazel run //rs/execution_environment:wasm_instructions_bench -- --sample-size 10 i32.div
 //!
 
+use std::time::Duration;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::common;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
@@ -32,9 +34,10 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     // Benchmark function.
     common::run_benchmarks(
         c,
-        "wasm_instructions",
+        "execution_environment:wasm_instructions",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |_id: &str,
+         exec_env: &ExecutionEnvironment,
          _expected_iterations,
          common::BenchmarkArgs {
              canister_state,
@@ -43,6 +46,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
              network_topology,
              execution_parameters,
              subnet_available_memory,
+             subnet_available_callbacks,
              ..
          }| {
             let mut round_limits = RoundLimits {
@@ -50,6 +54,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
                     execution_parameters.instruction_limits.message(),
                 ),
                 subnet_available_memory,
+                subnet_available_callbacks,
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
@@ -84,5 +89,12 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, wasm_instructions_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default()
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(1))
+        .sample_size(10);
+    targets = wasm_instructions_bench
+}
 criterion_main!(benchmarks);

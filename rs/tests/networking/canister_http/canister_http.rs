@@ -23,6 +23,8 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
+const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
+
 pub enum PemType {
     PemCert,
     PemKey,
@@ -51,31 +53,48 @@ pub fn install_nns_canisters(env: &TestEnv) {
 }
 
 pub fn setup(env: TestEnv) {
-    // Set up Universal VM with HTTP Bin testing service
-    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-        ))
-        .enable_ipv4()
-        .start(&env)
-        .expect("failed to set up universal VM");
+    std::thread::scope(|s| {
+        // Set up IC with 1 system subnet and 4 application subnets
+        s.spawn(|| {
+            InternetComputer::new()
+                .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+                .add_subnet(
+                    Subnet::new(SubnetType::Application)
+                        .with_features(SubnetFeatures {
+                            http_requests: true,
+                            ..SubnetFeatures::default()
+                        })
+                        .add_nodes(4),
+                )
+                .setup_and_start(&env)
+                .expect("failed to setup IC under test");
 
-    start_httpbin_on_uvm(&env);
+            await_nodes_healthy(&env);
 
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(4),
-        )
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-    await_nodes_healthy(&env);
-    install_nns_canisters(&env);
+            s.spawn(|| {
+                install_nns_canisters(&env);
+            });
+            s.spawn(|| {
+                // Get application subnet node to deploy canister to.
+                let mut nodes = get_node_snapshots(&env);
+                let node = nodes.next().expect("there is no application node");
+                let runtime = get_runtime_from_node(&node);
+                let _ = create_proxy_canister(&env, &runtime, &node);
+            });
+        });
+        // Set up Universal VM with HTTP Bin testing service
+        s.spawn(|| {
+            UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+                .with_config_img(get_dependency_path(
+                    "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+                ))
+                .enable_ipv4()
+                .start(&env)
+                .expect("failed to set up universal VM");
+
+            start_httpbin_on_uvm(&env);
+        });
+    });
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
@@ -136,10 +155,9 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
 
         echo "Making certs directory in $(pwd) ..."
         docker load -i /config/minica.tar
-        docker tag bazel/image:image minica
         docker run \
             -v "$(pwd)":/output \
-            minica \
+            minica:image \
             -ip-addresses="$ipv6${{ipv4:+,$ipv4}}"
 
         echo "Updating service certificate folder name so it can be fed to ssl-proxy container ..."
@@ -147,15 +165,14 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         sudo chmod -R 755 ipv6
 
         echo "Setting up httpbin on port 20443 ..."
-        docker load -i /config/httpbin_image.tar
-        docker tag bazel/rs/tests/httpbin-rs:httpbin_image httpbin
+        docker load -i /config/httpbin.tar
         sudo docker run \
             --rm \
             -d \
             -p 20443:80 \
             -v "$(pwd)/ipv6":/certs \
             --name httpbin \
-            httpbin \
+            httpbin:image \
             --cert-file /certs/cert.pem --key-file /certs/key.pem --port 80
     "#
         ))
@@ -182,10 +199,11 @@ pub fn get_runtime_from_node(node: &IcNodeSnapshot) -> Runtime {
     util::runtime_from_url(node.get_public_url(), node.effective_canister_id())
 }
 
-pub fn create_proxy_canister<'a>(
+pub fn create_proxy_canister_with_name<'a>(
     env: &TestEnv,
     runtime: &'a Runtime,
     node: &IcNodeSnapshot,
+    canister_name: &str,
 ) -> Canister<'a> {
     info!(&env.logger(), "Installing proxy_canister.");
 
@@ -200,8 +218,28 @@ pub fn create_proxy_canister<'a>(
         &env.logger(),
         "proxy_canister {} installed", proxy_canister_id
     );
-    Canister::new(
-        runtime,
-        CanisterId::unchecked_from_principal(PrincipalId::from(proxy_canister_id)),
-    )
+
+    let principal_id = PrincipalId::from(proxy_canister_id);
+
+    // write proxy canister id to TestEnv
+    env.write_json_object(canister_name, &principal_id)
+        .expect("Could not write proxy canister id to TestEnv.");
+
+    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+pub fn create_proxy_canister<'a>(
+    env: &TestEnv,
+    runtime: &'a Runtime,
+    node: &IcNodeSnapshot,
+) -> Canister<'a> {
+    create_proxy_canister_with_name(env, runtime, node, PROXY_CANISTER_ID_PATH)
+}
+
+pub fn get_proxy_canister_id_with_name(env: &TestEnv, name: &str) -> PrincipalId {
+    env.read_json_object(name)
+        .expect("Proxy canister should should .")
+}
+
+pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
+    get_proxy_canister_id_with_name(env, PROXY_CANISTER_ID_PATH)
 }

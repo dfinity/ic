@@ -4,7 +4,7 @@ use ic_btc_replica_types::{
     GetSuccessorsResponseComplete, GetSuccessorsResponsePartial,
 };
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
+use ic_management_canister_types_private::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
 use ic_types::{
     batch::ConsensusResponse,
     messages::{CallbackId, Payload, RejectContext},
@@ -103,7 +103,7 @@ pub fn push_response(
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum SplitError {
     NotOneBlock,
     ResponseTooLarge,

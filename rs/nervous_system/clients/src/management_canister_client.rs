@@ -6,7 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use candid::Encode;
 use ic_error_types::RejectCode;
-use ic_management_canister_types::IC_00;
+use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_runtime::Runtime;
 use std::{
@@ -93,7 +93,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
     }
 
     fn canister_version(&self) -> Option<u64> {
-        Some(dfn_core::api::canister_version())
+        Some(Rt::canister_version())
     }
 }
 
@@ -223,6 +223,7 @@ impl MockManagementCanisterClient {
         self.calls.lock().unwrap().clone().into()
     }
 
+    #[track_caller]
     pub fn assert_all_replies_consumed(&self) {
         assert!(self.replies.lock().unwrap().is_empty())
     }
@@ -232,13 +233,13 @@ impl MockManagementCanisterClient {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum MockManagementCanisterClientCall {
     CanisterStatus(CanisterIdRecord),
     UpdateSettings(UpdateSettings),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),

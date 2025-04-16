@@ -9,12 +9,14 @@ use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
-use strum_macros::EnumIter;
+use strum_macros::EnumCount;
 use thiserror::Error;
 
 pub mod config;
@@ -29,15 +31,89 @@ pub use id::NiDkgId;
 #[cfg(test)]
 mod tests;
 
-/// Allows to distinguish protocol executions in high and low threshold
-/// settings.
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, EnumIter,
-)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, EnumCount, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum NiDkgMasterPublicKeyId {
+    VetKd(VetKdKeyId),
+}
+
+impl From<NiDkgMasterPublicKeyId> for MasterPublicKeyId {
+    fn from(val: NiDkgMasterPublicKeyId) -> Self {
+        match val {
+            NiDkgMasterPublicKeyId::VetKd(k) => MasterPublicKeyId::VetKd(k),
+        }
+    }
+}
+
+impl TryFrom<MasterPublicKeyId> for NiDkgMasterPublicKeyId {
+    type Error = &'static str;
+
+    fn try_from(value: MasterPublicKeyId) -> Result<Self, Self::Error> {
+        match value {
+            MasterPublicKeyId::VetKd(vet_kd_key_id) => {
+                Ok(NiDkgMasterPublicKeyId::VetKd(vet_kd_key_id))
+            }
+            MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => {
+                Err("This is not a NiDkg key")
+            }
+        }
+    }
+}
+
+impl From<&NiDkgMasterPublicKeyId> for pb::MasterPublicKeyId {
+    fn from(item: &NiDkgMasterPublicKeyId) -> Self {
+        Self {
+            key_id: Some(match item {
+                NiDkgMasterPublicKeyId::VetKd(vetkd_key_id) => {
+                    pb::master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId::from(vetkd_key_id))
+                }
+            }),
+        }
+    }
+}
+
+impl TryFrom<pb::MasterPublicKeyId> for NiDkgMasterPublicKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb::MasterPublicKeyId) -> Result<Self, Self::Error> {
+        use pb::master_public_key_id::KeyId;
+        let Some(key_id_pb) = item.key_id else {
+            return Err(ProxyDecodeError::MissingField("MasterPublicKeyId::key_id"));
+        };
+        Ok(match key_id_pb {
+            KeyId::Vetkd(vetkd_key_id_pb) => {
+                NiDkgMasterPublicKeyId::VetKd(VetKdKeyId::try_from(vetkd_key_id_pb)?)
+            }
+            KeyId::Ecdsa(_) | KeyId::Schnorr(_) => {
+                return Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "NiDkgMasterPublicKeyId",
+                    err: format!(
+                        "Unable to convert {:?} to a NiDkgMasterPublicKeyId",
+                        key_id_pb
+                    ),
+                });
+            }
+        })
+    }
+}
+
+impl fmt::Display for NiDkgMasterPublicKeyId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&MasterPublicKeyId::from(self.clone()), f)
+    }
+}
+
+/// Allows to distinguish NI-DKG protocol executions for different purposes:
+/// * LowThreshold: generate a transcript with a low threshold,
+/// * HighThreshold: generate a transcript with a high threshold,
+/// * HighThresholdForKey: generate a transcript with a high threshold for
+///   a master public key with a particular ID
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumCount, Serialize)]
+#[repr(isize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
+    HighThresholdForKey(NiDkgMasterPublicKeyId) = 3,
 }
 
 impl From<&NiDkgTag> for pb::NiDkgTag {
@@ -45,12 +121,15 @@ impl From<&NiDkgTag> for pb::NiDkgTag {
         match tag {
             NiDkgTag::LowThreshold => pb::NiDkgTag::LowThreshold,
             NiDkgTag::HighThreshold => pb::NiDkgTag::HighThreshold,
+            NiDkgTag::HighThresholdForKey(_master_public_key_id) => {
+                pb::NiDkgTag::HighThresholdForKey
+            }
         }
     }
 }
 
 /// The subnet for which the DKG generates keys.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTargetSubnet {
     /// `Local` means the subnet creates keys for itself.
@@ -70,7 +149,7 @@ pub enum NiDkgTargetSubnet {
 ///
 /// Please refer to the rustdoc of `NiDkgTargetSubnet::Remote` for an
 /// explanation of why this is needed.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgTargetId([u8; NiDkgTargetId::SIZE]);
 ic_crypto_internal_types::derive_serde!(NiDkgTargetId, NiDkgTargetId::SIZE);
@@ -102,20 +181,8 @@ impl fmt::Display for NiDkgTargetSubnet {
     }
 }
 
-impl TryFrom<i32> for NiDkgTag {
-    type Error = ();
-
-    fn try_from(ni_dkg_tag: i32) -> Result<Self, Self::Error> {
-        match ni_dkg_tag {
-            1 => Ok(NiDkgTag::LowThreshold),
-            2 => Ok(NiDkgTag::HighThreshold),
-            _ => Err(()),
-        }
-    }
-}
-
 /// A dealer's contribution (called dealing) to distributed key generation.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgDealing {
     pub internal_dealing: CspNiDkgDealing,
 }
@@ -148,14 +215,14 @@ impl From<NiDkgDealing> for CspNiDkgDealing {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum ThresholdSigPublicKeyError {
     #[error("threshold signature public key coefficients empty")]
     CoefficientsEmpty,
 }
 
 /// Summarizes a distributed key generation.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgTranscript {
     pub dkg_id: NiDkgId,
     pub threshold: NiDkgThreshold,
@@ -174,7 +241,7 @@ impl From<&NiDkgTranscript> for CspPublicCoefficients {
 impl From<&NiDkgTranscript> for pb::NiDkgTranscript {
     fn from(transcript: &NiDkgTranscript) -> Self {
         Self {
-            dkg_id: Some(pb::NiDkgId::from(transcript.dkg_id)),
+            dkg_id: Some(pb::NiDkgId::from(transcript.dkg_id.clone())),
             threshold: transcript.threshold.get().get(),
             committee: transcript
                 .committee

@@ -1,0 +1,54 @@
+[package]
+name = "ic_crypto_system_tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-fstrim-tool = { path = "../../ic_os/fstrim_tool" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+ic-types = { path = "../../types/types" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
+k256 = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "canister_sig_verification_cache_test"
+path = "canister_sig_verification_cache_test.rs"
+
+[[bin]]
+name = "ic_crypto_csp_metrics_test"
+path = "ic_crypto_csp_metrics_test.rs"
+
+[[bin]]
+name = "ic_crypto_csp_socket_test"
+path = "ic_crypto_csp_socket_test.rs"
+
+[[bin]]
+name = "ic_crypto_csp_umask_test"
+path = "ic_crypto_csp_umask_test.rs"
+
+[[bin]]
+name = "ic_crypto_fstrim_tool_test"
+path = "ic_crypto_fstrim_tool_test.rs"
+
+[[bin]]
+name = "request_signature_test"
+path = "request_signature_test.rs"
+
+[[bin]]
+name = "rpc_csp_vault_reconnection_test"
+path = "rpc_csp_vault_reconnection_test.rs"

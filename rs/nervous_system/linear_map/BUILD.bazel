@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+# Feel free to open this up so that more people can use this. If you do that,
+# move this out of the nervous_system directory.
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:rust_decimal",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/tests/**",
+    ],
+)
+
+rust_library(
+    name = "linear_map",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_linear_map",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "linear_map_integration_test",
+    srcs = glob(["tests/*.rs"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":linear_map",
+    ],
+)

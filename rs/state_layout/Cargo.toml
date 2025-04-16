@@ -7,17 +7,19 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+crossbeam-channel = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
+ic-utils-thread = { path = "../utils/thread" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = { workspace = true }
 prometheus = { workspace = true }
@@ -32,4 +34,5 @@ ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 itertools = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
+test-strategy = "0.4.0"

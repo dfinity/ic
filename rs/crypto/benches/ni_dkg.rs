@@ -26,7 +26,7 @@ criterion_group!(benches, crypto_nidkg_benchmarks,);
 
 fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
     let rng = &mut reproducible_rng();
-    let test_cases = test_cases(&[13, 28, 40]);
+    let test_cases = test_cases(&[13, 34, 40]);
 
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name().to_string());
@@ -258,6 +258,7 @@ impl TestCase {
         let tag_name = match self.dkg_tag {
             NiDkgTag::LowThreshold => "low",
             NiDkgTag::HighThreshold => "high",
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!(),
         };
         format!(
             "crypto_nidkg_{}_nodes_{}_dealers_{}",
@@ -281,6 +282,7 @@ impl TestCase {
                 num_of_dealers: num_of_nodes,
                 dkg_tag,
             },
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!(),
         }
     }
 }
@@ -295,7 +297,7 @@ fn prepare_create_reshare_dealing_test_vectors<R: Rng + CryptoRng>(
 ) -> (NiDkgTestEnvironment, RandomNiDkgConfig) {
     let config0 = RandomNiDkgConfig::builder()
         .subnet_size(test_case.num_of_nodes)
-        .dkg_tag(test_case.dkg_tag)
+        .dkg_tag(test_case.dkg_tag.clone())
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
@@ -325,7 +327,7 @@ fn prepare_create_initial_dealing_test_vectors<R: Rng + CryptoRng>(
 ) -> (NiDkgTestEnvironment, RandomNiDkgConfig) {
     let config = RandomNiDkgConfig::builder()
         .subnet_size(test_case.num_of_nodes)
-        .dkg_tag(test_case.dkg_tag)
+        .dkg_tag(test_case.dkg_tag.clone())
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
@@ -343,7 +345,7 @@ fn prepare_verify_dealing_test_vectors<R: Rng + CryptoRng>(
 ) {
     let config = RandomNiDkgConfig::builder()
         .subnet_size(test_case.num_of_nodes)
-        .dkg_tag(test_case.dkg_tag)
+        .dkg_tag(test_case.dkg_tag.clone())
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
@@ -376,7 +378,7 @@ fn prepare_create_transcript_test_vectors<R: Rng + CryptoRng>(
 ) {
     let config = RandomNiDkgConfig::builder()
         .subnet_size(test_case.num_of_nodes)
-        .dkg_tag(test_case.dkg_tag)
+        .dkg_tag(test_case.dkg_tag.clone())
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
@@ -394,7 +396,7 @@ fn prepare_load_transcript_test_vectors<R: Rng + CryptoRng>(
 ) -> (NiDkgTestEnvironment, RandomNiDkgConfig, NiDkgTranscript) {
     let config = RandomNiDkgConfig::builder()
         .subnet_size(test_case.num_of_nodes)
-        .dkg_tag(test_case.dkg_tag)
+        .dkg_tag(test_case.dkg_tag.clone())
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
@@ -417,7 +419,7 @@ fn prepare_retain_keys_test_vectors<R: Rng + CryptoRng>(
     // tag/threshold).
     let config0 = RandomNiDkgConfig::builder()
         .subnet_size(test_case.num_of_nodes)
-        .dkg_tag(test_case.dkg_tag)
+        .dkg_tag(test_case.dkg_tag.clone())
         .dealer_count(test_case.num_of_dealers)
         .registry_version(ic_base_types::RegistryVersion::from(1))
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))

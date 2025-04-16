@@ -21,26 +21,17 @@ flate2 = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 ic-agent = { workspace = true }
-ic-utils = { workspace = true, features = ["raw"] }
-ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }
+ic-response-verification = { workspace = true }
+ic-utils = { workspace = true, features = ["raw"] }
 idna = { workspace = true }
-instant-acme = "0.3.2"
+instant-acme = "0.7.2"
 leb128 = "0.2.5"
 mockall = { workspace = true }
-opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
-opentelemetry-prometheus = { version = "0.13" }
 pem = "1.1.0"
 prometheus = { workspace = true }
 rcgen = { workspace = true }
-reqwest = { workspace = true, default-features = false, features = [
-    "blocking",
-    "json",
-    "multipart",
-    "rustls-tls",
-    "rustls-tls-webpki-roots",
-    "stream",
-] }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }

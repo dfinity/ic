@@ -9,6 +9,7 @@ pub mod v1;
 
 mod conversions;
 mod convert_struct_to_enum;
+pub mod proposal_conversions;
 
 impl Storable for ArchivedMonthlyNodeProviderRewards {
     fn to_bytes(&self) -> Cow<'_, [u8]> {

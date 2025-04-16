@@ -1,3 +1,7 @@
+use crate::lifecycle::init::InitArg;
+use crate::state::State;
+use candid::{Nat, Principal};
+
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     f: F,
     expected_message: &str,
@@ -24,15 +28,35 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     );
 }
 
+pub fn initial_state() -> State {
+    State::try_from(valid_init_arg()).expect("BUG: invalid init arg")
+}
+
+pub fn valid_init_arg() -> InitArg {
+    InitArg {
+        ethereum_network: Default::default(),
+        ecdsa_key_name: "test_key_1".to_string(),
+        ethereum_contract_address: None,
+        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
+            .expect("BUG: invalid principal"),
+        ethereum_block_height: Default::default(),
+        minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
+        next_transaction_nonce: Default::default(),
+        last_scraped_block_number: Default::default(),
+    }
+}
+
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
+    use crate::eth_logs::LedgerSubaccount;
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use candid::Nat;
-    use evm_rpc_client::types::candid::{
-        HttpOutcallError as EvmHttpOutcallError, JsonRpcError as EvmJsonRpcError,
-        ProviderError as EvmProviderError, RpcError as EvmRpcError,
-        ValidationError as EvmValidationError,
+    use crate::numeric::BlockRangeInclusive;
+    use candid::Principal;
+    use evm_rpc_client::{
+        Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
+        JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
+        RpcError as EvmRpcError, ValidationError as EvmValidationError,
     };
     use ic_cdk::api::call::RejectionCode;
     use ic_ethereum_types::Address;
@@ -50,9 +74,53 @@ pub mod arb {
         uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
     }
 
-    pub fn arb_nat_256() -> impl Strategy<Value = Nat> {
-        arb_checked_amount_of()
-            .prop_map(|checked_amount: CheckedAmountOf<()>| Nat::from(checked_amount))
+    pub fn arb_block_range_inclusive() -> impl Strategy<Value = BlockRangeInclusive> {
+        (arb_checked_amount_of(), arb_checked_amount_of())
+            .prop_map(|(start, end)| BlockRangeInclusive::new(start, end))
+    }
+
+    pub fn arb_nat_256() -> impl Strategy<Value = Nat256> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform32;
+        uniform32(any::<u8>()).prop_map(Nat256::from_be_bytes)
+    }
+
+    pub fn arb_principal() -> impl Strategy<Value = Principal> {
+        vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    }
+
+    pub fn arb_ledger_subaccount() -> impl Strategy<Value = Option<LedgerSubaccount>> {
+        uniform32(any::<u8>()).prop_map(LedgerSubaccount::from_bytes)
+    }
+
+    pub fn arb_hex_byte() -> impl Strategy<Value = HexByte> {
+        use proptest::arbitrary::any;
+        any::<u8>().prop_map(HexByte::from)
+    }
+
+    pub fn arb_hex20() -> impl Strategy<Value = Hex20> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform20;
+        uniform20(any::<u8>()).prop_map(Hex20::from)
+    }
+
+    pub fn arb_hex32() -> impl Strategy<Value = Hex32> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform32;
+        uniform32(any::<u8>()).prop_map(Hex32::from)
+    }
+
+    pub fn arb_hex256() -> impl Strategy<Value = Hex256> {
+        use proptest::arbitrary::any;
+        vec(any::<u8>(), 256..=256).prop_map(|bytes| {
+            let array: [u8; 256] = bytes.try_into().unwrap();
+            Hex256::from(array)
+        })
+    }
+
+    pub fn arb_hex() -> impl Strategy<Value = Hex> {
+        use proptest::arbitrary::any;
+        vec(any::<u8>(), 0..100).prop_map(Hex::from)
     }
 
     pub fn arb_address() -> impl Strategy<Value = Address> {
@@ -219,10 +287,6 @@ pub mod arb {
         prop_oneof![
             ".*".prop_map(EvmValidationError::Custom),
             ".*".prop_map(EvmValidationError::InvalidHex),
-            ".*".prop_map(EvmValidationError::UrlParseError),
-            ".*".prop_map(EvmValidationError::HostNotAllowed),
-            Just(EvmValidationError::CredentialPathNotAllowed),
-            Just(EvmValidationError::CredentialHeaderNotAllowed)
         ]
     }
 }

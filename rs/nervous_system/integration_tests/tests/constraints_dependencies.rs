@@ -1,20 +1,21 @@
+use ic_nervous_system_common::MAX_NEURONS_FOR_DIRECT_PARTICIPANTS;
 use ic_nns_governance::governance::MAX_NEURONS_FUND_PARTICIPANTS;
 use ic_sns_governance::pb::v1::NervousSystemParameters;
-use ic_sns_init::{
-    distributions::{MAX_AIRDROP_DISTRIBUTION_COUNT, MAX_DEVELOPER_DISTRIBUTION_COUNT},
-    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS, MAX_SNS_NEURONS_PER_BASKET,
-};
+use ic_sns_init::{distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT, MAX_SNS_NEURONS_PER_BASKET};
 
 // Test that the total number of SNS neurons created by an SNS swap is within the ceiling expected
 // by SNS Governance (`MAX_NUMBER_OF_NEURONS_CEILING`). Concretely, the test compares this constant
 // against the sum of intermediate limits set for various types of SNS neurons. These intermediate
 // limits are not checked within just one canister, so testing their inter-consistency is done here.
 //
+// Many SNS neurons may be created after a swap succeeds. The number of such neurons is limited to
+// `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`. This limit is enforced only *during* the swap. In effect,
+// this limits the maximum number of swap participants to `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS` /
+// #number of SNS neurons per participant (a.k.a., the SNS basket count).
+//
 // If a `CreateServiceNervousSystem` proposal is valid, its parameters must comply, in particular,
 // with the following limits (checked at the time of proposal submission):
 // - The number of SNS neurons per basket does not exceed `MAX_SNS_NEURONS_PER_BASKET`.
-// - The number of SNS neurons created for direct swap participants in the worst case cannot exceed
-//   `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`.
 // - The number of SNS neurons granted to the dapp developers doe snot exceed
 //   `MAX_DEVELOPER_DISTRIBUTION_COUNT`.
 //
@@ -42,19 +43,13 @@ fn test_max_number_of_sns_neurons_adds_up() {
         NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING
             >= MAX_SNS_NEURONS_PER_BASKET * MAX_NEURONS_FUND_PARTICIPANTS
                 + MAX_NEURONS_FOR_DIRECT_PARTICIPANTS
-                + MAX_DEVELOPER_DISTRIBUTION_COUNT as u64
-                + MAX_AIRDROP_DISTRIBUTION_COUNT as u64,
+                + MAX_DEVELOPER_DISTRIBUTION_COUNT as u64,
         "MAX_NUMBER_OF_NEURONS_CEILING ({}) must be >= \
-         MAX_SNS_NEURONS_PER_BASKET ({}) * MAX_NEURONS_FUND_PARTICIPANTS ({}) \
-         + MAX_NEURONS_FOR_DIRECT_PARTICIPANTS ({}) \
-         + MAX_DEVELOPER_DISTRIBUTION_COUNT ({}) \
-         + MAX_AIRDROP_DISTRIBUTION_COUNT ({}).\n{}",
-        NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING,
-        MAX_SNS_NEURONS_PER_BASKET,
-        MAX_NEURONS_FUND_PARTICIPANTS,
-        MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
-        MAX_DEVELOPER_DISTRIBUTION_COUNT,
-        MAX_AIRDROP_DISTRIBUTION_COUNT,
-        RECOMMENDATION
+         MAX_SNS_NEURONS_PER_BASKET ({MAX_SNS_NEURONS_PER_BASKET}) * \
+         MAX_NEURONS_FUND_PARTICIPANTS ({MAX_NEURONS_FUND_PARTICIPANTS}) \
+         + MAX_NEURONS_FOR_DIRECT_PARTICIPANTS ({MAX_NEURONS_FOR_DIRECT_PARTICIPANTS}) \
+         + MAX_DEVELOPER_DISTRIBUTION_COUNT ({MAX_DEVELOPER_DISTRIBUTION_COUNT}).\n\
+         {RECOMMENDATION}",
+        NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING
     );
 }

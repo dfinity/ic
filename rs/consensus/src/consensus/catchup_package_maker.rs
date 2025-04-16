@@ -14,7 +14,7 @@
 //! block is considered finalized.
 
 use ic_consensus_utils::{
-    active_high_threshold_transcript, crypto::ConsensusCrypto,
+    active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
@@ -119,7 +119,7 @@ impl CatchUpPackageMaker {
         self.report_state_divergence_if_required(pool);
 
         let current_cup_height = pool.get_catch_up_height();
-        let mut block = pool.get_highest_summary_block();
+        let mut block = pool.get_highest_finalized_summary_block();
 
         while block.height() > current_cup_height {
             let result = self.consider_block(pool, block.clone());
@@ -235,9 +235,8 @@ impl CatchUpPackageMaker {
                     registry_version,
                 );
                 let share_content = CatchUpShareContent::from(&content);
-                if let Some(transcript) = active_high_threshold_transcript(pool.as_cache(), height)
-                {
-                    match self.crypto.sign(&content, my_node_id, transcript.dkg_id) {
+                if let Some(dkg_id) = active_high_threshold_nidkg_id(pool.as_cache(), height) {
+                    match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => {
                             // Caution: The log string below is checked in replica_determinism_test.
                             // Changing the string might break the test.
@@ -267,11 +266,6 @@ impl CatchUpPackageMaker {
 #[cfg(test)]
 mod tests {
     //! CatchUpPackageMaker unit tests
-    use crate::idkg::test_utils::{
-        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
-    };
-
     use super::*;
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
@@ -279,6 +273,11 @@ mod tests {
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_consensus::idkg::{
+        add_available_quadruple_to_payload, empty_idkg_payload,
+        fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
+        fake_state_with_signature_requests, request_id,
+    };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
@@ -389,12 +388,13 @@ mod tests {
                 )],
             );
 
+            let height = Height::from(0);
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-            let key_id = fake_ecdsa_master_public_key_id();
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
 
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
@@ -402,16 +402,28 @@ mod tests {
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
-                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
-                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(1, height),
+                    key_id.clone(),
+                    Some(pre_sig_id1),
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(2, height),
+                    key_id.clone(),
+                    None,
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(3, height),
+                    key_id.clone(),
+                    Some(pre_sig_id3),
+                ),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
                 .return_const(Ok(fake_state_with_signature_requests(
-                    Height::from(0),
+                    height,
                     contexts.clone(),
                 )
                 .get_labeled_state()));
@@ -464,7 +476,7 @@ mod tests {
             assert_eq!(&share.content.block, proposal.content.get_hash());
             assert_eq!(
                 share.content.state_hash,
-                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+                state_manager.get_state_hash_at(height).unwrap()
             );
             // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
             // by the replicated state should be the registry version of quadruple 3, which is 2.

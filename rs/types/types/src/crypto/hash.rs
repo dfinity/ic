@@ -8,7 +8,10 @@ use crate::consensus::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
     dkg as consensus_dkg,
-    idkg::{EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare},
+    idkg::{
+        EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare,
+        VetKdKeyShare,
+    },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -118,6 +121,7 @@ mod private {
     impl CryptoHashDomainSeal for IDkgTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
     impl CryptoHashDomainSeal for SchnorrSigShare {}
+    impl CryptoHashDomainSeal for VetKdKeyShare {}
 
     impl CryptoHashDomainSeal for IDkgComplaintContent {}
     impl CryptoHashDomainSeal for Signed<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>> {}
@@ -380,6 +384,12 @@ impl CryptoHashDomain for SchnorrSigShare {
     }
 }
 
+impl CryptoHashDomain for VetKdKeyShare {
+    fn domain(&self) -> String {
+        DomainSeparator::VetKdKeyShare.to_string()
+    }
+}
+
 impl CryptoHashDomain for IDkgComplaintContent {
     fn domain(&self) -> String {
         DomainSeparator::IDkgComplaintContent.to_string()
@@ -417,7 +427,7 @@ impl CryptoHashDomain for CryptoHashableTestDummy {
 /// Ideally, this struct would be annotated with `#[cfg(test)]` so that it is
 /// only available in test code, however, then it would not be visible outside
 /// of this crate where it is needed.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CryptoHashableTestDummy(pub Vec<u8>);
 
 /// A cryptographically hashable type.

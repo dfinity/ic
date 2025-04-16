@@ -2,7 +2,7 @@
 #
 # Build step for example:
 # - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev \ `
-#   `--build-arg BASE_IMAGE=docker.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
+#   `--build-arg BASE_IMAGE=ghcr.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
 #
 #
 # The base images are defined in docker-base.prod and docker-base.dev. Update
@@ -23,14 +23,19 @@ USER root:root
 
 WORKDIR /tmp
 
+# Download and verify ic-gateway
+RUN \
+    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.2.6/ic-gateway_0.2.6_amd64.deb && \
+    echo "4f5090015bfc72995f1d0dd5cfb6f929864d9655221fb226b0668e221cb92ccf  ic-gateway_0.2.6_amd64.deb" | sha256sum -c
+
 #
 # Second build stage:
 # - Construct base images with the differences between dev and prod (IC-OS root filesystem)
 #
-FROM $BASE_IMAGE as image-dev
+FROM $BASE_IMAGE AS image-dev
 # nns public key will be on the USB stick
 
-FROM $BASE_IMAGE as image-prod
+FROM $BASE_IMAGE AS image-prod
 USER root:root
 
 # Bake the nns public key into the image
@@ -50,6 +55,10 @@ RUN printf '%s\n' >/etc/nns_public_key.pem \
 FROM image-${BUILD_TYPE}
 
 USER root:root
+
+COPY --from=download /tmp/ic-gateway_0.2.6_amd64.deb /tmp/ic-gateway_0.2.6_amd64.deb
+RUN dpkg -i --force-confold /tmp/ic-gateway_0.2.6_amd64.deb && \
+    rm /tmp/ic-gateway_0.2.6_amd64.deb
 
 RUN mkdir -p /boot/config \
              /boot/efi \
@@ -106,9 +115,12 @@ RUN if [ "${ROOT_PASSWORD}" != "" ]; then \
 # to node operation.
 
 RUN for SERVICE in /etc/systemd/system/*; do \
-    if [ -f "$SERVICE" -a ! -L "$SERVICE" ] && grep -q '^.Install.' "$SERVICE" ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
+        if [ -f "$SERVICE" ] && [ ! -L "$SERVICE" ] && ! echo "$SERVICE" | grep -Eq "@\.service$"; then \
+            systemctl enable "${SERVICE#/etc/systemd/system/}"; \
+        fi ; \
     done && \
     systemctl enable \
+    ssh \
     chrony \
     nftables \
     systemd-networkd \
@@ -116,14 +128,7 @@ RUN for SERVICE in /etc/systemd/system/*; do \
     systemd-resolved \
     systemd-journal-gatewayd
 
-# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
-# E.g., systemd-timesync/coredump
-RUN systemd-sysusers && \
-    # Fix reproducibility issue. Notes in boundary-guestos/context/Dockerfile
-    usermod -p '!!' systemd-timesync && \
-    usermod -p '!!' systemd-coredump && \
-    # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
-    echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
+RUN ln -sf /bin/bash /usr/bin/sh
 
 # Group accounts to which parts of the runtime state are assigned such that
 # user accounts can be granted individual access rights.
@@ -168,15 +173,6 @@ RUN addgroup node_exporter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home socks && \
     adduser socks socks && chmod +s /usr/sbin/danted
 
-# Setup prober
-RUN \
-    addgroup prober && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home prober && \
-    adduser prober prober && \
-    mkdir -p /var/log/prober && \
-    chown prober:prober /var/log/prober && \
-    chmod 755 /var/log/prober
-
 # Install node_exporter
 RUN chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
@@ -187,40 +183,24 @@ RUN chown root:root /etc/node_exporter \
 # will be cached when only the binaries change.
 COPY opt /opt
 
-RUN rm -rf /etc/nginx/sites-enabled/nginx.conf
-
-RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html
-
-# Install other files (e.g. the uninstall-script)
-COPY var/www/html /var/www/html
-RUN chmod 0644 /var/www/html/*
-
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \
-        /var/cache/fontconfig/* /var/cache/ldconfig/aux-cache \
-        /var/log/alternatives.log /var/log/apt/history.log \
-        /var/log/apt/term.log /var/log/dpkg.log \
-        /var/lib/apt/lists/* /var/lib/dbus/machine-id \
-        /var/lib/initramfs-tools/5.8.0-50-generic && \
-    find /usr/local/share/fonts -name .uuid | xargs rm && \
-    find /usr/share/fonts -name .uuid | xargs rm && \
-    find /usr/lib -name "*.pyc" | xargs rm -rf&& \
-    find /usr/share -name "*.pyc" | xargs rm -rf&& \
+        /var/cache/fontconfig/* \
+        /var/cache/ldconfig/aux-cache \
+        /var/log/alternatives.log \
+        /var/log/apt/history.log \
+        /var/log/apt/term.log \
+        /var/log/dpkg.log \
+        /var/lib/apt/lists/* \
+        /var/lib/dbus/machine-id && \
+    find /usr -name "*.pyc" -delete && \
     truncate --size 0 /etc/machine-id
 
 # Update POSIX permissions in /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/*
-
-# Take care of nginx files
-RUN chmod 0755 /etc/nginx/* && \
-    chmod 0644 /etc/nginx/nginx.conf && \
-    rm -rf /etc/nginx/conf.d/nginx-global.conf && \
-    rm -rf /etc/nginx/conf.d/default.conf && \
-    rm -rf /etc/nginx/sites-enabled/default && \
-    rm -rf /etc/nginx/conf.d/default
 
 # Increase the default limit on the number of open files for all systemd services
 RUN sed -i '/^#DefaultLimitNOFILE=/c\DefaultLimitNOFILE=1048576:1048576' /etc/systemd/system.conf

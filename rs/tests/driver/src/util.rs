@@ -9,7 +9,7 @@ use crate::{
     retry_with_msg, retry_with_msg_async,
     types::*,
 };
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use dfn_protobuf::{protobuf, ProtoBuf};
@@ -19,8 +19,8 @@ use futures::{
 };
 use ic_agent::{
     agent::{
-        http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
+        http_transport::reqwest_transport::reqwest, CallResponse, EnvelopeContent, RejectCode,
+        RejectResponse,
     },
     export::Principal,
     identity::BasicIdentity,
@@ -28,8 +28,8 @@ use ic_agent::{
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
-use ic_constants::MAX_INGRESS_TTL;
-use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_limits::MAX_INGRESS_TTL;
+use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -44,21 +44,21 @@ use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
+use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
     messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
 };
-use ic_universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
-};
+use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use on_wire::FromWire;
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -71,6 +71,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
     net::{TcpSocket, TcpStream},
     runtime::{Builder, Handle as THandle},
+    time::timeout,
 };
 use url::Url;
 
@@ -79,21 +80,25 @@ pub mod delegations;
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-pub const IDENTITY_PEM:&str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
+pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 /// The following definition is a temporary work-around. Please do not copy!
 pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/components/ic/ic.json5.template");
+    include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 
+pub const MAX_TCP_ERROR_RETRIES: usize = 5;
+
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
-        .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
+        TEST_IDENTITY_KEYPAIR.to_pem(),
+    ))
+    .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
@@ -115,6 +120,25 @@ pub fn runtime_from_url(url: Url, effective_canister_id: PrincipalId) -> Runtime
     })
 }
 
+// Note that we can't use the UNIVERSAL_CANISTER_WASM from rs/universal_canister/lib/src/lib.rs
+// since in system-tests paths to runtime dependencies need to be get via get_dependency_path(path).
+lazy_static! {
+    /// The WASM of the Universal Canister.
+    pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
+        let vec = get_universal_canister_wasm();
+        Box::leak(vec.into_boxed_slice())
+    };
+}
+
+fn get_universal_canister_wasm() -> Vec<u8> {
+    let uc_wasm_path = get_dependency_path(
+        std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+            .expect("UNIVERSAL_CANISTER_WASM_PATH not set"),
+    );
+    std::fs::read(&uc_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+}
+
 /// Provides an abstraction to the universal canister.
 #[derive(Clone)]
 pub struct UniversalCanister<'a> {
@@ -129,7 +153,7 @@ impl<'a> UniversalCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
     ) -> UniversalCanister<'a> {
-        Self::new_with_params(agent, effective_canister_id, None, None, None)
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None, None)
             .await
             .expect("Could not create universal canister.")
     }
@@ -138,7 +162,7 @@ impl<'a> UniversalCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
     ) -> Result<UniversalCanister<'a>, String> {
-        Self::new_with_params(agent, effective_canister_id, None, None, None).await
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None, None).await
     }
 
     pub async fn new_with_retries(
@@ -155,10 +179,9 @@ impl<'a> UniversalCanister<'a> {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                match Self::new_with_params(agent, effective_canister_id, None, None, None).await {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                Self::new_with_params_with_timeout(agent, effective_canister_id, None, None, None)
+                    .await
+                    .map_err(|e| anyhow!(e))
             }
         )
         .await
@@ -181,10 +204,9 @@ impl<'a> UniversalCanister<'a> {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                match Self::new_with_cycles(agent, effective_canister_id, c).await {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                Self::new_with_cycles(agent, effective_canister_id, c)
+                    .await
+                    .map_err(|e| anyhow!(e))
             }
         )
         .await
@@ -208,7 +230,7 @@ impl<'a> UniversalCanister<'a> {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                match Self::new_with_params(
+                Self::new_with_params_with_timeout(
                     agent,
                     effective_canister_id,
                     compute_allocation,
@@ -216,14 +238,36 @@ impl<'a> UniversalCanister<'a> {
                     pages,
                 )
                 .await
-                {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                .map_err(|e| anyhow!(e))
             }
         )
         .await
         .expect("Could not create universal canister with params.")
+    }
+
+    pub async fn new_with_params_with_timeout(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+        pages: Option<u32>,
+    ) -> Result<UniversalCanister<'a>, String> {
+        match timeout(
+            CANISTER_CREATE_TIMEOUT,
+            Self::new_with_params(
+                agent,
+                effective_canister_id,
+                compute_allocation,
+                cycles,
+                pages,
+            ),
+        )
+        .await
+        {
+            Ok(Ok(canister)) => Ok(canister),
+            Ok(Err(err)) => Err(format!("Could not create universal canister: {:?}", err)),
+            Err(_elasped) => Err("Timeout while creating universal canister".to_string()),
+        }
     }
 
     pub async fn new_with_params(
@@ -251,7 +295,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -278,7 +322,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -306,7 +350,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -380,16 +424,12 @@ impl<'a> UniversalCanister<'a> {
 
     /// Try to store `msg` in stable memory starting at `offset` bytes.
     pub async fn try_store_to_stable(&self, offset: u32, msg: &[u8]) -> Result<(), AgentError> {
-        let res = self
-            .agent
+        self.agent
             .update(&self.canister_id, "update")
             .with_arg(Self::stable_writer(offset, msg))
             .call_and_wait()
-            .await;
-        match res {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err),
-        }
+            .await
+            .map(|_| ())
     }
 
     /// Stores `msg` in stable memory starting at `offset` bytes.
@@ -554,7 +594,7 @@ pub struct MessageCanister<'a> {
 impl<'a> MessageCanister<'a> {
     /// Initializes a [MessageCanister] using the provided [Agent].
     pub async fn new(agent: &'a Agent, effective_canister_id: PrincipalId) -> MessageCanister<'a> {
-        Self::new_with_params(agent, effective_canister_id, None, None)
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None)
             .await
             .expect("Could not create message canister.")
     }
@@ -563,7 +603,7 @@ impl<'a> MessageCanister<'a> {
         agent: &'a Agent,
         effective_canister_id: PrincipalId,
     ) -> Result<MessageCanister<'a>, String> {
-        Self::new_with_params(agent, effective_canister_id, None, None).await
+        Self::new_with_params_with_timeout(agent, effective_canister_id, None, None).await
     }
 
     pub async fn new_with_retries(
@@ -575,21 +615,38 @@ impl<'a> MessageCanister<'a> {
     ) -> MessageCanister<'a> {
         retry_with_msg_async!(
             format!(
-                "install UniversalCanister {}",
+                "install MessageCanister {}",
                 effective_canister_id.to_string()
             ),
             log,
             timeout,
             backoff,
             || async {
-                match Self::new_with_params(agent, effective_canister_id, None, None).await {
-                    Ok(c) => Ok(c),
-                    Err(e) => anyhow::bail!(e),
-                }
+                Self::new_with_params_with_timeout(agent, effective_canister_id, None, None)
+                    .await
+                    .map_err(|e| anyhow!(e))
             }
         )
         .await
         .expect("Could not create message canister.")
+    }
+
+    pub async fn new_with_params_with_timeout(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        compute_allocation: Option<u64>,
+        cycles: Option<u128>,
+    ) -> Result<MessageCanister<'a>, String> {
+        match timeout(
+            CANISTER_CREATE_TIMEOUT,
+            Self::new_with_params(agent, effective_canister_id, compute_allocation, cycles),
+        )
+        .await
+        {
+            Ok(Ok(canister)) => Ok(canister),
+            Ok(Err(err)) => Err(format!("Could not create message canister: {:?}", err)),
+            Err(_elasped) => Err("Timeout while creating message canister".to_string()),
+        }
     }
 
     pub async fn new_with_params(
@@ -744,27 +801,6 @@ pub async fn assert_create_agent(url: &str) -> Agent {
         .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
 }
 
-/// Initializes an `Agent` using the provided URL.
-/// The root key is fetched as part of the initialization in order
-/// to validate certificates from the replica.
-///
-/// The created agent will route call requests to the
-/// asynchronous V2 call endpoint.
-pub async fn assert_create_agent_using_call_v2(url: &str) -> Agent {
-    let start = Instant::now();
-    // The root key might not be ready yet, so we retry until it is.
-    while start.elapsed() < READY_WAIT_TIMEOUT {
-        if let Ok(agent) = agent_using_call_v2_endpoint(url, None).await {
-            return agent;
-        }
-        tokio::time::sleep(RETRY_BACKOFF).await;
-    }
-
-    agent_using_call_v2_endpoint(url, None)
-        .await
-        .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
-}
-
 /// Initializes an `Agent` using the provided URL and identity.
 pub async fn assert_create_agent_with_identity(
     url: &str,
@@ -804,6 +840,7 @@ pub async fn agent_with_identity_mapping(
 ) -> Result<Agent, AgentError> {
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
+        .http2_prior_knowledge()
         .danger_accept_invalid_certs(true);
 
     let builder = match (
@@ -813,9 +850,7 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder
-        .build()
-        .map_err(|err| AgentError::TransportError(Box::new(err)))?;
+    let client = builder.build().map_err(AgentError::TransportError)?;
     agent_with_client_identity(url, client, identity).await
 }
 
@@ -824,9 +859,9 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
     let a = Agent::builder()
-        .with_transport(transport)
+        .with_url(url)
+        .with_http_client(client)
         .with_identity(identity)
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
@@ -841,45 +876,11 @@ pub async fn agent_with_client_identity(
         // too further in the future, i.e. greater than x+MAX_INGRESS_TTL in this case. To tolerate
         // the delays in the progress of consensus, we reduce 30sn from MAX_INGRESS_TTL and set the
         // expiry_time of ingresses accordingly.
-        .with_ingress_expiry(Some(MAX_INGRESS_TTL - std::time::Duration::from_secs(30)))
+        .with_ingress_expiry(MAX_INGRESS_TTL - std::time::Duration::from_secs(30))
         .build()
         .unwrap();
     a.fetch_root_key().await?;
     Ok(a)
-}
-
-/// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
-pub async fn agent_using_call_v2_endpoint(
-    url: &str,
-    addr_mapping: Option<IpAddr>,
-) -> Result<Agent, AgentError> {
-    let identity = get_identity();
-
-    let builder = reqwest::Client::builder()
-        .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(true);
-
-    let builder = match (
-        addr_mapping,
-        reqwest::Url::parse(url).as_ref().map(|u| u.domain()),
-    ) {
-        (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
-        _ => builder,
-    };
-
-    let transport = ReqwestTransport::create_with_client(
-        url,
-        builder.build().expect("Is valid reqwest client"),
-    )?;
-
-    let agent = Agent::builder()
-        .with_transport(transport)
-        .with_identity(identity)
-        .build()
-        .unwrap();
-    agent.fetch_root_key().await?;
-
-    Ok(agent)
 }
 
 // Creates an identity to be used with `Agent`.
@@ -1008,7 +1009,7 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum EndpointsStatus {
     AllHealthy,
     AllUnhealthy,
@@ -1273,7 +1274,7 @@ pub async fn get_balance_via_canister(
         )
         .await
         .map(|res| {
-            Decode!(res.as_slice(), CanisterStatusResult)
+            Decode!(res.as_slice(), CanisterStatusResultV2)
                 .unwrap()
                 .cycles()
                 .into()
@@ -1350,14 +1351,11 @@ pub fn to_principal_id(principal: &Principal) -> PrincipalId {
 }
 
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
-    let status = ManagementCanister::create(agent)
+    ManagementCanister::create(agent)
         .canister_status(canister_id)
         .call_and_wait()
-        .await;
-    match status {
-        Ok(s) => s.0.module_hash.is_some(),
-        Err(_) => false,
-    }
+        .await
+        .is_ok_and(|s| s.0.module_hash.is_some())
 }
 
 pub async fn assert_canister_counter_with_retries(
@@ -1430,13 +1428,11 @@ pub fn get_config() -> ConfigOptional {
     // Make the string parsable by filling the template placeholders with dummy values
     let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES)
         .to_string()
-        .replace("{{ node_index }}", "0")
         .replace("{{ ipv6_address }}", "::")
         .replace("{{ backup_retention_time_secs }}", "0")
         .replace("{{ backup_purging_interval_secs }}", "0")
-        .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+        .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
-        .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
         .replace("{{ query_stats_epoch_length }}", "600");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
@@ -1501,7 +1497,9 @@ impl LogStream {
 
         // Use plaintext instead of json, because some messages are too large for the journal json serializer
         stream
-            .write_all(b"GET /entries?follow HTTP/1.1\n\r\n\r")
+            .write_all(
+                format!("GET /entries?follow HTTP/1.1\r\nHost:{ip_addr}:19531\r\n\r\n").as_bytes(),
+            )
             .await?;
 
         let bf = BufReader::new(stream);
@@ -1515,14 +1513,25 @@ impl LogStream {
 pub struct MetricsFetcher {
     nodes: Vec<IcNodeSnapshot>,
     metrics: Vec<String>,
+    port: u16,
 }
 
 impl MetricsFetcher {
     /// Create a new [`MetricsFetcher`]
     pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
+        Self::new_with_port(nodes, metrics, 9090)
+    }
+
+    /// Create a new [`MetricsFetcher`] for a specific port
+    pub fn new_with_port(
+        nodes: impl Iterator<Item = IcNodeSnapshot>,
+        metrics: Vec<String>,
+        port: u16,
+    ) -> Self {
         Self {
             nodes: nodes.collect(),
             metrics,
+            port,
         }
     }
 
@@ -1565,7 +1574,7 @@ impl MetricsFetcher {
             IpAddr::V6(ipv6_addr) => ipv6_addr,
         };
 
-        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, 9090, 0, 0));
+        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
         let url = format!("http://{}", socket_addr);
         let response = reqwest::get(url).await?.text().await?;
 
@@ -1643,10 +1652,10 @@ async fn assert_nodes_malicious_parallel(
                 .await
         });
     }
-    let result = join_all(futures).await.iter().all(|x| x.is_ok());
-    match result {
-        true => Ok(()),
-        false => Err("Not all malicious nodes produced logs containing the malicious signal."),
+    if join_all(futures).await.iter().all(|x| x.is_ok()) {
+        Ok(())
+    } else {
+        Err("Not all malicious nodes produced logs containing the malicious signal.")
     }
 }
 
@@ -1873,4 +1882,16 @@ pub fn expiry_time() -> Duration {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         + Duration::from_secs(4 * 60)
+}
+
+/// Time the duration of the given closure and log it.
+pub fn timeit<F, R>(log: Logger, description: &str, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let start = Instant::now();
+    let result = f(); // Run the closure
+    let duration = start.elapsed();
+    info!(log, "Executed '{}' in: {:?}", description, duration);
+    result
 }

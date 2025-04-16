@@ -60,13 +60,7 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(7 * B);
 
 // Limit per `install_code` message. It's bigger than the limit for a regular
 // update call to allow for canisters with bigger state to be upgraded.
-// This is a temporary measure until a longer term solution that alleviates the
-// limitations with the current upgrade process is implemented.
-//
-// The value is picked to allow roughly for 4GB of state to be stored to stable
-// memory during upgrade. We know that we hit `MAX_INSTRUCTIONS_PER_MESSAGE`
-// with roughly 100MB of state, so we set the limit to 40x.
-const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(40 * 5 * B);
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(300 * B);
 
 // The limit on the number of instructions a slice of an `install_code` message
 // is allowed to executed.
@@ -132,6 +126,12 @@ pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// cover the cost of the subnet.
 pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
+/// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
+/// second, that would come to  26k SDR per month if we spent the whole time
+/// creating key derivations. At 13 nodes and 2k SDR per node per month this would
+/// cover the cost of the subnet.
+pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
+
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
@@ -140,7 +140,6 @@ const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
-const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(0);
 
 /// Accumulated priority reset interval, rounds.
 ///
@@ -161,8 +160,24 @@ const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
 /// 1/10th of a round.
 pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(200_000_000);
 
+/// Baseline cost for creating or loading a canister snapshot (2B instructions).
+/// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
+pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
+    NumInstructions::new(2_000_000_000);
+
+/// Baseline cost for up/downloading binary snapshot data (5M instructions).
+/// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
+pub const DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS: NumInstructions =
+    NumInstructions::new(5_000_000);
+
+/// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
+/// This overhead is a multiplier over the cost of executing the same instructions
+/// in Wasm32 mode. The overhead comes from the bound checks performed in Wasm64 mode
+/// as well as larger heap sizes that lead to larger application working sets.
+pub const WASM64_INSTRUCTION_COST_OVERHEAD: u128 = 2;
+
 /// The per subnet type configuration for the scheduler component
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct SchedulerConfig {
     /// Number of canisters that the scheduler is allowed to schedule in
     /// parallel.
@@ -259,6 +274,12 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading a chunk to the wasm store.
     pub upload_wasm_chunk_instructions: NumInstructions,
+
+    /// Number of instructions to count when creating or loading a canister snapshot.
+    pub canister_snapshot_baseline_instructions: NumInstructions,
+
+    /// Number of instructions to count when uploading or downloading binary snapshot data.
+    pub canister_snapshot_data_baseline_instructions: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -286,6 +307,10 @@ impl SchedulerConfig {
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
+            canister_snapshot_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
+            canister_snapshot_data_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
         }
     }
 
@@ -293,7 +318,7 @@ impl SchedulerConfig {
         let max_instructions_per_message_without_dts = NumInstructions::from(50 * B);
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         let max_instructions_per_slice = NumInstructions::from(2 * B);
-        let max_instructions_per_install_code_slice = NumInstructions::from(10 * B);
+        let max_instructions_per_install_code_slice = NumInstructions::from(5 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
@@ -325,40 +350,16 @@ impl SchedulerConfig {
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
-            dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
+            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
+            canister_snapshot_baseline_instructions: NumInstructions::from(0),
+            canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
         }
     }
 
     pub fn verified_application_subnet() -> Self {
-        // When the `install_code` instruction limit on application subnets is
-        // also increased to 300B, then this line can be removed.
-        let max_instructions_per_install_code = NumInstructions::from(300 * B);
-        Self {
-            scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
-            max_paused_executions: MAX_PAUSED_EXECUTIONS,
-            subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
-            max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
-            max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
-            max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
-            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
-            instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
-            instruction_overhead_per_canister_for_finalization:
-                INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
-            max_instructions_per_install_code,
-            max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
-            max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
-            max_message_duration_before_warn_in_seconds:
-                MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
-            heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
-            install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
-            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
-            accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
-            upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
-        }
+        Self::application_subnet()
     }
 
     pub fn default_for_subnet_type(subnet_type: SubnetType) -> Self {
@@ -370,7 +371,7 @@ impl SchedulerConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CyclesAccountManagerConfig {
     /// Reference value of a subnet size that all the fees below are calculated for.
     /// Fees for a real subnet are calculated proportionally to this reference value.
@@ -386,6 +387,10 @@ pub struct CyclesAccountManagerConfig {
     /// messages. The reason for using 10 and not 1 is so support fees of less
     /// than 1 cycles per instruction.
     pub ten_update_instructions_execution_fee: Cycles,
+
+    /// Fee for every 10 instructions executed when executing update type
+    /// messages on a Wasm64 canister.
+    pub ten_update_instructions_execution_fee_wasm64: Cycles,
 
     /// Fee for every inter-canister call performed. This includes the fee for
     /// sending the request and receiving the response.
@@ -418,6 +423,9 @@ pub struct CyclesAccountManagerConfig {
     /// Amount to charge for a Schnorr signature.
     pub schnorr_signature_fee: Cycles,
 
+    /// Amount to charge for vet KD.
+    pub vetkd_fee: Cycles,
+
     /// A linear factor of the baseline cost to be charged for HTTP requests per node.
     /// The cost of an HTTP request is represented by a quadratic function due to the communication complexity of the subnet.
     pub http_request_linear_baseline_fee: Cycles,
@@ -442,23 +450,22 @@ pub struct CyclesAccountManagerConfig {
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
-        Self {
-            max_storage_reservation_period: Duration::from_secs(300_000_000),
-            ..Self::verified_application_subnet()
-        }
-    }
-
-    pub fn verified_application_subnet() -> Self {
+        let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(100_000_000_000),
+            canister_creation_fee: Cycles::new(500_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
             // we estimated how many resources a representative benchmark on a
             // verified subnet is using.
-            update_message_execution_fee: Cycles::new(590_000),
-            ten_update_instructions_execution_fee: Cycles::new(4),
+            update_message_execution_fee: Cycles::new(5_000_000),
+            ten_update_instructions_execution_fee: Cycles::new(
+                ten_update_instructions_execution_fee_in_cycles,
+            ),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(
+                WASM64_INSTRUCTION_COST_OVERHEAD * ten_update_instructions_execution_fee_in_cycles,
+            ),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
@@ -468,15 +475,18 @@ impl CyclesAccountManagerConfig {
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(3_000_000),
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
-            // This effectively disables the storage reservation mechanism on
-            // verified application subnets.
-            max_storage_reservation_period: Duration::from_secs(0),
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
+    }
+
+    pub fn verified_application_subnet() -> Self {
+        Self::application_subnet()
     }
 
     /// All processing is free on system subnets
@@ -487,6 +497,7 @@ impl CyclesAccountManagerConfig {
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
             ten_update_instructions_execution_fee: Cycles::new(0),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(0),
             xnet_call_fee: Cycles::new(0),
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),
@@ -503,6 +514,7 @@ impl CyclesAccountManagerConfig {
             // - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
@@ -510,6 +522,32 @@ impl CyclesAccountManagerConfig {
             // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
+        }
+    }
+
+    pub fn zero_cost(subnet_size: usize) -> Self {
+        Self {
+            reference_subnet_size: subnet_size,
+            canister_creation_fee: Cycles::zero(),
+            update_message_execution_fee: Cycles::zero(),
+            ten_update_instructions_execution_fee: Cycles::zero(),
+            ten_update_instructions_execution_fee_wasm64: Cycles::zero(),
+            xnet_call_fee: Cycles::zero(),
+            xnet_byte_transmission_fee: Cycles::zero(),
+            ingress_message_reception_fee: Cycles::zero(),
+            ingress_byte_reception_fee: Cycles::zero(),
+            gib_storage_per_second_fee: Cycles::zero(),
+            compute_percent_allocated_per_second_fee: Cycles::zero(),
+            duration_between_allocation_charges: Duration::from_secs(u64::MAX),
+            ecdsa_signature_fee: Cycles::zero(),
+            schnorr_signature_fee: Cycles::zero(),
+            vetkd_fee: Cycles::zero(),
+            http_request_linear_baseline_fee: Cycles::zero(),
+            http_request_quadratic_baseline_fee: Cycles::zero(),
+            http_request_per_byte_fee: Cycles::zero(),
+            http_response_per_byte_fee: Cycles::zero(),
+            max_storage_reservation_period: Duration::from_secs(u64::MAX),
+            default_reserved_balance_limit: Cycles::zero(),
         }
     }
 }

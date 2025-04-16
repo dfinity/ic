@@ -31,7 +31,7 @@ table filter {
     icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept
     ct state invalid drop
     ct state { established, related } accept
-    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport 443 accept
 
     ip saddr {5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
 ip saddr {7.7.7.7} ct state { new } tcp dport {1007} accept # api_boundary_nodes
@@ -87,9 +87,10 @@ table ip6 filter {
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
     ct state { invalid } drop
     ct state { established, related } accept
-    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept
 
-    ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
+    ip6 saddr {fd5b:693c:f8ea::1} ct state { new } tcp dport {1080} accept # system subnet nodes for SOCKS proxy
+ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
 ip6 saddr {::ffff:7.7.7.7} ct state { new } tcp dport {1007} accept # api_boundary_nodes
 ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
     

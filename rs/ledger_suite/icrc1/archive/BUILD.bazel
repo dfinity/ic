@@ -1,0 +1,105 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//visibility:public"])
+
+[
+    rust_canister(
+        name = "archive_canister" + name_suffix,
+        srcs = ["src/main.rs"],
+        compile_data = [":archive.did"],
+        crate_features = features,
+        crate_name = "ic_icrc1_archive" + name_suffix,
+        opt = "z",
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:ic-cdk-macros",
+        ],
+        rustc_env = {
+            "ARCHIVE_DID_PATH": "$(execpath :archive.did)",
+        },
+        service_file = ":archive.did",
+        version = "0.9.0",
+        deps = [
+            # Keep sorted.
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ledger_suite/common/ledger_canister_core",
+            "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
+            "//rs/rust_canisters/http_types",
+            "//rs/types/base_types",
+            "@crate_index//:candid",
+            "@crate_index//:ciborium",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:ic-stable-structures",
+            "@crate_index//:serde",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/ledger_suite/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+    ]
+]
+
+rust_test(
+    name = "archive_test",
+    crate = ":_wasm_archive_canister",
+    data = [
+        ":archive.did",
+        "//rs/ledger_suite/icrc1/ledger:ledger.did",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/archive",
+    },
+    deps = ["@crate_index//:candid_parser"],
+)
+
+[
+    rust_ic_test(
+        name = "archive_integration_tests" + name_suffix,
+        srcs = ["tests/tests.rs"],
+        crate_features = features,
+        data = [
+            ":archive_canister" + name_suffix + ".wasm.gz",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/archive",
+            "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath :archive_canister" + name_suffix + ".wasm.gz)",
+        },
+        deps = [
+            # Keep sorted.
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
+            "//rs/rosetta-api/icp/test_utils",
+            "//rs/state_machine_tests",
+            "//rs/test_utilities/load_wasm",
+            "//rs/types/base_types",
+            "@crate_index//:candid",
+            "@crate_index//:num-traits",
+            "@crate_index//:serde_bytes",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/ledger_suite/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+    ]
+]

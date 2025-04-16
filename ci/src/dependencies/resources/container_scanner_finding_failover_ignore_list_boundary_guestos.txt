@@ -1,0 +1,1 @@
+// one expression per line, if vulnerability description contains the expression of any line it will be ignored

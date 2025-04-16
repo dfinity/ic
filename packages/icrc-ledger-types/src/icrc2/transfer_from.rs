@@ -5,6 +5,9 @@ use std::fmt;
 use super::super::icrc1::account::{Account, Subaccount};
 use super::super::icrc1::transfer::Memo;
 
+/// The arguments for the
+/// [ICRC-2 `transfer_from`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md#icrc2_transfer_from)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransferFromArgs {
     #[serde(default)]
@@ -20,6 +23,9 @@ pub struct TransferFromArgs {
     pub created_at_time: Option<u64>,
 }
 
+/// The error return type for the
+/// [ICRC-2 `transfer_from`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md#icrc2_transfer_from)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum TransferFromError {
     BadFee { expected_fee: Nat },

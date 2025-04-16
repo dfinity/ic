@@ -37,6 +37,38 @@ rust_canister(
     name = "universal_canister",
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
+    crate_features = ["heartbeat"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
+    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+)
+
+genrule(
+    name = "universal_canister_serialized_module",
+    testonly = False,
+    srcs = [":universal_canister"],
+    outs = ["universal_canister.module"],
+    cmd_bash = " && ".join([
+        "{pigz} --decompress --no-name {input_wasm} --stdout > $@.unzip",
+        "{instrument_wasm} $@.unzip -a serialized-module > $@",
+    ])
+        .format(
+        input_wasm = "$(location :universal_canister)",
+        instrument_wasm = "$(location //rs/embedders:instrument-wasm)",
+        pigz = "$(location @pigz)",
+    ),
+    message = "Compiling universal canister with Wasmtime",
+    tools = [
+        "//rs/embedders:instrument-wasm",
+        "@pigz",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+rust_canister(
+    name = "universal_canister_no_heartbeat",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
     deps = LIB_DEPENDENCIES + DEPENDENCIES,

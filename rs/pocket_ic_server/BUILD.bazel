@@ -6,12 +6,13 @@ BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
+    "//packages/ic-error-types",
     "//packages/pocket-ic:pocket-ic",
+    "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
-    "//rs/boundary_node/icx_proxy:icx_proxy_dev",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/crypto/ed25519",
     "//rs/crypto/iccsa",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",
@@ -32,6 +33,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/starter:ic-starter-lib",
     "//rs/state_machine_tests",
+    "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/types/management_canister_types",
@@ -42,28 +44,36 @@ LIB_DEPENDENCIES = [
     "@crate_index//:askama",
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
-    "@crate_index//:axum_server_0_6_0",
+    "@crate_index//:axum-server",
     "@crate_index//:backoff",
     "@crate_index//:base64",
+    "@crate_index//:bitcoin",
+    "@crate_index//:bytes",
     "@crate_index//:candid",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
+    "@crate_index//:ctrlc",
     "@crate_index//:flate2",
+    "@crate_index//:form_urlencoded",
+    "@crate_index//:fqdn",
     "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:http",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
-    "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-util",
-    "@crate_index//:hyper_0_14_27",
-    "@crate_index//:hyper_rustls_0_24_2",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-bn-lib",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:rand",
+    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
@@ -80,27 +90,44 @@ LIB_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
+    "//rs/config",
+    "//rs/interfaces/registry",
+    "//rs/nns/constants",
+    "//rs/registry/canister",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
+    "//rs/registry/transport",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
+    "@crate_index//:nix",
+    "@crate_index//:prometheus",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
+    "@crate_index//:rustls",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
 
 SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
-    "//rs/tests/testing_verification/spec_compliance",
+    "//rs/tests/research/spec_compliance",
     "//rs/registry/subnet_type",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 ALIASES = {}
 
@@ -119,7 +146,10 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO: restrict the visibility
     visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+    deps = LIB_DEPENDENCIES + [
+        ":pocket-ic-server-lib",
+        "//rs/canister_sandbox:build_script",
+    ],
 )
 
 rust_library(
@@ -131,21 +161,15 @@ rust_library(
     ] + glob([
         "src/state_api/**/*.rs",
     ]),
-    aliases = {
-        "@crate_index//:hyper_0_14_27": "hyper_legacy",
-    },
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "5.0.0",
+    version = "8.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
 rust_ic_test(
     name = "pic_test",
-    srcs = glob(["src/**"]),
-    aliases = {
-        "@crate_index//:hyper_0_14_27": "hyper_legacy",
-    },
+    srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
@@ -160,13 +184,32 @@ rust_test(
     aliases = {},
     data = [
         ":pocket-ic-server",
+        "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-        "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
+        "RUST_TEST_THREADS": "2",
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
+        "II_WASM": "$(rootpath @ii_dev_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:8",
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        #  ---- test_http_gateway stdout ----
+        #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
+        #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
+        #    kind: Request, url: "http://7tjcv-pp777-77776-qaaaa-cai.raw.localhost:49380/",
+        #    source: hyper_util::client::legacy::Error(
+        #      Connect,
+        #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
+        #    )
+        #  }
+        "requires-network",
+        "test_macos",
+    ],
     deps = TEST_DEPENDENCIES,
 )
 
@@ -179,14 +222,50 @@ rust_test(
     ],
     data = [
         ":pocket-ic-server",
-        "//rs/tests:ic-hs",
+        "//hs/spec_compliance:ic-ref-test",
         "//rs/tests/httpbin-rs:httpbin",
+        "//rs/tests/research:ic-hs",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-        "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
+        "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:8",
+    ],
     deps = SPEC_TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "bitcoin_integration_tests",
+    size = "small",
+    srcs = [
+        "tests/bitcoin_integration_tests.rs",
+    ],
+    aliases = {},
+    data = [
+        ":pocket-ic-server",
+        "//:bitcoind",
+        "@bitcoin_example_canister//file",
+        "@btc_canister//file",
+        "@mozilla_root_ca_store//file",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
+        "BITCOIND_BIN": "$(rootpath //:bitcoind)",
+        "BTC_WASM": "$(rootpath @btc_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
+    },
+    tags = [
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
+        "test_macos",
+    ],
+    deps = TEST_DEPENDENCIES,
 )

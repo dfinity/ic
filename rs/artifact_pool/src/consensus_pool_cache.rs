@@ -19,7 +19,7 @@ pub(crate) struct ConsensusCacheImpl {
 }
 
 /// Things that can be updated in the consensus cache.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CacheUpdateAction {
     Finalization,
     CatchUpPackage,
@@ -120,7 +120,7 @@ impl<'a> CachedChainIterator<'a> {
     }
 }
 
-impl<'a> Iterator for CachedChainIterator<'a> {
+impl Iterator for CachedChainIterator<'_> {
     type Item = Block;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -57,7 +57,7 @@ pub fn crypto_lib_testvec(test_vec: Ed25519TestVector) -> ([u8; 32], [u8; 32], V
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter)]
 pub enum Ed25519TestVector {
     RFC8032_ED25519_1,
     RFC8032_ED25519_2,

@@ -1,6 +1,9 @@
-use crate::message_routing::LatencyMetrics;
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
+use crate::message_routing::{
+    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
+use ic_config::embedders::BestEffortResponsesFeature;
 use ic_error_types::RejectCode;
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
@@ -13,14 +16,14 @@ use ic_replicated_state::{
 use ic_types::{
     messages::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
     },
     CountBytes, SubnetId,
 };
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
-use std::collections::BTreeMap;
+use std::collections::{btree_map, BTreeMap};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -45,19 +48,10 @@ struct StreamBuilderMetrics {
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
     pub critical_error_response_destination_not_found: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// failures to induct responses.
+    pub critical_error_induct_response_failed: IntCounter,
 }
-
-/// Desired byte size of an outgoing stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
-
-/// Maximum number of messages in a stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 50_000;
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
@@ -82,7 +76,10 @@ const CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND: &str =
     "mr_stream_builder_response_destination_not_found";
 
 impl StreamBuilderMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
+    ) -> Self {
         let stream_messages = metrics_registry.int_gauge_vec(
             METRIC_STREAM_MESSAGES,
             "Messages currently enqueued in streams, by remote subnet.",
@@ -120,6 +117,9 @@ impl StreamBuilderMetrics {
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
         let critical_error_response_destination_not_found =
             metrics_registry.error_counter(CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND);
+        let critical_error_induct_response_failed = message_routing_metrics
+            .critical_error_induct_response_failed
+            .clone();
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
         for (msg_type, status) in &[
@@ -147,6 +147,7 @@ impl StreamBuilderMetrics {
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
+            critical_error_induct_response_failed,
         }
     }
 }
@@ -160,24 +161,41 @@ pub(crate) trait StreamBuilder: Send {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState;
 }
 
+/// Routes messages from canister output queues into streams, up to the specified limits.
+///
+/// At most `max_stream_messages` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `target_stream_size_bytes`.
 pub(crate) struct StreamBuilderImpl {
     subnet_id: SubnetId,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
     metrics: StreamBuilderMetrics,
     time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
+
+    /// Rollout stage of the best-effort responses feature.
+    best_effort_responses: BestEffortResponsesFeature,
+
     log: ReplicaLogger,
 }
 
 impl StreamBuilderImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
+        best_effort_responses: BestEffortResponsesFeature,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             subnet_id,
-            metrics: StreamBuilderMetrics::new(metrics_registry),
+            max_stream_messages,
+            target_stream_size_bytes,
+            metrics: StreamBuilderMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
+            best_effort_responses,
             log,
         }
     }
@@ -211,9 +229,19 @@ impl StreamBuilderImpl {
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
-            // Enqueuing a response for a local request.
-            // There should never be the case of getting `CanisterStopped` or `CanisterStopping`.
-            .unwrap();
+            .map(|_| ())
+            .unwrap_or_else(|(err, response)| {
+                // Local request, we should never get a `CanisterNotFound`, `CanisterStopped` or
+                // `NonMatchingResponse` error.
+                error!(
+                    self.log,
+                    "{}: Failed to enqueue reject response for local request: {}\n{:?}",
+                    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                    err,
+                    response
+                );
+                self.metrics.critical_error_induct_response_failed.inc();
+            });
     }
 
     /// Records the result of routing an XNet message.
@@ -240,15 +268,8 @@ impl StreamBuilderImpl {
             .observe(msg.payload_size_bytes().get() as f64);
     }
 
-    /// Implementation of `StreamBuilder::build_streams()` that takes a
-    /// `target_stream_size_bytes` argument to limit how many messages will be
-    /// routed into each stream.
-    fn build_streams_impl(
-        &self,
-        mut state: ReplicatedState,
-        max_stream_messages: usize,
-        target_stream_size_bytes: usize,
-    ) -> ReplicatedState {
+    /// Implementation of `StreamBuilder::build_streams()`.
+    fn build_streams_impl(&self, mut state: ReplicatedState) -> ReplicatedState {
         /// Pops the previously peeked message.
         ///
         /// Panics:
@@ -264,23 +285,20 @@ impl StreamBuilderImpl {
             message
         }
 
-        /// Tests whether a stream is over the message count limit, byte limit or (if
-        /// directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
-        fn is_at_limit(
-            stream: Option<&Stream>,
-            max_stream_messages: usize,
-            target_stream_size_bytes: usize,
-            is_local_message: bool,
-            destination_subnet_type: SubnetType,
-        ) -> bool {
+        // Tests whether a stream is over the message count limit, byte limit or (if
+        // directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
+        let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
+                           is_local_message: bool,
+                           destination_subnet_type: SubnetType|
+         -> bool {
             let stream = match stream {
-                Some(stream) => stream,
-                None => return false,
+                btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
+                btree_map::Entry::Vacant(_) => return false,
             };
             let stream_messages_len = stream.messages().len();
 
-            if stream_messages_len >= max_stream_messages
-                || stream.count_bytes() >= target_stream_size_bytes
+            if stream_messages_len >= self.max_stream_messages
+                || stream.count_bytes() >= self.target_stream_size_bytes
             {
                 // At limit if message count or byte size limits (enforced across all outgoing
                 // streams) are hit.
@@ -293,7 +311,7 @@ impl StreamBuilderImpl {
             !is_local_message
                 && destination_subnet_type == SubnetType::System
                 && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
-        }
+        };
 
         let mut streams = state.take_streams();
         let routing_table = state.routing_table();
@@ -306,6 +324,7 @@ impl StreamBuilderImpl {
             .collect();
 
         let mut requests_to_reject = Vec::new();
+        let mut best_effort_requests_to_unsupported_subnets = Vec::new();
         let mut oversized_requests = Vec::new();
 
         let mut output_iter = state.output_into_iter();
@@ -336,14 +355,14 @@ impl StreamBuilderImpl {
             match routing_table.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
+                    let destination_subnet_type = *subnet_types
+                        .get(&dst_subnet_id)
+                        .unwrap_or(&SubnetType::Application);
+                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     if is_at_limit(
-                        streams.get(&dst_subnet_id),
-                        max_stream_messages,
-                        target_stream_size_bytes,
+                        &dst_stream_entry,
                         self.subnet_id == dst_subnet_id,
-                        *subnet_types
-                            .get(&dst_subnet_id)
-                            .unwrap_or(&SubnetType::Application),
+                        destination_subnet_type,
                     ) {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
@@ -353,8 +372,8 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
-                    // Reject messages with oversized payloads, as they may
-                    // cause streams to permanently stall.
+                    // Reject messages with oversized payloads, as they may cause streams to
+                    // permanently stall. Also reject best-effort requests to unsupported subnets.
                     match msg {
                         // Remote request above the payload size limit.
                         RequestOrResponse::Request(req)
@@ -373,6 +392,24 @@ impl StreamBuilderImpl {
                                 LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE,
                             );
                             oversized_requests.push(req);
+                        }
+
+                        // Best-effort request to unsupported subnet. Always route subnet-local requests
+                        // for consistency with scheduler routing.
+                        //
+                        // TODO(MR-649): Drop this once best-effort calls are fully deployed.
+                        RequestOrResponse::Request(req)
+                            if req.deadline != NO_DEADLINE
+                                && dst_subnet_id != self.subnet_id
+                                && !self
+                                    .best_effort_responses
+                                    .is_enabled_on(&dst_subnet_id, destination_subnet_type) =>
+                        {
+                            warn!(
+                                self.log,
+                                "Best-effort request to unsupported subnet from {}", req.sender
+                            );
+                            best_effort_requests_to_unsupported_subnets.push(req);
                         }
 
                         // Response above the payload size limit.
@@ -410,14 +447,14 @@ impl StreamBuilderImpl {
                                 }
                             }
 
-                            streams.push(dst_subnet_id, msg);
+                            dst_stream_entry.or_default().push(msg);
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            streams.push(dst_subnet_id, msg);
+                            dst_stream_entry.or_default().push(msg);
                         }
                     };
                 }
@@ -456,6 +493,18 @@ impl StreamBuilderImpl {
                 &req,
                 RejectCode::DestinationInvalid,
                 format!("No route to canister {}", dst_canister_id),
+            );
+        }
+
+        for req in best_effort_requests_to_unsupported_subnets {
+            self.reject_local_request(
+                &mut state,
+                &req,
+                RejectCode::DestinationInvalid,
+                format!(
+                    "Best-effort call to unsupported subnet: {} -> {}",
+                    req.sender, req.receiver
+                ),
             );
         }
 
@@ -525,6 +574,6 @@ impl StreamBuilderImpl {
 
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
-        self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
+        self.build_streams_impl(state)
     }
 }

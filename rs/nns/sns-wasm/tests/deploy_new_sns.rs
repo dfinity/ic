@@ -3,14 +3,13 @@ use crate::common::{
     EXPECTED_SNS_CREATION_FEE,
 };
 use canister_test::Wasm;
-use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
-    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     sns_wasm,
@@ -63,7 +62,6 @@ fn test_canisters_are_created_and_installed() {
         &state_machine,
         CanisterId::unchecked_from_principal(root_canister_id),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },
@@ -130,9 +128,11 @@ fn test_canisters_are_created_and_installed() {
     let swap_canister_summary = get_sns_canisters_summary_response.swap_canister_summary();
     assert_eq!(swap_canister_summary.canister_id(), swap_canister_id);
     assert_eq!(swap_canister_summary.status().status(), Running);
+    // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-canister_info:
+    // The order of controllers stored in the canister history may vary depending on the implementation.
     assert_eq!(
         swap_canister_summary.status().controllers(),
-        vec![ROOT_CANISTER_ID.get()]
+        vec![root_canister_id]
     );
     assert_eq!(
         swap_canister_summary.status().module_hash().unwrap(),
@@ -175,7 +175,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     sns_wasm::add_real_wasms_to_sns_wasms(&machine);
     // we add a wasm that will fail with the given payload on installation
     let bad_wasm = SnsWasm {
-        wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
+        wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes(),
         canister_type: SnsCanisterType::Governance.into(),
         ..SnsWasm::default()
     };
@@ -193,11 +193,24 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         sns_init_payload,
     );
 
-    let root = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root = canister_test_id(highest_nns_created_canister_index + 1);
+    let governance = canister_test_id(highest_nns_created_canister_index + 2);
+    let ledger = canister_test_id(highest_nns_created_canister_index + 3);
+    let swap = canister_test_id(highest_nns_created_canister_index + 4);
+    let index = canister_test_id(highest_nns_created_canister_index + 5);
+    let error_message = response.error.clone().unwrap().message;
+    let expected_error = format!(
+        "Error installing Governance WASM: Failed to install WASM on canister \
+        {}: error code 5: Error from Canister {}: \
+        Canister called `ic0.trap` with message: 'did not find blob on stack",
+        governance, governance
+    );
+    assert!(
+        error_message.contains(&expected_error),
+        "Response error \"{error_message}\" does not contain expected error \"{expected_error}\""
+    );
 
     assert_eq!(
         response,
@@ -213,13 +226,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
             // Because of the invalid WASM above (i.e. universal canister) which does not understand
             // the governance init payload, this fails.
             error: Some(SnsWasmError {
-                message: "Error installing Governance WASM: Failed to install WASM on canister \
-                qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Error from Canister qsgjb-riaaa-aaaaa-aaaga-cai: \
-                Canister called `ic0.trap` with message: did not find blob on stack.\n\
-                Consider gracefully handling failures from this canister or altering the canister to \
-                handle exceptions. See documentation: \
-                http://internetcomputer.org/docs/current/references/execution-errors#trapped-explicitly"
-                    .to_string()
+                message: error_message,
             }),
             dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
                 restored_dapp_canisters: vec![],
@@ -229,18 +236,18 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         }
     );
 
-    // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET because we deleted
+    // No canisters should exist above highest_nns_created_canister_index because we deleted
     // those canisters.
     for i in 1..=5 {
-        assert!(
-            !machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + i))
-        );
+        assert!(!machine.canister_exists(canister_test_id(highest_nns_created_canister_index + i)));
     }
 
-    // 5_000_000_000_000 cycles are burned creating the canisters before the failure
+    // 15_000_000_000_000 cycles are burned creating the canisters before the failure
+    let initial_canister_creation_cycles = 3 * ONE_TRILLION as u128;
     assert_eq!(
         machine.cycle_balance(SNS_WASM_CANISTER_ID),
-        EXPECTED_SNS_CREATION_FEE - SNS_CANISTER_COUNT_AT_INSTALL as u128 * (ONE_TRILLION as u128)
+        EXPECTED_SNS_CREATION_FEE
+            - SNS_CANISTER_COUNT_AT_INSTALL as u128 * initial_canister_creation_cycles,
     );
 }
 
@@ -267,11 +274,13 @@ fn test_deploy_adds_cycles_to_target_canisters() {
         sns_init_payload,
     );
 
-    let root = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root = canister_test_id(highest_nns_created_canister_index + 1);
+    let governance = canister_test_id(highest_nns_created_canister_index + 2);
+    let ledger = canister_test_id(highest_nns_created_canister_index + 3);
+    let swap = canister_test_id(highest_nns_created_canister_index + 4);
+    let index = canister_test_id(highest_nns_created_canister_index + 5);
 
     assert_eq!(
         response,
@@ -351,11 +360,13 @@ fn test_deploy_sns_and_transfer_dapps() {
         sns_init_payload,
     );
 
-    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
-    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
-    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 7);
-    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 8);
-    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 9);
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root_canister_id = canister_test_id(highest_nns_created_canister_index + 5);
+    let governance_canister_id = canister_test_id(highest_nns_created_canister_index + 6);
+    let ledger_canister_id = canister_test_id(highest_nns_created_canister_index + 7);
+    let swap_canister_id = canister_test_id(highest_nns_created_canister_index + 8);
+    let index_canister_id = canister_test_id(highest_nns_created_canister_index + 9);
 
     assert_eq!(
         response,
@@ -386,7 +397,6 @@ fn test_deploy_sns_and_transfer_dapps() {
         &machine,
         CanisterId::unchecked_from_principal(root_canister_principal),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },

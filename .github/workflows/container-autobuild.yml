@@ -6,11 +6,19 @@ on:
       - '.github/workflows/container-autobuild.yml'
       - '.bazelversion'
       - 'rust-toolchain.toml'
-      - 'gitlab-ci/container/**'
+      - 'ci/container/**'
+  push:
+    branches:
+      - 'dev-gh-*'
+    paths:
+      - '.github/workflows/container-autobuild.yml'
+      - '.bazelversion'
+      - 'rust-toolchain.toml'
+      - 'ci/container/**'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -24,11 +32,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 8
 
       - name: Set Env Variables
@@ -37,7 +52,7 @@ jobs:
         run: |
           # Set relevant env variables
           set -eExuo pipefail
-          IMAGE_TAG="$(gitlab-ci/container/get-image-tag.sh)"
+          IMAGE_TAG="$(ci/container/get-image-tag.sh)"
           RUST_VERSION="$(grep channel rust-toolchain.toml | sed -e 's/.*=//' | tr -d '"')"
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
           echo "RUST_VERSION=${RUST_VERSION}" >> "$GITHUB_ENV"
@@ -48,10 +63,10 @@ jobs:
         run: |
           # Check if we've previously already built ic-build image
           set -eExuo pipefail
-          if grep "$IMAGE_TAG" gitlab-ci/container/TAG_GH; then
+          if grep "$IMAGE_TAG" ci/container/TAG; then
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify gitlab-ci/container/TAG_GH with random string to trigger new build."
+            echo "Modify ci/container/TAG with random string to trigger new build."
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
@@ -63,7 +78,7 @@ jobs:
         if: ${{ steps.check.outputs.build == 'true' }}
 
       - name: Login to GHCR
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         if: ${{ steps.check.outputs.build == 'true' }}
         with:
           registry: ghcr.io
@@ -76,7 +91,7 @@ jobs:
         id: build
         with:
           context: .
-          file: gitlab-ci/container/Dockerfile
+          file: ci/container/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ env.IMAGE_TAG }}
           build-args: |
@@ -93,7 +108,7 @@ jobs:
           IMG_NAME=${{ github.repository_owner }}/ic-build
           IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ env.IMAGE_SHA }}"
 
-          echo "$IMAGE_TAG" > gitlab-ci/container/TAG_GH
+          echo "$IMAGE_TAG" > ci/container/TAG
           pushd .devcontainer
           sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
           popd
@@ -102,7 +117,7 @@ jobs:
           popd
 
           git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "idx@dfinity.org"
+          git config --global user.email "<>"
           git add .
           git commit -m "Updating container image to ${IMAGE_SHA}" -m "Image tag: ${IMAGE_TAG}"
           git push
@@ -111,7 +126,7 @@ jobs:
 
       - name: Add PR Comment
         uses: actions/github-script@v7
-        if: ${{ steps.check.outputs.build == 'true' }}
+        if: ${{ steps.check.outputs.build == 'true' && github.event_name == 'pull_request' }}
         with:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'

@@ -1,6 +1,5 @@
-use crate::canister_state::queues::QueueOp;
-
 use super::*;
+use assert_matches::assert_matches;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use ic_types::time::UNIX_EPOCH;
@@ -17,35 +16,43 @@ fn test_insert() {
     let mut pool = MessagePool::default();
 
     // Insert one message of each kind / class / context.
-    let id1 = pool.insert_inbound(request(NO_DEADLINE).into());
+    let id1: Id = pool.insert_inbound(request(NO_DEADLINE).into()).into();
     assert_eq!(Request, id1.kind());
     assert_eq!(Inbound, id1.context());
     assert_eq!(GuaranteedResponse, id1.class());
-    let id2 = pool.insert_inbound(request(time(20)).into());
+    let id2: Id = pool.insert_inbound(request(time(20)).into()).into();
     assert_eq!(Request, id2.kind());
     assert_eq!(Inbound, id2.context());
     assert_eq!(BestEffort, id2.class());
-    let id3 = pool.insert_inbound(response(NO_DEADLINE).into());
+    let id3: Id = pool.insert_inbound(response(NO_DEADLINE).into()).into();
     assert_eq!(Response, id3.kind());
     assert_eq!(Inbound, id3.context());
     assert_eq!(GuaranteedResponse, id3.class());
-    let id4 = pool.insert_inbound(response(time(40)).into());
+    let id4: Id = pool.insert_inbound(response(time(40)).into()).into();
     assert_eq!(Response, id4.kind());
     assert_eq!(Inbound, id4.context());
     assert_eq!(BestEffort, id4.class());
-    let id5 = pool.insert_outbound_request(request(NO_DEADLINE).into(), time(50).into());
+    let id5: Id = pool
+        .insert_outbound_request(request(NO_DEADLINE).into(), time(50).into())
+        .into();
     assert_eq!(Request, id5.kind());
     assert_eq!(Outbound, id5.context());
     assert_eq!(GuaranteedResponse, id5.class());
-    let id6 = pool.insert_outbound_request(request(time(60)).into(), time(65).into());
+    let id6: Id = pool
+        .insert_outbound_request(request(time(60)).into(), time(65).into())
+        .into();
     assert_eq!(Request, id6.kind());
     assert_eq!(Outbound, id6.context());
     assert_eq!(BestEffort, id6.class());
-    let id7 = pool.insert_outbound_response(response(NO_DEADLINE).into());
+    let id7: Id = pool
+        .insert_outbound_response(response(NO_DEADLINE).into())
+        .into();
     assert_eq!(Response, id7.kind());
     assert_eq!(Outbound, id7.context());
     assert_eq!(GuaranteedResponse, id7.class());
-    let id8 = pool.insert_outbound_response(response(time(80)).into());
+    let id8: Id = pool
+        .insert_outbound_response(response(time(80)).into())
+        .into();
     assert_eq!(Response, id8.kind());
     assert_eq!(Outbound, id8.context());
     assert_eq!(BestEffort, id8.class());
@@ -63,6 +70,9 @@ fn test_insert() {
             (time(50 + REQUEST_LIFETIME.as_secs() as u32), id5)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
 
     // All best-effort messages should be in the load shedding queue.
@@ -95,56 +105,7 @@ fn test_insert_outbound_request_deadline_rounding() {
 
     pool.insert_outbound_request(request(NO_DEADLINE).into(), current_time);
 
-    assert_eq!(expected_deadline, pool.deadline_queue.first().unwrap().0);
-}
-
-#[test]
-fn test_replace_inbound_timeout_response() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-    let id = placeholder.id();
-    assert_eq!(Kind::Response, id.kind());
-    assert_eq!(Context::Inbound, id.context());
-    assert_eq!(Class::BestEffort, id.class());
-    assert_eq!(0, pool.len());
-    assert_eq!(None, pool.get(id));
-
-    // Replace the placeholder with a best-effort response.
-    let msg: RequestOrResponse = response(time(5)).into();
-    pool.replace_inbound_timeout_response(placeholder, msg.clone());
-    assert_eq!(1, pool.len());
-    assert_eq!(Some(&response(time(5)).into()), pool.get(id));
-
-    // Response is in load shedding queue, but not in deadline queue.
-    assert!(pool.expire_messages(time(u32::MAX).into()).is_empty());
-    assert_eq!(Some((id, msg)), pool.shed_largest_message());
-    assert_eq!(0, pool.len());
-}
-
-#[test]
-#[should_panic(expected = "Message must be a best-effort response")]
-fn test_replace_request() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-
-    // Replace the placeholder with a request.
-    pool.replace_inbound_timeout_response(placeholder, request(NO_DEADLINE).into());
-}
-
-#[test]
-#[should_panic(expected = "Message must be a best-effort response")]
-fn test_replace_guaranteed_response() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-
-    // Replace the placeholder with a guaranteed response.
-    pool.replace_inbound_timeout_response(placeholder, response(NO_DEADLINE).into());
+    assert_eq!(expected_deadline, pool.deadline_queue.min_key().unwrap().0);
 }
 
 #[test]
@@ -170,12 +131,40 @@ fn test_get() {
     }
 
     // Also do a negative test.
-    let nonexistent_id = pool.next_message_id(Kind::Request, Context::Inbound, Class::BestEffort);
-    assert_eq!(None, pool.get(nonexistent_id));
+    let nonexistent_reference: InboundReference =
+        pool.next_reference(Class::BestEffort, Kind::Request);
+    assert_eq!(None, pool.get(nonexistent_reference));
 }
 
 #[test]
 fn test_take() {
+    fn test_take_impl<T>(
+        request_id: Reference<T>,
+        response_id: Reference<T>,
+        request: Request,
+        response: Response,
+        pool: &mut MessagePool,
+    ) {
+        let request: RequestOrResponse = request.into();
+        let response: RequestOrResponse = response.into();
+
+        // Ensure that the messages are now in the pool.
+        assert_eq!(Some(&request), pool.get(request_id));
+        assert_eq!(Some(&response), pool.get(response_id));
+
+        // Actually take the messages.
+        assert_eq!(Some(request), pool.take(request_id));
+        assert_eq!(Some(response), pool.take(response_id));
+
+        // Messages are gone.
+        assert_eq!(None, pool.get(request_id));
+        assert_eq!(None, pool.get(response_id));
+
+        // And cannot be taken out again.
+        assert_eq!(None, pool.take(request_id));
+        assert_eq!(None, pool.take(response_id));
+    }
+
     let mut pool = MessagePool::default();
 
     for deadline in [NO_DEADLINE, time(13)] {
@@ -183,36 +172,19 @@ fn test_take() {
             let request = request(deadline);
             let response = response(deadline);
 
-            // Insert the two messages.
-            let (request_id, response_id) = match context {
-                Context::Inbound => (
-                    pool.insert_inbound(request.clone().into()),
-                    pool.insert_inbound(response.clone().into()),
-                ),
-                Context::Outbound => (
-                    pool.insert_outbound_request(request.clone().into(), time(14).into()),
-                    pool.insert_outbound_response(response.clone().into()),
-                ),
-            };
-
-            let request: RequestOrResponse = request.into();
-            let response: RequestOrResponse = response.into();
-
-            // Ensure that the messages are now in the pool.
-            assert_eq!(Some(&request), pool.get(request_id));
-            assert_eq!(Some(&response), pool.get(response_id));
-
-            // Actually take the messages.
-            assert_eq!(Some(request), pool.take(request_id));
-            assert_eq!(Some(response), pool.take(response_id));
-
-            // Messages are gone.
-            assert_eq!(None, pool.get(request_id));
-            assert_eq!(None, pool.get(response_id));
-
-            // And cannot be taken out again.
-            assert_eq!(None, pool.take(request_id));
-            assert_eq!(None, pool.take(response_id));
+            match context {
+                Context::Inbound => {
+                    let request_id = pool.insert_inbound(request.clone().into());
+                    let response_id = pool.insert_inbound(response.clone().into());
+                    test_take_impl(request_id, response_id, request, response, &mut pool);
+                }
+                Context::Outbound => {
+                    let request_id =
+                        pool.insert_outbound_request(request.clone().into(), time(14).into());
+                    let response_id = pool.insert_outbound_response(response.clone().into());
+                    test_take_impl(request_id, response_id, request, response, &mut pool);
+                }
+            }
         }
     }
 
@@ -232,7 +204,7 @@ fn test_expiration() {
     let t41_plus_lifetime = Time::from(time(41)) + REQUEST_LIFETIME;
     let t_max = Time::from_nanos_since_unix_epoch(u64::MAX);
     let half_second = Duration::from_nanos(500_000_000);
-    let empty_vec = Vec::<(Id, RequestOrResponse)>::new();
+    let empty_vec = Vec::<(SomeReference, RequestOrResponse)>::new();
 
     let mut pool = MessagePool::default();
 
@@ -242,13 +214,17 @@ fn test_expiration() {
 
     // Insert one of each kind / class of message that expires.
     let msg1 = request(time(10));
-    let id1 = pool.insert_inbound(msg1.clone().into());
+    let ref1 = pool.insert_inbound(msg1.clone().into());
+    let id1 = ref1.into();
     let msg2 = request(time(20));
-    let id2 = pool.insert_outbound_request(msg2.clone().into(), time(25).into());
+    let ref2 = pool.insert_outbound_request(msg2.clone().into(), time(25).into());
+    let id2 = ref2.into();
     let msg3 = response(time(30));
-    let id3 = pool.insert_outbound_response(msg3.clone().into());
+    let ref3 = pool.insert_outbound_response(msg3.clone().into());
+    let id3 = ref3.into();
     let msg4 = request(NO_DEADLINE);
-    let id4 = pool.insert_outbound_request(msg4.clone().into(), time(40).into());
+    let ref4 = pool.insert_outbound_request(msg4.clone().into(), time(40).into());
+    let id4 = ref4.into();
 
     // Sanity check.
     assert_eq!(4, pool.len());
@@ -260,6 +236,9 @@ fn test_expiration() {
             (time(40 + REQUEST_LIFETIME.as_secs() as u32), id4)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
     // There are expiring messages.
     assert!(pool.has_expired_deadlines(t_max));
@@ -278,10 +257,10 @@ fn test_expiration() {
     assert_eq!(empty_vec, pool.expire_messages(t10));
     assert_eq!(empty_vec, pool.expire_messages(t10 + half_second));
     // But (only) `msg1` expires at 11 seconds.
-    assert_eq!(vec![(id1, msg1.into())], pool.expire_messages(t11));
+    assert_eq!(vec![(id1.into(), msg1.into())], pool.expire_messages(t11));
 
     // Sanity check: `msg1` is now gone.
-    assert_eq!(None, pool.get(id1));
+    assert_eq!(None, pool.get(ref1));
     assert_eq!(3, pool.len());
 
     // And there is nothing expiring at 11 seconds anymore.
@@ -299,7 +278,7 @@ fn test_expiration() {
     assert!(pool.has_expired_deadlines(t21));
 
     // Now pop it.
-    assert_eq!(Some(msg2.into()), pool.take(id2));
+    assert_eq!(Some(msg2.into()), pool.take(ref2));
     assert_eq!(2, pool.len());
 
     // There is now no longer a message expiring at 21 seconds.
@@ -319,7 +298,7 @@ fn test_expiration() {
     assert_eq!(empty_vec, pool.expire_messages(t30));
     // But both remaining messages expire at `t41_plus_lifetime`.
     assert_eq!(
-        vec![(id3, msg3.into()), (id4, msg4.into())],
+        vec![(id3.into(), msg3.into()), (id4.into(), msg4.into())],
         pool.expire_messages(t41_plus_lifetime)
     );
 
@@ -362,30 +341,32 @@ fn test_shed_message() {
 
     // Insert one best-effort message of each kind / context.
     let msg1 = request_with_payload(1000, time(10));
-    let id1 = pool.insert_inbound(msg1.clone().into());
+    let ref1 = pool.insert_inbound(msg1.clone().into());
     let msg2 = response_with_payload(4000, time(20));
-    let id2 = pool.insert_inbound(msg2.clone().into());
+    let ref2 = pool.insert_inbound(msg2.clone().into());
+    let id2: Id = ref2.into();
     let msg3 = request_with_payload(3000, time(30));
-    let id3 = pool.insert_outbound_request(msg3.clone().into(), time(35).into());
+    let ref3 = pool.insert_outbound_request(msg3.clone().into(), time(35).into());
     let msg4 = response_with_payload(2000, time(40));
-    let id4 = pool.insert_outbound_response(msg4.clone().into());
+    let ref4 = pool.insert_outbound_response(msg4.clone().into());
+    let id4: Id = ref4.into();
 
     // Sanity check.
     assert_eq!(4, pool.len());
 
     // Shed the largest message (`msg2`).
-    assert_eq!(Some((id2, msg2.into())), pool.shed_largest_message());
+    assert_eq!(Some((id2.into(), msg2.into())), pool.shed_largest_message());
     assert_eq!(3, pool.len());
 
     // Pop the next largest message ('msg3`).
-    assert_eq!(Some(msg3.into()), pool.take(id3));
+    assert_eq!(Some(msg3.into()), pool.take(ref3));
 
     // Shedding will now produce `msg4`.
-    assert_eq!(Some((id4, msg4.into())), pool.shed_largest_message());
+    assert_eq!(Some((id4.into(), msg4.into())), pool.shed_largest_message());
     assert_eq!(1, pool.len());
 
     // Pop the remaining message ('msg1`).
-    assert_eq!(Some(msg1.into()), pool.take(id1));
+    assert_eq!(Some(msg1.into()), pool.take(ref1));
 
     // Nothing left to shed.
     assert_eq!(None, pool.shed_largest_message());
@@ -415,14 +396,14 @@ fn test_equality() {
     let mut pool = MessagePool::default();
 
     // Insert one message of each kind / class / context.
-    let id1 = pool.insert_inbound(request(NO_DEADLINE).into());
-    let id2 = pool.insert_inbound(request_with_payload(2000, time(20)).into());
-    let _id3 = pool.insert_inbound(response(NO_DEADLINE).into());
-    let _id4 = pool.insert_inbound(response(time(40)).into());
-    let _id5 = pool.insert_outbound_request(request(NO_DEADLINE).into(), time(50).into());
-    let _id6 = pool.insert_outbound_request(request(time(60)).into(), time(65).into());
-    let _id7 = pool.insert_outbound_response(response(NO_DEADLINE).into());
-    let id8 = pool.insert_outbound_response(response(time(80)).into());
+    let ref1 = pool.insert_inbound(request(NO_DEADLINE).into());
+    let ref2 = pool.insert_inbound(request_with_payload(2000, time(20)).into());
+    let _ref3 = pool.insert_inbound(response(NO_DEADLINE).into());
+    let _ref4 = pool.insert_inbound(response(time(40)).into());
+    let _ref5 = pool.insert_outbound_request(request(NO_DEADLINE).into(), time(50).into());
+    let _ref6 = pool.insert_outbound_request(request(time(60)).into(), time(65).into());
+    let _ref7 = pool.insert_outbound_response(response(NO_DEADLINE).into());
+    let ref8 = pool.insert_outbound_response(response(time(80)).into());
 
     // Make a clone.
     let mut other_pool = pool.clone();
@@ -431,14 +412,20 @@ fn test_equality() {
     assert_eq!(pool, other_pool);
 
     // Pop the same message from either pool.
-    assert!(pool.take(id1).is_some());
-    assert!(other_pool.take(id1).is_some());
+    assert!(pool.take(ref1).is_some());
+    assert!(other_pool.take(ref1).is_some());
     // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 
     // Shed a message from either pool.
-    assert_eq!(id2, pool.shed_largest_message().unwrap().0);
-    assert_eq!(id2, other_pool.shed_largest_message().unwrap().0);
+    assert_eq!(
+        SomeReference::Inbound(ref2),
+        pool.shed_largest_message().unwrap().0
+    );
+    assert_eq!(
+        SomeReference::Inbound(ref2),
+        other_pool.shed_largest_message().unwrap().0
+    );
     // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 
@@ -450,13 +437,20 @@ fn test_equality() {
 
     // Expire a message from one pool (id8), take it from the other.
     assert_eq!(1, pool.expire_messages(time(81).into()).len());
-    assert!(other_pool.take(id8).is_some());
+    assert!(other_pool.take(ref8).is_some());
     // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 
     // Shed a message from one pool, take it from the other.
-    let id = pool.shed_largest_message().unwrap().0;
-    assert!(other_pool.take(id).is_some());
+    let some_ref = pool.shed_largest_message().unwrap().0;
+    match some_ref {
+        SomeReference::Inbound(reference) => {
+            assert!(other_pool.take(reference).is_some());
+        }
+        SomeReference::Outbound(reference) => {
+            assert!(other_pool.take(reference).is_some());
+        }
+    }
     // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 }
@@ -507,19 +501,22 @@ fn test_message_id_sanity() {
 #[test]
 fn test_message_id_flags() {
     // Guaranteed inbound request.
-    let giq_id = Id::new(
-        Kind::Request,
-        Context::Inbound,
+    let giq_id = Id::from(InboundReference::new(
         Class::GuaranteedResponse,
+        Kind::Request,
         13,
-    );
+    ));
     assert_eq!(Kind::Request, giq_id.kind());
     assert_eq!(Context::Inbound, giq_id.context());
     assert_eq!(Class::GuaranteedResponse, giq_id.class());
     assert_eq!(13, giq_id.0 >> Id::BITMASK_LEN);
 
     // Best-effort outbound response, same generator.
-    let bop_id = Id::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
+    let bop_id = Id::from(OutboundReference::new(
+        Class::BestEffort,
+        Kind::Response,
+        13,
+    ));
     assert_eq!(Kind::Response, bop_id.kind());
     assert_eq!(Context::Outbound, bop_id.context());
     assert_eq!(Class::BestEffort, bop_id.class());
@@ -534,24 +531,182 @@ fn test_message_id_flags() {
 
 #[test]
 fn test_message_id_range() {
-    const REQUEST: Kind = Kind::Request;
-    const INBOUND: Context = Context::Inbound;
-    const GUARANTEED: Class = Class::GuaranteedResponse;
+    use Class::GuaranteedResponse;
+    use Kind::Request;
 
-    let id1 = Id::new(REQUEST, INBOUND, GUARANTEED, 0);
+    let id1 = Id::from(InboundReference::new(GuaranteedResponse, Request, 0));
     assert_eq!(0, id1.0 >> Id::BITMASK_LEN);
 
-    let id2 = Id::new(REQUEST, INBOUND, GUARANTEED, 13);
+    let id2 = Id::from(InboundReference::new(GuaranteedResponse, Request, 13));
     assert_eq!(13, id2.0 >> Id::BITMASK_LEN);
 
     // Maximum generator value that will be preserved
     const GENERATOR_MAX: u64 = u64::MAX >> Id::BITMASK_LEN;
-    let id3 = Id::new(REQUEST, INBOUND, GUARANTEED, GENERATOR_MAX);
+    let id3 = Id::from(InboundReference::new(
+        GuaranteedResponse,
+        Request,
+        GENERATOR_MAX,
+    ));
     assert_eq!(GENERATOR_MAX, id3.0 >> Id::BITMASK_LEN);
 
     // Larger generator values still work, their high bits are just ignored.
-    let id4 = Id::new(REQUEST, INBOUND, GUARANTEED, u64::MAX);
-    assert_eq!(GENERATOR_MAX, id4.0 >> Id::BITMASK_LEN);
+    let id4 = Id::from(InboundReference::new(
+        GuaranteedResponse,
+        Request,
+        GENERATOR_MAX + 3,
+    ));
+    assert_eq!(2, id4.0 >> Id::BITMASK_LEN);
+}
+
+#[test]
+fn test_id_from_reference_roundtrip() {
+    for kind in [Kind::Request, Kind::Response] {
+        for class in [Class::GuaranteedResponse, Class::BestEffort] {
+            // Inbound.
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(reference.0, id.0);
+            assert_eq!(id, reference.into());
+            assert_eq!(SomeReference::Inbound(reference), SomeReference::from(id));
+            assert_eq!(
+                (id.context(), id.class(), id.kind()),
+                (reference.context(), reference.class(), reference.kind())
+            );
+
+            // Outbound.
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(reference.0, id.0);
+            assert_eq!(id, reference.into());
+            assert_eq!(SomeReference::Outbound(reference), SomeReference::from(id));
+            assert_eq!(
+                (id.context(), id.class(), id.kind()),
+                (reference.context(), reference.class(), reference.kind())
+            );
+        }
+    }
+}
+
+#[test]
+fn test_is_inbound_best_effort_response() {
+    use Class::*;
+    use Kind::*;
+
+    for kind in [Request, Response] {
+        for class in [GuaranteedResponse, BestEffort] {
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(
+                class == BestEffort && kind == Response,
+                id.is_inbound_best_effort_response()
+            );
+            assert_eq!(
+                class == BestEffort && kind == Response,
+                reference.is_inbound_best_effort_response()
+            );
+
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert!(!id.is_inbound_best_effort_response());
+            assert!(!reference.is_inbound_best_effort_response());
+        }
+    }
+}
+
+#[test]
+fn test_is_outbound_guaranteed_request() {
+    use Class::*;
+    use Kind::*;
+
+    for kind in [Request, Response] {
+        for class in [GuaranteedResponse, BestEffort] {
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert!(!id.is_outbound_guaranteed_request());
+
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(
+                class == GuaranteedResponse && kind == Request,
+                id.is_outbound_guaranteed_request()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_reference_roundtrip_encode() {
+    for kind in [Kind::Request, Kind::Response] {
+        for class in [Class::GuaranteedResponse, Class::BestEffort] {
+            // Inbound.
+            let reference = InboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
+            // Can be converted back to the same `InboundReference`.
+            let decoded = InboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
+            // Fails to convert to an `OutboundReference`.
+            assert_matches!(
+                OutboundReference::try_from(encoded),
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
+            );
+
+            // Outbound.
+            let reference = OutboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
+            // Fails to convert to an `InboundReference`.
+            assert_matches!(
+                InboundReference::try_from(encoded),
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
+            );
+            // Can be converted back to the same `OutboundReference`.
+            let decoded = OutboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
+        }
+    }
+}
+
+#[test]
+fn test_callback_reference_roundtip_encode() {
+    let callback_reference = CallbackReference(
+        Reference::new(Class::BestEffort, Kind::Response, 13),
+        42.into(),
+    );
+    let encoded = pb_queues::canister_queues::CallbackReference::from(callback_reference.clone());
+
+    assert_eq!(
+        callback_reference,
+        CallbackReference::try_from(encoded).unwrap()
+    );
+}
+
+#[test]
+fn test_decode_invalid_callback_reference() {
+    for kind in [Kind::Request, Kind::Response] {
+        for context in [Context::Inbound, Context::Outbound] {
+            for class in [Class::GuaranteedResponse, Class::BestEffort] {
+                if kind == Kind::Response
+                    && context == Context::Inbound
+                    && class == Class::BestEffort
+                {
+                    // This would be a valid `CallbackReference`, skip it.
+                    continue;
+                }
+                let id: Id = match context {
+                    Context::Inbound => InboundReference::new(class, kind, 13).into(),
+                    Context::Outbound => OutboundReference::new(class, kind, 13).into(),
+                };
+                let invalid = pb_queues::canister_queues::CallbackReference {
+                    id: id.0,
+                    callback_id: 42,
+                };
+
+                assert_matches!(
+                    CallbackReference::try_from(invalid),
+                    Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound best-effort response"
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -879,19 +1034,28 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
-fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T, Id)>) {
+fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &MutableIntMap<(T, Id), ()>)
+where
+    (T, Id): AsInt,
+{
     assert_eq!(messages.len(), queue.len());
-    assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
+    assert_eq!(messages, queue.iter().map(|((_, id), ())| *id).collect())
 }
 
-/// Generates an `Id` for a best-effort inbound request.
-pub(crate) fn new_request_message_id(generator: u64, class: Class) -> Id {
-    Id::new(Kind::Request, Context::Inbound, class, generator)
+/// Generates an `InboundReference` for a request of the given class.
+pub(crate) fn new_request_reference(generator: u64, class: Class) -> InboundReference {
+    Reference::new(class, Kind::Request, generator)
 }
 
-/// Generates an `Id` for an inbound response.
-pub(crate) fn new_response_message_id(generator: u64, class: Class) -> Id {
-    Id::new(Kind::Response, Context::Inbound, class, generator)
+/// Generates an `InboundReference` for a response of the given class.
+pub(crate) fn new_response_reference(generator: u64, class: Class) -> InboundReference {
+    Reference::new(class, Kind::Response, generator)
+}
+
+#[derive(PartialEq, Eq)]
+enum QueueOp {
+    Push,
+    Pop,
 }
 
 /// Fixture for validating updates to the message stats. Relies on a parallel

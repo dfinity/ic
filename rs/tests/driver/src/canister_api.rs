@@ -97,7 +97,6 @@ pub trait Request<T: Response> {
 /// via an appropriate `Request<ResponseType>`, for which `ResponseType` <: `Response` is a Candid type that can be decoded.
 ///
 /// Some examples of when this type is appropriate:
-/// - Counter Canister (//rs/workload_generator:src/counter.wat)
 /// - Universal Canister (//rs/universal_canister/lib)
 #[derive(Clone)]
 pub struct GenericRequest {
@@ -136,10 +135,10 @@ impl Request<()> for GenericRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 struct SimpleHttpHeader(String, String);
 
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 struct SimpleHttpRequest {
     url: String,
     method: String,
@@ -187,7 +186,7 @@ impl CanisterHttpRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct CanisterHttpRequestProvider {
     http_canister: Principal,
 }
@@ -242,7 +241,7 @@ impl GetAccountRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct NnsDappRequestProvider {
     nns_dapp_canister: Principal,
 }
@@ -627,7 +626,7 @@ impl Icrc1BalanceOfRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct Icrc1RequestProvider {
     icrc1_canister: Principal,
 }
@@ -738,6 +737,9 @@ impl ListNnsNeuronsRequest {
                 include_neurons_readable_by_caller,
                 include_empty_neurons_readable_by_caller: None,
                 include_public_neurons_in_full_neurons: None,
+                page_number: None,
+                page_size: None,
+                neuron_subaccounts: None,
             },
         }
     }
@@ -957,7 +959,7 @@ impl GetModeRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct SnsRequestProvider {
     pub sns_canisters: SnsCanisterIds,
     pub sns_wasm_canister_id: PrincipalId,
@@ -1138,7 +1140,7 @@ impl SnsRequestProvider {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Copy, Clone, Default)]
 pub struct NnsRequestProvider {}
 
 impl NnsRequestProvider {

@@ -35,7 +35,7 @@ use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation, Query},
     CanisterId, NumInstructions, PrincipalId,
 };
-use prometheus::Histogram;
+use prometheus::{histogram_opts, labels, Histogram};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -44,13 +44,14 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_management_canister_types::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
+use ic_management_canister_types_private::{
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
 
 /// Convert an object into CBOR binary.
@@ -114,12 +115,15 @@ struct HttpQueryHandlerMetrics {
 }
 
 impl HttpQueryHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, namespace: &str) -> Self {
         Self {
-            height_diff_during_query_scheduling: metrics_registry.histogram(
-                "execution_query_height_diff_during_query_scheduling",
-                "The height difference between the latest certified height before query scheduling and state height used for execution",
-                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+            height_diff_during_query_scheduling: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "execution_query_height_diff_during_query_scheduling",
+                    "The height difference between the latest certified height before query scheduling and state height used for execution",
+                    vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+                    labels! {"query_type".to_string() => namespace.to_string()}
+                )).unwrap(),
             ),
         }
     }
@@ -198,11 +202,18 @@ impl InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return fetch_canister_logs(
+                    let since = Instant::now(); // Start logging execution time.
+                    let result = fetch_canister_logs(
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
                     );
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
                 }
                 Err(_) => {
                     return Err(UserError::new(
@@ -239,7 +250,10 @@ impl InternalHttpQueryHandler {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = subnet_memory_capacity(&self.config);
-        let max_canister_memory_size = self.config.max_canister_memory_size;
+        // We apply the (rather high) subnet soft limit for callbacks because the
+        // instruction limit for the whole composite query tree imposes a much lower
+        // implicit bound anyway.
+        let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
 
         let mut context = query_context::QueryContext::new(
             &self.log,
@@ -251,7 +265,10 @@ impl InternalHttpQueryHandler {
             state.clone(),
             data_certificate,
             subnet_available_memory,
-            max_canister_memory_size,
+            subnet_available_callbacks,
+            self.config.canister_guaranteed_callback_quota as u64,
+            self.config.max_canister_memory_size_wasm32,
+            self.config.max_canister_memory_size_wasm64,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
@@ -296,9 +313,11 @@ fn fetch_canister_logs(
     })?;
 
     match canister.log_visibility() {
-        LogVisibility::Public => Ok(()),
-        LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibility::Controllers => Err(UserError::new(
+        LogVisibilityV2::Public => Ok(()),
+        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
                 "Caller {} is not allowed to query ic00 method {}",
@@ -326,12 +345,13 @@ impl HttpQueryHandler {
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
+        namespace: &str,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
-            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry)),
+            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
         })
     }
 }

@@ -7,8 +7,9 @@
 //!
 use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
+use ic_cdk::caller;
 use ic_cdk_macros::{query, update};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
@@ -19,6 +20,8 @@ thread_local! {
     #[allow(clippy::type_complexity)]
     pub static REMOTE_CALLS: RefCell<HashMap<String, Result<RemoteHttpResponse, (RejectionCode, String)>>>  = RefCell::new(HashMap::new());
 }
+
+const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 
 #[update]
 async fn send_request(
@@ -112,15 +115,32 @@ fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
     transformed
 }
 
+fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, context) = (raw.response, raw.context);
+    let mut transformed = response;
+    transformed.headers = vec![
+        HttpHeader {
+            name: "hello".to_string(),
+            value: "bonjour".to_string(),
+        },
+        HttpHeader {
+            name: "caller".to_string(),
+            value: caller().to_string(),
+        },
+    ];
+    transformed.body = context;
+    transformed.status = 202;
+    transformed
+}
+
 #[query]
 fn test_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
-    let (response, _) = (raw.response, raw.context);
-    let mut transformed = response;
-    transformed.headers = vec![HttpHeader {
-        name: "hello".to_string(),
-        value: "bonjour".to_string(),
-    }];
-    transformed
+    test_transform_(raw)
+}
+
+#[query(composite = true)]
+fn test_composite_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    test_transform_(raw)
 }
 
 #[query]
@@ -128,8 +148,23 @@ fn bloat_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, _) = (raw.response, raw.context);
     let mut transformed = response;
     transformed.headers = vec![];
+    // TODO: size_of<CanisterHttpResponsePayload> = 64, so not exactly sure why 50 does it..
+    let overhead = 50;
     // Return response that is bigger than allowed limit.
-    transformed.body = vec![0; 2 * 1024 * 1024 + 1024];
+    // - 50 is small enough, but -49 is too large.
+    transformed.body = vec![0; MAX_TRANSFORM_SIZE - overhead + 1];
+
+    transformed
+}
+
+#[query]
+fn very_large_but_allowed_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, _) = (raw.response, raw.context);
+    let mut transformed = response;
+    transformed.headers = vec![];
+    let overhead = 50;
+    // Return response that is exactly equal to the allowed limit.
+    transformed.body = vec![0; MAX_TRANSFORM_SIZE - overhead];
 
     transformed
 }
@@ -139,7 +174,7 @@ fn main() {}
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
-    use ic_management_canister_types::HttpHeader;
+    use ic_management_canister_types_private::HttpHeader;
 
     #[test]
     fn test_transform() {

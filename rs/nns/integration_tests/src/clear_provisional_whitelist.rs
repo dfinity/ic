@@ -85,8 +85,8 @@ fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.

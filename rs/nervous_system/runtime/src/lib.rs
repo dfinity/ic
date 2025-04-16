@@ -6,7 +6,7 @@ use std::future::Future;
 // A trait to help parameterize the switch from dfn_core to ic_cdk. It should
 // no longer exist after the switch is completed for all NNS/SNS canisters.
 #[async_trait]
-pub trait Runtime {
+pub trait Runtime: Send + Sync {
     // Invokes a Candid `method` on another canister identified by `id`.
     // Whether cleanup is done (call drop() on local variables in the context
     // upon a trap in its callback) depends on the specific Runtime
@@ -44,6 +44,9 @@ pub trait Runtime {
 
     // Spawns a future.
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F);
+
+    /// Get the canister version
+    fn canister_version() -> u64;
 }
 
 pub struct DfnRuntime;
@@ -94,6 +97,10 @@ impl Runtime for DfnRuntime {
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
         dfn_core::api::futures::spawn(future);
     }
+
+    fn canister_version() -> u64 {
+        dfn_core::api::canister_version()
+    }
 }
 
 pub struct CdkRuntime;
@@ -141,5 +148,9 @@ impl Runtime for CdkRuntime {
 
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
         ic_cdk::spawn(future);
+    }
+
+    fn canister_version() -> u64 {
+        ic_cdk::api::canister_version()
     }
 }

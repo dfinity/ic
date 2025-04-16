@@ -25,6 +25,7 @@ use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
+use std::io::ErrorKind;
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -35,7 +36,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str};
+use util::{block_on, parse_hex_str, DataLocation};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -76,12 +77,13 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
 ];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
+pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const CHECKPOINTS: &str = "checkpoints";
 pub const ADMIN: &str = "admin";
 pub const READONLY: &str = "readonly";
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronArgs {
     dfx_hsm_pin: String,
     slot: String,
@@ -94,9 +96,10 @@ pub struct NodeMetrics {
     _ip: IpAddr,
     pub finalization_height: Height,
     pub certification_height: Height,
+    pub certification_share_height: Height,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,
@@ -104,6 +107,7 @@ pub struct RecoveryArgs {
     pub key_file: Option<PathBuf>,
     pub test_mode: bool,
     pub skip_prompts: bool,
+    pub use_local_binaries: bool,
 }
 
 /// The recovery struct comprises working directories for the recovery of a
@@ -142,13 +146,37 @@ impl Recovery {
     ) -> RecoveryResult<Self> {
         let ssh_confirmation = !args.test_mode;
         let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
-        let binary_dir = recovery_dir.join("binaries");
+        let binary_dir = if args.use_local_binaries {
+            PathBuf::from_str("/opt/ic/bin/").expect("bad file path string")
+        } else {
+            recovery_dir.join("binaries")
+        };
         let data_dir = recovery_dir.join("original_data");
         let work_dir = recovery_dir.join("working_dir");
         let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
 
-        Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path])?;
+        let mut to_create: Vec<&Path> = vec![&data_dir, &work_dir, &local_store_path];
+        if !args.use_local_binaries {
+            to_create.push(&binary_dir);
+        }
+
+        match Recovery::create_dirs(&to_create) {
+            Err(RecoveryError::IoError(s, err)) => match err.kind() {
+                ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
+                    format!(
+                        "No permission to create recovery directory. Consider manually \
+                        creating the directory with the right permissions by running:\n\n  \
+                        sudo mkdir -p {} && sudo chown $USER {}\n",
+                        recovery_dir.display(),
+                        recovery_dir.display()
+                    ),
+                    err,
+                )),
+                _ => Err(RecoveryError::IoError(s, err)),
+            },
+            x => x,
+        }?;
 
         let registry_helper = RegistryHelper::new(
             logger.clone(),
@@ -162,7 +190,7 @@ impl Recovery {
             wait_for_confirmation(&logger);
         }
 
-        if !binary_dir.join("ic-admin").exists() {
+        if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
             if let Some(version) = args.replica_version {
                 block_on(download_binary(
                     &logger,
@@ -286,7 +314,14 @@ impl Recovery {
 
     /// Return a [DownloadCertificationsStep] downloading the certification pools of all reachable
     /// nodes in the given subnet to the recovery data directory using the readonly account.
-    pub fn get_download_certs_step(&self, subnet_id: SubnetId, admin: bool) -> impl Step {
+    /// If auto-retry is false, the user will be prompted on what to do (skip or continue). In
+    /// non-interactive recoveries, auto-retry should be set to true.
+    pub fn get_download_certs_step(
+        &self,
+        subnet_id: SubnetId,
+        admin: bool,
+        auto_retry: bool,
+    ) -> impl Step {
         DownloadCertificationsStep {
             logger: self.logger.clone(),
             subnet_id,
@@ -294,6 +329,7 @@ impl Recovery {
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            auto_retry,
             admin,
         }
     }
@@ -329,6 +365,16 @@ impl Recovery {
                 .iter()
                 .map(std::string::ToString::to_string)
                 .collect(),
+        }
+    }
+
+    /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
+    /// node to the recovery data directory.
+    pub fn get_copy_local_state_step(&self) -> impl Step {
+        CopyLocalIcStateStep {
+            logger: self.logger.clone(),
+            working_dir: self.work_dir.display().to_string(),
+            require_confirmation: self.ssh_confirmation,
         }
     }
 
@@ -468,20 +514,23 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
-        self.get_upload_and_restart_step_with_data_src(node_ip, self.work_dir.join(IC_STATE_DIR))
+    pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step {
+        self.get_upload_and_restart_step_with_data_src(
+            upload_method,
+            self.work_dir.join(IC_STATE_DIR),
+        )
     }
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step_with_data_src(
         &self,
-        node_ip: IpAddr,
+        upload_method: DataLocation,
         data_src: PathBuf,
     ) -> impl Step {
         UploadAndRestartStep {
             logger: self.logger.clone(),
-            node_ip,
+            upload_method,
             work_dir: self.work_dir.clone(),
             data_src,
             require_confirmation: self.ssh_confirmation,
@@ -786,7 +835,7 @@ impl Recovery {
             .arg("-zcvf")
             .arg(
                 self.work_dir
-                    .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE)),
+                    .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE)),
             )
             .arg(".");
 
@@ -891,16 +940,29 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
     let mut node_heights = NodeMetrics {
         finalization_height: Height::from(0),
         certification_height: Height::from(0),
+        certification_share_height: Height::from(0),
         _ip: *ip,
     };
     for line in body.split('\n') {
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
-                "certification_last_certified_height" => match height.trim().parse::<u64>() {
-                    Ok(val) => node_heights.certification_height = Height::from(val),
-                    error => warn!(logger, "Couldn't parse height {}: {:?}", height, error),
-                },
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.certification_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification_share"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.certification_share_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
                 r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.finalization_height = Height::from(val),
@@ -976,6 +1038,7 @@ pub fn get_member_ips(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::GracefulExpect;
     use ic_test_utilities_tmpdir::tmpdir;
 
     #[test]
@@ -991,7 +1054,7 @@ mod tests {
 
         let (name, height) =
             Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
-                .expect("Failed getting the latest checkpoint name and height");
+                .expect_graceful("Failed getting the latest checkpoint name and height");
 
         assert_eq!(name, "000000000000fd84");
         assert_eq!(height, Height::from(64900));

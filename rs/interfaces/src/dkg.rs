@@ -25,9 +25,9 @@ pub enum ChangeAction {
     Purge(Height),
 }
 
-pub type ChangeSet = Vec<ChangeAction>;
+pub type Mutations = Vec<ChangeAction>;
 
-impl From<ChangeAction> for ChangeSet {
+impl From<ChangeAction> for Mutations {
     fn from(change_action: ChangeAction) -> Self {
         vec![change_action]
     }

@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/canister_client/sender",
@@ -21,7 +21,11 @@ BASE_DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/handlers/root/impl:root",
     "//rs/nns/init",
+    "//rs/nns/sns-wasm",
+    "//rs/nns/test_utils",
     "//rs/prep",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -36,13 +40,15 @@ BASE_DEPENDENCIES = [
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
+    "//rs/sns/init",
+    "//rs/sns/swap",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:chrono",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
@@ -58,27 +64,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
-
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/init",
-    "//rs/nns/governance",
-    "//rs/nns/sns-wasm",
-    "//rs/nns/handlers/root/impl:root",
-    "//rs/sns/swap",
-    "//rs/nns/test_utils",
-]
-
-# (Currently not used)
-# DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-#     "//rs/sns/init:init--test_feature",
-#     "//rs/nns/governance:governance--test_feature",
-#     "//rs/nns/sns-wasm:sns-wasm--test_feature",
-#     "//rs/nns/handlers/root/impl:root--test_feature",
-#     "//rs/sns/swap:swap--test_feature",
-#     "//rs/nns/test_utils:test_utils--test_feature",
-# ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
@@ -101,13 +86,13 @@ DEV_DATA = [
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/registry/canister:registry-canister",
-    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
 ]
 
 DEV_ENV = {
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
     "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
@@ -139,7 +124,6 @@ rust_test(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

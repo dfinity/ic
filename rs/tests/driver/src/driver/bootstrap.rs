@@ -1,26 +1,30 @@
-use crate::driver::{
-    config::NODES_INFO,
-    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-    farm::{AttachImageSpec, Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
-    nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
-    node_software_version::NodeSoftwareVersion,
-    port_allocator::AddrType,
-    resource::AllocatedVm,
-    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
-    test_env_api::{
-        get_dependency_path, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
-        get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
-        get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
-        read_dependency_from_env_to_string, read_dependency_to_string, HasIcDependencies,
-        HasTopologySnapshot, IcNodeContainer, InitialReplicaVersion, NodesInfo,
-    },
-    test_setup::InfraProvider,
-};
-use crate::k8s::datavolume::DataVolumeContentType;
+use crate::k8s::config::LOGS_URL;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
+use crate::{
+    driver::{
+        config::NODES_INFO,
+        driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+        farm::{AttachImageSpec, Farm, FarmResult, FileId},
+        ic::{InternetComputer, Node},
+        nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
+        node_software_version::NodeSoftwareVersion,
+        port_allocator::AddrType,
+        resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
+        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+        test_env_api::{
+            get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
+            get_ic_os_update_img_sha256, get_ic_os_update_img_url,
+            get_mainnet_ic_os_update_img_url, get_mainnet_nns_revision,
+            get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
+            read_dependency_from_env_to_string, HasIcDependencies, HasTopologySnapshot, HasVmName,
+            IcNodeContainer, InitialReplicaVersion, NodesInfo,
+        },
+        test_setup::InfraProvider,
+    },
+    k8s::job::wait_for_job_completion,
+};
 use anyhow::{bail, Result};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -28,22 +32,23 @@ use ic_prep_lib::{
     node::{InitializedNode, NodeConfiguration, NodeIndex},
     subnet_configuration::SubnetConfig,
 };
+use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
-use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
     convert::Into,
+    fs,
     fs::File,
     io,
     io::Write,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::Command,
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle, ScopedJoinHandle},
 };
 use url::Url;
 use zstd::stream::write::Encoder;
@@ -88,8 +93,7 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = if ic.with_mainnet_config {
-        let mainnet_nns_revisions_path = "testnet/mainnet_nns_revision.txt".to_string();
-        read_dependency_to_string(mainnet_nns_revisions_path.clone())?
+        get_mainnet_nns_revision()
     } else {
         read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
     };
@@ -118,7 +122,7 @@ pub fn init_ic(
 
     // Note: NNS subnet should be selected from among the system subnets.
     // If there is no system subnet, fall back on choosing the first one.
-    let mut nns_subnet_idx = Some(0);
+    let mut nns_subnet_idx = None;
     // TopologyConfig is a structure provided by ic-prep. We translate from the
     // builder (InternetComputer) to TopologyConfig. While doing so, we allocate tcp
     // ports for the http handler, p2p and xnet. The corresponding sockets are
@@ -126,7 +130,7 @@ pub fn init_ic(
     // nodes.
     let mut ic_topology = TopologyConfig::default();
     for (subnet_idx, subnet) in ic.subnets.iter().enumerate() {
-        if subnet.subnet_type == SubnetType::System {
+        if subnet.subnet_type == SubnetType::System && nns_subnet_idx.is_none() {
             nns_subnet_idx = Some(subnet_idx as u64);
         }
         let subnet_index = subnet_idx as u64;
@@ -172,6 +176,12 @@ pub fn init_ic(
         ic_topology.insert_unassigned_node(node_index as NodeIndex, node_to_config(node));
     }
 
+    for node in &ic.api_boundary_nodes {
+        let node_index = next_node_index;
+        next_node_index += 1;
+        ic_topology.insert_api_boundary_node(node_index as NodeIndex, node_to_config(node))?;
+    }
+
     let whitelist = ProvisionalWhitelist::All;
     let (ic_os_update_img_sha256, ic_os_update_img_url) = {
         if ic.has_malicious_behaviours() {
@@ -202,7 +212,7 @@ pub fn init_ic(
 
         /* generate_subnet_records= */
         true,
-        nns_subnet_idx,
+        Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
         Some(whitelist),
@@ -232,6 +242,9 @@ pub fn setup_and_start_vms(
         }
     }
     for node in initialized_ic.unassigned_nodes.values() {
+        nodes.push(node.clone());
+    }
+    for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
 
@@ -274,13 +287,13 @@ pub fn setup_and_start_vms(
                 &group_name,
             )?;
 
-            let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+            let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
             match InfraProvider::read_attribute(&t_env) {
                 InfraProvider::K8s => {
                     let url = format!(
                         "{}/{}",
                         tnet_node.config_url.clone().expect("missing config_url"),
-                        CONF_IMG_FNAME
+                        mk_compressed_img_path()
                     );
                     info!(
                         t_env.logger(),
@@ -290,13 +303,18 @@ pub fn setup_and_start_vms(
                     );
                     block_on(upload_image(conf_img_path.as_path(), &url))
                         .expect("Failed to upload config image");
-                    block_on(tnet_node.deploy_config_image(
-                        CONF_IMG_FNAME,
-                        "config",
-                        DataVolumeContentType::Kubevirt,
-                    ))
-                    .expect("deploying config image failed");
+                    // wait for job pulling the disk to complete
+                    block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
+                        .expect("waiting for job failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
+                    let node_name = tnet_node.name.unwrap();
+                    info!(t_farm.logger, "starting k8s vm: {}", node_name);
+                    info!(
+                        t_farm.logger,
+                        "vm {} console logs: {}",
+                        node_name.clone(),
+                        LOGS_URL.replace("{job}", &node_name)
+                    );
                 }
                 InfraProvider::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(
@@ -335,57 +353,6 @@ pub fn setup_and_start_vms(
     result
 }
 
-// Startup nested VMs. NOTE: This is different from `setup_and_start_vms` in
-// that we need to configure and push a SetupOS image for each node.
-pub fn setup_and_start_nested_vms(
-    nodes: &[NestedNode],
-    env: &TestEnv,
-    farm: &Farm,
-    group_name: &str,
-    nns_url: &Url,
-    nns_public_key: &str,
-) -> anyhow::Result<()> {
-    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
-    for node in nodes {
-        let t_farm = farm.to_owned();
-        let t_env = env.to_owned();
-        let t_group_name = group_name.to_owned();
-        let t_vm_name = node.name.to_owned();
-        let t_nns_url = nns_url.to_owned();
-        let t_nns_public_key = nns_public_key.to_owned();
-        join_handles.push(thread::spawn(move || {
-            let configured_image =
-                configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key)?;
-
-            let configured_image_spec = AttachImageSpec::new(t_farm.upload_file(
-                &t_group_name,
-                configured_image,
-                NESTED_CONFIGURED_IMAGE_PATH,
-            )?);
-            t_farm.attach_disk_images(
-                &t_group_name,
-                &t_vm_name,
-                "usb-storage",
-                vec![configured_image_spec],
-            )?;
-            t_farm.start_vm(&t_group_name, &t_vm_name)?;
-
-            Ok(())
-        }));
-    }
-
-    let mut result = Ok(());
-    // Wait for all threads to finish and return an error if any of them fails.
-    for jh in join_handles {
-        if let Err(e) = jh.join().expect("waiting for a thread failed") {
-            warn!(farm.logger, "starting VM failed with: {:?}", e);
-            result = Err(anyhow::anyhow!("failed to set up and start a VM pool"));
-        }
-    }
-
-    result
-}
-
 pub fn upload_config_disk_image(
     group_name: &str,
     node: &InitializedNode,
@@ -419,6 +386,7 @@ fn create_config_disk_image(
         .expect("no no-name IC")
         .registry_local_store_path();
     cmd.arg(img_path.clone())
+        .args(["--node_reward_type", "type3.1"])
         .arg("--hostname")
         .arg(node.node_id.to_string())
         .arg("--ic_registry_local_store")
@@ -446,7 +414,7 @@ fn create_config_disk_image(
         .nodes()
         .next()
     {
-        cmd.arg("--nns_url")
+        cmd.arg("--nns_urls")
             .arg(format!("http://[{}]:8080", node.get_ip_addr()));
     }
 
@@ -477,9 +445,16 @@ fn create_config_disk_image(
         );
         cmd.arg("--ipv4_address").arg(format!(
             "{}/{:?}",
-            ipv4_config.ip_addr, ipv4_config.prefix_length
+            ipv4_config.ip_addr(),
+            ipv4_config.prefix_length()
         ));
-        cmd.arg("--ipv4_gateway").arg(&ipv4_config.gateway_ip_addr);
+        cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
+    }
+
+    // if the node has a domain name, generate a certificate to be used
+    // when the node is an API boundary node.
+    if let Some(domain_name) = &node.node_config.domain {
+        cmd.arg("--generate_ic_boundary_tls_cert").arg(domain_name);
     }
 
     if let Some(domain) = domain {
@@ -564,26 +539,84 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
+        domain: node.domain.clone(),
+        node_reward_type: None,
     }
 }
 
-fn configure_setupos_image(
+// Setup nested VMs. NOTE: This is different from `setup_and_start_vms` in that
+// we need to configure and push a SetupOS image for each node.
+pub fn setup_nested_vms(
+    nodes: &[NestedNode],
+    env: &TestEnv,
+    farm: &Farm,
+    group_name: &str,
+    nns_url: &Url,
+    nns_public_key: &str,
+) -> anyhow::Result<()> {
+    let mut result = Ok(());
+
+    thread::scope(|s| {
+        let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
+        for node in nodes {
+            join_handles.push(s.spawn(|| {
+                let vm_name = &node.name;
+                let configured_image =
+                    configure_setupos_image(env, vm_name, nns_url, nns_public_key)?;
+
+                let configured_image_spec = AttachImageSpec::new(farm.upload_file(
+                    group_name,
+                    configured_image,
+                    NESTED_CONFIGURED_IMAGE_PATH,
+                )?);
+                farm.attach_disk_images(
+                    group_name,
+                    vm_name,
+                    "usb-storage",
+                    vec![configured_image_spec],
+                )?;
+
+                Ok(())
+            }));
+        }
+
+        // Wait for all threads to finish and return an error if any of them fails.
+        for jh in join_handles {
+            if let Err(e) = jh.join().expect("waiting for a thread failed") {
+                warn!(farm.logger, "setting up VM failed with: {:?}", e);
+                result = Err(anyhow::anyhow!("failed to set up a VM pool"));
+            }
+        }
+    });
+
+    result
+}
+
+pub fn start_nested_vms(env: &TestEnv, farm: &Farm, group_name: &str) -> anyhow::Result<()> {
+    for node in env.get_all_nested_vms()? {
+        farm.start_vm(group_name, &node.vm_name())?;
+    }
+
+    Ok(())
+}
+
+pub fn configure_setupos_image(
     env: &TestEnv,
     name: &str,
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
-    let setupos_inject_configs =
-        get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
-    let setupos_disable_checks =
-        get_dependency_path("rs/ic_os/setupos-disable-checks/setupos-disable-checks");
+    let tmp_dir = env.get_path("setupos");
+    fs::create_dir_all(&tmp_dir)?;
+
+    let setupos_image = get_dependency_path_from_env("ENV_DEPS__SETUPOS_IMG_PATH");
+    let setupos_inject_configs = get_dependency_path_from_env("ENV_DEPS__SETUPOS_INJECT_CONFIGS");
+    let setupos_disable_checks = get_dependency_path_from_env("ENV_DEPS__SETUPOS_DISABLE_CHECKS");
 
     let nested_vm = env.get_nested_vm(name)?;
 
     let mac = nested_vm.get_vm()?.mac6;
-    let memory = "16";
-    let cpu_mode = "qemu";
+    let cpu = "kvm";
 
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let admin_keys: Vec<_> = std::fs::read_to_string(ssh_authorized_pub_keys_dir.join("admin"))
@@ -603,14 +636,13 @@ fn configure_setupos_image(
         segments[0], segments[1], segments[2], segments[3]
     );
 
-    let tmp_dir = tempfile::tempdir().unwrap();
-    let uncompressed_image = tmp_dir.path().join("disk.img");
+    let uncompressed_image = tmp_dir.join("disk.img");
 
     let output = Command::new("tar")
         .arg("xaf")
         .arg(&setupos_image)
         .arg("-C")
-        .arg(tmp_dir.path())
+        .arg(tmp_dir)
         .output()?;
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
@@ -635,6 +667,8 @@ fn configure_setupos_image(
     let mut cmd = Command::new(setupos_inject_configs);
     cmd.arg("--image-path")
         .arg(&uncompressed_image)
+        .arg("--deployment-environment")
+        .arg("testnet")
         .arg("--mgmt-mac")
         .arg(&mac)
         .arg("--ipv6-prefix")
@@ -642,14 +676,24 @@ fn configure_setupos_image(
         .arg("--ipv6-gateway")
         .arg(&gateway)
         .arg("--memory-gb")
-        .arg(memory)
-        .arg("--cpu-mode")
-        .arg(cpu_mode)
+        .arg((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).to_string())
+        .arg("--cpu")
+        .arg(cpu)
+        .arg("--nr-of-vcpus")
+        .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
         .arg("--nns-url")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
+        .arg("--node-reward-type")
+        .arg("type3.1")
         .env(path_key, &new_path);
+
+    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
+        if !node_key.trim().is_empty() {
+            cmd.arg("--node-operator-private-key").arg(node_key);
+        }
+    }
 
     if !admin_keys.is_empty() {
         cmd.arg("--public-keys");
@@ -665,7 +709,7 @@ fn configure_setupos_image(
         bail!("could not inject configs into image");
     }
 
-    let configured_image = nested_vm.get_configured_setupos_image_path().unwrap();
+    let configured_image = nested_vm.get_configured_setupos_image_path()?;
 
     let mut img_file = File::open(&uncompressed_image)?;
     let configured_image_file = File::create(configured_image.clone())?;

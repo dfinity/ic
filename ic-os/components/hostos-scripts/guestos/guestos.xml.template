@@ -8,14 +8,14 @@
   </metadata>
   <memory unit='GiB'>{{ resources_memory }}</memory>
   <currentMemory unit='GiB'>{{ resources_memory }}</currentMemory>
-  <vcpu placement='static'>64</vcpu>
+  <vcpu placement='static'>{{ nr_of_vcpus }}</vcpu>
   {{ cpu_spec }}
   <resource>
     <partition>/machine</partition>
   </resource>
   <os>
     <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
   </os>

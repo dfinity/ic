@@ -13,28 +13,37 @@
     "ledger": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz"
+        "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm.gz",
-      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
       "shrink": false
     },
     "archive": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz"
+        "bazel build //rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm.gz",
-      "candid": "../../../rosetta-api/icrc1/archive/archive.did",
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/archive/archive_canister.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/archive/archive.did",
       "shrink": false
     },
     "index": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister.wasm.gz"
+        "bazel build //rs/ledger_suite/icrc1/index-ng:index_ng_canister.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister.wasm.gz",
-      "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "btc_checker": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/bitcoin/checker:btc_checker_canister"
+      ],
+      "wasm": "../../../../bazel-bin/rs/bitcoin/checker/btc_checker_canister.wasm.gz",
+      "candid": "../../checker/btc_checker_canister.did",
       "shrink": false
     },
     "kyt": {

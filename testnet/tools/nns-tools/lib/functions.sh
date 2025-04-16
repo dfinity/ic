@@ -66,7 +66,10 @@ canister_bazel_label() {
         "cycles-minting")
             echo "//rs/nns/cmc:cycles-minting-canister"
             ;;
-        # TODO identity, ledger, lifeline, nns-ui, registry
+        "node-rewards")
+            echo "//rs/node_rewards/canister:node-rewards-canister"
+            ;;
+        # TODO identity, ledger, lifeline, nns-ui
         *)
             echo "Sorry. I do not know how to build ${CANISTER_NAME}."
             exit 1
@@ -110,6 +113,11 @@ propose_upgrade_canister_wasm_file_pem() {
     echo "Testnet $CANISTER_ID upgrade" >$PROPOSAL
 
     local WASM_SHA=$(sha_256 "$WASM_FILE")
+    local ENCODED_ARGS_SHA=""
+
+    if [ -f "$ENCODED_ARGS_FILE" ]; then
+        local ENCODED_ARGS_SHA=$(sha_256 "$ENCODED_ARGS_FILE")
+    fi
 
     $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
         propose-to-change-nns-canister --mode=upgrade \
@@ -119,7 +127,8 @@ propose_upgrade_canister_wasm_file_pem() {
         --summary-file $PROPOSAL \
         --proposer "$NEURON_ID" \
         $([ "${SKIP_STOPPING:-no}" == "yes" ] && echo "--skip-stopping-before-installing") \
-        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE")
+        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE") \
+        $([ -z "$ENCODED_ARGS_SHA" ] || echo "--arg-sha256 $ENCODED_ARGS_SHA")
 
     rm -rf $PROPOSAL
 }
@@ -129,23 +138,24 @@ get_nns_canister_code_location() {
 
     IC_REPO=$(repo_root)
     RUST_DIR="$IC_REPO/rs"
-    LEDGER_COMMON="$RUST_DIR/rosetta-api/icp_ledger/src "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_core "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_canister_core "
+    LEDGER_COMMON="$RUST_DIR/ledger_suite/icp/src "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_core "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_canister_core "
     LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
     SNS_INIT="$RUST_DIR/sns/init"
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"
     code_location__governance="$RUST_DIR/nns/governance $SNS_INIT"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
-    code_location__icp_ledger_archive="$RUST_DIR/rosetta-api/icp_ledger/archive $LEDGER_COMMON"
-    code_location__root="$RUST_DIR/nns/handlers/root/impl"
+    code_location__icp_ledger_archive="$RUST_DIR/ledger_suite/icp/archive $LEDGER_COMMON"
+    code_location__root="$RUST_DIR/nns/handlers/root"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
     code_location__genesis_token="$RUST_DIR/nns/gtc"
     code_location__identity="$RUST_DIR/nns/identity"
     code_location__nns_ui="$RUST_DIR/nns/nns-ui"
     code_location__sns_wasm="$RUST_DIR/nns/sns-wasm $SNS_INIT"
+    code_location__node_rewards="$RUST_DIR/node_rewards/canister $RUST_DIR/node_rewards $RUST_DIR/registry/node_provider_rewards"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}
@@ -160,10 +170,10 @@ get_sns_canister_code_location() {
     # Map of locations
     code_location__root="$RUST_DIR/sns/root"
     code_location__governance="$RUST_DIR/sns/governance"
-    code_location__ledger="$RUST_DIR/rosetta-api/icrc1 $RUST_DIR/rosetta-api/ledger_core $RUST_DIR/rosetta-api/ledger_canister_core"
+    code_location__ledger="$RUST_DIR/ledger_suite/icrc1 $RUST_DIR/ledger_suite/common/ledger_core $RUST_DIR/ledger_suite/common/ledger_canister_core"
     code_location__swap="$RUST_DIR/sns/swap"
-    code_location__archive="$RUST_DIR/rosetta-api/icrc1"
-    code_location__index="$RUST_DIR/rosetta-api/icrc1"
+    code_location__archive="$RUST_DIR/ledger_suite/icrc1"
+    code_location__index="$RUST_DIR/ledger_suite/icrc1"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}
@@ -270,7 +280,7 @@ top_up_canister() {
         --amount "$AMOUNT" "$CANISTER"
 }
 
-# Note, this will be deprecated soon when get_state is deprecated from sale canister.
+# Note, this will be deprecated soon when get_state is deprecated from swap canister.
 call_swap() {
     local NNS_URL=$1
     local SWAP_CANISTER_ID=$2
@@ -284,7 +294,7 @@ call_swap() {
         $SWAP_CANISTER_ID $METHOD '(record {})'
 }
 
-sns_quill_participate_in_sale() {
+sns_quill_participate_in_swap() {
     ensure_variable_set SNS_QUILL
 
     # Please forgive me we need separate urls for these subnets until we get the boundary node in the script :(
@@ -341,7 +351,7 @@ sns_get_sns_canisters_summary() {
         "$SNS_ROOT_CANISTER_ID" get_sns_canisters_summary '(record {})'
 }
 
-sns_finalize_sale() {
+sns_finalize_swap() {
     local SNS_URL=$1
     local SWAP_CANISTER_ID=$2
 
@@ -634,7 +644,7 @@ set_testnet_env_variables() {
 
     # Check if the target directory exists
     if [ ! -d "${TEST_TMPDIR}" ]; then
-        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './gitlab-ci/container/container-run.sh', and that you created it by following the instructions in README.md."
+        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './ci/container/container-run.sh', and that you created it by following the instructions in README.md."
         exit 1
     fi
 

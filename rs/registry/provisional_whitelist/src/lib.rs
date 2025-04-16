@@ -4,7 +4,7 @@ use ic_protobuf::{
 };
 use std::{collections::BTreeSet, convert::TryFrom};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ProvisionalWhitelist {
     /// The only PrincipalIds that are allowed to use the provisional API are
     /// the ones listed here.

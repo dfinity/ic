@@ -2,13 +2,15 @@ use crate::embedders::Config as EmbeddersConfig;
 use crate::flag_status::FlagStatus;
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_types::{
-    Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 
 const MIB: u64 = 1024 * 1024;
 const GIB: u64 = MIB * 1024;
+const TIB: u64 = GIB * 1024;
 
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
@@ -21,14 +23,22 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
 /// Logical storage is the amount of storage being used from the point of view
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(700 * GIB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(TIB);
 
-/// This is the upper limit on how much memory can be used by all canister
-/// messages on a given subnet.
+/// This is the upper limit on how much memory can be used by all guaranteed
+/// response canister messages on a given subnet.
 ///
-/// Message memory usage is calculated as the total size of enqueued canister
-/// responses; plus the maximum allowed response size per queue reservation.
-const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
+/// Guaranteed response message memory usage is calculated as the total size of
+/// enqueued guaranteed responses; plus the maximum allowed response size per
+/// reserved guaranteed response slot.
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
+
+/// The limit on how much memory may be used by all guaranteed response messages
+/// on a given subnet at the end of a round.
+///
+/// During the round, the best-effort message memory usage may exceed the limit,
+/// but the constraint is restored at the end of the round by shedding messages.
+const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
 
 /// This is the upper limit on how much memory can be used by the ingress
 /// history on a given subnet. It is lower than the subnet message memory
@@ -42,6 +52,12 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 
 /// The number of bytes reserved for response callback executions.
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
+
+/// The soft limit on the subnet-wide number of callbacks.
+pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 1_000_000;
+
+/// The number of callbacks that are guaranteed to each canister.
+pub const CANISTER_GUARANTEED_CALLBACK_QUOTA: usize = 50;
 
 /// The duration a stop_canister has to stop the canister before timing out.
 pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60); // 5 minutes
@@ -133,9 +149,21 @@ pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 
 /// Maximum number of canister snapshots that can be stored for a single canister.
-pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 1;
+pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 10;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+/// Maximum number of http outcall requests in-flight on a subnet.
+/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
+/// The worst case request latency used here should be equivalent to the request timeout in the adapter.
+pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
+
+/// The default value of `wasm_memory_limit` in the canister settings:
+/// - this value is used directly for newly created canisters.
+/// - existing canisters will get their field initialized as follows:
+///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
+///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
+pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
     pub embedders_config: EmbeddersConfig,
@@ -157,9 +185,13 @@ pub struct Config {
     /// the subnet.
     pub subnet_memory_capacity: NumBytes,
 
-    /// The maximum amount of logical storage available to canister messages
-    /// across the whole subnet.
-    pub subnet_message_memory_capacity: NumBytes,
+    /// The maximum amount of logical storage available to guaranteed response
+    /// canister messages across the whole subnet.
+    pub guaranteed_response_message_memory_capacity: NumBytes,
+
+    /// The maximum amount of logical storage available to best-effort canister
+    /// messages across the whole subnet.
+    pub best_effort_message_memory_capacity: NumBytes,
 
     /// The maximum amount of logical storage available to the ingress history
     /// across the whole subnet.
@@ -173,7 +205,23 @@ pub struct Config {
     pub subnet_memory_reservation: NumBytes,
 
     /// The maximum amount of memory that can be utilized by a single canister.
-    pub max_canister_memory_size: NumBytes,
+    /// running in Wasm32 mode.
+    pub max_canister_memory_size_wasm32: NumBytes,
+
+    /// The maximum amount of memory that can be utilized by a single canister.
+    /// running in Wasm64 mode.
+    pub max_canister_memory_size_wasm64: NumBytes,
+
+    /// The soft limit on the subnet-wide number of callbacks. Beyond this limit,
+    /// canisters are only allowed to make downstream calls up to their individual
+    /// guaranteed quota.
+    pub subnet_callback_soft_limit: usize,
+
+    /// The number of callbacks that are guaranteed to each canister. Beyond
+    /// this quota, canisters are only allowed to make downstream calls if the
+    /// subnet's shared callback pool has not been exhausted (i.e. the subnet-wide
+    /// soft limit has not been exceeded).
+    pub canister_guaranteed_callback_quota: usize,
 
     /// The default value used when provisioning a canister
     /// if amount of cycles was not specified.
@@ -258,23 +306,28 @@ pub struct Config {
     /// The duration a stop_canister has to stop the canister before timing out.
     pub stop_canister_timeout_duration: Duration,
 
-    /// Indicates whether canister backup and restore feature is enabled or not.
-    pub canister_snapshots: FlagStatus,
-
     /// Indicates whether dirty page logging is enabled or not.
     pub dirty_page_logging: FlagStatus,
 
-    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
-    /// Indicates whether `Ic00Method::ComputeInitialIDkgDealings` is enabled.
-    pub ic00_compute_initial_i_dkg_dealings: FlagStatus,
+    pub max_canister_http_requests_in_flight: usize,
 
-    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
-    /// Indicates whether `Ic00Method::SchnorrPublicKey` is enabled.
-    pub ic00_schnorr_public_key: FlagStatus,
+    /// The default value of `wasm_memory_limit` in the canister settings:
+    /// - this value is used directly for newly created canisters.
+    /// - existing canisters will get their field initialized as follows:
+    ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
+    ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
+    pub default_wasm_memory_limit: NumBytes,
 
-    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
-    /// Indicates whether `Ic00Method::SignWithSchnorr` is enabled.
-    pub ic00_sign_with_schnorr: FlagStatus,
+    /// The maximum number of snapshots allowed per canister.
+    pub max_number_of_snapshots_per_canister: usize,
+
+    /// Whether canister snapshot metadata and data can be downloaded
+    /// by controllers.
+    pub canister_snapshot_download: FlagStatus,
+
+    /// Whether canister snapshot metadata and data can be uploaded
+    /// by controllers.
+    pub canister_snapshot_upload: FlagStatus,
 }
 
 impl Default for Config {
@@ -296,14 +349,21 @@ impl Default for Config {
                 MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS,
             subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
-            subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
+            guaranteed_response_message_memory_capacity:
+                SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
+            best_effort_message_memory_capacity: SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
             subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-            max_canister_memory_size: NumBytes::new(
+            max_canister_memory_size_wasm32: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),
+            max_canister_memory_size_wasm64: NumBytes::new(
+                MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES,
+            ),
+            subnet_callback_soft_limit: SUBNET_CALLBACK_SOFT_LIMIT,
+            canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA,
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
             // The default freeze threshold is 30 days.
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),
@@ -343,16 +403,17 @@ impl Default for Config {
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
-            canister_snapshots: FlagStatus::Disabled,
             dirty_page_logging: FlagStatus::Disabled,
-            ic00_compute_initial_i_dkg_dealings: FlagStatus::Enabled,
-            ic00_schnorr_public_key: FlagStatus::Enabled,
-            ic00_sign_with_schnorr: FlagStatus::Enabled,
+            max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
+            default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
+            max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+            canister_snapshot_download: FlagStatus::Disabled,
+            canister_snapshot_upload: FlagStatus::Disabled,
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct BitcoinConfig {
     /// Canisters that have access to privileged bitcoin API (e.g. `bitcoin_get_successors`)
     /// This list is intentionally separate from the bitcoin canister IDs below because it

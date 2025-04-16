@@ -11,8 +11,9 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/local_store",
     "//rs/types/types",
+    "@crate_index//:anyhow",
     "@crate_index//:chrono",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
@@ -35,7 +36,6 @@ ALIASES = {}
 
 rust_library(
     name = "backup",
-    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_backup",
@@ -49,7 +49,6 @@ rust_library(
 
 rust_binary(
     name = "ic-backup",
-    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -62,7 +61,7 @@ rust_binary(
 
 rust_test(
     name = "backup_test",
+    compile_data = ["test_data/fake_input_config.json.template"],
     crate = ":backup",
-    data = ["test_data/fake_input_config.json.template"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

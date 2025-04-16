@@ -1,10 +1,16 @@
 use crate::{
-    canister_state::execution_state::Memory,
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
-    PageMap,
+    canister_state::{
+        execution_state::Memory, system_state::wasm_chunk_store::WasmChunkStore,
+        WASM_PAGE_SIZE_IN_BYTES,
+    },
+    page_map::Buffer,
+    CanisterState, NumWasmPages, PageMap,
 };
+use ic_management_canister_types_private::{Global, OnLowWasmMemoryHookStatus, SnapshotSource};
 use ic_sys::PAGE_SIZE;
-use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_types::{CanisterId, CanisterTimer, NumBytes, SnapshotId, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 
 use std::{
@@ -16,8 +22,9 @@ use std::{
 ///
 /// Additionally, keeps track of all the accumulated changes
 /// since the last flush to the disk.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterSnapshots {
+    #[validate_eq(CompareWithValidateEq)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshot operations are consumed by the `StateManager` in order to
     /// correctly represent backups and restores in the next checkpoint.
@@ -123,12 +130,9 @@ impl CanisterSnapshots {
     /// Additionally, new items are added to the `unflushed_changes`,
     /// representing the deleted backups since the last flush to the disk.
     pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
-        if let Some(snapshot_ids) = self.snapshot_ids.remove(&canister_id) {
+        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {
-                debug_assert!(self.snapshots.contains_key(&snapshot_id));
-                self.snapshots.remove(&snapshot_id).unwrap();
-                self.unflushed_changes
-                    .push(SnapshotOperation::Delete(snapshot_id));
+                self.remove(snapshot_id);
             }
         }
     }
@@ -153,11 +157,32 @@ impl CanisterSnapshots {
     }
 
     /// Returns the number of snapshots stored for the given canister id.
-    pub fn snapshots_count(&self, canister_id: &CanisterId) -> usize {
+    pub fn count_by_canister(&self, canister_id: &CanisterId) -> usize {
         match self.snapshot_ids.get(canister_id) {
             Some(snapshot_ids) => snapshot_ids.len(),
             None => 0,
         }
+    }
+
+    /// Returns the total number of snapshots stored in the replicated state.
+    pub fn count(&self) -> usize {
+        self.snapshots.len()
+    }
+
+    /// Computes the total memory usage of all of the specified canister's snapshots.
+    ///
+    /// Used for testing that `SystemState::snapshots_memory_usage` is updated as needed
+    /// whenever taking or deleting a snapshot.
+    #[doc(hidden)]
+    pub fn compute_memory_usage_by_canister(&self, canister_id: CanisterId) -> NumBytes {
+        let mut memory_size = NumBytes::new(0);
+        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
+            for snapshot_id in snapshot_ids {
+                debug_assert!(self.snapshots.contains_key(snapshot_id));
+                memory_size += self.snapshots.get(snapshot_id).unwrap().size();
+            }
+        }
+        memory_size
     }
 
     /// Adds a new restore snapshot operation in the unflushed changes.
@@ -218,7 +243,7 @@ impl CanisterSnapshots {
 
     /// Returns the amount of memory taken by all canister snapshots on
     /// this subnet.
-    pub(crate) fn memory_taken(&self) -> NumBytes {
+    pub fn memory_taken(&self) -> NumBytes {
         // The running sum of the memory usage of all canister snapshots should
         // be the same as the one computed by iterating over all snapshots.
         debug_assert_eq!(
@@ -233,9 +258,10 @@ impl CanisterSnapshots {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct PageMemory {
     /// The contents of this memory.
+    #[validate_eq(Ignore)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -259,21 +285,35 @@ impl From<&PageMemory> for Memory {
 }
 
 /// Contains all information related to a canister's execution state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct ExecutionStateSnapshot {
     /// The raw canister module.
+    #[validate_eq(Ignore)]
     pub wasm_binary: CanisterModule,
+    /// The Wasm global variables.
+    /// Note: The hypervisor instrumentations exports all global variables,
+    /// including originally internal global variables.
+    #[validate_eq(Ignore)]
+    pub exported_globals: Vec<Global>,
     /// Snapshot of stable memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: PageMemory,
     /// Snapshot of wasm memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: PageMemory,
+    /// Status of global timer
+    pub global_timer: Option<CanisterTimer>,
+    /// Whether the hook is inactive, ready or executed.
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
 /// Contains all information related to a canister snapshot.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct CanisterSnapshot {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
+    /// Whether this snapshot was created from the canister or uploaded manually.
+    source: SnapshotSource,
     /// The timestamp indicating the moment the snapshot was captured.
     taken_at_timestamp: Time,
     /// The canister version at the time of taking the snapshot.
@@ -283,13 +323,16 @@ pub struct CanisterSnapshot {
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
+    #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
+    #[validate_eq(CompareWithValidateEq)]
     execution_snapshot: ExecutionStateSnapshot,
 }
 
 impl CanisterSnapshot {
     pub fn new(
         canister_id: CanisterId,
+        source: SnapshotSource,
         taken_at_timestamp: Time,
         canister_version: u64,
         certified_data: Vec<u8>,
@@ -299,6 +342,7 @@ impl CanisterSnapshot {
     ) -> CanisterSnapshot {
         Self {
             canister_id,
+            source,
             taken_at_timestamp,
             canister_version,
             certified_data,
@@ -318,25 +362,35 @@ impl CanisterSnapshot {
             .execution_state
             .as_ref()
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
+        let global_timer = canister.system_state.global_timer;
+        let hook_status = canister.system_state.task_queue.peek_hook_status();
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
+            exported_globals: execution_state.exported_globals.clone(),
             stable_memory: PageMemory::from(&execution_state.stable_memory),
             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
+            global_timer: Some(global_timer),
+            on_low_wasm_memory_hook_status: Some(hook_status),
         };
 
         Ok(CanisterSnapshot {
             canister_id,
+            source: SnapshotSource::TakenFromCanister,
             taken_at_timestamp,
             canister_version: canister.system_state.canister_version,
             certified_data: canister.system_state.certified_data.clone(),
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
-            size: canister.snapshot_memory_usage(),
+            size: canister.snapshot_size_bytes(),
         })
     }
 
     pub fn canister_id(&self) -> CanisterId {
         self.canister_id
+    }
+
+    pub fn source(&self) -> SnapshotSource {
+        self.source
     }
 
     pub fn canister_version(&self) -> u64 {
@@ -365,6 +419,10 @@ impl CanisterSnapshot {
 
     pub fn canister_module(&self) -> &CanisterModule {
         &self.execution_snapshot.wasm_binary
+    }
+
+    pub fn exported_globals(&self) -> &Vec<Global> {
+        &self.execution_snapshot.exported_globals
     }
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
@@ -400,17 +458,49 @@ impl CanisterSnapshot {
                 .num_delta_pages();
         NumBytes::from((delta_pages * PAGE_SIZE) as u64) + self.chunk_store.heap_delta()
     }
+
+    pub fn get_wasm_module_chunk(
+        &self,
+        offset: u64,
+        size: u64,
+    ) -> Result<Vec<u8>, CanisterSnapshotError> {
+        let module_bytes = self.execution_snapshot.wasm_binary.as_slice();
+        let end = offset.saturating_add(size);
+        if end > module_bytes.len() as u64 {
+            return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
+        }
+        Ok(module_bytes[(offset as usize)..(end as usize)].to_vec())
+    }
+
+    /// Get a user-defined chunk of the (stable/main) memory represented by `page_map`.
+    /// Returns an error if offset + size exceed the page_map's current size.
+    pub fn get_memory_chunk(
+        page_memory: PageMemory,
+        offset: u64,
+        size: u64,
+    ) -> Result<Vec<u8>, CanisterSnapshotError> {
+        let page_map_size_bytes = (page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64;
+        if offset.saturating_add(size) > page_map_size_bytes {
+            return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
+        }
+        let memory_buffer = Buffer::new(page_memory.page_map);
+        let mut dst = vec![0; size as usize];
+        memory_buffer.read(&mut dst, offset as usize);
+        Ok(dst)
+    }
 }
 
 /// Errors that can occur when trying to create a `CanisterSnapshot` from a canister.
 #[derive(Debug)]
 pub enum CanisterSnapshotError {
-    ///  The canister is missing the execution state because it's empty (newly created or uninstalled).
+    /// The canister is missing the execution state because it's empty (newly created or uninstalled).
     EmptyExecutionState(CanisterId),
+    /// Offset and size exceed module or memory bounds.
+    InvalidSubslice { offset: u64, size: u64 },
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SnapshotOperation {
     Delete(SnapshotId),
     Backup(CanisterId, SnapshotId),
@@ -432,6 +522,7 @@ mod tests {
     ) -> (SnapshotId, CanisterSnapshot) {
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: CanisterModule::new(vec![1, 2, 3]),
+            exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
             stable_memory: PageMemory {
                 page_map: PageMap::new_for_testing(),
                 size: NumWasmPages::new(10),
@@ -440,9 +531,12 @@ mod tests {
                 page_map: PageMap::new_for_testing(),
                 size: NumWasmPages::new(10),
             },
+            global_timer: Some(CanisterTimer::Inactive),
+            on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
         };
         let snapshot = CanisterSnapshot::new(
             canister_id,
+            SnapshotSource::TakenFromCanister,
             UNIX_EPOCH,
             0,
             vec![],
@@ -537,9 +631,17 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size)
         );
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(canister_id),
+            NumBytes::from(snapshot1_size)
+        );
 
         let other_canister_id = canister_test_id(1);
         let (second_snapshot_id, second_snapshot) = fake_canister_snapshot(other_canister_id, 2);
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
+            NumBytes::from(0)
+        );
 
         // Pushing another snapshot updates the `memory_usage`.
         let snapshot2_size = second_snapshot.size();
@@ -551,6 +653,10 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size + snapshot2_size)
         );
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
+            NumBytes::from(snapshot2_size)
+        );
 
         // Deleting a snapshot updates the `memory_usage`.
         snapshot_manager.remove(first_snapshot_id);
@@ -558,9 +664,17 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot2_size)
         );
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(canister_id),
+            NumBytes::from(0)
+        );
 
         // Deleting the second snapshot brings us back to 0 memory taken.
         snapshot_manager.remove(second_snapshot_id);
         assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
+            NumBytes::from(0)
+        );
     }
 }

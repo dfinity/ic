@@ -17,9 +17,7 @@ use ic_nns_governance_api::pb::v1::{
         swap_parameters::NeuronBasketConstructionParameters,
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     },
-    manage_neuron_response,
-    proposal::Action,
-    CreateServiceNervousSystem, Proposal,
+    manage_neuron_response, CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -235,11 +233,11 @@ impl SnsInitializationFlowTestSetup {
         neuron_id: NeuronId,
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) -> ProposalId {
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title: Some("Proposal to create the SNS-2 ServiceNervousSystem".to_string()),
             summary: "Please do this, if anything just so that the test can pass.".to_string(),
             url: "".to_string(),
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system.clone(),
             )),
         };
@@ -450,6 +448,9 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     sns_initialization_flow_test.advance_time_to_open_swap(test_sns.swap_canister_id.unwrap());
 
     // Make sure the opening can occur in the heartbeat
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -482,7 +483,10 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         direct_participant_amounts.insert(participant, response.icp_accepted_participation_e8s);
     }
 
-    // Assert the Swap lifecycle transitions to Committed in a heartbeat message
+    // Assert the Swap lifecycle transitions to Committed after the next periodic task ran.
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -752,6 +756,9 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
     sns_initialization_flow_test.advance_time_to_open_swap(test_sns.swap_canister_id.unwrap());
 
     // Make sure the opening can occur in the heartbeat
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -784,7 +791,10 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
         direct_participant_amounts.insert(participant, response.icp_accepted_participation_e8s);
     }
 
-    // Assert the Swap lifecycle transitions to Committed in a heartbeat message
+    // Assert the Swap lifecycle transitions to Committed after the next periodic task ran.
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -1115,7 +1125,10 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
         direct_participant_amounts.insert(participant, response.icp_accepted_participation_e8s);
     }
 
-    // Assert the Swap lifecycle transitions to Committed in a heartbeat message
+    // Assert the Swap lifecycle transitions to Committed after the next periodic task ran.
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -1217,7 +1230,7 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     // Step 3: Advance time to open the swap for participation
     sns_initialization_flow_test.advance_time_to_open_swap(test_sns_1.swap_canister_id.unwrap());
 
-    // Make sure the opening can occur in the heartbeat
+    // Make sure the opening can occur after the next periodic task ran.
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,

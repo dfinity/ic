@@ -5,20 +5,24 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icrc1/index-ng",
+    "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
-    "//rs/rosetta-api/icrc1/index-ng",
-    "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/ledger_canister_core",
-    "//rs/rosetta-api/ledger_core",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/sns/governance",
     "//rs/sns/root",
+    "//rs/sns/swap:swap",
     "//rs/types/base_types",
     "@crate_index//:base64",
     "@crate_index//:candid",
@@ -28,20 +32,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_yaml",
-]
-
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants",
-    "//rs/sns/governance",
-    "//rs/sns/swap",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants:constants--test_feature",
-    "//rs/sns/governance:governance--test_feature",
-    "//rs/sns/swap:swap--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -54,6 +44,7 @@ DEV_DEPENDENCIES = [
     "//rs/sns/init/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:num-traits",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:tempfile",
 ]
 
@@ -83,7 +74,7 @@ rust_library(
     crate_name = "ic_sns_init",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
+    deps = DEPENDENCIES,
 )
 
 generated_files_check(

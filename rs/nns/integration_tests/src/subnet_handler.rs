@@ -1,6 +1,7 @@
 use dfn_candid::candid;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
@@ -37,7 +38,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 500,
-                initial_notary_delay_millis: 1500,
+                initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 0,
                 dkg_dealings_per_block: 1,
@@ -49,7 +50,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 max_number_of_canisters: 100,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: None,
                 chain_key_config: None,
             };
 
@@ -86,9 +86,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 is_halted: Some(true),
                 halt_at_cup_height: Some(true),
                 features: None,
-                ecdsa_config: None,
-                ecdsa_key_signing_enable: None,
-                ecdsa_key_signing_disable: None,
                 max_number_of_canisters: Some(200),
                 ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
                 ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -139,8 +136,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
             assert_eq!(
                 wait_for_final_state(&nns_canisters.governance, proposal_id)
                     .await
-                    .status(),
-                ProposalStatus::Executed
+                    .status,
+                ProposalStatus::Executed as i32
             );
 
             // No proposals should be pending now.
@@ -158,7 +155,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     max_ingress_messages_per_block: 1000,
                     max_block_payload_size: 4 * 1024 * 1024,
                     unit_delay_millis: 500,
-                    initial_notary_delay_millis: 1500,
+                    initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
                     replica_version_id: ReplicaVersion::default().into(),
                     dkg_interval_length: 10,
                     dkg_dealings_per_block: 1,
@@ -170,7 +167,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     max_number_of_canisters: 200,
                     ssh_readonly_access: vec!["pub_key_0".to_string()],
                     ssh_backup_access: vec!["pub_key_1".to_string()],
-                    ecdsa_config: None,
                     chain_key_config: None,
                 }
             );

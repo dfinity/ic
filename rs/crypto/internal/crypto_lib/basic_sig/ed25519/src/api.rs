@@ -1,7 +1,6 @@
 //! API for Ed25519 basic signature
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_internal_seed::Seed;
 use ic_crypto_secrets_containers::{SecretArray, SecretBytes};
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use rand::{CryptoRng, Rng};
@@ -14,7 +13,7 @@ mod tests;
 pub fn keypair_from_rng<R: Rng + CryptoRng>(
     csprng: &mut R,
 ) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
-    let signing_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(csprng);
+    let signing_key = ic_ed25519::PrivateKey::generate_using_rng(csprng);
     let sk = types::SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(
         &signing_key.serialize_raw(),
     ));
@@ -145,7 +144,7 @@ pub fn secret_key_to_pkcs8_v2_der(
 /// # Errors
 /// * `MalformedSecretKey` if the secret key is malformed
 pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
-    let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(sk.0.expose_secret());
+    let signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(sk.0.expose_secret());
     let signature = signing_key.sign_message(msg);
     Ok(types::SignatureBytes(signature))
 }
@@ -161,7 +160,7 @@ pub fn verify(
     msg: &[u8],
     pk: &types::PublicKeyBytes,
 ) -> CryptoResult<()> {
-    let public_key = ic_crypto_ed25519::PublicKey::deserialize_raw(&pk.0).map_err(|e| {
+    let public_key = ic_ed25519::PublicKey::deserialize_raw(&pk.0).map_err(|e| {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Ed25519,
             key_bytes: Some(pk.0.to_vec()),
@@ -177,47 +176,6 @@ pub fn verify(
             sig_bytes: sig.0.to_vec(),
             internal_error: e.to_string(),
         })
-}
-
-/// Verifies one or more signatures of the same message using
-/// the respective Ed25519 public key(s).
-///
-/// # Errors
-/// * `MalformedPublicKey` if the public key is malformed
-/// * `SignatureVerification` if the signature is invalid
-/// * `MalformedSignature` if the signature is malformed
-pub fn verify_batch(
-    key_signature_map: &[(&types::PublicKeyBytes, &types::SignatureBytes)],
-    msg: &[u8],
-    seed: Seed,
-) -> CryptoResult<()> {
-    let mut messages = Vec::new();
-    let mut signatures = Vec::new();
-    let mut keys = Vec::new();
-
-    for (key, signature) in key_signature_map {
-        messages.push(msg);
-        signatures.push(signature.0.as_ref());
-        keys.push(
-            ic_crypto_ed25519::PublicKey::deserialize_raw(&key.0).map_err(|e| {
-                CryptoError::MalformedPublicKey {
-                    algorithm: AlgorithmId::Ed25519,
-                    key_bytes: Some(key.0.to_vec()),
-                    internal_error: e.to_string(),
-                }
-            })?,
-        );
-    }
-
-    let rng = &mut seed.into_rng();
-    ic_crypto_ed25519::PublicKey::batch_verify(&messages, &signatures, &keys, rng).map_err(|e| {
-        CryptoError::SignatureVerification {
-            algorithm: AlgorithmId::Ed25519,
-            public_key_bytes: vec![],
-            sig_bytes: vec![],
-            internal_error: e.to_string(),
-        }
-    })
 }
 
 /// Verifies whether the given key is a valid Ed25519 public key.

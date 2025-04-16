@@ -45,6 +45,11 @@ impl GovernanceCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn with_swap_canister_id(&mut self, swap_canister_id: PrincipalId) -> &mut Self {
+        self.proto.swap_canister_id = Some(swap_canister_id);
+        self
+    }
+
     pub fn with_mode(&mut self, mode: Mode) -> &mut Self {
         self.proto.set_mode(mode);
         self

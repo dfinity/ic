@@ -12,6 +12,7 @@ Requires the following environment varianbles to be set:
      stripped from both ends) contains the value that's supposed to be
      associated with the aforementioned WASM custom section.
 """
+
 import os
 import subprocess
 import unittest

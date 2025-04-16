@@ -20,6 +20,7 @@
 //!   - serves metrics at localhost:18080 instead of dumping them at stdout
 
 use anyhow::Result;
+use clap::builder::PossibleValuesParser;
 use clap::Parser;
 use ic_config::{
     adapters::AdaptersConfig,
@@ -34,7 +35,7 @@ use ic_config::{
     ConfigOptional as ReplicaConfig,
 };
 use ic_logger::{info, new_replica_logger_from_config};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
@@ -82,14 +83,25 @@ fn main() -> Result<()> {
         // At the moment, this always regenerates the node key.
         // TODO: Only regenerate if necessary, depends on CRP-359
 
+        let public_api = config.http_listen_addr;
+        // We put a fake xnet endpoint into the registry.
+        // The registry canister expects the public and xnet endpoints to be distinct
+        // and thus we modify the fake xnet endpoint if they are equal.
+        let mut xnet_api = SocketAddr::from_str("127.0.0.1:2497").unwrap();
+        if public_api == xnet_api {
+            xnet_api = SocketAddr::from_str("127.0.0.1:2197").unwrap();
+        }
+
         let mut subnet_nodes: BTreeMap<NodeIndex, NodeConfiguration> = BTreeMap::new();
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: SocketAddr::from_str("127.0.0.1:0").unwrap(),
-                public_api: config.http_listen_addr,
+                xnet_api,
+                public_api,
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                domain: None,
+                node_reward_type: None,
             },
         );
 
@@ -193,12 +205,12 @@ fn main() -> Result<()> {
         .arg("--config-file")
         .args([config_path.to_str().unwrap()]);
     info!(log, "Executing {:?}", cmd);
-    cmd.exec();
+    let _ = cmd.exec();
 
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Parser)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Parser, Serialize)]
 #[clap(name = "ic-starter", about = "Starter.", version)]
 struct CliArgs {
     /// Path the to replica binary.
@@ -207,11 +219,11 @@ struct CliArgs {
     /// expected that a config will be found for '--bin replica'. In other
     /// words, it is expected that the starter is invoked from the rs/
     /// directory.
-    #[clap(long = "replica-path", parse(from_os_str))]
+    #[clap(long = "replica-path")]
     replica_path: Option<PathBuf>,
 
     /// Version of the replica binary.
-    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
+    #[clap(long)]
     replica_version: Option<ReplicaVersion>,
 
     /// Path to the cargo binary. Not optional because there is a default value.
@@ -233,7 +245,7 @@ struct CliArgs {
     /// Path to the directory containing all state for this replica. (default: a
     /// temp directory that will be deleted immediately when the replica
     /// stops).
-    #[clap(long = "state-dir", parse(from_os_str))]
+    #[clap(long = "state-dir")]
     state_dir: Option<PathBuf>,
 
     /// The http port of the public API.
@@ -257,7 +269,7 @@ struct CliArgs {
     /// at start time.
     ///
     /// This argument is incompatible with --http-port.
-    #[clap(long = "http-port-file", parse(from_os_str))]
+    #[clap(long = "http-port-file")]
     http_port_file: Option<PathBuf>,
 
     /// Arg to control whitelist for creating funds which is either set to "*"
@@ -267,7 +279,7 @@ struct CliArgs {
 
     /// Run replica and ic-starter with the provided log level. Default is Warning
     #[clap(long = "log-level",
-                possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
+                value_parser = PossibleValuesParser::new(["critical", "error", "warning", "info", "debug", "trace"]),
                 ignore_case = true)]
     log_level: Option<String>,
 
@@ -299,12 +311,12 @@ struct CliArgs {
 
     /// The backend DB used by Consensus, can be rocksdb or lmdb.
     #[clap(long = "consensus-pool-backend",
-                possible_values = &["lmdb", "rocksdb"])]
+                value_parser = PossibleValuesParser::new(["lmdb", "rocksdb"]))]
     consensus_pool_backend: Option<String>,
 
     /// Subnet features
     #[clap(long = "subnet-features",
-        possible_values = &[
+        value_parser = PossibleValuesParser::new([
             "canister_sandboxing",
             "http_requests",
             "bitcoin_testnet",
@@ -316,8 +328,8 @@ struct CliArgs {
             "bitcoin_regtest",
             "bitcoin_regtest_syncing",
             "bitcoin_regtest_paused",
-        ],
-        multiple_values(true))]
+        ]),
+        num_args(1..))]
     subnet_features: Vec<String>,
 
     /// Enable ecdsa signature by assigning the given key id a freshly generated key.
@@ -331,7 +343,7 @@ struct CliArgs {
 
     /// Subnet type
     #[clap(long = "subnet-type",
-                possible_values = &["application", "verified_application", "system"])]
+                value_parser = PossibleValuesParser::new(["application", "verified_application", "system"]))]
     subnet_type: Option<String>,
 
     /// Unix Domain Socket for Bitcoin testnet

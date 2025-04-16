@@ -10,16 +10,11 @@ documentation.workspace = true
 anyhow = { workspace = true }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
-ic-nns-governance = { path = "../../../nns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 ic-system-test-driver = { path = "../../driver" }
-rust_decimal = "1.25"
+rust_decimal = "1.36.0"
 slog = { workspace = true }
-tests = { path = "../../" }
-
-[lib]
-name = "ic_sns_tests"
-path = "src/lib.rs"
+sns_system_test_lib = { path = "./lib" }
 
 [[bin]]
 name = "ic-systest-sns-sale-simple-load-test"

@@ -32,24 +32,32 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
-dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 dyn-clone = "1.0.14"
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
+ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
+ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
+ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
+ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
+ic-nervous-system-timers = { path = "../../nervous_system/timers" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
@@ -57,6 +65,7 @@ ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 ic-nns-governance-api = { path = "./api" }
 ic-nns-governance-init = { path = "./init" }
 ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
+ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
@@ -65,7 +74,8 @@ ic-sns-wasm = { path = "../sns-wasm" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
@@ -75,8 +85,8 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
-rust_decimal = { version = "1.25" }
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
@@ -86,8 +96,11 @@ registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
-canbench-rs = { version = "0.1.4", optional = true }
-ic-cdk = { workspace = true, optional = true }
+canbench-rs = { version = "0.1.7", optional = true }
+
+local_key = { path = "../../tla_instrumentation/local_key", optional = true }
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
+tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
@@ -100,18 +113,22 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-futures = { workspace = true }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
+ic-nns-governance = { path = ".", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-proptest = "1.0"
+local_key = { path = "../../tla_instrumentation/local_key" }
+proptest = { workspace = true }
 tempfile = { workspace = true }
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
 tokio = { workspace = true }
-tokio-test = "0.4.2"
+tokio-test = { workspace = true }
 
 [features]
 test = ["ic-sns-swap/test"]
-canbench-rs = ["dep:canbench-rs", "dep:ic-cdk"]
+canbench-rs = ["dep:canbench-rs"]
+tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]

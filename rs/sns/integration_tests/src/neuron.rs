@@ -10,10 +10,9 @@ use ic_ledger_core::{
     tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
     Tokens,
 };
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{
-    cmc::FakeCmc, i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
-};
+use ic_nervous_system_common::{i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
@@ -668,7 +667,7 @@ fn test_neuron_action_is_not_authorized() {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
             ..NervousSystemParameters::with_default_values()
         };
 
@@ -724,7 +723,10 @@ fn test_neuron_action_is_not_authorized() {
 // This is a bit hacky and fragile, as it depends on how `SnsCanisters` is setup.
 // TODO(NNS1-1892): expose SnsCanisters' current time via API.
 fn get_sns_canisters_now_seconds() -> i64 {
-    (NativeEnvironment::default().now() as i64)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
         + (NervousSystemParameters::with_default_values()
             .initial_voting_period_seconds
             .unwrap() as i64)
@@ -1255,7 +1257,7 @@ async fn zero_total_reward_shares() {
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
         swap_canister_id: Some(PrincipalId::new(29, swap_canister_id)),
         parameters: Some(NervousSystemParameters {
-            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+            voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
             ..NervousSystemParameters::with_default_values()
         }),
         mode: governance::Mode::Normal as i32,
@@ -1299,7 +1301,7 @@ async fn zero_total_reward_shares() {
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    governance.heartbeat().await;
+    governance.run_periodic_tasks().await;
 
     // Step 3: Inspect results. The main thing is to make sure that we did not
     // divide by zero. If that happened, it would show up in a couple places:
@@ -1372,7 +1374,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     }
 
     let nervous_system_parameters = NervousSystemParameters {
-        voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS.clone()),
+        voting_rewards_parameters: Some(VOTING_REWARDS_PARAMETERS),
         ..NervousSystemParameters::with_default_values()
     };
 
@@ -1517,7 +1519,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     governance.latest_gc_timestamp_seconds = now;
 
     // Step 2: Run code under test.
-    governance.heartbeat().await;
+    governance.run_periodic_tasks().await;
 
     // Step 3: Inspect results.
 

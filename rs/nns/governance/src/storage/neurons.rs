@@ -2,23 +2,24 @@ use crate::{
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
+        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, MaturityDisbursement,
+        NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{StableBTreeMap, Storable};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
-    ops::RangeBounds,
+    collections::{btree_map::Entry, BTreeMap as HeapBTreeMap, HashMap},
+    iter::Peekable,
+    ops::{Bound as RangeBound, RangeBounds},
 };
 
 // Because many arguments are needed to construct a StableNeuronStore, there is
@@ -38,6 +39,7 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
     pub hot_keys: Memory,
     pub recent_ballots: Memory,
     pub followees: Memory,
+    pub maturity_disbursements: Memory,
 
     // Singletons
     pub known_neuron_data: Memory,
@@ -46,25 +48,34 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
 
 /// A section of a neuron represents a part of neuron that can potentially be large, and when a
 /// neuron is read, the caller can specify which sections of the neuron they want to read.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) struct NeuronSections {
     pub hot_keys: bool,
     pub recent_ballots: bool,
     pub followees: bool,
+    pub maturity_disbursements: bool,
     pub known_neuron_data: bool,
     pub transfer: bool,
 }
 
 impl NeuronSections {
-    pub fn all() -> Self {
-        Self {
-            hot_keys: true,
-            recent_ballots: true,
-            followees: true,
-            known_neuron_data: true,
-            transfer: true,
-        }
-    }
+    pub const NONE: Self = Self {
+        hot_keys: false,
+        recent_ballots: false,
+        followees: false,
+        maturity_disbursements: false,
+        known_neuron_data: false,
+        transfer: false,
+    };
+
+    pub const ALL: Self = Self {
+        hot_keys: true,
+        recent_ballots: true,
+        followees: true,
+        maturity_disbursements: true,
+        known_neuron_data: true,
+        transfer: true,
+    };
 }
 
 impl<Memory> StableNeuronStoreBuilder<Memory>
@@ -79,6 +90,7 @@ where
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements,
 
             // Singletons
             known_neuron_data,
@@ -92,6 +104,7 @@ where
             hot_keys_map: StableBTreeMap::init(hot_keys),
             followees_map: StableBTreeMap::init(followees),
             recent_ballots_map: StableBTreeMap::init(recent_ballots),
+            maturity_disbursements_map: StableBTreeMap::init(maturity_disbursements),
 
             // Singletons
             known_neuron_data_map: StableBTreeMap::init(known_neuron_data),
@@ -110,6 +123,8 @@ where
     hot_keys_map: StableBTreeMap<(NeuronId, /* index */ u64), Principal, Memory>,
     recent_ballots_map: StableBTreeMap<(NeuronId, /* index */ u64), BallotInfo, Memory>,
     followees_map: StableBTreeMap<FolloweesKey, NeuronId, Memory>,
+    maturity_disbursements_map:
+        StableBTreeMap<(NeuronId, /* index */ u64), MaturityDisbursement, Memory>,
 
     // Singletons
     known_neuron_data_map: StableBTreeMap<NeuronId, KnownNeuronData, Memory>,
@@ -166,6 +181,7 @@ where
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             known_neuron_data,
             transfer,
@@ -204,6 +220,11 @@ where
         );
         update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
+        update_repeated_field(
+            neuron_id,
+            maturity_disbursements_in_progress,
+            &mut self.maturity_disbursements_map,
+        );
 
         update_singleton_field(
             neuron_id,
@@ -230,6 +251,76 @@ where
         Ok(self.reconstitute_neuron(neuron_id, main_neuron_part, sections))
     }
 
+    pub fn register_recent_neuron_ballot(
+        &mut self,
+        neuron_id: NeuronId,
+        topic: Topic,
+        proposal_id: ProposalId,
+        vote: Vote,
+    ) -> Result<(), NeuronStoreError> {
+        if topic == Topic::ExchangeRate {
+            return Ok(());
+        }
+
+        let main_neuron_part = self
+            .main
+            .get(&neuron_id)
+            // Deal with no entry by blaming it on the caller.
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+
+        let recent_entry_index = main_neuron_part.recent_ballots_next_entry_index;
+
+        let next_entry_index = if let Some(recent_entry_index) = recent_entry_index {
+            recent_entry_index as usize
+        } else {
+            let mut ballots = read_repeated_field(neuron_id, &self.recent_ballots_map);
+            ballots.reverse();
+            let next_entry = ballots.len() % MAX_NEURON_RECENT_BALLOTS;
+            update_repeated_field(neuron_id, ballots, &mut self.recent_ballots_map);
+            next_entry
+        };
+        // We cannot error after this, or we risk creating some chaos with the ordering
+        // of the ballots b/c of the migration code above.
+
+        let ballot_info = BallotInfo {
+            proposal_id: Some(proposal_id),
+            vote: vote as i32,
+        };
+
+        insert_element_in_repeated_field(
+            neuron_id,
+            next_entry_index as u64,
+            ballot_info,
+            &mut self.recent_ballots_map,
+        );
+
+        // update the main part now
+        let mut main_neuron_part = main_neuron_part;
+        main_neuron_part.recent_ballots_next_entry_index =
+            Some(((next_entry_index + 1) % MAX_NEURON_RECENT_BALLOTS) as u32);
+        self.main.insert(neuron_id, main_neuron_part);
+
+        Ok(())
+    }
+
+    /// Updates the main part of an existing neuron.
+    pub fn with_main_part_mut<R>(
+        &mut self,
+        neuron_id: NeuronId,
+        f: impl FnOnce(&mut AbridgedNeuron) -> R,
+    ) -> Result<R, NeuronStoreError> {
+        let mut main_neuron_part = self
+            .main
+            .get(&neuron_id)
+            // Deal with no entry by blaming it on the caller.
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+
+        let result = f(&mut main_neuron_part);
+        self.main.insert(neuron_id, main_neuron_part);
+
+        Ok(result)
+    }
+
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
@@ -247,6 +338,7 @@ where
             hot_keys,
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress,
 
             known_neuron_data,
             transfer,
@@ -292,8 +384,15 @@ where
         if followees != old_neuron.followees {
             self.update_followees(neuron_id, followees);
         }
+        if maturity_disbursements_in_progress != old_neuron.maturity_disbursements_in_progress {
+            update_repeated_field(
+                neuron_id,
+                maturity_disbursements_in_progress,
+                &mut self.maturity_disbursements_map,
+            );
+        }
 
-        if known_neuron_data != old_neuron.known_neuron_data {
+        if known_neuron_data.as_ref() != old_neuron.known_neuron_data() {
             update_singleton_field(
                 neuron_id,
                 known_neuron_data,
@@ -341,13 +440,136 @@ where
         self.main.len().min(usize::MAX as u64) as usize
     }
 
-    /// Returns the next neuron_id equal to or higher than the provided neuron_id
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
     where
-        R: RangeBounds<NeuronId>,
+        R: RangeBounds<NeuronId> + Clone,
     {
-        self.main.range(range).map(|(neuron_id, neuron)| {
-            self.reconstitute_neuron(neuron_id, neuron, NeuronSections::all())
+        self.range_neurons_sections(range, NeuronSections::ALL)
+    }
+
+    /// Returns the next neuron_id equal to or higher than the provided neuron_id
+    pub fn range_neurons_sections<R>(
+        &self,
+        range: R,
+        sections: NeuronSections,
+    ) -> impl Iterator<Item = Neuron> + '_
+    where
+        R: RangeBounds<NeuronId> + Clone,
+    {
+        let (start, end) = get_range_boundaries(range.clone());
+
+        // We want our ranges for sub iterators to include start and end
+        let hotkeys_range = (start, u64::MIN)..=(end, u64::MAX);
+        let ballots_range = (start, u64::MIN)..=(end, u64::MAX);
+        let maturity_disbursements_range = (start, u64::MIN)..=(end, u64::MAX);
+
+        let followees_range = FolloweesKey {
+            follower_id: start,
+            ..FolloweesKey::MIN
+        }..=FolloweesKey {
+            follower_id: end,
+            ..FolloweesKey::MAX
+        };
+
+        // Instead of randomly accessing each map (which is expensive for StableBTreeMaps), we
+        // use a range query on each map, and iterate all of the ranges at the same time.  This
+        // uses 40% less instructions compared to just iterating on the top level range, and
+        // accessing the other maps for each neuron_id.
+        // This is only possible because EVERY range begins with NeuronId, so that their ordering
+        // is the same in respect to the main range's neurons.
+
+        let main_range = self.main.range(range.clone());
+        let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
+        let mut recent_ballots_iter = self.recent_ballots_map.range(ballots_range).peekable();
+        let mut followees_iter = self.followees_map.range(followees_range).peekable();
+        let mut maturity_disbursements_iter = self
+            .maturity_disbursements_map
+            .range(maturity_disbursements_range)
+            .peekable();
+        let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
+        let mut transfer_iter = self.transfer_map.range(range).peekable();
+
+        main_range.map(move |(main_neuron_id, abridged_neuron)| {
+            // We'll collect data from all relevant maps for this neuron_id
+
+            let hot_keys = if sections.hot_keys {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut hot_keys_iter,
+                    main_neuron_id,
+                    |((neuron_id, _), _)| *neuron_id,
+                    |((_, _), principal)| PrincipalId::from(principal),
+                )
+            } else {
+                vec![]
+            };
+
+            let ballots = if sections.recent_ballots {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut recent_ballots_iter,
+                    main_neuron_id,
+                    |((neuron_id, _), _)| *neuron_id,
+                    |((_, _), ballot_info)| ballot_info,
+                )
+            } else {
+                vec![]
+            };
+
+            let followees = if sections.followees {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut followees_iter,
+                    main_neuron_id,
+                    |(followees_key, _)| followees_key.follower_id,
+                    |x| x,
+                )
+            } else {
+                vec![]
+            };
+
+            let maturity_disbursements_in_progress = if sections.maturity_disbursements {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut maturity_disbursements_iter,
+                    main_neuron_id,
+                    |((neuron_id, _), _)| *neuron_id,
+                    |((_, _), maturity_disbursement)| maturity_disbursement,
+                )
+            } else {
+                vec![]
+            };
+
+            let current_known_neuron_data = if sections.known_neuron_data {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut known_neuron_data_iter,
+                    main_neuron_id,
+                    |(neuron_id, _)| *neuron_id,
+                    |(_, known_neuron_data)| known_neuron_data,
+                )
+                .pop()
+            } else {
+                None
+            };
+
+            let current_transfer = if sections.transfer {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut transfer_iter,
+                    main_neuron_id,
+                    |(neuron_id, _)| *neuron_id,
+                    |(_, transfer)| transfer,
+                )
+                .pop()
+            } else {
+                None
+            };
+
+            Neuron::from(DecomposedNeuron {
+                id: main_neuron_id,
+                main: abridged_neuron,
+                hot_keys,
+                recent_ballots: ballots,
+                followees: self.reconstitute_followees_from_range(followees.into_iter()),
+                maturity_disbursements_in_progress,
+                known_neuron_data: current_known_neuron_data,
+                transfer: current_transfer,
+            })
         })
     }
 
@@ -367,6 +589,7 @@ where
         validate_stable_btree_map(&self.hot_keys_map);
         validate_stable_btree_map(&self.recent_ballots_map);
         validate_stable_btree_map(&self.followees_map);
+        validate_stable_btree_map(&self.maturity_disbursements_map);
         validate_stable_btree_map(&self.known_neuron_data_map);
         validate_stable_btree_map(&self.transfer_map);
     }
@@ -394,6 +617,11 @@ where
         } else {
             HashMap::new()
         };
+        let maturity_disbursements = if sections.maturity_disbursements {
+            read_repeated_field(neuron_id, &self.maturity_disbursements_map)
+        } else {
+            Vec::new()
+        };
 
         let known_neuron_data = if sections.known_neuron_data {
             self.known_neuron_data_map.get(&neuron_id)
@@ -416,6 +644,7 @@ where
                 .collect(),
             recent_ballots,
             followees,
+            maturity_disbursements_in_progress: maturity_disbursements,
 
             known_neuron_data,
             transfer,
@@ -439,6 +668,13 @@ where
         };
         let range = self.followees_map.range(first..=last);
 
+        self.reconstitute_followees_from_range(range)
+    }
+
+    fn reconstitute_followees_from_range(
+        &self,
+        range: impl Iterator<Item = (FolloweesKey, NeuronId)>,
+    ) -> HashMap</* topic ID */ i32, Followees> {
         range
             // create groups for topics
             .group_by(|(followees_key, _followee_id)| followees_key.topic)
@@ -517,6 +753,7 @@ pub struct NeuronStorageLens {
     pub known_neuron_data: u64,
 }
 
+use crate::{governance::MAX_NEURON_RECENT_BALLOTS, pb::v1::Vote};
 #[cfg(test)]
 use ic_stable_structures::VectorMemory;
 
@@ -529,6 +766,7 @@ pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
         hot_keys: VectorMemory::default(),
         recent_ballots: VectorMemory::default(),
         followees: VectorMemory::default(),
+        maturity_disbursements: VectorMemory::default(),
 
         // Singletons
         known_neuron_data: VectorMemory::default(),
@@ -578,6 +816,18 @@ impl Storable for BallotInfo {
     };
 }
 
+impl Storable for MaturityDisbursement {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::from(self.encode_to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 impl Storable for KnownNeuronData {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
@@ -613,6 +863,56 @@ impl Storable for NeuronStakeTransfer {
 // Private Helpers
 // ===============
 
+fn get_range_boundaries<R>(range_bound: R) -> (NeuronId, NeuronId)
+where
+    R: RangeBounds<NeuronId>,
+{
+    let start = match range_bound.start_bound() {
+        RangeBound::Included(start) => *start,
+        RangeBound::Excluded(start) => *start,
+        RangeBound::Unbounded => NeuronId::MIN,
+    };
+    let end = match range_bound.end_bound() {
+        RangeBound::Included(end) => *end,
+        RangeBound::Excluded(end) => *end,
+        RangeBound::Unbounded => NeuronId::MAX,
+    };
+
+    (start, end)
+}
+
+/// Skips until extract_neuron_id(item) == target_neuron_id, then maps corresponding items through
+/// extract_value and returns the result as a vector.
+fn collect_values_for_neuron_from_peekable_range<Iter, T, R, FNeuronId, FValue>(
+    iter: &mut Peekable<Iter>,
+    target_neuron_id: NeuronId,
+    extract_neuron_id: FNeuronId,
+    extract_value: FValue,
+) -> Vec<R>
+where
+    Iter: Iterator<Item = T>,
+    FNeuronId: Fn(&T) -> NeuronId,
+    FValue: Fn(T) -> R,
+{
+    let mut result = vec![];
+
+    while let Some(item) = iter.peek() {
+        let neuron_id = extract_neuron_id(item);
+        if neuron_id > target_neuron_id {
+            break;
+        }
+        let item = iter
+            .next()
+            .expect("Peek had a value, but next did not!  This should be impossible.");
+
+        if neuron_id == target_neuron_id {
+            result.push(extract_value(item));
+        }
+    }
+
+    result
+}
+
 // This is copied from candid/src. Seems like their definition should be public,
 // but it's not. Seems to be an oversight.
 const PRINCIPAL_MAX_LENGTH_IN_BYTES: usize = 29;
@@ -635,7 +935,7 @@ fn update_repeated_field<Element, Memory>(
     new_elements: Vec<Element>,
     map: &mut StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
 ) where
-    Element: Storable,
+    Element: Storable + PartialEq,
     Memory: ic_stable_structures::Memory,
 {
     let new_entries = new_elements
@@ -656,31 +956,53 @@ fn update_repeated_field<Element, Memory>(
     update_range(new_entries, range, map)
 }
 
+fn insert_element_in_repeated_field<Element, Memory>(
+    neuron_id: NeuronId,
+    index: u64,
+    element: Element,
+    map: &mut StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
+) where
+    Element: Storable + PartialEq,
+    Memory: ic_stable_structures::Memory,
+{
+    let key = (neuron_id, index);
+    map.insert(key, element);
+}
+
 /// Replaces the contents of map where keys are in range with new_entries.
 // TODO(NNS1-2513): To avoid the caller passing an incorrect range (e.g. too
 // small, or to big), derive range from NeuronId.
 fn update_range<Key, Value, Memory>(
-    new_entries: HeapBTreeMap<Key, Value>,
+    mut new_entries: HeapBTreeMap<Key, Value>,
     range: impl RangeBounds<Key>,
     map: &mut StableBTreeMap<Key, Value, Memory>,
 ) where
     Key: Storable + Ord + Clone,
-    Value: Storable,
+    Value: Storable + PartialEq,
     Memory: ic_stable_structures::Memory,
 {
-    let new_keys = new_entries.keys().cloned().collect::<HeapBTreeSet<Key>>();
+    let mut to_remove = vec![];
+    for (key, value) in map.range(range) {
+        match new_entries.entry(key.clone()) {
+            // If our new entries do not include a key in existing, we remove it from existing.
+            Entry::Vacant(_) => {
+                to_remove.push(key);
+            }
+            Entry::Occupied(entry) => {
+                // If our new entries have the same value as what exists, we do not want to insert
+                // it, but instead remove it from the list of new entries, since it's present.
+                if *entry.get() == value {
+                    entry.remove();
+                }
+            }
+        };
+    }
 
     for (new_key, new_value) in new_entries {
         map.insert(new_key, new_value);
     }
 
-    let obsolete_keys = map
-        .range(range)
-        .filter(|(key, _value)| !new_keys.contains(key))
-        .map(|(key, _value)| key)
-        .collect::<Vec<_>>();
-
-    for obsolete_key in obsolete_keys {
+    for obsolete_key in to_remove {
         map.remove(&obsolete_key);
     }
 }
@@ -740,7 +1062,7 @@ fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), NeuronSt
 // StableBTreeMap Compound Keys
 // ----------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct FolloweesKey {
     follower_id: NeuronId,
     topic: Topic,

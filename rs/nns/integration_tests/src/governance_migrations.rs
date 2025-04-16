@@ -1,50 +1,23 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::neuron_data_validation::NeuronDataValidationSummary;
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::{Command, FollowResponse, SplitResponse},
-    Topic,
-};
+use ic_nns_governance_api::pb::v1::manage_neuron_response::Command;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    neuron_helpers::{get_neuron_1, get_neuron_2, get_neuron_3},
     state_test_helpers::{
-        nns_set_followees_for_neuron, nns_split_neuron, query, setup_nns_canisters,
+        nns_claim_or_refresh_neuron, nns_disburse_neuron, nns_send_icp_to_claim_or_refresh_neuron,
+        nns_start_dissolving, query, setup_nns_canisters_with_features,
         state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
+use icp_ledger::{AccountIdentifier, Tokens};
 use serde_bytes::ByteBuf;
 use std::time::Duration;
 
-fn assert_no_validation_issues(state_machine: &StateMachine) {
-    let response_bytes = query(
-        state_machine,
-        GOVERNANCE_CANISTER_ID,
-        "get_neuron_data_validation_summary",
-        Encode!(&{}).unwrap(),
-    )
-    .unwrap();
-    let summary = Decode!(&response_bytes, NeuronDataValidationSummary).unwrap();
-    assert_eq!(summary.current_validation_started_time_seconds, None);
-    let current_issues_summary = summary.current_issues_summary.unwrap();
-    assert_eq!(current_issues_summary.issue_groups, vec![]);
-}
-
-struct NeuronIndexesLens {
-    subaccount: u64,
-    principal: u64,
-    following: u64,
-    known_neuron: u64,
-    account_id: u64,
-}
-
-fn assert_neuron_indexes_lens(
-    state_machine: &StateMachine,
-    neuron_indexes_lens: NeuronIndexesLens,
-) {
+fn assert_metric(state_machine: &StateMachine, name: &str, value: u64) {
     let response_bytes = query(
         state_machine,
         GOVERNANCE_CANISTER_ID,
@@ -61,108 +34,81 @@ fn assert_neuron_indexes_lens(
     let response: HttpResponse = Decode!(&response_bytes, HttpResponse).unwrap();
     let response_body = String::from_utf8(response.body.into_vec()).unwrap();
 
-    assert!(response_body.contains(&format!(
-        "governance_subaccount_index_len {} ",
-        neuron_indexes_lens.subaccount
-    )));
-    assert!(response_body.contains(&format!(
-        "governance_principal_index_len {} ",
-        neuron_indexes_lens.principal
-    )));
-    assert!(response_body.contains(&format!(
-        "governance_following_index_len {} ",
-        neuron_indexes_lens.following
-    )));
-    assert!(response_body.contains(&format!(
-        "governance_known_neuron_index_len {} ",
-        neuron_indexes_lens.known_neuron
-    )));
-    assert!(response_body.contains(&format!(
-        "governance_account_id_index_len {} ",
-        neuron_indexes_lens.account_id
-    )));
+    let line = response_body
+        .lines()
+        .filter(|line| line.starts_with(name))
+        .collect::<Vec<_>>()
+        .first()
+        .unwrap()
+        .to_string();
+    assert!(
+        line.starts_with(&format!("{} {} ", name, value)),
+        "{}",
+        line
+    );
 }
 
 #[test]
-fn test_neuron_indexes_migrations() {
+fn test_neuron_migration_from_heap_to_stable() {
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
-    setup_nns_canisters(&state_machine, nns_init_payloads);
+    let test_user_principal = PrincipalId::new_self_authenticating(&[1]);
+    let nonce = 123_456;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(test_user_principal, None),
+            Tokens::from_e8s(2_000_000_000),
+        )
+        .build();
+    // Make sure the test feature is not enabled. Otherwise new neurons will be created in the
+    // stable memory, which makes the test precondition wrong.
+    setup_nns_canisters_with_features(&state_machine, nns_init_payloads, &[]);
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        test_user_principal,
+        Tokens::from_e8s(1_000_000_000),
+        nonce,
+    );
+    let neuron_id = nns_claim_or_refresh_neuron(&state_machine, test_user_principal, nonce);
 
-    // Let heartbeat run and validation progress.
+    // Let heartbeat/timer run.
     for _ in 0..20 {
         state_machine.tick();
     }
 
-    assert_neuron_indexes_lens(
+    // Make sure that the neuron is in the heap memory and active.
+    assert_metric(
         &state_machine,
-        NeuronIndexesLens {
-            subaccount: 3,
-            principal: 3,
-            following: 0,
-            known_neuron: 0,
-            account_id: 3,
-        },
+        "governance_garbage_collectable_neurons_count",
+        0,
     );
-    assert_no_validation_issues(&state_machine);
+    assert_metric(&state_machine, "governance_heap_neuron_count", 0);
+    assert_metric(&state_machine, "governance_stable_memory_neuron_count", 1);
 
-    let neuron_1 = get_neuron_1();
-    let neuron_2 = get_neuron_2();
-    let neuron_3 = get_neuron_3();
+    // Advance time and disburse the neuron so that it's empty.
+    nns_start_dissolving(&state_machine, test_user_principal, neuron_id).unwrap();
+    let time_to_dissolve = Duration::from_secs(60 * 60 * 24 * 7);
+    state_machine.advance_time(time_to_dissolve);
+    let disburse_response =
+        nns_disburse_neuron(&state_machine, test_user_principal, neuron_id, None, None);
+    assert_matches!(disburse_response.command, Some(Command::Disburse(_)));
 
-    // Follow will cause the neuron to be modified.
-    let follow_response = nns_set_followees_for_neuron(
-        &state_machine,
-        neuron_3.principal_id,
-        neuron_3.neuron_id,
-        &[neuron_1.neuron_id, neuron_2.neuron_id],
-        Topic::Governance as i32,
-    )
-    .command
-    .expect("Manage neuron command failed");
-    assert_eq!(follow_response, Command::Follow(FollowResponse {}));
+    // After 14 days the neuron will become inactive. Advance enough time for that.
+    let time_to_become_inactive = Duration::from_secs(60 * 60 * 24 * 20);
+    state_machine.advance_time(time_to_become_inactive);
 
-    assert_neuron_indexes_lens(
-        &state_machine,
-        NeuronIndexesLens {
-            subaccount: 3,
-            principal: 3,
-            following: 2,
-            known_neuron: 0,
-            account_id: 3,
-        },
-    );
-
-    // Split will cause a neuron to be created.
-    let split_response = nns_split_neuron(
-        &state_machine,
-        neuron_1.principal_id,
-        neuron_1.neuron_id,
-        500_000_000,
-    )
-    .command
-    .expect("Manage neuron command failed");
-    assert_matches!(split_response, Command::Split(SplitResponse { .. }));
-
-    assert_neuron_indexes_lens(
-        &state_machine,
-        NeuronIndexesLens {
-            subaccount: 4,
-            principal: 4,
-            following: 2,
-            known_neuron: 0,
-            account_id: 4,
-        },
-    );
-
-    // Advance time so the validation can rerun.
-    let two_days = Duration::from_secs(60 * 60 * 24 * 2);
-    state_machine.advance_time(two_days);
-
-    // Let heartbeat run and validation progress again.
+    // Let timer run.
     for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(60 * 60));
         state_machine.tick();
     }
 
-    assert_no_validation_issues(&state_machine);
+    // After the timer runs, the inactive (garbage collectable) neuron should be moved to the stable
+    // memory.
+    assert_metric(
+        &state_machine,
+        "governance_garbage_collectable_neurons_count",
+        1,
+    );
+    assert_metric(&state_machine, "governance_heap_neuron_count", 0);
+    assert_metric(&state_machine, "governance_stable_memory_neuron_count", 1);
 }

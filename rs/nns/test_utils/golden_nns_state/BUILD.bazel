@@ -1,10 +1,12 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
+    "//rs/nns/test_utils/prepare_golden_state",
+    "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
@@ -34,8 +36,14 @@ DEPENDENCIES = [
 rust_library(
     name = "golden_nns_state",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_nns_test_utils_golden_nns_state",
     version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "golden_nns_state_test",
+    crate = ":golden_nns_state",
     deps = DEPENDENCIES,
 )

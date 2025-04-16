@@ -114,6 +114,8 @@ pub(super) mod parser_to_internal {
 
 /// Conversion from internal to [`wasm_encoder`] types.
 pub(super) mod internal_to_encoder {
+    use std::borrow::Cow;
+
     use super::*;
 
     pub(crate) fn block_type(ty: wasmparser::BlockType) -> Result<wasm_encoder::BlockType> {
@@ -121,7 +123,7 @@ pub(super) mod internal_to_encoder {
             wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,
             wasmparser::BlockType::Type(ty) => {
                 wasm_encoder::BlockType::Result(wasm_encoder::ValType::try_from(ty).map_err(
-                    |()| Error::ConversionError(format!("Failed to convert type: {:?}", ty)),
+                    |_err| Error::ConversionError(format!("Failed to convert type: {:?}", ty)),
                 )?)
             }
             wasmparser::BlockType::FuncType(f) => wasm_encoder::BlockType::FunctionType(f),
@@ -134,6 +136,26 @@ pub(super) mod internal_to_encoder {
             align: memarg.align as u32,
             memory_index: memarg.memory,
         }
+    }
+
+    fn ordering(arg: wasmparser::Ordering) -> wasm_encoder::Ordering {
+        match arg {
+            wasmparser::Ordering::SeqCst => wasm_encoder::Ordering::SeqCst,
+            wasmparser::Ordering::AcqRel => wasm_encoder::Ordering::AcqRel,
+        }
+    }
+
+    fn handle(handle: wasmparser::Handle) -> wasm_encoder::Handle {
+        match handle {
+            wasmparser::Handle::OnLabel { tag, label } => {
+                wasm_encoder::Handle::OnLabel { tag, label }
+            }
+            wasmparser::Handle::OnSwitch { tag } => wasm_encoder::Handle::OnSwitch { tag },
+        }
+    }
+
+    fn resume_table(resume_table: wasmparser::ResumeTable) -> Cow<'static, [wasm_encoder::Handle]> {
+        Cow::Owned(resume_table.handlers.into_iter().map(handle).collect())
     }
 
     pub(crate) fn const_expr(expr: &wasmparser::Operator) -> Result<wasm_encoder::ConstExpr> {
@@ -167,7 +189,7 @@ pub(super) mod internal_to_encoder {
         use wasm_encoder::Instruction as I;
 
         macro_rules! convert {
-            ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
+            ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
                 match op {
                     $(
                         wasmparser::Operator::$op $({ $($arg),* })? => {
@@ -176,7 +198,10 @@ pub(super) mod internal_to_encoder {
                             )?
                             convert!(build $op $($($arg)*)?)
                         }
-                    )*
+                    )*,
+                    // TODO put the operator there.
+                    op => Err(Error::UnknownInstruction),
+
                 }
             };
 
@@ -203,25 +228,28 @@ pub(super) mod internal_to_encoder {
             ));
             (map $arg:ident ty) => (
                 wasm_encoder::ValType::try_from($arg)
-                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
             );
             (map $arg:ident hty) => (
                 wasm_encoder::HeapType::try_from($arg)
-                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
             );
             (map $arg:ident from_ref_type) => (
                 wasm_encoder::RefType::try_from($arg)
-                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
             );
             (map $arg:ident to_ref_type) => (
                 wasm_encoder::RefType::try_from($arg)
-                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+                    .map_err(|_err| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
             );
 
             (map $arg:ident memarg) => (memarg(&$arg));
+            (map $arg:ident ordering) => (ordering($arg));
             (map $arg:ident table_byte) => (());
             (map $arg:ident mem_byte) => (());
             (map $arg:ident flags) => (());
+            (map $arg:ident resume_table) => (resume_table($arg));
+
 
             // All other arguments are kept the same.
             (map $arg:ident $_:ident) => ($arg);
@@ -246,12 +274,12 @@ pub(super) mod internal_to_encoder {
 
             // Special case of multiple arguments.
             (build CallIndirect $ty:ident $table:ident $_:ident) => (Ok(I::CallIndirect {
-                ty: $ty,
-                table: $table,
+                type_index: $ty,
+                table_index: $table,
             }));
             (build ReturnCallIndirect $ty:ident $table:ident) => (Ok(I::ReturnCallIndirect {
-                ty: $ty,
-                table: $table,
+                type_index: $ty,
+                table_index: $table,
             }));
             (build MemoryGrow $mem:ident $_:ident) => (Ok(I::MemoryGrow($mem)));
             (build MemorySize $mem:ident $_:ident) => (Ok(I::MemorySize($mem)));

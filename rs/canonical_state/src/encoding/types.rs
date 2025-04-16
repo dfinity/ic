@@ -31,7 +31,7 @@ use strum_macros::EnumIter;
 pub(crate) type Bytes = Vec<u8>;
 
 /// Canonical representation of `ic_types::xnet::StreamHeader`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StreamHeader {
     pub begin: u64,
@@ -57,7 +57,7 @@ pub struct StreamHeader {
 /// the current one.
 ///
 /// Note that `signals_end` is NOT part of the reject signals.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RejectSignals {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -89,7 +89,7 @@ impl RejectSignals {
 }
 
 /// Canonical representation of `ic_types::messages::RequestOrResponse`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestOrResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,8 +98,9 @@ pub struct RequestOrResponse {
     pub response: Option<Response>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct RequestMetadata {
+    // TODO(MR-642): Remove `Option` from `call_tree_depth` and `call_tree_start_time`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call_tree_depth: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -109,7 +110,7 @@ pub struct RequestMetadata {
 }
 
 /// Canonical representation of `ic_types::messages::Request`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
     #[serde(with = "serde_bytes")]
@@ -123,6 +124,7 @@ pub struct Request {
     pub method_payload: Bytes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_payment: Option<Cycles>,
+    // TODO(MR-642): Remove `Option` from `metadata`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<RequestMetadata>,
     #[serde(skip_serializing_if = "is_zero", default)]
@@ -130,7 +132,7 @@ pub struct Request {
 }
 
 /// Canonical representation of `ic_types::messages::Response`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Response {
     #[serde(with = "serde_bytes")]
@@ -147,7 +149,7 @@ pub struct Response {
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cycles {
     pub low: u64,
@@ -157,7 +159,7 @@ pub struct Cycles {
 }
 
 /// Canonical representation of `ic_types::funds::Funds`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Funds {
     pub cycles: Cycles,
@@ -173,7 +175,7 @@ where
 }
 
 /// Canonical representation of `ic_types::messages::Payload`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Payload {
     #[serde(with = "serde_bytes", skip_serializing_if = "Option::is_none", default)]
@@ -183,7 +185,7 @@ pub struct Payload {
 }
 
 /// Canonical representation of `ic_types::messages::RejectContext`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RejectContext {
     pub code: u8,
@@ -195,12 +197,12 @@ pub struct RejectContext {
 pub struct SystemMetadata {
     /// The counter used to allocate canister ids.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id_counter: Option<u64>,
+    pub deprecated_id_counter: Option<u64>,
     /// Hash bytes of the previous (partial) canonical state.
     pub prev_state_hash: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SubnetMetrics {
     /// The number of canisters on this subnet.
     pub num_canisters: u64,
@@ -233,19 +235,6 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
     fn from(
         (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
-        // Replicas with certification version < 9 do not produce reject signals. This
-        // includes replicas with certification version 8, but they may "inherit" reject
-        // signals from a replica with certification version 9 after a downgrade.
-        assert!(
-            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
-            "Replicas with certification version < 9 should not be producing reject signals"
-        );
-        // Replicas with certification version < 17 should not have flags set.
-        assert!(
-            *header.flags() == STREAM_DEFAULT_FLAGS
-                || certification_version >= CertificationVersion::V17
-        );
-
         let mut flags = 0;
         let ic_types::xnet::StreamFlags {
             deprecated_responses_only,
@@ -535,9 +524,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
-            metadata: request.metadata.as_ref().and_then(|metadata| {
-                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
-            }),
+            metadata: Some((&request.metadata).into()),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -564,7 +551,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             payment,
             method_name: request.method_name,
             method_payload: request.method_payload,
-            metadata: request.metadata.map(From::from),
+            metadata: request.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
         })
     }
@@ -743,17 +730,13 @@ impl
     )> for SystemMetadata
 {
     fn from(
-        (metadata, certification_version): (
+        (metadata, _certification_version): (
             &ic_replicated_state::metadata_state::SystemMetadata,
             CertificationVersion,
         ),
     ) -> Self {
         Self {
-            id_counter: if certification_version <= CertificationVersion::V9 {
-                Some(0)
-            } else {
-                None
-            },
+            deprecated_id_counter: None,
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()

@@ -13,7 +13,7 @@ use crate::driver::{constants, event::TaskId, subprocess_ipc::LogSender};
 
 use slog::debug;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct GroupContext {
     pub exec_path: PathBuf,
     pub group_dir: PathBuf,

@@ -17,9 +17,7 @@ use reqwest::{Client, Response};
 use serde_bytes::ByteBuf;
 use std::time::{Duration, Instant};
 
-pub const INTERNET_IDENTITY_WASM: &str =
-    "external/ii_dev_canister/file/internet_identity_dev.wasm.gz";
-pub const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+pub const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(10);
 /// user ids start with 10000 and increase by 1 for each new user
 pub const USER_NUMBER_OFFSET: u64 = 10_000;
@@ -34,7 +32,7 @@ pub type UserKey = PublicKey;
 pub type Timestamp = u64;
 type Signature = ByteBuf;
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 struct DeviceData {
     pub pubkey: DeviceKey,
     pub alias: String,
@@ -44,7 +42,7 @@ struct DeviceData {
     pub protection: DeviceProtection,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum Purpose {
     #[serde(rename = "recovery")]
     Recovery,
@@ -52,7 +50,7 @@ pub enum Purpose {
     Authentication,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 enum RegisterResponse {
     #[serde(rename = "registered")]
     Registered { user_number: AnchorNumber },
@@ -62,7 +60,7 @@ enum RegisterResponse {
     BadChallenge,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 enum KeyType {
     #[serde(rename = "unknown")]
     Unknown,
@@ -74,7 +72,7 @@ enum KeyType {
     SeedPhrase,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum DeviceProtection {
     #[serde(rename = "protected")]
     Protected,
@@ -126,7 +124,7 @@ pub struct AgentWithDelegation<'a> {
     pub polling_timeout: Duration,
 }
 
-impl<'a> AgentWithDelegation<'a> {
+impl AgentWithDelegation<'_> {
     async fn send_http_request(
         &self,
         method: &str,
@@ -135,7 +133,7 @@ impl<'a> AgentWithDelegation<'a> {
     ) -> Response {
         let client = Client::new();
         client
-            .post(&format!(
+            .post(format!(
                 "{}api/v2/canister/{}/{}",
                 self.node_url.as_str(),
                 canister_id,
@@ -400,7 +398,7 @@ pub async fn install_universal_canister(
         .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))
         .unwrap()
         .0;
-    mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+    mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
         .with_raw_arg(wasm().build())
         .call_and_wait()
         .await

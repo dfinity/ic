@@ -29,6 +29,7 @@ use lazy_static::lazy_static;
 use std::{
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 
 lazy_static! {
@@ -82,7 +83,7 @@ impl PaymentProtocolTestSetup {
         // install the ICP ledger
         {
             let wasm = ic_test_utilities_load_wasm::load_wasm(
-                "../../rosetta-api/icp_ledger/ledger",
+                "../../ledger_suite/icp/ledger",
                 "ledger-canister",
                 &[],
             );
@@ -94,7 +95,7 @@ impl PaymentProtocolTestSetup {
         // install the sns ledger
         {
             let wasm = ic_test_utilities_load_wasm::load_wasm(
-                "../../rosetta-api/icrc1/ledger",
+                "../../ledger_suite/icrc1/ledger",
                 "ic-icrc1-ledger",
                 &[],
             );
@@ -115,6 +116,9 @@ impl PaymentProtocolTestSetup {
             state_machine
                 .install_existing_canister(swap_id, wasm, args)
                 .unwrap();
+            // Make sure at least one Swap periodic tasks is executed.
+            state_machine.advance_time(Duration::from_secs(100));
+            state_machine.tick();
         }
 
         Self {
@@ -308,6 +312,10 @@ impl PaymentProtocolTestSetup {
 fn test_get_open_ticket() {
     let user0 = PrincipalId::new_user_test_id(0);
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
+    assert_eq!(
+        payment_flow_protocol.get_lifecycle().lifecycle,
+        Some(Lifecycle::Open as i32)
+    );
     assert_eq!(payment_flow_protocol.get_open_ticket(&user0).unwrap(), None);
 }
 

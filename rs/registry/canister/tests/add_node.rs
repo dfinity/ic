@@ -5,15 +5,15 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
-use ic_nns_test_utils::registry::{
-    get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
-    get_node_signing_key, get_transport_tls_certificate,
-};
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload},
+    registry::{
+        get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
+        get_node_signing_key, get_transport_tls_certificate,
+        invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload,
+    },
 };
-use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+use ic_protobuf::registry::{node::v1::NodeRewardType, node_operator::v1::NodeOperatorRecord};
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
@@ -36,7 +36,8 @@ fn node_is_created_on_receiving_the_request() {
         )
         .await;
 
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (mut payload, node_pks) = prepare_add_node_payload(1);
+        payload.node_reward_type = Some("type3".to_string());
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -51,13 +52,17 @@ fn node_is_created_on_receiving_the_request() {
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
             .await;
-        println!("registry.update_from_sender(add_node) = {response:?}");
         assert!(response.is_ok());
 
         // Now let's check directly in the registry that the mutation actually happened
         let node_record = get_node_record(&registry, node_id).await;
         // Check if some fields are present
         assert!(node_record.is_some());
+        let node_record = node_record.unwrap();
+        assert_eq!(
+            node_record.node_reward_type,
+            Some(NodeRewardType::Type3 as i32)
+        );
 
         // Check that other fields are present
         let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await.unwrap();
@@ -91,6 +96,50 @@ fn node_is_created_on_receiving_the_request() {
                 .await
                 .unwrap();
         assert_eq!(node_operator_record.node_allowance, 99);
+
+        Ok(())
+    });
+}
+
+#[test]
+fn node_is_not_created_with_invalid_type() {
+    local_test_on_nns_subnet(|runtime| async move {
+        // First prepare the registry with a Node Operator record and make it callable
+        // by anyone
+        let registry = set_up_registry_canister(
+            &runtime,
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
+                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .build(),
+        )
+        .await;
+
+        let (mut payload, node_pks) = prepare_add_node_payload(1);
+        payload.node_reward_type = Some("type0.11".to_string());
+        let node_id = node_pks.node_id();
+
+        // Then, ensure there is no value for the node
+        let node_record = get_node_record(&registry, node_id).await;
+        assert!(node_record.is_none());
+
+        let response: Result<NodeId, String> = registry
+            .update_from_sender(
+                "add_node",
+                candid,
+                (payload,),
+                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            )
+            .await;
+        assert!(response.is_err());
+        assert!(response
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid node type"));
+
+        // The record should still not be there
+        let node_record = get_node_record(&registry, node_id).await;
+        assert!(node_record.is_none());
 
         Ok(())
     });

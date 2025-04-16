@@ -28,6 +28,6 @@ rust_library(
 
 rust_test(
     name = "humanize_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = DEV_DEPENDENCIES,
 )
