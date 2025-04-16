@@ -17,8 +17,8 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::{
     balances_len, clear_stable_allowance_data, clear_stable_balances_data,
-    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
-    LEDGER_VERSION, UPGRADES_MEMORY,
+    clear_stable_blocks_data, get_allowances, is_ready, ledger_state, panic_if_not_ready,
+    set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -31,6 +31,9 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+use icrc_ledger_types::icrc103::get_allowances::{
+    Allowances, GetAllowancesArgs, GetAllowancesError,
+};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -65,6 +68,7 @@ use icrc_ledger_types::{
 };
 use num_traits::{bounds::Bounded, ToPrimitive};
 use serde_bytes::ByteBuf;
+use std::char::MAX;
 use std::{
     cell::RefCell,
     io::{Read, Write},
@@ -1096,6 +1100,36 @@ fn icrc21_canister_call_consent_message(
 #[candid_method(query)]
 fn is_ledger_ready() -> bool {
     is_ready()
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
+    let from_account = match arg.from_account {
+        Some(from_account) => from_account,
+        None => Account {
+            owner: ic_cdk::api::caller(),
+            subaccount: None,
+        },
+    };
+    let spender_account = match arg.prev_spender {
+        Some(spender) => spender,
+        None => Account {
+            owner: Principal::from_slice(&[0u8; 0]),
+            subaccount: None,
+        },
+    };
+    let max_results = arg.take.unwrap_or(Nat::from(u64::MAX));
+    let max_results = std::cmp::min(
+        max_results.0.to_u64().unwrap(),
+        Access::with_ledger(|ledger| ledger.max_take_allowances()),
+    );
+    Ok(get_allowances(
+        from_account,
+        spender_account,
+        max_results,
+        ic_cdk::api::time(),
+    ))
 }
 
 candid::export_service!();

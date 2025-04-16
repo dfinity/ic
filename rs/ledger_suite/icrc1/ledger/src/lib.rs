@@ -33,8 +33,6 @@ use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
-use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
-use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
@@ -46,6 +44,13 @@ use icrc_ledger_types::{
         archive::{GetArchivesArgs, GetArchivesResult, ICRC3ArchiveInfo, QueryArchiveFn},
         blocks::{ArchivedBlocks, GetBlocksRequest, GetBlocksResult},
     },
+};
+use icrc_ledger_types::{
+    icrc103::get_allowances::Allowance as Allowance103,
+    icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse},
+};
+use icrc_ledger_types::{
+    icrc103::get_allowances::Allowances, icrc3::transactions::Transaction as Tx,
 };
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -70,6 +75,8 @@ const METADATA_NAME: &str = "icrc1:name";
 const METADATA_SYMBOL: &str = "icrc1:symbol";
 const METADATA_FEE: &str = "icrc1:fee";
 const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
+const METADATA_PUBLIC_ALLOWANCES: &str = "icrc103:public_allowances";
+const METADATA_MAX_TAKE_ALLOWANCES: &str = "icrc103:max_take_value";
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -619,12 +626,14 @@ fn default_decimals() -> u8 {
 }
 
 fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
-    const DISALLOWED_METADATA_FIELDS: [&str; 5] = [
+    const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         METADATA_DECIMALS,
         METADATA_NAME,
         METADATA_SYMBOL,
         METADATA_FEE,
         METADATA_MAX_MEMO_LENGTH,
+        METADATA_PUBLIC_ALLOWANCES,
+        METADATA_MAX_TAKE_ALLOWANCES,
     ];
     arg_metadata
         .into_iter()
@@ -867,6 +876,10 @@ impl Ledger {
         self.decimals
     }
 
+    pub fn max_take_allowances(&self) -> u64 {
+        100u64
+    }
+
     pub fn metadata(&self) -> Vec<(String, Value)> {
         let mut records: Vec<(String, Value)> = self
             .metadata
@@ -881,6 +894,11 @@ impl Ledger {
         records.push(Value::entry(
             METADATA_MAX_MEMO_LENGTH,
             self.max_memo_length() as u64,
+        ));
+        records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true"));
+        records.push(Value::entry(
+            METADATA_MAX_TAKE_ALLOWANCES,
+            self.max_take_allowances(),
         ));
         records
     }
@@ -1174,6 +1192,36 @@ pub fn clear_stable_blocks_data() {
 
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
+}
+
+pub fn get_allowances(from: Account, spender: Account, max_results: u64, now: u64) -> Allowances {
+    let mut result = vec![];
+    ALLOWANCES_MEMORY.with_borrow(|allowances| {
+        let account_spender = AccountSpender {
+            account: from,
+            spender,
+        };
+        for allowance in allowances.range(account_spender..) {
+            if result.len() >= max_results as usize {
+                break;
+            }
+            if let Some(expires_at) = allowance.1.expires_at {
+                if expires_at.as_nanos_since_unix_epoch() <= now {
+                    continue;
+                }
+            }
+            result.push(Allowance103 {
+                from_account: allowance.0.account,
+                to_spender: allowance.0.spender,
+                allowance: allowance.1.amount.into(),
+                expires_at: allowance
+                    .1
+                    .expires_at
+                    .map(|t| t.as_nanos_since_unix_epoch()),
+            });
+        }
+    });
+    result
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
