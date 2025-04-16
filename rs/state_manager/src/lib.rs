@@ -2361,6 +2361,7 @@ impl StateManagerImpl {
         height: Height,
     ) -> CreateCheckpointResult {
         self.observe_num_loaded_pagemaps(&state);
+        self.observe_num_loaded_wasm_files(&state);
         struct PreviousCheckpointInfo {
             base_manifest: Manifest,
             base_height: Height,
