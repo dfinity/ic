@@ -4129,6 +4129,16 @@ impl UploadCanisterSnapshotMetadataArgs {
 
 /// Struct to encode/decode
 /// (record {
+///     snapshot_id: blob;
+/// };)
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+pub struct UploadCanisterSnapshotMetadataResponse {
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
+}
+
+/// Struct to encode/decode
+/// (record {
 ///     canister_id : principal;
 ///     snapshot_id : blob;
 ///     kind : variant {

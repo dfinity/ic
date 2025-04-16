@@ -46,8 +46,9 @@ use ic_management_canister_types_private::{
     SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
     SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs,
     SubnetInfoResponse, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
-    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -2576,7 +2577,13 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok(()) => (Ok(EmptyBlob.encode()), instructions_used),
+            Ok(snapshot_id) => (
+                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse {
+                    snapshot_id: snapshot_id.to_vec()
+                })
+                .unwrap()),
+                instructions_used,
+            ),
             Err(err) => (Err(err.into()), instructions_used),
         }
     }

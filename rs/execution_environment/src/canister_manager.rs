@@ -1568,28 +1568,13 @@ impl CanisterManager {
             Err(err) => return (Err(err), instructions),
         };
 
-        // Delete old snapshot identified by `replace_snapshot` ID.
-        if let Some(replace_snapshot) = replace_snapshot {
-            state.canister_snapshots.remove(replace_snapshot);
-            canister.system_state.snapshots_memory_usage = canister
-                .system_state
-                .snapshots_memory_usage
-                .get()
-                .saturating_sub(replace_snapshot_size.get())
-                .into();
-            // Confirm that `snapshots_memory_usage` is updated correctly.
-            debug_assert_eq!(
-                canister.system_state.snapshots_memory_usage,
-                state
-                    .canister_snapshots
-                    .compute_memory_usage_by_canister(canister.canister_id()),
-            );
-            round_limits.subnet_available_memory.increment(
-                replace_snapshot_size,
-                NumBytes::from(0),
-                NumBytes::from(0),
-            );
-        }
+        maybe_replace_snapshot(
+            canister,
+            replace_snapshot,
+            state,
+            round_limits,
+            replace_snapshot_size,
+        );
 
         // Actually deduct memory from the subnet. It's safe to unwrap
         // here because we already checked the available memory above.
@@ -2152,18 +2137,7 @@ impl CanisterManager {
         subnet_size: usize,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> (Result<(), CanisterManagerError>, NumInstructions) {
-        let UploadCanisterSnapshotMetadataArgs {
-            canister_id,
-            replace_snapshot,
-            wasm_module_size,
-            exported_globals,
-            wasm_memory_size,
-            stable_memory_size,
-            certified_data,
-            global_timer,
-            on_low_wasm_memory_hook_status,
-        } = &args;
+    ) -> (Result<SnapshotId, CanisterManagerError>, NumInstructions) {
         // Check sender is a controller.
         if let Err(err) = validate_controller(canister, &sender) {
             return (Err(err), NumInstructions::new(0));
@@ -2236,7 +2210,41 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        todo!()
+        maybe_replace_snapshot(
+            canister,
+            args.replace_snapshot(),
+            state,
+            round_limits,
+            replace_snapshot_size,
+        );
+
+        // Actually deduct memory from the subnet. It's safe to unwrap
+        // here because we already checked the available memory above.
+        round_limits.subnet_available_memory
+            .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
+            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
+            canister.scheduler_state.heap_delta_debit = canister
+                .scheduler_state
+                .heap_delta_debit
+                .saturating_add(&new_snapshot.heap_delta());
+        }
+        state.metadata.heap_delta_estimate = state
+            .metadata
+            .heap_delta_estimate
+            .saturating_add(&new_snapshot.heap_delta());
+
+        let snapshot_id =
+            SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
+        canister.system_state.snapshots_memory_usage = canister
+            .system_state
+            .snapshots_memory_usage
+            .saturating_add(&new_snapshot_size);
+        (Ok(snapshot_id), instructions)
     }
 
     pub(crate) fn write_snapshot_data(
@@ -2248,6 +2256,37 @@ impl CanisterManager {
         subnet_size: usize,
     ) -> Result<(), CanisterManagerError> {
         todo!()
+    }
+}
+
+fn maybe_replace_snapshot(
+    canister: &mut CanisterState,
+    replace_snapshot: Option<SnapshotId>,
+    state: &mut ReplicatedState,
+    round_limits: &mut RoundLimits,
+    replace_snapshot_size: NumBytes,
+) {
+    // Delete old snapshot identified by `replace_snapshot` ID.
+    if let Some(replace_snapshot) = replace_snapshot {
+        state.canister_snapshots.remove(replace_snapshot);
+        canister.system_state.snapshots_memory_usage = canister
+            .system_state
+            .snapshots_memory_usage
+            .get()
+            .saturating_sub(replace_snapshot_size.get())
+            .into();
+        // Confirm that `snapshots_memory_usage` is updated correctly.
+        debug_assert_eq!(
+            canister.system_state.snapshots_memory_usage,
+            state
+                .canister_snapshots
+                .compute_memory_usage_by_canister(canister.canister_id()),
+        );
+        round_limits.subnet_available_memory.increment(
+            replace_snapshot_size,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
     }
 }
 
