@@ -10,14 +10,14 @@ DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "ic-canisters-http-types",
+    name = "ic-http-types",
     srcs = glob(["src/**"]),
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "ic-canisters-http-types-tests",
+    name = "ic-http-types-tests",
     srcs = glob(["src/**/*.rs"]),
     deps = DEPENDENCIES,
 )

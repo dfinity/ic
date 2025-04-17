@@ -1,6 +1,6 @@
-# ic-canisters-http-types
+# ic-http-types
 
-`ic-canisters-http-types` is a Rust crate that provides types for representing HTTP requests and responses. These types are designed to simplify working with HTTP communication in canister development on the Internet Computer.
+`ic-http-types` is a Rust crate that provides types for representing HTTP requests and responses. These types are designed to simplify working with HTTP communication in canister development on the Internet Computer.
 
 ## Features
 
@@ -14,7 +14,7 @@ Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ic-canisters-http-types = "0.1.0"
+ic-http-types = "0.1.0"
 ```
 
 #### Example
@@ -46,7 +46,7 @@ fn main() {
 ```
 
 ## Documentation
-For detailed documentation, visit the [Rust Docs](https://docs.rs/ic-canisters-http-types).
+For detailed documentation, visit the [Rust Docs](https://docs.rs/ic-http-types).
 
 ## License
 This project is licensed under the [Apache License 2.0](LICENSE).

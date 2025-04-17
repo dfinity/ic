@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2025-04-16
 
-Initial release of the `ic-canisters-http-types` package.
+Initial release of the `ic-http-types` package.
 
 ### Added
 
