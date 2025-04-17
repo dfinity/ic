@@ -1413,11 +1413,12 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
                 timestamp: expire_cutoff,
                 inner: None,
             };
-            let mut expired = self.values.split_off(&pivot);
-            std::mem::swap(&mut self.values, &mut expired);
-            expired.keys().for_each(|key| {
+            let mut non_expired = self.values.split_off(&pivot);
+            self.values.keys().for_each(|key| {
                 self.keys.remove(key.inner.as_ref().unwrap());
             });
+            std::mem::swap(&mut self.values, &mut non_expired);
+            assert_eq!(self.keys.len(), self.values.len())
         }
     }
     pub fn insert<T: Into<Timestamp>>(&mut self, key: Key, value: Value, now: T) {
