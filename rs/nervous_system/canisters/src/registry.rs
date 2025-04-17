@@ -3,7 +3,8 @@ use ic_base_types::{CanisterId, RegistryVersion};
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_registry_transport::pb::v1::{RegistryDelta, RegistryValue};
+use ic_registry_transport::pb::v1::registry_mutation::Type;
+use ic_registry_transport::pb::v1::{RegistryDelta, RegistryMutation, RegistryValue};
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     serialize_get_changes_since_request, Error,
@@ -115,6 +116,12 @@ impl FakeRegistry {
         FakeRegistry::default()
     }
 
+    /// Test method to get the latest version in the FakeRegistry (as opposed to
+    /// get_latest_version which implements the Registry interface and returns a Result)
+    pub fn latest_version(&self) -> u64 {
+        self.version.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub fn set_fake_response_for_get_changes_since(
         &mut self,
         version: u64,
@@ -133,6 +140,17 @@ impl FakeRegistry {
             .push(response);
     }
 
+    /// Encodes a prost message at latest_version + 1, and updates latest_version.
+    pub fn encode_value<T: prost::Message>(&self, key: impl AsRef<str>, value: Option<T>) {
+        self.encode_value_at_version(
+            key,
+            self.version.load(std::sync::atomic::Ordering::SeqCst) + 1,
+            value,
+        );
+    }
+
+    /// Encodes a prost message at the given version, and updates latest_version if the given version is
+    /// greater than latest_version.  Panics if the value is already set at that version.
     pub fn encode_value_at_version<T: prost::Message>(
         &self,
         key: impl AsRef<str>,
@@ -143,6 +161,47 @@ impl FakeRegistry {
         self.set_value_at_version(key, version, value);
     }
 
+    pub fn get_value(&self, key: impl AsRef<str>) -> Option<Vec<u8>> {
+        self.get_value_at_version(key, self.version.load(std::sync::atomic::Ordering::SeqCst))
+    }
+
+    fn get_value_at_version(&self, key: impl AsRef<str>, version: u64) -> Option<Vec<u8>> {
+        let key_bytes = key.as_ref().as_bytes().to_vec();
+        let binding = self.store.lock().unwrap();
+        binding.get(&key_bytes).and_then(|values| {
+            values
+                .iter()
+                .rev()
+                .find(|v| v.version <= version)
+                .and_then(|v| {
+                    if v.deletion_marker {
+                        None
+                    } else {
+                        Some(v.value.clone())
+                    }
+                })
+        })
+    }
+
+    pub fn get_decoded_value<T: prost::Message + Default>(
+        &self,
+        key: impl AsRef<str>,
+    ) -> Option<T> {
+        self.get_value(key)
+            .and_then(|value| T::decode(value.as_slice()).ok())
+    }
+
+    /// Sets a value at latest_version + 1, and updates latest_version.
+    pub fn set_value(&self, key: impl AsRef<str>, value: Option<Vec<u8>>) {
+        self.set_value_at_version(
+            key,
+            self.version.load(std::sync::atomic::Ordering::SeqCst) + 1,
+            value,
+        );
+    }
+
+    /// Sets a value at the given version, and updates latest_version if the given version is
+    /// greater than latest_version.  Panics if the value is already set at that version.
     pub fn set_value_at_version(&self, key: impl AsRef<str>, version: u64, value: Option<Vec<u8>>) {
         let key_bytes = key.as_ref().as_bytes().to_vec();
         let mut binding = self.store.lock().unwrap();
@@ -170,6 +229,26 @@ impl FakeRegistry {
             self.version
                 .store(version, std::sync::atomic::Ordering::SeqCst);
         }
+    }
+
+    /// Applies mutations as latest version.  This is similar to what Registry actuall does, which
+    /// is helpful for re-using other code that sets initial Registry mutations.
+    pub fn apply_mutations(&self, mutations: Vec<RegistryMutation>) {
+        let current_version = self.version.load(std::sync::atomic::Ordering::SeqCst);
+        let next_version = current_version + 1;
+        for mutation in mutations {
+            let mut binding = self.store.lock().unwrap();
+
+            let entry = binding.entry(mutation.key).or_default();
+            entry.push(RegistryValue {
+                value: mutation.value,
+                version: next_version,
+                deletion_marker: mutation.mutation_type == Type::Delete as i32,
+            })
+        }
+        // Set next version.
+        self.version
+            .store(next_version, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
