@@ -1604,6 +1604,49 @@ impl StateManagerImpl {
     /// Populate `num_loaded_wasm_files_by_source` in the metrics with their actual
     /// values in provided state.
     fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
+        for canister in state.canisters_iter() {
+            if let Some(execution_state) = canister.execution_state.as_ref() {
+                eprintln!("canister wasm: {:?}", execution_state.wasm_binary.binary);
+                match execution_state.wasm_binary.binary.file_loading_status() {
+                    Some(true) => {
+                        let path = execution_state.wasm_binary.binary.file().unwrap();
+                        eprintln!("Canister wasm file loaded from {}", path.display());
+                    }
+                    Some(false) => {
+                        let path = execution_state.wasm_binary.binary.file().unwrap();
+                        eprintln!("Canister wasm file NOT loaded from {}", path.display());
+                    }
+                    None => {
+                        eprintln!("Canister wasm is in memory");
+                    }
+                }
+            }
+        }
+
+        for (_, snapshot) in state.canister_snapshots.iter() {
+            eprintln!(
+                "snapshot wasm: {:?}",
+                snapshot.execution_snapshot().wasm_binary
+            );
+            match snapshot
+                .execution_snapshot()
+                .wasm_binary
+                .file_loading_status()
+            {
+                Some(true) => {
+                    let path = snapshot.execution_snapshot().wasm_binary.file().unwrap();
+                    eprintln!("Snapshot wasm file loaded from {}", path.display());
+                }
+                Some(false) => {
+                    let path = snapshot.execution_snapshot().wasm_binary.file().unwrap();
+                    eprintln!("Snapshot wasm file NOT loaded from {}", path.display());
+                }
+                None => {
+                    eprintln!("Snapshot wasm is in memory");
+                }
+            }
+        }
+
         let num_loaded_canister_wasm = state
             .canister_states
             .iter()

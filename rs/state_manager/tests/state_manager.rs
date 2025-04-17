@@ -408,7 +408,7 @@ fn lazy_wasms() {
     eprintln!("3: {}", wasm_files_by_source("canister", &env));
     eprintln!("3: {}", wasm_files_by_source("snapshot", &env));
 
-    env.execute_ingress(canister_id, "read", vec![],).unwrap();
+    env.execute_ingress(canister_id, "read", vec![]).unwrap();
     eprintln!("4: {}", wasm_files_by_source("canister", &env));
     eprintln!("4: {}", wasm_files_by_source("snapshot", &env));
     let env = env.restart_node();
