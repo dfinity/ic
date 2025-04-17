@@ -1,9 +1,8 @@
-use crate::lifecycle::init::{BtcNetwork, InitArgs};
-use crate::Timestamp;
-use crate::{lifecycle, ECDSAPublicKey};
+use crate::lifecycle::init::InitArgs;
+use crate::{lifecycle, ECDSAPublicKey, GetUtxosResponse, Network, Timestamp};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{GetUtxosResponse, OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::Duration;
 
@@ -16,7 +15,7 @@ pub const BTC_CHECKER_CANISTER_ID: Principal =
 #[allow(deprecated)]
 pub fn init_args() -> InitArgs {
     InitArgs {
-        btc_network: BtcNetwork::Mainnet,
+        btc_network: Network::Mainnet,
         ecdsa_key_name: "key_1".to_string(),
         retrieve_btc_min_amount: 10_000,
         ledger_id: CanisterId::unchecked_from_principal(
@@ -105,10 +104,6 @@ pub fn quarantined_utxo() -> Utxo {
 pub fn get_uxos_response() -> GetUtxosResponse {
     GetUtxosResponse {
         utxos: vec![],
-        tip_block_hash: hex::decode(
-            "00000000000000000002716d23b6b02097a297a84da484c7a9b6427a999112d8",
-        )
-        .unwrap(),
         tip_height: 871160,
         next_page: None,
     }
@@ -117,12 +112,12 @@ pub fn get_uxos_response() -> GetUtxosResponse {
 pub mod mock {
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
-    use crate::CanisterRuntime;
+    use crate::{CanisterRuntime, GetUtxosRequest, GetUtxosResponse};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse, Utxo};
     use ic_management_canister_types_private::DerivationPath;
+    use ic_btc_interface::Utxo;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
@@ -331,16 +326,14 @@ pub mod arbitrary {
     #[allow(deprecated)]
     mod event {
         use super::*;
-        use crate::lifecycle::{
-            init::{BtcNetwork, InitArgs},
-            upgrade::UpgradeArgs,
-        };
+        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
+        use crate::Network;
 
-        fn btc_network() -> impl Strategy<Value = BtcNetwork> {
+        fn btc_network() -> impl Strategy<Value = Network> {
             prop_oneof![
-                Just(BtcNetwork::Mainnet),
-                Just(BtcNetwork::Testnet),
-                Just(BtcNetwork::Regtest),
+                Just(Network::Mainnet),
+                Just(Network::Testnet),
+                Just(Network::Regtest),
             ]
         }
 

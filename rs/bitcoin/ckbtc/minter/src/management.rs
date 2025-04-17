@@ -1,26 +1,19 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
+use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency, MetricsResult};
-use crate::ECDSAPublicKey;
-use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
 };
-use ic_btc_interface::{
-    Address, GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Txid, Utxo,
-    UtxosFilterInRequest,
-};
+use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_canister_log::log;
-use ic_cdk::api::{
-    call::RejectionCode,
-    management_canister::bitcoin::{BitcoinNetwork, UtxoFilter},
-};
+use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
 use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
 use serde::de::DeserializeOwned;
-use serde_bytes::ByteBuf;
 use std::fmt;
 
 /// Represents an error from a management canister call, such as
@@ -176,34 +169,24 @@ pub async fn get_utxos<R: CanisterRuntime>(
     }
 
     let start_time = runtime.time();
+    let request = GetUtxosRequest {
+        address: address.clone(),
+        network: network.into(),
+        filter: Some(UtxoFilter::MinConfirmations(min_confirmations)),
+    };
 
-    let mut response = bitcoin_get_utxos(
-        GetUtxosRequest {
-            address: address.to_string(),
-            network: network.into(),
-            filter: Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)),
-        },
-        source,
-        runtime,
-    )
-    .await?;
+    let mut response = bitcoin_get_utxos(request.clone(), source, runtime).await?;
 
     let mut utxos = std::mem::take(&mut response.utxos);
     let mut num_pages: usize = 1;
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
-        response = bitcoin_get_utxos(
-            GetUtxosRequest {
-                address: address.to_string(),
-                network: network.into(),
-                filter: Some(UtxosFilterInRequest::Page(page)),
-            },
-            source,
-            runtime,
-        )
-        .await?;
-
+        let paged_request = GetUtxosRequest {
+            filter: Some(UtxoFilter::Page(page.to_vec())),
+            ..request.clone()
+        };
+        response = bitcoin_get_utxos(paged_request, source, runtime).await?;
         utxos.append(&mut response.utxos);
         num_pages += 1;
     }
@@ -217,50 +200,9 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    fn cdk_get_utxos_request(
-        request: GetUtxosRequest,
-    ) -> ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
-        ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
-            address: request.address,
-            network: cdk_network(request.network.into()),
-            filter: request.filter.map(|filter| match filter {
-                UtxosFilterInRequest::MinConfirmations(confirmations)
-                | UtxosFilterInRequest::min_confirmations(confirmations) => {
-                    UtxoFilter::MinConfirmations(confirmations)
-                }
-                UtxosFilterInRequest::Page(bytes) | UtxosFilterInRequest::page(bytes) => {
-                    UtxoFilter::Page(bytes.into_vec())
-                }
-            }),
-        }
-    }
-
-    fn parse_cdk_get_utxos_response(
-        response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse,
-    ) -> GetUtxosResponse {
-        GetUtxosResponse {
-            utxos: response
-                .utxos
-                .into_iter()
-                .map(|utxo| Utxo {
-                    outpoint: OutPoint {
-                        txid: Txid::try_from(utxo.outpoint.txid.as_slice())
-                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
-                        vout: utxo.outpoint.vout,
-                    },
-                    value: utxo.value,
-                    height: utxo.height,
-                })
-                .collect(),
-            tip_block_hash: response.tip_block_hash,
-            tip_height: response.tip_height,
-            next_page: response.next_page.map(ByteBuf::from),
-        }
-    }
-
-    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(cdk_get_utxos_request(request))
+    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request)
         .await
-        .map(|(response,)| parse_cdk_get_utxos_response(response))
+        .map(|(response,)| response.into())
         .map_err(|err| CallError::from_cdk_error("bitcoin_get_utxos", err))
 }
 
@@ -268,7 +210,7 @@ pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosRespo
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
     ic_cdk::api::management_canister::bitcoin::bitcoin_get_current_fee_percentiles(
         ic_cdk::api::management_canister::bitcoin::GetCurrentFeePercentilesRequest {
-            network: cdk_network(network),
+            network: network.into(),
         },
     )
     .await
@@ -284,7 +226,7 @@ pub async fn send_transaction(
     ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
         ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
             transaction: transaction.serialize(),
-            network: cdk_network(network),
+            network: network.into(),
         },
     )
     .await
@@ -377,12 +319,4 @@ pub async fn check_transaction(
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)
-}
-
-fn cdk_network(network: Network) -> BitcoinNetwork {
-    match network {
-        Network::Mainnet => BitcoinNetwork::Mainnet,
-        Network::Testnet => BitcoinNetwork::Testnet,
-        Network::Regtest => BitcoinNetwork::Regtest,
-    }
 }

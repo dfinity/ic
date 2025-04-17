@@ -6,10 +6,9 @@ use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{
-    GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
-};
+use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
+use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -111,6 +110,69 @@ pub struct MinterInfo {
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
+}
+
+pub type GetUtxosRequest = ic_cdk::api::management_canister::bitcoin::GetUtxosRequest;
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct GetUtxosResponse {
+    pub utxos: Vec<Utxo>,
+    pub tip_height: u32,
+    pub next_page: Option<Page>,
+}
+
+impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse) -> Self {
+        Self {
+            utxos: response
+                .utxos
+                .into_iter()
+                .map(|utxo| Utxo {
+                    outpoint: OutPoint {
+                        txid: Txid::try_from(utxo.outpoint.txid.as_slice())
+                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
+                        vout: utxo.outpoint.vout,
+                    },
+                    value: utxo.value,
+                    height: utxo.height,
+                })
+                .collect(),
+
+            tip_height: response.tip_height,
+            next_page: response.next_page.map(Page::from),
+        }
+    }
+}
+
+// Note that both [ic_btc_interface::Network] and
+// [ic_cdk::api::management_canister::bitcoin::BitcoinNetwork] from ic_cdk
+// would serialize to lowercase names, but here we keep uppercase names for
+// backward compatibility with the state of already deployed minter canister.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+    Regtest,
+}
+
+impl From<Network> for BitcoinNetwork {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => BitcoinNetwork::Mainnet,
+            Network::Testnet => BitcoinNetwork::Testnet,
+            Network::Regtest => BitcoinNetwork::Regtest,
+        }
+    }
+}
+
+impl std::fmt::Display for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+            Self::Regtest => write!(f, "regtest"),
+        }
+    }
 }
 
 struct SignTxRequest {
@@ -1269,7 +1331,7 @@ impl CanisterRuntime for IcCanisterRuntime {
 }
 
 /// Time in nanoseconds since the epoch (1970-01-01).
-#[derive(Eq, Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Eq, Clone, Copy, PartialEq, Debug, Default, Serialize, CandidType, serde::Deserialize)]
 pub struct Timestamp(u64);
 
 impl Timestamp {
