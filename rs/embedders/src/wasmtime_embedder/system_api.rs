@@ -1507,6 +1507,7 @@ impl SystemApiImpl {
         system_state_modifications: &mut SystemStateModifications,
     ) {
         if let Some(log_message) = match err {
+            HypervisorError::InstructionLimitExceeded(num_instructions) => Some(format!("[InstructionLimitExceeded]: {:?}", num_instructions))
             HypervisorError::Trapped {
                 trap_code,
                 backtrace,
