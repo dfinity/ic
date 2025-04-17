@@ -768,7 +768,7 @@ impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
 {
     async fn payload(&self, _: &Agent) -> DeployGuestosToAllUnassignedNodesPayload {
         DeployGuestosToAllUnassignedNodesPayload {
-            elected_guestos_version: self.guestos_version_id.clone(),
+            elected_replica_version: self.guestos_version_id.clone(),
         }
     }
 }

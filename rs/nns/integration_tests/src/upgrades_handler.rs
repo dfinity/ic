@@ -123,7 +123,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
 
         // update unassigned version
         let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_guestos_version: unassigned_nodes_version.to_string(),
+            elected_replica_version: unassigned_nodes_version.to_string(),
         };
         let proposal_id = submit(
             gov,

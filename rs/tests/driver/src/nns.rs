@@ -654,7 +654,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
         neuron_id,
         NnsFunction::DeployGuestosToAllUnassignedNodes,
         DeployGuestosToAllUnassignedNodesPayload {
-            elected_guestos_version: version.clone(),
+            elected_replica_version: version.clone(),
         },
         format!("Update unassigned nodes version to: {}", version.clone()),
         "".to_string(),
