@@ -8,6 +8,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
+    "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister-client",

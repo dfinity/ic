@@ -236,6 +236,37 @@ fn can_retrieve_entries_correctly() {
     test_family("FA_", 6, &["FA_2"]);
     test_family("FA_", 7, &["FA_1"]);
     test_family("FA_", 8, &[]);
+
+    let test_family_values =
+        |key_prefix: &str, version: u64, exp_result: Vec<(String, Vec<u8>)>| {
+            let actual_res = client
+                .get_key_family_with_values(key_prefix, v(version))
+                .unwrap();
+            assert_eq!(actual_res.len(), actual_res.len());
+            assert_eq!(actual_res, exp_result);
+        };
+
+    test_family_values(
+        "B",
+        6,
+        vec![("B".to_string(), vec![6]), ("B3".to_string(), vec![5])],
+    );
+    test_family_values(
+        "F",
+        1,
+        vec![
+            ("F0_1".to_string(), vec![1]),
+            ("FA_1".to_string(), vec![1]),
+            ("FA_2".to_string(), vec![1]),
+            ("FA_3".to_string(), vec![1]),
+            ("FB_1".to_string(), vec![1]),
+        ],
+    );
+    test_family_values(
+        "FA_",
+        3,
+        vec![("FA_1".to_string(), vec![3]), ("FA_3".to_string(), vec![1])],
+    );
 }
 
 #[test]

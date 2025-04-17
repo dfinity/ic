@@ -444,10 +444,7 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
-    let mut serialized = Vec::new();
-    init_payload
-        .encode(&mut serialized)
-        .expect("Couldn't serialize init payload.");
+    let serialized = Encode!(&init_payload).expect("Couldn't serialize init payload.");
     install_rust_canister(canister, "governance-canister", &["test"], Some(serialized)).await;
 }
 

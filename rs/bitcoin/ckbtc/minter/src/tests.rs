@@ -8,13 +8,13 @@ use crate::{
         SubmittedBtcTransaction,
     },
     test_fixtures::arbitrary,
-    tx, BuildTxError, MINTER_ADDRESS_DUST_LIMIT,
+    tx, BuildTxError, Network, MINTER_ADDRESS_DUST_LIMIT,
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{Network, OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreeset;
 use proptest::{
@@ -30,7 +30,7 @@ use std::str::FromStr;
 #[allow(deprecated)]
 fn default_init_args() -> InitArgs {
     InitArgs {
-        btc_network: Network::Regtest.into(),
+        btc_network: Network::Regtest,
         ecdsa_key_name: "".to_string(),
         retrieve_btc_min_amount: 0,
         ledger_id: CanisterId::from_u64(42),
@@ -1113,5 +1113,22 @@ fn test_build_account_to_utxos_table_pagination() {
     let no_utxo_page = dashboard::build_account_to_utxos_table(&state, utxos.len() as u64, 7);
     for utxo in utxos.iter() {
         assert!(!no_utxo_page.contains(&format!("{}", utxo.outpoint.txid)));
+    }
+}
+
+#[test]
+fn serialize_network_preserves_capitalization() {
+    use ciborium::{de::from_reader, ser::into_writer, Value};
+    use Network::*;
+    // We use CBOR serialization for events storage. The test below
+    // checks if the serialization/deserialization of Network preserves
+    // capitalization.
+    for network in [Mainnet, Testnet, Regtest] {
+        let mut buf = Vec::new();
+        into_writer(&network, &mut buf).unwrap();
+        let value: Value = from_reader(buf.as_ref() as &[u8]).unwrap();
+        let name = value.as_text().unwrap();
+        let first_char = name.chars().next().unwrap();
+        assert!(first_char.is_uppercase());
     }
 }
