@@ -101,7 +101,7 @@ pub mod fake {
     use ic_registry_transport::Error;
     use std::collections::BTreeMap;
     use std::sync::atomic::AtomicU64;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{atomic, Arc, Mutex};
 
     type FakeGetChangesSince = BTreeMap<u64, Result<Vec<RegistryDelta>, Error>>;
     type FakeGetLatestVersion = Vec<Result<u64, Error>>;
@@ -130,7 +130,7 @@ pub mod fake {
         /// Method to get the latest version in the FakeRegistry (as opposed to
         /// get_latest_version which implements the Registry interface and returns a Result)
         pub fn latest_version(&self) -> u64 {
-            self.version.load(std::sync::atomic::Ordering::SeqCst)
+            self.version.load(atomic::Ordering::SeqCst)
         }
 
         pub fn set_fake_response_for_get_changes_since(
@@ -155,7 +155,7 @@ pub mod fake {
         pub fn encode_value<T: prost::Message>(&self, key: impl AsRef<str>, value: Option<T>) {
             self.encode_value_at_version(
                 key,
-                self.version.load(std::sync::atomic::Ordering::SeqCst) + 1,
+                self.version.load(atomic::Ordering::SeqCst) + 1,
                 value,
             );
         }
@@ -173,7 +173,7 @@ pub mod fake {
         }
 
         pub fn get_value(&self, key: impl AsRef<str>) -> Option<Vec<u8>> {
-            self.get_value_at_version(key, self.version.load(std::sync::atomic::Ordering::SeqCst))
+            self.get_value_at_version(key, self.version.load(atomic::Ordering::SeqCst))
         }
 
         fn get_value_at_version(&self, key: impl AsRef<str>, version: u64) -> Option<Vec<u8>> {
@@ -204,11 +204,7 @@ pub mod fake {
 
         /// Sets a value at latest_version + 1, and updates latest_version.
         pub fn set_value(&self, key: impl AsRef<str>, value: Option<Vec<u8>>) {
-            self.set_value_at_version(
-                key,
-                self.version.load(std::sync::atomic::Ordering::SeqCst) + 1,
-                value,
-            );
+            self.set_value_at_version(key, self.version.load(atomic::Ordering::SeqCst) + 1, value);
         }
 
         /// Sets a value at the given version, and updates latest_version if the given version is
@@ -241,16 +237,15 @@ pub mod fake {
                     entry.insert(index, registry_value)
                 }
             }
-            if version > self.version.load(std::sync::atomic::Ordering::SeqCst) {
-                self.version
-                    .store(version, std::sync::atomic::Ordering::SeqCst);
+            if version > self.version.load(atomic::Ordering::SeqCst) {
+                self.version.store(version, atomic::Ordering::SeqCst);
             }
         }
 
         /// Applies mutations as latest version.  This is similar to what Registry actually does, which
         /// is helpful for re-using other code that sets initial Registry mutations.
         pub fn apply_mutations(&self, mutations: Vec<RegistryMutation>) {
-            let current_version = self.version.load(std::sync::atomic::Ordering::SeqCst);
+            let current_version = self.version.load(atomic::Ordering::SeqCst);
             let next_version = current_version + 1;
             for mutation in mutations {
                 let mut binding = self.store.lock().unwrap();
@@ -263,8 +258,7 @@ pub mod fake {
                 })
             }
             // Set next version.
-            self.version
-                .store(next_version, std::sync::atomic::Ordering::SeqCst);
+            self.version.store(next_version, atomic::Ordering::SeqCst);
         }
     }
 
@@ -277,10 +271,7 @@ pub mod fake {
                     .map_err(|e| NervousSystemError::new_with_message(format!("{e:?}")));
             }
 
-            Ok(self
-                .version
-                .load(std::sync::atomic::Ordering::SeqCst)
-                .into())
+            Ok(self.version.load(atomic::Ordering::SeqCst).into())
         }
 
         /// Returns the changes since the given version.  This is a fake implementation that
