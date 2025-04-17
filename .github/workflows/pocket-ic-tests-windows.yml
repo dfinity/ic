@@ -1,4 +1,4 @@
-name: PocketIC tests on Windows
+name: PocketIC Windows
 on:
   pull_request:
     paths:
@@ -11,15 +11,16 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+
 jobs:
-  bazel-build:
+  bazel-build-pocket-ic:
+    name: Bazel Build PocketIC
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     runs-on:
-      group: zh1
       labels: dind-large
     steps:
       - name: Checkout
@@ -48,8 +49,9 @@ jobs:
         with:
           name: pocket-ic-test-canister
           path: ${{ steps.pocket-ic-test-canister-path.outputs.pocket_ic_test_canister_path }}
+
   pocket-ic-lint-on-windows:
-    name: PocketIC tests on Windows
+    name: PocketIC Lint on Windows
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -59,8 +61,9 @@ jobs:
       - name: Linting
         run: |
           cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+          
   pocket-ic-tests-on-windows:
-    name: PocketIC tests on Windows
+    name: PocketIC Tests on Windows
     needs: [bazel-build]
     runs-on: windows-2022
     steps:
