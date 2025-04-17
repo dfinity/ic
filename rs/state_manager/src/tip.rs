@@ -16,10 +16,12 @@ use ic_protobuf::state::{
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshot, SnapshotOperation},
+    canister_snapshots::CanisterSnapshot,
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+};
+use ic_replicated_state::{
+    metadata_state::UnflushedCheckpointOperation, page_map::PageAllocatorFileDescriptor,
 };
 use ic_replicated_state::{
     page_map::{StorageLayout, PAGE_SIZE},
@@ -86,7 +88,7 @@ pub(crate) enum TipRequest {
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
-        snapshot_operations: Vec<SnapshotOperation>,
+        unflushed_checkpoint_operations: Vec<UnflushedCheckpointOperation>,
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
@@ -213,7 +215,7 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::FlushPageMapDelta {
                             height,
                             pagemaps,
-                            snapshot_operations,
+                            unflushed_checkpoint_operations,
                         } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             debug_assert!(tip_state.tip_folder_state.page_maps_height <= height);
@@ -227,8 +229,8 @@ pub(crate) fn spawn_tip_thread(
                                 );
                             });
 
-                            // We flush snapshots to disk first.
-                            flush_snapshot_changes(&log, layout, snapshot_operations)
+                            // We flush snapshots and canister renamings to disk first.
+                            flush_unflushed_checkpoint_operations(&log, layout, unflushed_checkpoint_operations)
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to flush snapshot changes: {}", err);
                                 });
@@ -437,23 +439,23 @@ pub(crate) fn spawn_tip_thread(
     (tip_handle, tip_sender)
 }
 
-/// Update the tip directory files with the most recent snapshot operations.
-/// `snapshot_operations` is an ordered list of all created/restores/deleted snapshots since the last flush.
-fn flush_snapshot_changes<T>(
+/// Update the tip directory files with the most recent checkpoint operations.
+/// `operations` is an ordered list of all created/restores/deleted snapshots and renamed canisters since the last flush.
+fn flush_unflushed_checkpoint_operations<T>(
     log: &ReplicaLogger,
     layout: &CheckpointLayout<RwPolicy<T>>,
-    snapshot_operations: Vec<SnapshotOperation>,
+    operations: Vec<UnflushedCheckpointOperation>,
 ) -> Result<(), LayoutError> {
     // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
-    for op in snapshot_operations {
+    for op in operations {
         match op {
-            SnapshotOperation::Delete(snapshot_id) => {
+            UnflushedCheckpointOperation::DeleteSnapshot(snapshot_id) => {
                 layout.snapshot(&snapshot_id)?.delete_dir()?;
             }
-            SnapshotOperation::Backup(canister_id, snapshot_id) => {
+            UnflushedCheckpointOperation::CreateSnapshot(canister_id, snapshot_id) => {
                 backup(log, layout, canister_id, snapshot_id)?;
             }
-            SnapshotOperation::Restore(canister_id, snapshot_id) => {
+            UnflushedCheckpointOperation::RestoreSnapshot(canister_id, snapshot_id) => {
                 restore(log, layout, canister_id, snapshot_id)?;
             }
         }
@@ -785,8 +787,8 @@ fn serialize_to_tip(
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    // Snapshots should have been handled earlier in `flush_page_delta`.
-    debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
+    // Snapshots and other unflushed changed should have been handled earlier in `flush_page_delta`.
+    debug_assert!(state.metadata.unflushed_checkpoint_operations.is_empty());
 
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.

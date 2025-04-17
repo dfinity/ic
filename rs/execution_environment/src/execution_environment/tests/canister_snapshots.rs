@@ -15,13 +15,12 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::SnapshotOperation,
     canister_state::{
         execution_state::{WasmBinary, WasmExecutionMode},
         system_state::{wasm_chunk_store::CHUNK_SIZE, CyclesUseCase},
         WASM_PAGE_SIZE_IN_BYTES,
     },
-    CanisterState, ExecutionState, SchedulerState,
+    CanisterState, ExecutionState, SchedulerState, metadata_state::UnflushedCheckpointOperation,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_execution_environment::{
@@ -1685,11 +1684,11 @@ fn load_canister_snapshot_succeeds() {
             snapshot_taken_at_timestamp
         )
     );
-    let unflushed_changes = test.state_mut().canister_snapshots.take_unflushed_changes();
+    let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_operations.take();
     assert_eq!(unflushed_changes.len(), 2);
     let expected_unflushed_changes = vec![
-        SnapshotOperation::Backup(canister_id, snapshot_id),
-        SnapshotOperation::Restore(canister_id, snapshot_id),
+        UnflushedCheckpointOperation::CreateSnapshot(canister_id, snapshot_id),
+        UnflushedCheckpointOperation::RestoreSnapshot(canister_id, snapshot_id),
     ];
     assert_eq!(expected_unflushed_changes, unflushed_changes);
 }
