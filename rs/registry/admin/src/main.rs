@@ -732,7 +732,7 @@ impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
-            guestos_version_id: self.guestos_version_id.clone(),
+            replica_version_id: self.guestos_version_id.clone(),
         }
     }
 }

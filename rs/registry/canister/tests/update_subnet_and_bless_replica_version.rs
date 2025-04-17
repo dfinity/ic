@@ -235,7 +235,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Set the subnet to a blessed version: it should work
         let set_to_blessed_ = DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_test_id(999).get(),
-            guestos_version_id: ReplicaVersion::default().into(),
+            replica_version_id: ReplicaVersion::default().into(),
         };
         assert!(
             forward_call_via_universal_canister(
@@ -259,7 +259,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Try to set the subnet to an unblessed version: it should fail
         let try_set_to_unblessed = DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_test_id(999).get(),
-            guestos_version_id: "unblessed".to_string(),
+            replica_version_id: "unblessed".to_string(),
         };
         assert!(
             !forward_call_via_universal_canister(

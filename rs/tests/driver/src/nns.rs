@@ -546,7 +546,7 @@ pub async fn submit_deploy_guestos_to_all_subnet_nodes_proposal(
         NnsFunction::DeployGuestosToAllSubnetNodes,
         DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
-            guestos_version_id: String::from(version.clone()),
+            replica_version_id: String::from(version.clone()),
         },
         format!(
             "Update {} subnet's replica version to: {}",
