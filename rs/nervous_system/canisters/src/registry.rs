@@ -231,7 +231,7 @@ impl FakeRegistry {
         }
     }
 
-    /// Applies mutations as latest version.  This is similar to what Registry actuall does, which
+    /// Applies mutations as latest version.  This is similar to what Registry actually does, which
     /// is helpful for re-using other code that sets initial Registry mutations.
     pub fn apply_mutations(&self, mutations: Vec<RegistryMutation>) {
         let current_version = self.version.load(std::sync::atomic::Ordering::SeqCst);
