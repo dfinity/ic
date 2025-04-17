@@ -18,6 +18,5 @@ rust_library(
 
 rust_test(
     name = "ic-http-types-tests",
-    srcs = glob(["src/**/*.rs"]),
-    deps = DEPENDENCIES,
+    crate = ":ic-http-types",
 )

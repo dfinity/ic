@@ -52,4 +52,4 @@ For detailed documentation, visit the [Rust Docs](https://docs.rs/ic-http-types)
 This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Contributing
-Contributions are welcome! Please open an issue or submit a pull request if you have suggestions or improvements.
+If you decide to contribute, we encourage you to announce it on the [Forum](https://forum.dfinity.org/)!
