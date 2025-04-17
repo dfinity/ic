@@ -2220,7 +2220,7 @@ impl CanisterManager {
         );
 
         // TODO: the new_snapshot does not have the correct size yet because of the page-map
-        // backed memories. this means we are underestimating the memory here.
+        // backed memories. this means we may be underestimating the memory here (new_snapshot.heap_delta).
 
         // Actually deduct memory from the subnet. It's safe to unwrap
         // here because we already checked the available memory above.
@@ -2301,7 +2301,8 @@ impl CanisterManager {
                 buffer.write(&args.chunk, offset as usize);
             }
             CanisterSnapshotDataOffset::WasmChunk => {
-                // TODO: use `upload_chunk`
+                // TODO: this is different from self.upload_chunk, because that one
+                // targets the running canister, whereas this targets the snapshot.
             }
         }
 
