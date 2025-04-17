@@ -540,7 +540,9 @@ mod update_balance {
             sign_with_ecdsa(key_name, derivation_path, message_hash, &runtime).await
         }
 
-        let sign_with_ecdsa_ms = [0, 1, 250, 500, 2_250, 4_000, 4_500, 8_000, 100_000];
+        let sign_with_ecdsa_ms = [
+            500, 1_000, 1_250, 2_500, 3_250, 4_000, 8_000, 15_000, 50_000,
+        ];
         for millis in &sign_with_ecdsa_ms {
             let result =
                 sign_with_ecdsa_with_latency(Duration::from_millis(*millis), MetricsResult::Ok)
@@ -549,20 +551,20 @@ mod update_balance {
         }
 
         let result =
-            sign_with_ecdsa_with_latency(Duration::from_millis(50), MetricsResult::Err).await;
+            sign_with_ecdsa_with_latency(Duration::from_millis(5_000), MetricsResult::Err).await;
         assert!(result.is_err());
 
         let histogram = sign_with_ecdsa_histogram(MetricsResult::Ok);
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
-                (500., 4.),
-                (1_000., 0.),
-                (2_000., 0.),
-                (4_000., 2.),
-                (8_000., 2.),
-                (16_000., 0.),
-                (32_000., 0.),
+                (1_000., 2.),
+                (2_000., 1.),
+                (4_000., 3.),
+                (6_000., 0.),
+                (8_000., 1.),
+                (12_000., 0.),
+                (20_000., 1.),
                 (f64::INFINITY, 1.)
             ]
         );
@@ -572,17 +574,17 @@ mod update_balance {
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
-                (500., 1.),
                 (1_000., 0.),
                 (2_000., 0.),
                 (4_000., 0.),
+                (6_000., 1.),
                 (8_000., 0.),
-                (16_000., 0.),
-                (32_000., 0.),
+                (12_000., 0.),
+                (20_000., 0.),
                 (f64::INFINITY, 0.)
             ]
         );
-        assert_eq!(histogram.sum(), 50);
+        assert_eq!(histogram.sum(), 5_000);
     }
 
     fn sign_with_ecdsa_histogram(result: MetricsResult) -> Histogram<8> {

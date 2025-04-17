@@ -31,7 +31,10 @@ thread_local! {
     pub static SIGN_WITH_ECDSA_LATENCY: RefCell<BTreeMap<MetricsResult, LatencyHistogram>> = RefCell::default();
 }
 
-pub const BUCKETS_MS: [u64; 8] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
+pub const BUCKETS_DEFAULT_MS: [u64; 8] =
+    [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, u64::MAX];
+pub const BUCKETS_SIGN_WITH_ECDSA_MS: [u64; 8] =
+    [1_000, 2_000, 4_000, 6_000, 8_000, 12_000, 20_000, u64::MAX];
 pub const BUCKETS_UTXOS: [u64; 8] = [1, 4, 16, 64, 256, 1024, 4096, u64::MAX];
 
 pub struct NumUtxosHistogram(pub Histogram<8>);
@@ -46,7 +49,7 @@ pub struct LatencyHistogram(pub Histogram<8>);
 
 impl Default for LatencyHistogram {
     fn default() -> Self {
-        Self(Histogram::new(&BUCKETS_MS))
+        Self(Histogram::new(&BUCKETS_DEFAULT_MS))
     }
 }
 
@@ -148,7 +151,9 @@ pub fn observe_sign_with_ecdsa_latency(result: MetricsResult, start_ns: u64, end
     SIGN_WITH_ECDSA_LATENCY.with_borrow_mut(|metrics| {
         metrics
             .entry(result)
-            .or_default()
+            .or_insert(LatencyHistogram(Histogram::new(
+                &BUCKETS_SIGN_WITH_ECDSA_MS,
+            )))
             .observe_latency(start_ns, end_ns);
     });
 }

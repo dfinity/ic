@@ -175,7 +175,6 @@ pub async fn get_utxos<R: CanisterRuntime>(
         runtime.bitcoin_get_utxos(req).await
     }
 
-    // Record start time of method execution for metrics
     let start_time = runtime.time();
 
     let mut response = bitcoin_get_utxos(
@@ -325,7 +324,6 @@ pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     message_hash: [u8; 32],
     runtime: &R,
 ) -> Result<Vec<u8>, CallError> {
-    // Record start time of method execution for metrics
     let start_time = runtime.time();
 
     let result = runtime
