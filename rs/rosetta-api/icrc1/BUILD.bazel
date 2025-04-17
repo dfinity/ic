@@ -6,6 +6,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//rs/pocket_ic_server:defs.bzl", "pocket_ic_rust_test_suite_with_extra_srcs")
 load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
@@ -119,7 +120,6 @@ LOCAL_REPLICA_DATA = [
     "//rs/ledger_suite/icrc1/archive:archive_canister",
     "//rs/rosetta-api/icrc1:ic-icrc-rosetta-bin",
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin",
-    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
 
@@ -127,14 +127,13 @@ LOCAL_REPLICA_ENV = {
     "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "REPLICA_BIN": "$(rootpath //rs/replica)",
     "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1:ic-icrc-rosetta-bin)",
     "ROSETTA_CLIENT_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client-bin)",
     "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
 }
 
-rust_test_suite_with_extra_srcs(
+pocket_ic_rust_test_suite_with_extra_srcs(
     name = "icrc_rosetta_integration",
     size = "large",
     srcs = [
