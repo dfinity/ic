@@ -114,7 +114,7 @@ pub struct ECDSAPublicKey {
 
 pub type GetUtxosRequest = bitcoin::GetUtxosRequest;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
     pub utxos: Vec<Utxo>,
     pub tip_height: u32,
@@ -1353,7 +1353,7 @@ impl From<u64> for Timestamp {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct Timestamped<Inner> {
     timestamp: Timestamp,
     inner: Option<Inner>,
