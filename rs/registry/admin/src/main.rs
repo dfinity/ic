@@ -969,11 +969,11 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
 {
     async fn payload(&self, _: &Agent) -> ReviseElectedGuestosVersionsPayload {
         let payload = ReviseElectedGuestosVersionsPayload {
-            guestos_version_to_elect: self.guestos_version_to_elect.clone(),
+            replica_version_to_elect: self.guestos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
             guest_launch_measurement_sha256_hex: None,
-            guestos_versions_to_unelect: self.guestos_versions_to_unelect.clone(),
+            replica_versions_to_unelect: self.guestos_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
         payload

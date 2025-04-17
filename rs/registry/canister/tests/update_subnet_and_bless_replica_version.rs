@@ -41,11 +41,11 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
         .await;
 
         let payload = ReviseElectedGuestosVersionsPayload {
-            guestos_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
             guest_launch_measurement_sha256_hex: None,
-            guestos_versions_to_unelect: vec![],
+            replica_versions_to_unelect: vec![],
         };
         // The anonymous end-user tries to bless a version, bypassing the proposals
         // This should be rejected.
@@ -116,11 +116,11 @@ fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
         )
         .await;
         let payload = ReviseElectedGuestosVersionsPayload {
-            guestos_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec!["http://release_package.tar.zst".into()],
             guest_launch_measurement_sha256_hex: None,
-            guestos_versions_to_unelect: vec![],
+            replica_versions_to_unelect: vec![],
         };
         // The attacker canister tries to bless a version, pretending to be the
         // governance canister. This should have no effect.
@@ -168,11 +168,11 @@ fn test_accepted_proposal_mutates_the_registry() {
 
         // We can bless a new version, the version already in the registry is 42
         let payload_v43 = ReviseElectedGuestosVersionsPayload {
-            guestos_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec!["http://release_package.tar.zst".into()],
             guest_launch_measurement_sha256_hex: None,
-            guestos_versions_to_unelect: vec![],
+            replica_versions_to_unelect: vec![],
         };
         assert!(
             forward_call_via_universal_canister(
@@ -199,11 +199,11 @@ fn test_accepted_proposal_mutates_the_registry() {
 
         // Trying to mutate an existing record should have no effect.
         let payload_v42_mutate = ReviseElectedGuestosVersionsPayload {
-            guestos_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
             guest_launch_measurement_sha256_hex: None,
-            guestos_versions_to_unelect: vec![],
+            replica_versions_to_unelect: vec![],
         };
         assert!(
             !forward_call_via_universal_canister(
