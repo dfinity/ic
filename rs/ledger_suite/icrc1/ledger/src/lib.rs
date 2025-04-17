@@ -242,6 +242,11 @@ impl InitArgsBuilder {
         self
     }
 
+    pub fn with_index_principal(mut self, index_principal: Principal) -> Self {
+        self.0.index_principal = Some(index_principal);
+        self
+    }
+
     pub fn with_feature_flags(mut self, flags: FeatureFlags) -> Self {
         self.0.feature_flags = Some(flags);
         self
