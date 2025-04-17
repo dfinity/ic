@@ -73,7 +73,7 @@ fn test_list_node_provider_rewards() {
     do_test_list_node_provider_rewards(&[]);
 }
 
-// TODO - after Node Reward Canister is by-default enabled, remove this test.
+// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
 #[test]
 fn test_list_node_provider_rewards_with_node_reward_canister() {
     do_test_list_node_provider_rewards(&["test"]);
@@ -296,7 +296,7 @@ fn test_automated_node_provider_remuneration() {
     do_test_automated_node_provider_remuneration(&[]);
 }
 
-// TODO - after Node Reward Canister is by-default enabled, remove this test.
+// TODO(NNS1-3763) after Node Reward Canister is by-default enabled, remove this test.
 #[test]
 fn test_automated_node_provider_remuneration_with_node_reward_canister() {
     do_test_automated_node_provider_remuneration(&["test"]);
