@@ -10,7 +10,6 @@ documentation.workspace = true
 candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 ic-base-types = {path="../../types/base_types"}
-#ic-canisters-http-types = { path = "../http_types" }
 on_wire = { path = "../on_wire" }
 serde = { workspace = true }
 
