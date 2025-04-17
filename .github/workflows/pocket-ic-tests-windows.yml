@@ -3,9 +3,8 @@ on:
   pull_request:
     paths:
       - packages/pocket-ic/**
-  push:
-    branches:
-      - master
+  schedule:
+    - cron: "0 1 * * *"
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
