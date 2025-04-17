@@ -9251,6 +9251,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-http-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-http-utils"
 version = "0.9.0"
 dependencies = [
