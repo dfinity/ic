@@ -76,6 +76,10 @@ fn should_spawn_ledger_with_correct_init_args() {
                 "icrc1:max_memo_length".to_string(),
                 LedgerMetadataValue::from(80_u64),
             ),
+            (
+                "icrc106:index_principal".to_string(),
+                LedgerMetadataValue::from("ryjl3-tyaaa-aaaaa-aaaba-cai"),
+            ),
         ]);
 }
 
