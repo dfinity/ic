@@ -436,7 +436,7 @@ impl CkBtcMinterState {
             btc_checker_principal,
             kyt_principal: _,
             kyt_fee,
-            get_utxos_cache_expiration,
+            get_utxos_cache_expiration_seconds,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
@@ -455,9 +455,9 @@ impl CkBtcMinterState {
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
         }
-        if let Some(expiration) = get_utxos_cache_expiration {
+        if let Some(expiration) = get_utxos_cache_expiration_seconds {
             self.get_utxos_cache
-                .set_expiration(Duration::from_nanos(expiration));
+                .set_expiration(Duration::from_secs(expiration));
         }
     }
 
@@ -473,7 +473,7 @@ impl CkBtcMinterState {
             btc_checker_principal,
             kyt_principal: _,
             kyt_fee,
-            get_utxos_cache_expiration,
+            get_utxos_cache_expiration_seconds,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -506,9 +506,9 @@ impl CkBtcMinterState {
         } else if let Some(kyt_fee) = kyt_fee {
             self.check_fee = kyt_fee;
         }
-        if let Some(expiration) = get_utxos_cache_expiration {
+        if let Some(expiration) = get_utxos_cache_expiration_seconds {
             self.get_utxos_cache
-                .set_expiration(Duration::from_nanos(expiration));
+                .set_expiration(Duration::from_secs(expiration));
         }
     }
 
@@ -1514,8 +1514,8 @@ impl From<InitArgs> for CkBtcMinterState {
             suspended_utxos: Default::default(),
             pending_reimbursements: Default::default(),
             reimbursed_transactions: Default::default(),
-            get_utxos_cache: GetUtxosCache::new(Duration::from_nanos(
-                args.get_utxos_cache_expiration.unwrap_or_default(),
+            get_utxos_cache: GetUtxosCache::new(Duration::from_secs(
+                args.get_utxos_cache_expiration_seconds.unwrap_or_default(),
             )),
         }
     }

@@ -209,8 +209,8 @@ type InitArgs = record {
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
     kyt_principal: opt principal;
 
-    /// The expiration duration (in nanoseconds) for cached entries in the get_utxos cache.
-    get_utxos_cache_expiration: opt nat64;
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
 };
 
 // The upgrade parameters of the minter canister.
@@ -241,8 +241,8 @@ type UpgradeArgs = record {
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
     kyt_principal: opt principal;
 
-    /// The expiration duration (in nanoseconds) for cached entries in the get_utxos cache.
-    get_utxos_cache_expiration: opt nat64;
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
 };
 
 type RetrieveBtcStatus = variant {
