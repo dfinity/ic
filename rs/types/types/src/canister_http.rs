@@ -771,3 +771,176 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod validate_http_headers_and_body_tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use ic_management_canister_types_private::HttpHeader;
+
+    #[test]
+    fn test_empty_request() {
+        let empty_headers: Vec<HttpHeader> = vec![];
+        let empty_body = b"";
+        assert!(validate_http_headers_and_body(&empty_headers, empty_body).is_ok());
+    }
+
+    #[test]
+    fn test_valid_request() {
+        let headers = vec![HttpHeader {
+            name: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+        }];
+        let body = b"Hello";
+        assert!(validate_http_headers_and_body(&headers, body).is_ok());
+    }
+
+    #[test]
+    fn test_headers_at_max_count() {
+        // Create exactly the maximum allowed number of headers
+        let headers = (0..MAX_CANISTER_HTTP_HEADER_NUM)
+            .map(|i| HttpHeader {
+                name: format!("Header-{}", i),
+                value: "value".to_string(),
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_header_name_at_max_length() {
+        // Create a header with name exactly at the limit
+        let headers = vec![HttpHeader {
+            name: "a".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
+            value: "value".to_string(),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_header_value_at_max_length() {
+        // Create a header with value exactly at the limit
+        let headers = vec![HttpHeader {
+            name: "Header".to_string(),
+            value: "b".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_headers_at_max_total_size() {
+        // Create headers that sum up exactly to the maximum total size
+        let header_name_and_value_size = 2 * MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
+        
+        // We'll assume for this test that this division has no remainder.
+        assert!(MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE % header_name_and_value_size == 0);
+
+        let headers_count =  MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / header_name_and_value_size;
+        
+        // headers will be an array of headers that will be exactly at the size limit.
+        let headers = (0..headers_count)
+            .map(|i| {
+                // mock_letter will be 'a' for the first chunck, then 'b' and etc.
+                let mock_letter = ((b'a' + i as u8) as char).to_string();
+                let mock_header_name_and_value = mock_letter.repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH);
+                HttpHeader {
+                    name: mock_header_name_and_value.clone(),
+                    value: mock_header_name_and_value.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_too_many_headers() {
+        // Create more headers than allowed
+        let headers = (0..=MAX_CANISTER_HTTP_HEADER_NUM)
+            .map(|i| HttpHeader {
+                name: format!("Header-{}", i),
+                value: "value".to_string(),
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooManyHeaders(count))
+            if count == MAX_CANISTER_HTTP_HEADER_NUM + 1
+        );
+    }
+
+    #[test]
+    fn test_header_name_too_long() {
+        // Create a header with name exceeding the limit
+        let headers = vec![HttpHeader {
+            name: "a".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1),
+            value: "value".to_string(),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooLongHeaderName(size))
+            if size == MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1
+        );
+    }
+
+    #[test]
+    fn test_header_value_too_long() {
+        // Create a header with value exceeding the limit
+        let headers = vec![HttpHeader {
+            name: "Header".to_string(),
+            value: "b".repeat(MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1),
+        }];
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooLongHeaderValue(size))
+            if size == MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH + 1
+        );
+    }
+
+    #[test]
+    fn test_headers_total_size_too_large() {
+        let header_size = MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH;
+        // The total header size limit is 48KB which divides by 8KB
+        let headers_needed = MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / header_size;
+
+        let headers = (0..headers_needed)
+            .map(|i| {
+                let header_name = format!("Header-{}", i);
+                HttpHeader {
+                    name: header_name.clone(),
+                    // Going over a single byte for each header value should do it.
+                    value: "a".repeat(header_size - header_name.len() + 1),
+                }
+            })
+            .collect::<Vec<_>>();
+        let body = b"";
+
+        let result = validate_http_headers_and_body(&headers, body);
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TooLargeHeaders(size))
+            if size > MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE
+        );
+    }
+}
