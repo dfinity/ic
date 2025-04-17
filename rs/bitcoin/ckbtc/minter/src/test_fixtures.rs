@@ -116,8 +116,8 @@ pub mod mock {
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_management_canister_types_private::DerivationPath;
     use ic_btc_interface::Utxo;
+    use ic_management_canister_types_private::DerivationPath;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
