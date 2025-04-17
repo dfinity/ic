@@ -1411,3 +1411,50 @@ fn test_canister_log_on_cleanup() {
         ]
     );
 }
+
+/*
+bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging \
+    --test_output=streamed \
+    --test_arg=--nocapture \
+    --test_arg=test_logging_instruction_limit_exceeded_in_heartbeat
+
+*/
+#[test]
+fn test_logging_instruction_limit_exceeded_in_heartbeat() {
+    let instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE.get() as i64;
+    let number_of_slices = MAX_INSTRUCTIONS_PER_MESSAGE / MAX_INSTRUCTIONS_PER_SLICE;
+    let (env, canister_id, controller) = setup_with_controller(
+        wat_canister()
+            .heartbeat(
+                wat_fn()
+                    .debug_print(b"heartbeat")
+                    .wait(2 * instructions_per_message),
+            )
+            .build_wasm(),
+    );
+    let timestamp = env.time();
+    for i in 1..number_of_slices {
+        let result = fetch_canister_logs(&env, controller, canister_id);
+        assert_eq!(
+            FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+            canister_log_response(vec![]),
+            "Expect no log messages after round #{}",
+            i
+        );
+        env.advance_time(TIME_STEP);
+        env.tick();
+    }
+
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (0, timestamp, "heartbeat".to_string()),
+            (
+                1,
+                timestamp,
+                "[InstructionLimitExceeded]: 20000000000".to_string()
+            )
+        ]
+    );
+}
