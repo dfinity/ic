@@ -312,6 +312,7 @@ fn canister_manager_config(
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
+        SchedulerConfig::application_subnet().canister_snapshot_data_baseline_instructions,
         DEFAULT_WASM_MEMORY_LIMIT,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
     )
@@ -6190,7 +6191,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         .subnet_message("upload_chunk", upload_args.encode())
         .unwrap_err();
 
-    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
         error
             .description()
