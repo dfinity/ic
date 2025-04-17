@@ -3132,6 +3132,7 @@ impl StateManager for StateManagerImpl {
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
+        eprintln!("height {} is with scope {:?}", height, scope);
         let _timer = self
             .metrics
             .api_call_duration

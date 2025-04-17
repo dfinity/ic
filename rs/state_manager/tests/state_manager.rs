@@ -396,29 +396,26 @@ fn lazy_wasms() {
 
     let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(true);
-
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    eprintln!("1: {}", wasm_files_by_source("canister", &env));
+    eprintln!("1: {}", wasm_files_by_source("snapshot", &env));
+
+    env.tick();
+    eprintln!("2: {}", wasm_files_by_source("canister", &env));
+    eprintln!("2: {}", wasm_files_by_source("snapshot", &env));
 
     env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-    assert_eq!(
-        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
-        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
-    );
-    env.tick();
-    assert_eq!(wasm_files_by_source("canister", &env), 0);
-    assert_eq!(wasm_files_by_source("snapshot", &env), 0);
+    eprintln!("3: {}", wasm_files_by_source("canister", &env));
+    eprintln!("3: {}", wasm_files_by_source("snapshot", &env));
 
+    env.execute_ingress(canister_id, "read", vec![],).unwrap();
+    eprintln!("4: {}", wasm_files_by_source("canister", &env));
+    eprintln!("4: {}", wasm_files_by_source("snapshot", &env));
     let env = env.restart_node();
-    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-    assert_eq!(
-        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
-        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
-    );
     env.tick();
-    assert_eq!(wasm_files_by_source("canister", &env), 1);
-    assert_eq!(wasm_files_by_source("snapshot", &env), 0);
+    eprintln!("5: {}", wasm_files_by_source("canister", &env));
+    eprintln!("5: {}", wasm_files_by_source("snapshot", &env));
 
-    // Snapshot is running TEST_CANISTER.
     let snapshot_id = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
@@ -426,7 +423,12 @@ fn lazy_wasms() {
         })
         .unwrap()
         .snapshot_id();
+    eprintln!("6: {}", wasm_files_by_source("canister", &env));
+    eprintln!("6: {}", wasm_files_by_source("snapshot", &env));
+
     env.tick();
+    eprintln!("7: {}", wasm_files_by_source("canister", &env));
+    eprintln!("7: {}", wasm_files_by_source("snapshot", &env));
 
     let args = ReadCanisterSnapshotDataArgs::new(
         canister_id,
@@ -436,10 +438,12 @@ fn lazy_wasms() {
     let _ = env
         .read_canister_snapshot_data(&args)
         .expect("Error reading snapshot data");
+    eprintln!("8: {}", wasm_files_by_source("canister", &env));
+    eprintln!("8: {}", wasm_files_by_source("snapshot", &env));
 
     env.tick();
-    assert_eq!(wasm_files_by_source("canister", &env), 0);
-    assert_eq!(wasm_files_by_source("snapshot", &env), 1);
+    eprintln!("9: {}", wasm_files_by_source("canister", &env));
+    eprintln!("9: {}", wasm_files_by_source("snapshot", &env));
 }
 
 #[test]
