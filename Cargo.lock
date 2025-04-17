@@ -11469,6 +11469,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-interfaces-registry",
  "ic-nervous-system-canisters",
+ "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
  "ic-protobuf",
@@ -23278,8 +23279,6 @@ name = "vsock_lib"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "futures",
- "ic-http-utils",
  "regex",
  "reqwest 0.12.12",
  "rusb",

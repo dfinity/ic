@@ -6191,7 +6191,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         .subnet_message("upload_chunk", upload_args.encode())
         .unwrap_err();
 
-    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
         error
             .description()
