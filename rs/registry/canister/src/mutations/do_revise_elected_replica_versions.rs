@@ -39,7 +39,7 @@ impl Registry {
             .map_err(|e| panic!("{LOG_PREFIX}Failed to validate payload: {e}"))
             .unwrap();
 
-        let versions_to_remove = BTreeSet::from_iter(payload.replica_versions_to_unelect);
+        let versions_to_remove = BTreeSet::from_iter(payload.guestos_versions_to_unelect);
 
         // Remove the unelected versions (that is, delete their ReplicaVersionRecords)
         let mut mutations: Vec<RegistryMutation> = versions_to_remove
@@ -53,7 +53,7 @@ impl Registry {
 
         let mut versions = self.remove_blessed_versions_or_panic(&versions_to_remove);
 
-        if let Some(version) = payload.replica_version_to_elect.as_ref() {
+        if let Some(version) = payload.guestos_version_to_elect.as_ref() {
             assert!(
                 !versions_to_remove.contains(version),
                 "{LOG_PREFIX}ReviseElectedGuestosVersionsPayload cannot elect and unelect the same version.",
@@ -198,7 +198,7 @@ pub struct ReviseElectedGuestosVersionsPayload {
     /// Version ID. This can be anything, it has not semantics. The reason it is
     /// part of the payload is that it will be needed in the subsequent step
     /// of upgrading individual subnets.
-    pub replica_version_to_elect: Option<String>,
+    pub guestos_version_to_elect: Option<String>,
 
     /// The hex-formatted SHA-256 hash of the archive file served by
     /// 'release_package_urls'
@@ -212,13 +212,13 @@ pub struct ReviseElectedGuestosVersionsPayload {
     pub guest_launch_measurement_sha256_hex: Option<String>,
 
     /// Version IDs. These can be anything, they have no semantics.
-    pub replica_versions_to_unelect: Vec<String>,
+    pub guestos_versions_to_unelect: Vec<String>,
 }
 
 impl ReviseElectedGuestosVersionsPayload {
     pub fn is_electing_a_version(&self) -> Result<bool, String> {
         let elect_params = [
-            self.replica_version_to_elect.as_ref(),
+            self.guestos_version_to_elect.as_ref(),
             self.release_package_sha256_hex.as_ref(),
             self.release_package_urls.first(),
         ];
@@ -235,7 +235,7 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn is_unelecting_a_version(&self) -> bool {
-        !self.replica_versions_to_unelect.is_empty()
+        !self.guestos_versions_to_unelect.is_empty()
     }
 
     pub fn validate(&self) -> Result<(), String> {

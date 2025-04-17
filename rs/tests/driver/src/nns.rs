@@ -492,10 +492,10 @@ pub async fn submit_update_elected_replica_versions_proposal(
         neuron_id,
         NnsFunction::ReviseElectedGuestosVersions,
         ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: version.clone().map(String::from),
+            guestos_version_to_elect: version.clone().map(String::from),
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
-            replica_versions_to_unelect: versions_to_unelect.clone(),
+            guestos_versions_to_unelect: versions_to_unelect.clone(),
             guest_launch_measurement_sha256_hex: None,
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
@@ -546,7 +546,7 @@ pub async fn submit_deploy_guestos_to_all_subnet_nodes_proposal(
         NnsFunction::DeployGuestosToAllSubnetNodes,
         DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
-            replica_version_id: String::from(version.clone()),
+            guestos_version_id: String::from(version.clone()),
         },
         format!(
             "Update {} subnet's replica version to: {}",
@@ -654,7 +654,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
         neuron_id,
         NnsFunction::DeployGuestosToAllUnassignedNodes,
         DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: version.clone(),
+            elected_guestos_version: version.clone(),
         },
         format!("Update unassigned nodes version to: {}", version.clone()),
         "".to_string(),

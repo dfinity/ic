@@ -68,9 +68,9 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                     .as_ref()
                     .map(|_| vec!["http://release_package.tar.zst".to_string()])
                     .unwrap_or_default(),
-                replica_version_to_elect: elect,
+                guestos_version_to_elect: elect,
                 guest_launch_measurement_sha256_hex: None,
-                replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
+                guestos_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
             };
         let bless_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
             update_versions_payload(Some(version_id.into()), vec![])
@@ -123,7 +123,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
 
         // update unassigned version
         let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: unassigned_nodes_version.to_string(),
+            elected_guestos_version: unassigned_nodes_version.to_string(),
         };
         let proposal_id = submit(
             gov,
@@ -159,7 +159,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             ),
             (
                 ReviseElectedGuestosVersionsPayload {
-                    replica_version_to_elect: Some("version_with_missing_hash".into()),
+                    guestos_version_to_elect: Some("version_with_missing_hash".into()),
                     ..Default::default()
                 },
                 Some("All parameters to elect a version have to be either set or unset"),

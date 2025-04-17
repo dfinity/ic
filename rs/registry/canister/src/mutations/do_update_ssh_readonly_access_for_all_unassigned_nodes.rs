@@ -63,7 +63,7 @@ mod tests {
 
         // Make a proposal to upgrade all unassigned nodes to a new version
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: "version".into(),
+            elected_guestos_version: "version".into(),
         };
 
         registry.do_deploy_guestos_to_all_unassigned_nodes(payload);
@@ -106,7 +106,7 @@ mod tests {
 
         // Make a proposal to upgrade all unassigned nodes to a new blessed version
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: "version".into(),
+            elected_guestos_version: "version".into(),
         };
 
         registry.do_deploy_guestos_to_all_unassigned_nodes(payload);
@@ -124,7 +124,7 @@ mod tests {
         let blessed_versions = get_blessed_replica_versions(&registry)
             .expect("failed to get the blessed replica versions");
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: blessed_versions
+            elected_guestos_version: blessed_versions
                 .blessed_version_ids
                 .first()
                 .expect("there is no blessed replica version")

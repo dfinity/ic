@@ -25,7 +25,7 @@ impl Registry {
 
         let update_unassigned_nodes_config_payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: None,
-            replica_version: Some(payload.elected_replica_version),
+            replica_version: Some(payload.elected_guestos_version),
         };
 
         self.do_update_unassigned_nodes_config(update_unassigned_nodes_config_payload);
@@ -34,7 +34,7 @@ impl Registry {
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct DeployGuestosToAllUnassignedNodesPayload {
-    pub elected_replica_version: String,
+    pub elected_guestos_version: String,
 }
 
 #[cfg(test)]
@@ -60,7 +60,7 @@ mod tests {
 
         // Make a proposal to upgrade all unassigned nodes to a new version
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: "version".into(),
+            elected_guestos_version: "version".into(),
         };
 
         registry.do_deploy_guestos_to_all_unassigned_nodes(payload);
@@ -103,7 +103,7 @@ mod tests {
 
         // Make a proposal to upgrade all unassigned nodes to a new blessed version
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: "version".into(),
+            elected_guestos_version: "version".into(),
         };
 
         registry.do_deploy_guestos_to_all_unassigned_nodes(payload);

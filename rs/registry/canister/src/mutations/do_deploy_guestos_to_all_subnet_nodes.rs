@@ -22,7 +22,7 @@ impl Registry {
             LOG_PREFIX, payload
         );
 
-        check_replica_version_is_blessed(self, &payload.replica_version_id);
+        check_replica_version_is_blessed(self, &payload.guestos_version_id);
 
         // Get the subnet record
         let subnet_key = make_subnet_record_key(SubnetId::from(payload.subnet_id));
@@ -33,7 +33,7 @@ impl Registry {
                 deletion_marker: _,
             }) => {
                 let mut subnet_record = SubnetRecord::decode(subnet_record_vec.as_slice()).unwrap();
-                subnet_record.replica_version_id = payload.replica_version_id;
+                subnet_record.replica_version_id = payload.guestos_version_id;
                 RegistryMutation {
                     mutation_type: registry_mutation::Type::Update as i32,
                     key: subnet_key.as_bytes().to_vec(),
@@ -59,5 +59,5 @@ pub struct DeployGuestosToAllSubnetNodesPayload {
     /// The subnet to update.
     pub subnet_id: PrincipalId, // SubnetId See NNS-73
     /// The new Replica version to use.
-    pub replica_version_id: String,
+    pub guestos_version_id: String,
 }

@@ -31,7 +31,7 @@ fn test_submit_update_ssh_readonly_access_for_all_unassigned_nodes() {
         // first we need to make sure that the unassigned nodes config contains a blessed replica version
         let replica_version = ReplicaVersion::default().to_string();
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: replica_version.clone(),
+            elected_guestos_version: replica_version.clone(),
         };
 
         let proposal_id: ProposalId = submit_external_update_proposal(
@@ -146,7 +146,7 @@ fn test_submit_deploy_guestos_to_all_unassigned_nodes_proposal() {
         let replica_version = ReplicaVersion::default().to_string();
 
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: replica_version.clone(),
+            elected_guestos_version: replica_version.clone(),
         };
 
         let proposal_id: ProposalId = submit_external_update_proposal(
