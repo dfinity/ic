@@ -51,7 +51,7 @@ impl BinaryEncodedWasm {
 ///   * Gzip-compressed Wasm modules (magic number \1f\8b\08)
 // We don't derive `Serialize` and `Deserialize` because this is a binary that is serialized by
 // writing it to a file when creating checkpoints.
-#[derive(Clone, ValidateEq)]
+#[derive(Clone, Debug, ValidateEq)]
 pub struct CanisterModule {
     // The Wasm binary.
     #[validate_eq(Ignore)]
@@ -132,14 +132,14 @@ impl CanisterModule {
     }
 }
 
-impl fmt::Debug for CanisterModule {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!(
-            "CanisterModule{{{}}}",
-            truncate_and_format(self.as_slice(), 40_usize)
-        ))
-    }
-}
+// impl fmt::Debug for CanisterModule {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.write_fmt(format_args!(
+//             "CanisterModule{{{}}}",
+//             truncate_and_format(self.as_slice(), 40_usize)
+//         ))
+//     }
+// }
 
 impl PartialEq for CanisterModule {
     fn eq(&self, other: &Self) -> bool {
@@ -235,7 +235,7 @@ pub trait MemoryMappableWasmFile {
 // We introduce another enum instead of making `BinaryEncodedWasm` an enum to
 // keep constructors private. We want `BinaryEncodedWasm` to be visible, but not
 // its structure.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum ModuleStorage {
     Memory(Arc<Vec<u8>>),
     File(WasmFileStorage),
@@ -255,6 +255,14 @@ pub struct WasmFileStorage {
     path: PathBuf,
     file: Arc<Mutex<Option<Box<dyn MemoryMappableWasmFile + Send + Sync>>>>,
     mmap: Arc<OnceLock<ic_sys::mmap::ScopedMmap>>,
+}
+
+impl fmt::Debug for WasmFileStorage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WasmFileStorage")
+            .field("path", &self.path)
+            .finish()
+    }
 }
 
 impl WasmFileStorage {

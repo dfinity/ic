@@ -1607,19 +1607,10 @@ impl StateManagerImpl {
         for canister in state.canisters_iter() {
             if let Some(execution_state) = canister.execution_state.as_ref() {
                 eprintln!("canister wasm: {:?}", execution_state.wasm_binary.binary);
-                match execution_state.wasm_binary.binary.file_loading_status() {
-                    Some(true) => {
-                        let path = execution_state.wasm_binary.binary.file().unwrap();
-                        eprintln!("Canister wasm file loaded from {}", path.display());
-                    }
-                    Some(false) => {
-                        let path = execution_state.wasm_binary.binary.file().unwrap();
-                        eprintln!("Canister wasm file NOT loaded from {}", path.display());
-                    }
-                    None => {
-                        eprintln!("Canister wasm is in memory");
-                    }
-                }
+                eprintln!(
+                    "file_loading_status {:?}",
+                    execution_state.wasm_binary.binary.file_loading_status()
+                );
             }
         }
 
@@ -1628,23 +1619,13 @@ impl StateManagerImpl {
                 "snapshot wasm: {:?}",
                 snapshot.execution_snapshot().wasm_binary
             );
-            match snapshot
-                .execution_snapshot()
-                .wasm_binary
-                .file_loading_status()
-            {
-                Some(true) => {
-                    let path = snapshot.execution_snapshot().wasm_binary.file().unwrap();
-                    eprintln!("Snapshot wasm file loaded from {}", path.display());
-                }
-                Some(false) => {
-                    let path = snapshot.execution_snapshot().wasm_binary.file().unwrap();
-                    eprintln!("Snapshot wasm file NOT loaded from {}", path.display());
-                }
-                None => {
-                    eprintln!("Snapshot wasm is in memory");
-                }
-            }
+            eprintln!(
+                "file_loading_status {:?}",
+                snapshot
+                    .execution_snapshot()
+                    .wasm_binary
+                    .file_loading_status()
+            );
         }
 
         let num_loaded_canister_wasm = state
@@ -1671,6 +1652,9 @@ impl StateManagerImpl {
                     .is_some_and(identity)
             })
             .count();
+
+        eprintln!("num_loaded_canister_wasm: {}", num_loaded_canister_wasm);
+        eprintln!("num_loaded_snapshot_wasm: {}", num_loaded_snapshot_wasm);
 
         self.metrics
             .checkpoint_metrics
