@@ -851,7 +851,7 @@ async fn install_ledger_suite<R: CanisterRuntime>(
             runtime.id().into(),
             more_controllers,
             cycles_for_archive_creation,
-            Some(index_principal),
+            index_principal,
         )),
         runtime,
     )
@@ -899,7 +899,7 @@ fn icrc1_ledger_init_arg(
     archive_controller_id: PrincipalId,
     archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
-    index_principal: Option<Principal>,
+    index_principal: Principal,
 ) -> LedgerInitArgs {
     use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -934,7 +934,7 @@ fn icrc1_ledger_init_arg(
         ),
         max_memo_length: Some(MAX_MEMO_LENGTH),
         feature_flags: Some(ICRC2_FEATURE),
-        index_principal,
+        index_principal: Some(index_principal),
     }
 }
 
