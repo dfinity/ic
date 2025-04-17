@@ -1,0 +1,12 @@
+[Unit]
+Description=Log config partition
+After=update-config.service
+Wants=update-config.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/log-config.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

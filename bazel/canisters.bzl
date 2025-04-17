@@ -25,6 +25,13 @@ def _wasm_rust_transition_impl(_settings, attr):
             "-C",
             "lto",
             "-C",
+            # If combined with -C lto, -C embed-bitcode=no will cause rustc to abort at start-up,
+            # because the combination is invalid.
+            # See: https://doc.rust-lang.org/rustc/codegen-options/index.html#embed-bitcode
+            #
+            # embed-bitcode is disabled by default by rules_rust.
+            "embed-bitcode=yes",
+            "-C",
             "target-feature=+bulk-memory",
         ],
     }
@@ -112,14 +119,12 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     )
 
     # The finalized wasm (optimized, versioned, etc)
-    # NOTE: the name should be .wasm.gz, but '.wasm' is used by some targets
-    # and kept for legacy reasons
-    final_name = name + ".wasm"
+    final_name = name + ".wasm.gz"
     finalize_wasm(
         name = final_name,
         src_wasm = wasm_name,
         service_file = service_file,
-        version_file = "//bazel:rc_only_version.txt",
+        version_file = "//bazel:version.txt",
         visibility = visibility,
         testonly = testonly,
         keep_name_section = keep_name_section,
@@ -127,13 +132,15 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
 
     native.alias(
         name = name,
-        actual = name + ".wasm",
+        actual = final_name,
+        visibility = visibility,
     )
 
     # DID service related targets
     native.alias(
         name = name + ".didfile",
         actual = service_file,
+        visibility = visibility,
     )
     did_git_test(
         name = name + "_did_git_test",
@@ -151,6 +158,7 @@ def motoko_canister(name, entry, deps):
 
     raw_wasm = entry.replace(".mo", ".raw")
     raw_did = entry.replace(".mo", ".did")
+    final_name = name + ".wasm.gz"
 
     native.alias(
         name = name + ".didfile",
@@ -166,15 +174,15 @@ def motoko_canister(name, entry, deps):
     )
 
     finalize_wasm(
-        name = name + ".wasm",
+        name = final_name,
         src_wasm = raw_wasm,
-        version_file = "//bazel:rc_only_version.txt",
+        version_file = "//bazel:version.txt",
         testonly = False,
     )
 
     native.alias(
         name = name,
-        actual = name + ".wasm",
+        actual = final_name,
     )
 
 def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False):
@@ -186,9 +194,9 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
         'icp:public candid:service': the canister's candid service description
     """
     native.genrule(
-        name = name,
+        name = "_" + name + "_finalize",
         srcs = [src_wasm, version_file] + ([service_file] if not (service_file == None) else []),
-        outs = [name + ".gz"],
+        outs = [name],
         visibility = visibility,
         testonly = testonly,
         message = "Finalizing canister " + name,

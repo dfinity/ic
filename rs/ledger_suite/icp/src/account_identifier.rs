@@ -1,6 +1,5 @@
 use candid::{CandidType, Principal};
-use dfn_core::CanisterId;
-use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
+use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
 use ic_stable_structures::{storable::Bound, Storable};
 use icrc_ledger_types::icrc1::account::Account;

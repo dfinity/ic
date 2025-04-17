@@ -1,18 +1,15 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
-package(default_visibility = ["//visibility:private"])
-
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/bitcoin/service",
     "//rs/bitcoin/validation",
     "//rs/config",
+    "//rs/http_endpoints/async_utils",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:bitcoin",
-    "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hashlink",
     "@crate_index//:hex",
@@ -25,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
+    "@crate_index//:static_assertions",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-socks",
@@ -50,50 +48,56 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = []
 
-ALIASES = {}
-
 rust_library(
     name = "adapter",
-    srcs = glob(["src/**"]),
-    aliases = ALIASES,
+    srcs = glob(
+        ["src/**"],
+        exclude = [
+            "src/main.rs",
+            "src/cli.rs",
+            "src/stress_test.rs",
+        ],
+    ),
     crate_name = "ic_btc_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
     visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "ic-btc-adapter",
-    srcs = ["src/main.rs"],
-    aliases = ALIASES,
+    srcs = [
+        "src/cli.rs",
+        "src/main.rs",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [
         ":adapter",
         "//rs/monitoring/adapter_metrics/server",
+        "@crate_index//:clap",
     ],
 )
 
 rust_binary(
     name = "adapter-stress-test",
     srcs = ["src/stress_test.rs"],
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":adapter",
         "//rs/monitoring/adapter_metrics/server",
+        "@crate_index//:clap",
         "@crate_index//:hyper-util",
     ],
 )
 
 rust_test(
     name = "adapter_test",
-    crate = ":adapter",
-    data = [
+    compile_data = [
         "test_data/first_2500_mainnet_headers.json",
         "test_data/first_2500_testnet_headers.json",
     ],
+    crate = ":adapter",
     tags = ["requires-network"],
     deps = DEV_DEPENDENCIES,
 )
@@ -102,7 +106,6 @@ rust_test_suite(
     name = "adapter_integration",
     timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
     data = [
         # Keep sorted.
         "//:bitcoind",
@@ -127,7 +130,6 @@ rust_bench(
     name = "e2e_bench",
     testonly = True,
     srcs = ["benches/e2e.rs"],
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":adapter"],
 )

@@ -40,7 +40,7 @@ fn should_reconnect_after_request_from_client_cannot_be_sent_because_too_large()
     let node_signing_public_key = client_cannot_send_large_request
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::try_from(&node_signing_public_key).unwrap();
+    let key_id = KeyId::from(&node_signing_public_key);
 
     let signature = sign_message(Small, key_id, &client_cannot_send_large_request);
     assert_matches!(signature, Ok(_));
@@ -67,7 +67,7 @@ fn should_reconnect_after_request_from_client_cannot_be_received_by_server_becau
     let node_signing_public_key = client
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::try_from(&node_signing_public_key).unwrap();
+    let key_id = KeyId::from(&node_signing_public_key);
 
     let signature_before_error = sign_message(Small, key_id, &client);
     assert_matches!(signature_before_error, Ok(_));
@@ -146,7 +146,7 @@ fn should_reconnect_with_existing_client_after_server_killed_and_restarted() {
     let node_signing_public_key = client
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::try_from(&node_signing_public_key).unwrap();
+    let key_id = KeyId::from(&node_signing_public_key);
 
     let signature_before_shutdown = sign_message(Small, key_id, &client);
     assert_matches!(signature_before_shutdown, Ok(_));
@@ -185,7 +185,7 @@ fn should_connect_with_new_client_after_server_killed_and_restarted() {
     let node_signing_public_key = client
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::try_from(&node_signing_public_key).unwrap();
+    let key_id = KeyId::from(&node_signing_public_key);
 
     env.shutdown_server_now();
     env.restart_server();

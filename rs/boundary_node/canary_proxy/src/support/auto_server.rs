@@ -123,7 +123,7 @@ enum Version {
     H1,
     H2,
 }
-async fn read_version<'a, A>(mut reader: A) -> IoResult<(Version, Rewind<A>)>
+async fn read_version<A>(mut reader: A) -> IoResult<(Version, Rewind<A>)>
 where
     A: AsyncRead + Unpin,
 {
@@ -171,7 +171,7 @@ where
         if this.buf.filled() == H2_PREFACE {
             *this.version = Version::H2;
         }
-        return Poll::Ready(Ok((*this.version, this.buf.filled().to_vec())));
+        Poll::Ready(Ok((*this.version, this.buf.filled().to_vec())))
     }
 }
 

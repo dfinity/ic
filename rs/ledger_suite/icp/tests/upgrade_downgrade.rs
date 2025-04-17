@@ -22,7 +22,6 @@ use icp_ledger::{
     LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs, DEFAULT_TRANSFER_FEE,
 };
 use maplit::hashmap;
-use pocket_ic::CallError;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use std::time::Duration;
 
@@ -164,12 +163,9 @@ impl Setup {
                 if should_succeed {
                     panic!("Upgrade should succeed!");
                 } else {
-                    match e {
-                        CallError::Reject(_) => panic!("Expected UserError!"),
-                        CallError::UserError(user_error) => assert!(user_error
-                            .description
-                            .contains("Trying to downgrade from incompatible version")),
-                    };
+                    assert!(e
+                        .reject_message
+                        .contains("Trying to downgrade from incompatible version"));
                 }
             }
         };
@@ -182,9 +178,11 @@ impl Setup {
     }
 
     fn upgrade_archive_canisters(&self, upgrade_to_version: UpgradeToVersion) {
-        let archive_wasm_bytes = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_archive_wasm().bytes(),
-            UpgradeToVersion::Latest => build_ledger_archive_wasm().bytes(),
+        let (archive_wasm_bytes, upgrade_arg) = match upgrade_to_version {
+            UpgradeToVersion::MainNet => (build_mainnet_ledger_archive_wasm().bytes(), vec![]),
+            UpgradeToVersion::Latest => {
+                (build_ledger_archive_wasm().bytes(), Encode!(&()).unwrap())
+            }
         };
         let mainnet_archive_module_hash = mainnet_archive_canister_sha256sum();
         let ledger_archives = archives(&self.pocket_ic);
@@ -196,10 +194,10 @@ impl Setup {
                 .upgrade_canister(
                     archive_canister_id,
                     archive_wasm_bytes.clone(),
-                    vec![],
+                    upgrade_arg.clone(),
                     None,
                 )
-                .unwrap();
+                .expect("failed to upgrade the archive canister");
 
             self.assert_canister_module_hash(
                 archive_canister_id,
@@ -451,7 +449,7 @@ fn should_upgrade_and_downgrade_canister_suite() {
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
-    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, false);
+    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
     setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
     setup.assert_index_ledger_parity(true);

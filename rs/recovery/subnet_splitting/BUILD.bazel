@@ -64,7 +64,7 @@ rust_binary(
 
 rust_test(
     name = "subnet_splitting_tool_test",
+    compile_data = ["test_data/fake_expected_manifests.data"],
     crate = "subnet_splitting",
-    data = ["test_data/fake_expected_manifests.data"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

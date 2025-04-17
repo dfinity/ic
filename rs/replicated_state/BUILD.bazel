@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/canonical_state/certification_version",
     "//rs/config",
@@ -20,7 +21,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/sys",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "@crate_index//:libc",
     "@crate_index//:maplit",
     "@crate_index//:nix",
+    "@crate_index//:num-traits",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -55,8 +56,8 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/criterion_time",
-    "//rs/crypto/ed25519",
     "//rs/crypto/test_utils/keys",
     "//rs/test_utilities/io",
     "//rs/test_utilities/metrics",
@@ -65,7 +66,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
-    "@crate_index//:ic-btc-test-utils",
     "@crate_index//:proptest",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
@@ -121,7 +121,7 @@ rust_bench(
     name = "replicated_state_intmap_bench",
     testonly = True,
     srcs = [
-        "benches/bench_allocator.rs",
+        "benches/bench_intmap.rs",
     ],
     deps = [":replicated_state"] + BIN_DEPENDENCIES,
 )

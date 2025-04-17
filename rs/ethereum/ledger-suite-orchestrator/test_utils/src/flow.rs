@@ -1,4 +1,3 @@
-use crate::metrics::MetricsAssert;
 use crate::universal_canister::UniversalCanister;
 use crate::{
     assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
@@ -9,11 +8,12 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterInfoResponse, CanisterInstallMode, CanisterStatusResultV2, InstallCodeArgs, Method,
     Payload,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
+use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
@@ -89,8 +89,7 @@ impl ManagedCanistersAssert {
     }
 
     pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.setup.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
@@ -423,6 +422,12 @@ impl ManagedCanistersAssert {
             .into_iter()
             .chain(self.archive_canister_ids())
             .collect()
+    }
+}
+
+impl CanisterHttpQuery<UserError> for ManagedCanistersAssert {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.setup.http_query(request)
     }
 }
 

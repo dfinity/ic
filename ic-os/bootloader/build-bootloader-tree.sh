@@ -6,7 +6,15 @@
 
 set -exo pipefail
 
-while getopts "o:t:v:p:x:" OPT; do
+cleanup() {
+    sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"
+    rm -rf "${TMPDIR}"
+    sudo umount "${TMPFS}"
+    rm -rf "${TMPFS}"
+}
+trap cleanup EXIT
+
+while getopts "o:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
@@ -18,16 +26,14 @@ while getopts "o:t:v:p:x:" OPT; do
     esac
 done
 
-trap 'mountpoint "${TMPFS}" && sudo umount "${TMPFS}"; rm -rf "${TMPFS}"' exit
 TMPFS=$(mktemp -d /tmp/mytempdir.XXXXXX)
 sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
 
-trap 'rm -rf "${TMPDIR}"; sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"' exit
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
 BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
 
-sudo podman --root "${TMPFS}" build --iidfile ${TMPDIR}/iidfile - <<<"
+sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
@@ -44,10 +50,9 @@ sudo podman --root "${TMPFS}" build --iidfile ${TMPDIR}/iidfile - <<<"
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 
-IMAGE=$(cat ${TMPDIR}/iidfile | cut -d':' -f2)
+IMAGE_ID=$(cut -d':' -f2 <"${TMPDIR}/iidfile")
 
-CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "$IMAGE")
+CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "${IMAGE_ID}")
 
-sudo podman --root "${TMPFS}" export "$CONTAINER" | tar -C "$TMPDIR" -x build --strip-components=1
+sudo podman --root "${TMPFS}" export "${CONTAINER}" | tar --strip-components=1 -C "${TMPDIR}" -x build
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
-find "$TMPDIR/boot" -type f -exec sha256sum {} \; | sed "s|$TMPDIR||"

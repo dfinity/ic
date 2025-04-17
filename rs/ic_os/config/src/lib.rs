@@ -15,6 +15,7 @@ pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
 
 pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config-hostos.json";
 
+// TODO(NODE-1518): remove unused constants
 pub static DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH: &str = "/boot/config/config.ini";
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
 pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
@@ -75,6 +76,7 @@ mod tests {
         let hostos_settings = HostOSSettings {
             vm_memory: 490,
             vm_cpu: "kvm".to_string(),
+            vm_nr_of_vcpus: 64,
             verbose: false,
         };
         let guestos_settings = GuestOSSettings {
@@ -166,6 +168,7 @@ mod tests {
         "hostos_settings": {
             "vm_memory": 490,
             "vm_cpu": "kvm",
+            "vm_nr_of_vcpus": 64,
             "verbose": false
         },
         "guestos_settings": {
@@ -246,6 +249,7 @@ mod tests {
         let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0).unwrap();
         assert_eq!(config.config_version, "1.0.0");
         assert_eq!(config.hostos_settings.vm_cpu, "kvm");
+        assert_eq!(config.hostos_settings.vm_nr_of_vcpus, 64);
     }
 
     #[test]

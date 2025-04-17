@@ -13,6 +13,8 @@ component_files = {
     Label("early-boot/save-machine-id/save-machine-id.service"): "/etc/systemd/system/save-machine-id.service",
     Label("early-boot/fstab/fstab-guestos"): "/etc/fstab",
     Label("early-boot/locale"): "/etc/default/locale",
+    Label("early-boot/initramfs-tools/guestos/amd64-microcode"): "/etc/default/amd64-microcode",
+    Label("early-boot/initramfs-tools/guestos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/guestos/hooks/veritysetup"): "/etc/initramfs-tools/hooks/veritysetup",
     Label("early-boot/initramfs-tools/guestos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
     Label("early-boot/initramfs-tools/guestos/modules"): "/etc/initramfs-tools/modules",
@@ -63,6 +65,8 @@ component_files = {
     Label("misc/guestos/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
     Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
     Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
+    Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
+    Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
@@ -94,8 +98,6 @@ component_files = {
 
     # networking
     Label("networking/generate-network-config/guestos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
-    Label("networking/retry-ipv6-config/retry-ipv6-config.sh"): "/opt/ic/bin/retry-ipv6-config.sh",
-    Label("networking/retry-ipv6-config/retry-ipv6-config.service"): "/etc/systemd/system/retry-ipv6-config.service",
     Label("networking/nftables/reload_nftables.path"): "/etc/systemd/system/reload_nftables.path",
     Label("networking/nftables/reload_nftables.service"): "/etc/systemd/system/reload_nftables.service",
     Label("networking/nftables/nftables-empty.conf"): "/etc/nftables.conf",
@@ -138,10 +140,10 @@ component_files = {
 
     # ssh
     Label("ssh/provision-ssh-keys.sh"): "/opt/ic/bin/provision-ssh-keys.sh",
-    Label("ssh/setup-ssh-keys/setup-ssh-keys.sh"): "/opt/ic/bin/setup-ssh-keys.sh",
-    Label("ssh/setup-ssh-keys/setup-ssh-keys.service"): "/etc/systemd/system/setup-ssh-keys.service",
-    Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.sh"): "/opt/ic/bin/setup-ssh-account-keys.sh",
-    Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.service"): "/etc/systemd/system/setup-ssh-account-keys.service",
+    Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
+    Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
     Label("ssh/read-ssh-keys.sh"): "/opt/ic/bin/read-ssh-keys.sh",
 
     # upgrade
@@ -162,6 +164,6 @@ component_files = {
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
 
-    # TODO(NODE-1519): delete update-config.service after switch to new icos config
+    # TODO(NODE-1518): delete update-config.service after switch to new icos config
     Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

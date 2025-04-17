@@ -1,24 +1,29 @@
 mod update_balance {
+    use crate::management::{get_utxos, CallError, CallSource};
     use crate::metrics::LatencyHistogram;
-    use crate::state::{audit, eventlog::Event, mutate_state, read_state, SuspendedReason};
+    use crate::metrics::{Histogram, NumUtxoPages};
+    use crate::state::{audit, eventlog::EventType, mutate_state, read_state, SuspendedReason};
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, BTC_CHECKER_CANISTER_ID, DAY,
+        mock::MockCanisterRuntime, quarantined_utxo, utxo, BTC_CHECKER_CANISTER_ID, DAY,
         MINTER_CANISTER_ID, NOW,
     };
+    use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::updates::update_balance;
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{storage, Timestamp};
+    use crate::{storage, GetUtxosResponse, Timestamp};
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_btc_interface::{GetUtxosResponse, Utxo};
+    use ic_btc_interface::{Page, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
 
     #[tokio::test]
     async fn should_not_add_event_when_reevaluated_utxo_still_ignored() {
+        mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
+
         test_suspended_utxo_last_time_checked_timestamp(
             ignored_utxo(),
             SuspendedReason::ValueTooSmall,
@@ -30,6 +35,9 @@ mod update_balance {
     async fn should_do_btc_check_when_reevaluating_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+
         let ignored_utxo = ignored_utxo();
         mutate_state(|s| {
             audit::ignore_utxo(
@@ -37,14 +45,13 @@ mod update_balance {
                 ignored_utxo.clone(),
                 account,
                 NOW.checked_sub(DAY).unwrap(),
+                &runtime,
             )
         });
         mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
-        let events_before: Vec<_> = storage::events().collect();
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
-        let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
-        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
         expect_check_transaction_returning(
             &mut runtime,
             ignored_utxo.clone(),
@@ -64,7 +71,7 @@ mod update_balance {
         assert_eq!(result, Ok(vec![UtxoStatus::Tainted(ignored_utxo.clone())]));
         assert_has_new_events(
             &events_before,
-            &[Event::SuspendedUtxo {
+            &[EventType::SuspendedUtxo {
                 utxo: ignored_utxo.clone(),
                 account,
                 reason: SuspendedReason::Quarantined,
@@ -80,6 +87,9 @@ mod update_balance {
     async fn should_mint_reevaluated_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+
         let ignored_utxo = ignored_utxo();
         mutate_state(|s| {
             audit::ignore_utxo(
@@ -87,14 +97,13 @@ mod update_balance {
                 ignored_utxo.clone(),
                 account,
                 NOW.checked_sub(DAY).unwrap(),
+                &runtime,
             )
         });
         mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
-        let events_before: Vec<_> = storage::events().collect();
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
-        let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
-        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
         expect_check_transaction_returning(
             &mut runtime,
             ignored_utxo.clone(),
@@ -129,7 +138,7 @@ mod update_balance {
             &events_before,
             &[
                 checked_utxo_event(ignored_utxo.clone(), account),
-                Event::ReceivedUtxos {
+                EventType::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
                     utxos: vec![ignored_utxo],
@@ -140,6 +149,8 @@ mod update_balance {
 
     #[tokio::test]
     async fn should_not_add_event_when_reevaluated_utxo_still_tainted() {
+        mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
+
         test_suspended_utxo_last_time_checked_timestamp(
             quarantined_utxo(),
             SuspendedReason::Quarantined,
@@ -151,18 +162,19 @@ mod update_balance {
     async fn should_mint_reevaluated_tainted_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+
         let quarantined_utxo = quarantined_utxo();
         let utxo = quarantined_utxo.clone();
         mutate_state(|s| {
-            audit::quarantine_utxo(s, utxo, account, NOW.checked_sub(DAY).unwrap());
+            audit::quarantine_utxo(s, utxo, account, NOW.checked_sub(DAY).unwrap(), &runtime);
         });
         let check_fee = read_state(|s| s.check_fee);
         let minted_amount = quarantined_utxo.value - check_fee;
-        let events_before: Vec<_> = storage::events().collect();
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
-        let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
-        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
         expect_check_transaction_returning(
             &mut runtime,
             quarantined_utxo.clone(),
@@ -196,7 +208,7 @@ mod update_balance {
             &events_before,
             &[
                 checked_utxo_event(quarantined_utxo.clone(), account),
-                Event::ReceivedUtxos {
+                EventType::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
                     utxos: vec![quarantined_utxo],
@@ -206,7 +218,78 @@ mod update_balance {
     }
 
     #[tokio::test]
-    async fn should_observe_latency_metrics() {
+    async fn should_not_evaluate_mint_unknown_utxo() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+
+        // Create two utxos, first one is already checked but with unknown mint status.
+        let checked_but_mint_unknown_utxo = quarantined_utxo();
+        let utxo = crate::test_fixtures::utxo();
+        mutate_state(|s| {
+            audit::mark_utxo_checked_mint_unknown(
+                s,
+                checked_but_mint_unknown_utxo.clone(),
+                account,
+                &runtime,
+            );
+        });
+        let check_fee = read_state(|s| s.check_fee);
+        let minted_amount = utxo.value - check_fee;
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+
+        mock_get_utxos_for_account(
+            &mut runtime,
+            account,
+            vec![checked_but_mint_unknown_utxo.clone(), utxo.clone()],
+        );
+        expect_check_transaction_returning(
+            &mut runtime,
+            utxo.clone(),
+            CheckTransactionResponse::Passed,
+        );
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount, account_, _memo| amount == &minted_amount && account_ == &account)
+            .return_const(Ok(1));
+        mock_schedule_now_process_logic(&mut runtime);
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert_eq!(suspended_utxo(&checked_but_mint_unknown_utxo), None);
+        assert_eq!(suspended_utxo(&utxo), None);
+        // Only the 2nd utxo is minted
+        assert_eq!(
+            result,
+            Ok(vec![UtxoStatus::Minted {
+                block_index: 1,
+                minted_amount,
+                utxo: utxo.clone()
+            }])
+        );
+        assert_has_new_events(
+            &events_before,
+            &[
+                checked_utxo_event(utxo.clone(), account),
+                EventType::ReceivedUtxos {
+                    mint_txid: Some(1),
+                    to_account: account,
+                    utxos: vec![utxo],
+                },
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn should_observe_update_balance_latency_metrics() {
         init_state_with_ecdsa_public_key();
 
         async fn update_balance_with_latency(
@@ -225,7 +308,10 @@ mod update_balance {
                 &mut runtime,
                 vec![
                     NOW,                         // start time of `update_balance` method
-                    NOW,                         // time used to triage processable UTXOs
+                    NOW,                         // start time of `get_utxos` method
+                    NOW.saturating_add(latency), // end time of `get_utxos` method
+                    NOW.saturating_add(latency), // time used to triage processable UTXOs
+                    NOW.saturating_add(latency), // event timestamp
                     NOW.saturating_add(latency), // time used in `schedule_now` call at end of `update_balance`
                     NOW.saturating_add(latency), // end time of `update_balance` method
                 ],
@@ -247,7 +333,7 @@ mod update_balance {
             .await
             .is_ok();
 
-        let histogram = get_latency_histogram(0);
+        let histogram = update_balance_latency_histogram(0);
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
@@ -266,7 +352,7 @@ mod update_balance {
             no_new_utxo_latencies_ms.iter().sum::<u64>()
         );
 
-        let histogram = get_latency_histogram(1);
+        let histogram = update_balance_latency_histogram(1);
         assert_eq!(
             histogram.iter().collect::<Vec<_>>(),
             vec![
@@ -283,38 +369,184 @@ mod update_balance {
         assert_eq!(histogram.sum(), 250);
     }
 
-    fn get_latency_histogram(num_new_utxos: usize) -> LatencyHistogram {
+    fn update_balance_latency_histogram(num_new_utxos: NumUtxoPages) -> Histogram<8> {
         crate::metrics::UPDATE_CALL_LATENCY.with_borrow(|histograms| {
-            *histograms
+            let &LatencyHistogram(histogram) = histograms
                 .get(&num_new_utxos)
-                .expect("No histogram for given number of new UTXOs")
+                .expect("No histogram for given number of new UTXOs");
+            histogram
+        })
+    }
+
+    #[tokio::test]
+    async fn should_observe_get_utxos_latency_metrics() {
+        init_state_with_ecdsa_public_key();
+
+        fn mock_get_utxos_for_account_with_num_pages(
+            runtime: &mut MockCanisterRuntime,
+            account: Account,
+            utxos: Vec<Utxo>,
+            num_pages: usize,
+        ) {
+            let mut responses =
+                std::iter::repeat(utxos)
+                    .take(num_pages)
+                    .enumerate()
+                    .map(move |(idx, utxos)| {
+                        let next_page = if idx == num_pages - 1 {
+                            None
+                        } else {
+                            Some(Page::new())
+                        };
+                        Ok(GetUtxosResponse {
+                            next_page: next_page.clone(),
+                            utxos: utxos.clone(),
+                            ..get_uxos_response()
+                        })
+                    });
+
+            runtime.expect_caller().return_const(account.owner);
+            runtime.expect_id().return_const(MINTER_CANISTER_ID);
+            runtime
+                .expect_bitcoin_get_utxos()
+                .times(num_pages)
+                .returning(move |_| responses.next().unwrap());
+        }
+
+        async fn get_utxos_with_latency(
+            latency: Duration,
+            account_utxos: Vec<Utxo>,
+            num_pages: usize,
+            call_source: CallSource,
+        ) -> Result<Vec<Utxo>, CallError> {
+            let account = ledger_account();
+            let (btc_network, min_confirmations) =
+                read_state(|s| (s.btc_network, s.min_confirmations));
+            let address = read_state(|s| account_to_p2wpkh_address_from_state(s, &account));
+            let mut runtime = MockCanisterRuntime::new();
+            mock_get_utxos_for_account_with_num_pages(
+                &mut runtime,
+                account,
+                account_utxos,
+                num_pages,
+            );
+            mock_increasing_time(&mut runtime, NOW, latency);
+            Ok(get_utxos(
+                btc_network,
+                &address,
+                min_confirmations,
+                call_source,
+                &runtime,
+            )
+            .await?
+            .utxos)
+        }
+
+        // get_utxos calls with 1 page
+        let get_utxos_latencies_ms = [0, 100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
+        for millis in &get_utxos_latencies_ms {
+            let result = get_utxos_with_latency(
+                Duration::from_millis(*millis),
+                vec![utxo()],
+                1,
+                CallSource::Minter,
+            )
+            .await;
+            assert_eq!(result, Ok(vec![utxo()]));
+        }
+
+        // get_utxos calls with 3 pages
+        let result = get_utxos_with_latency(
+            Duration::from_millis(3_500),
+            vec![utxo()],
+            3,
+            CallSource::Minter,
+        )
+        .await;
+        assert_eq!(result, Ok(vec![utxo(), utxo(), utxo()]));
+
+        let histogram = get_utxos_latency_histogram(1, CallSource::Minter);
+        assert_eq!(
+            histogram.iter().collect::<Vec<_>>(),
+            vec![
+                (500., 4.),
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 4.),
+                (8_000., 1.),
+                (16_000., 0.),
+                (32_000., 0.),
+                (f64::INFINITY, 1.)
+            ]
+        );
+        assert_eq!(histogram.sum(), get_utxos_latencies_ms.iter().sum::<u64>());
+
+        let histogram = get_utxos_latency_histogram(3, CallSource::Minter);
+        assert_eq!(
+            histogram.iter().collect::<Vec<_>>(),
+            vec![
+                (500., 0.),
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 1.),
+                (8_000., 0.),
+                (16_000., 0.),
+                (32_000., 0.),
+                (f64::INFINITY, 0.)
+            ]
+        );
+        assert_eq!(histogram.sum(), 3_500);
+    }
+
+    fn get_utxos_latency_histogram(
+        num_pages: NumUtxoPages,
+        call_source: CallSource,
+    ) -> Histogram<8> {
+        crate::metrics::GET_UTXOS_CALL_LATENCY.with_borrow(|histograms| {
+            let &LatencyHistogram(histogram) = histograms
+                .get(&(num_pages, call_source))
+                .expect("No histogram for given call source and number of pages");
+            histogram
         })
     }
 
     async fn test_suspended_utxo_last_time_checked_timestamp(utxo: Utxo, reason: SuspendedReason) {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        mock_constant_time(
+            &mut runtime,
+            NOW.checked_sub(Duration::from_secs(1)).unwrap(),
+            8,
+        );
+
         match &reason {
             SuspendedReason::ValueTooSmall => mutate_state(|s| {
-                audit::ignore_utxo(s, utxo.clone(), account, NOW.checked_sub(DAY).unwrap())
+                audit::ignore_utxo(
+                    s,
+                    utxo.clone(),
+                    account,
+                    NOW.checked_sub(DAY).unwrap(),
+                    &runtime,
+                )
             }),
             SuspendedReason::Quarantined => mutate_state(|s| {
-                audit::quarantine_utxo(s, utxo.clone(), account, NOW.checked_sub(DAY).unwrap());
+                audit::quarantine_utxo(
+                    s,
+                    utxo.clone(),
+                    account,
+                    NOW.checked_sub(DAY).unwrap(),
+                    &runtime,
+                );
             }),
         };
-        let events_before: Vec<_> = storage::events().collect();
+
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
         let update_balance_args = UpdateBalanceArgs {
             owner: Some(account.owner),
             subaccount: account.subaccount,
         };
-
-        let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        mock_constant_time(
-            &mut runtime,
-            NOW.checked_sub(Duration::from_secs(1)).unwrap(),
-            4,
-        );
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
 
@@ -336,10 +568,7 @@ mod update_balance {
         runtime.checkpoint();
 
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        mock_time(
-            &mut runtime,
-            vec![NOW, NOW, NOW, NOW.saturating_add(Duration::from_secs(1))],
-        );
+        mock_constant_time(&mut runtime, NOW, 6);
         match &reason {
             SuspendedReason::ValueTooSmall => {}
             SuspendedReason::Quarantined => {
@@ -366,7 +595,7 @@ mod update_balance {
         runtime.checkpoint();
 
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        mock_constant_time(&mut runtime, NOW.saturating_add(Duration::from_secs(1)), 4);
+        mock_constant_time(&mut runtime, NOW.saturating_add(Duration::from_secs(1)), 8);
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
 
@@ -471,23 +700,23 @@ mod update_balance {
         expect_bitcoin_get_utxos_returning(runtime, utxos);
     }
 
-    fn assert_has_new_events(events_before: &[Event], expected_new_events: &[Event]) {
+    fn assert_has_new_events(events_before: &[EventType], expected_new_events: &[EventType]) {
         let expected_events = events_before
             .iter()
             .chain(expected_new_events.iter())
             .collect::<Vec<_>>();
-        let actual_events: Vec<_> = storage::events().collect();
+        let actual_events: Vec<_> = storage::events().map(|event| event.payload).collect();
         let actual_events_ref = actual_events.iter().collect::<Vec<_>>();
 
         assert_eq!(expected_events.as_slice(), actual_events_ref.as_slice());
     }
 
-    fn assert_has_no_new_events(events_before: &[Event]) {
+    fn assert_has_no_new_events(events_before: &[EventType]) {
         assert_has_new_events(events_before, &[]);
     }
 
-    fn checked_utxo_event(utxo: Utxo, account: Account) -> Event {
-        Event::CheckedUtxoV2 { utxo, account }
+    fn checked_utxo_event(utxo: Utxo, account: Account) -> EventType {
+        EventType::CheckedUtxoV2 { utxo, account }
     }
 
     fn suspended_utxo(utxo: &Utxo) -> Option<SuspendedReason> {

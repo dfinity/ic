@@ -5,8 +5,8 @@ pub use crate::client::CanisterHttpAdapterClientImpl;
 
 use crate::client::BrokenCanisterHttpClient;
 use ic_adapter_metrics_client::AdapterMetrics;
-use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
+use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
@@ -16,8 +16,8 @@ use ic_types::{
     canister_http::{CanisterHttpRequest, CanisterHttpResponse},
     messages::CertificateDelegation,
 };
-use std::{convert::TryFrom, sync::Arc};
-use tokio::{net::UnixStream, sync::OnceCell};
+use std::convert::TryFrom;
+use tokio::{net::UnixStream, sync::watch};
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
@@ -29,7 +29,7 @@ pub fn setup_canister_http_client(
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
     subnet_type: SubnetType,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {

@@ -189,10 +189,12 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
 
 fn read_reward_conf(config_dir: &Path) -> Result<Option<String>> {
     let reward_conf_path = config_dir.join("reward.conf");
+    if !reward_conf_path.exists() {
+        return Ok(None);
+    }
+
     let conf_map = read_conf_file(&reward_conf_path)?;
-
     let node_reward_type = conf_map.get("node_reward_type").cloned();
-
     Ok(node_reward_type)
 }
 
@@ -343,6 +345,7 @@ pub fn update_hostos_config(
                 .cpu
                 .clone()
                 .unwrap_or("kvm".to_string()),
+            vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
             verbose,
         };
 

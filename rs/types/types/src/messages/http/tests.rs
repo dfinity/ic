@@ -730,7 +730,6 @@ mod cbor_serialization {
     fn encoding_status_without_root_key() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: None,
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -738,7 +737,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("starting"),
             }),
@@ -749,7 +747,6 @@ mod cbor_serialization {
     fn encoding_status_with_root_key() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -757,7 +754,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("healthy"),
@@ -769,7 +765,6 @@ mod cbor_serialization {
     fn encoding_status_without_health_status() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -777,7 +772,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
             }),
@@ -788,7 +782,6 @@ mod cbor_serialization {
     fn encoding_status_with_certified_height() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -796,7 +789,6 @@ mod cbor_serialization {
                 certified_height: Some(AmountOf::new(1)),
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("healthy"),

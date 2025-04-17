@@ -165,7 +165,10 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         ic_cdk::trap("illegal retrieve_btc target");
     }
 
-    let _guard = retrieve_btc_guard(caller)?;
+    let _guard = retrieve_btc_guard(Account {
+        owner: caller,
+        subaccount: None,
+    })?;
     let (min_retrieve_amount, btc_network) =
         read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network));
 
@@ -237,7 +240,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         request.block_index
     );
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,
@@ -269,8 +272,11 @@ pub async fn retrieve_btc_with_approval(
     if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
         ic_cdk::trap("illegal retrieve_btc target");
     }
-
-    let _guard = retrieve_btc_guard(caller)?;
+    let caller_account = Account {
+        owner: caller,
+        subaccount: args.from_subaccount,
+    };
+    let _guard = retrieve_btc_guard(caller_account)?;
     let (min_retrieve_amount, btc_network) =
         read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network));
     if args.amount < min_retrieve_amount {
@@ -320,10 +326,7 @@ pub async fn retrieve_btc_with_approval(
         status: None,
     };
     let block_index = burn_ckbtcs_icrc2(
-        Account {
-            owner: caller,
-            subaccount: args.from_subaccount,
-        },
+        caller_account,
         args.amount,
         crate::memo::encode(&burn_memo_icrc2).into(),
     )
@@ -341,7 +344,7 @@ pub async fn retrieve_btc_with_approval(
         }),
     };
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,

@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
-use criterion::{Criterion, Throughput};
+use criterion::{BatchSize, Criterion, Throughput};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::ingress::WasmResult;
 use ic_types::NumBytes;
@@ -11,7 +11,7 @@ use std::{
 };
 
 #[derive(Copy, Clone)]
-pub enum PostSetupAction {
+pub enum SetupAction {
     PerformCheckpoint,
     None,
 }
@@ -19,7 +19,7 @@ pub enum PostSetupAction {
 fn initialize_execution_test(
     wasm: &[u8],
     initialization_arg: &[u8],
-    post_setup_action: PostSetupAction,
+    setup_action: SetupAction,
     cell: &RefCell<Option<(ExecutionTest, CanisterId)>>,
 ) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
@@ -47,6 +47,7 @@ fn initialize_execution_test(
     }
 
     let mut test = ExecutionTestBuilder::new()
+        .with_query_caching_disabled()
         .with_install_code_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
@@ -56,7 +57,7 @@ fn initialize_execution_test(
     if is_wasm64 {
         test = test.with_wasm64();
         // Set memory size to 8 GiB for Wasm64.
-        test = test.with_max_wasm_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
+        test = test.with_max_wasm64_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
     }
     let mut test = test.build();
 
@@ -73,11 +74,11 @@ fn initialize_execution_test(
     if let WasmResult::Reject(s) = result {
         panic!("Installation rejected: {}", s)
     }
-    match post_setup_action {
-        PostSetupAction::PerformCheckpoint => {
+    match setup_action {
+        SetupAction::PerformCheckpoint => {
             test.checkpoint_canister_memories();
         }
-        PostSetupAction::None => {}
+        SetupAction::None => {}
     }
 
     // Execute a message to sync the new memory so that time isn't included in
@@ -90,22 +91,23 @@ fn initialize_execution_test(
 
 pub fn update_bench(
     c: &mut Criterion,
+    group_name: &str,
     name: &str,
     wasm: &[u8],
     initialization_arg: &[u8],
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
-    post_setup_action: PostSetupAction,
+    setup_action: SetupAction,
 ) {
     let cell = RefCell::new(None);
 
-    let mut group = c.benchmark_group("update");
+    let mut group = c.benchmark_group(group_name);
     if let Some(throughput) = throughput {
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
+        initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
         bench.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
             for _ in 0..iters {
@@ -117,7 +119,12 @@ pub fn update_bench(
                     .unwrap();
                 total_duration += start.elapsed();
                 assert!(matches!(result, WasmResult::Reply(_)));
-                test.checkpoint_canister_memories();
+                match setup_action {
+                    SetupAction::PerformCheckpoint => {
+                        test.checkpoint_canister_memories();
+                    }
+                    SetupAction::None => {}
+                }
             }
             total_duration
         });
@@ -125,24 +132,59 @@ pub fn update_bench(
     group.finish();
 }
 
-pub fn query_bench(
+pub fn update_bench_once(
     c: &mut Criterion,
+    group_name: &str,
     name: &str,
     wasm: &[u8],
     initialization_arg: &[u8],
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
-    post_setup_action: PostSetupAction,
+    setup_action: SetupAction,
 ) {
-    let cell = RefCell::new(None);
-
-    let mut group = c.benchmark_group("query");
+    let mut group = c.benchmark_group(group_name);
     if let Some(throughput) = throughput {
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
+        bench.iter_batched(
+            || {
+                let cell = RefCell::new(None);
+                initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
+                let mut setup = cell.borrow_mut();
+                setup.take().unwrap()
+            },
+            |(mut test, canister_id)| {
+                let result = test.ingress(canister_id, method, payload.to_vec()).unwrap();
+                assert!(matches!(result, WasmResult::Reply(_)));
+                (test, canister_id, result)
+            },
+            BatchSize::PerIteration,
+        );
+    });
+    group.finish();
+}
+
+pub fn query_bench(
+    c: &mut Criterion,
+    group_name: &str,
+    name: &str,
+    wasm: &[u8],
+    initialization_arg: &[u8],
+    method: &str,
+    payload: &[u8],
+    throughput: Option<Throughput>,
+    setup_action: SetupAction,
+) {
+    let cell = RefCell::new(None);
+
+    let mut group = c.benchmark_group(group_name);
+    if let Some(throughput) = throughput {
+        group.throughput(throughput);
+    }
+    group.bench_function(name, |bench| {
+        initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
         bench.iter(|| {
             let mut setup = cell.borrow_mut();
             let (test, canister_id) = setup.as_mut().unwrap();

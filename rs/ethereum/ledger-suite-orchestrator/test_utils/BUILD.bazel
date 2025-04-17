@@ -16,6 +16,7 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ledger_suite/icrc1/ledger",

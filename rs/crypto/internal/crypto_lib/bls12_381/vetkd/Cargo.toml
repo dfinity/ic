@@ -8,14 +8,13 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-bls12-381-type = { path = "../type" }
-ic-sha3 = { path = "../../../../../../packages/ic-sha3" }
 rand = { workspace = true }
-zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 hex = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+rand_chacha = { workspace = true }
 
 [[bench]]
 name = "vetkd"

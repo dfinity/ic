@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "oci_tar", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -61,7 +61,9 @@ system_test_nns(
         "CUSTOM_DOMAIN_UVM_CONFIG_PATH": "$(rootpath :custom_domains_uvm_config_image)",
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        "@crate_index//:indoc",
+    ],
     tags = [
         "manual",
     ],

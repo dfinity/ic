@@ -8,7 +8,7 @@ import "ic_nervous_system/pb/v1/nervous_system.proto";
 // All essential state of an SNS root canister.
 //
 // When canister_init is called in the SNS root canister, it is expected that a
-// serialized version of this was passed via ic_management_canister_types::InstallCodeArgs::args,
+// serialized version of this was passed via ic_management_canister_types_private::InstallCodeArgs::args,
 // which can be retrieved by the canister via ic_cdk::api::call::arg_data().
 message SnsRootCanister {
   // Required.
@@ -128,6 +128,7 @@ message ManageDappCanisterSettingsRequest {
   optional uint64 reserved_cycles_limit = 5;
   optional LogVisibility log_visibility = 6;
   optional uint64 wasm_memory_limit = 7;
+  optional uint64 wasm_memory_threshold = 8;
 }
 
 message ManageDappCanisterSettingsResponse {

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_types::{consensus::idkg::PreSigId, ExecutionRound, Height};
 use rand::RngCore;
@@ -104,7 +104,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
     };
@@ -147,7 +149,7 @@ mod tests {
             request: RequestBuilder::new().build(),
             args,
             pseudo_random_id: [id as u8; 32],
-            derivation_path: vec![],
+            derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
             matched_pre_signature: matched_pre_signature.map(|(id, h)| (PreSigId(id), h)),
             nonce: None,

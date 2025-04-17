@@ -11,7 +11,8 @@ use crate::{
         CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
         CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
-        CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+        CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT, CALL_V3_STATUS_IS_INVALID_UTF8,
+        CALL_V3_STATUS_IS_NOT_LEAF,
     },
     HttpError,
 };
@@ -39,7 +40,7 @@ use ic_types::{
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
-use tokio::sync::OnceCell;
+use tokio::sync::watch;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
@@ -57,10 +58,9 @@ pub(crate) enum CallV3Response {
 }
 
 #[derive(Clone)]
-
 struct SynchronousCallHandlerState {
     ingress_watcher_handle: IngressWatcherHandle,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
@@ -123,7 +123,7 @@ impl From<IngressError> for CallV3Response {
 }
 
 pub(crate) fn route() -> &'static str {
-    "/api/v3/canister/:effective_canister_id/call"
+    "/api/v3/canister/{effective_canister_id}/call"
 }
 
 pub(crate) fn new_router(
@@ -131,7 +131,7 @@ pub(crate) fn new_router(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
@@ -156,7 +156,7 @@ pub fn new_service(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> BoxCloneService<Request<Body>, Response, Infallible> {
     let router = new_router(
@@ -202,7 +202,7 @@ async fn call_sync_v3(
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns = delegation_from_nns.get().cloned();
+            let delegation_from_nns = delegation_from_nns.borrow().clone();
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
@@ -224,16 +224,11 @@ async fn call_sync_v3(
         .await
     {
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
-        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
-            // TODO: At this point we could return early without submitting the ingress message.
-            Err((
-                "Duplicate request. Message is already being tracked and executed.",
-                CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
-            ))
-        }
+        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => Err((
+            "Duplicate request. Message is already being tracked and executed.",
+            CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+        )),
         Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
-            // TODO: Send a warning or notification.
-            // This probably means that the ingress watcher panicked.
             error!(
                 every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
@@ -302,7 +297,6 @@ async fn call_sync_v3(
         );
     };
 
-    // Log the status of the message.
     let status_label = match parsed_message_status(&tree, &message_id) {
         ParsedMessageStatus::Known(status) => status,
         ParsedMessageStatus::Unknown => "unknown".to_string(),
@@ -313,7 +307,7 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns = delegation_from_nns.get().cloned();
+    let delegation_from_nns = delegation_from_nns.borrow().clone();
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {
@@ -333,11 +327,12 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
 
     match tree.lookup(&status_path) {
         LookupStatus::Found(MixedHashTree::Leaf(status)) => ParsedMessageStatus::Known(
-            String::from_utf8(status.clone()).unwrap_or_else(|_| "invalid_utf8_status".to_string()),
+            String::from_utf8(status.clone())
+                .unwrap_or_else(|_| CALL_V3_STATUS_IS_INVALID_UTF8.to_string()),
         ),
-        // This should never happen. Otherwise the tree is not following the spec.
-        // TODO: Log as error.
-        LookupStatus::Found(_) => ParsedMessageStatus::Known("Status not a leaf".to_string()),
+        LookupStatus::Found(_) => {
+            ParsedMessageStatus::Known(CALL_V3_STATUS_IS_NOT_LEAF.to_string())
+        }
         LookupStatus::Absent | LookupStatus::Unknown => ParsedMessageStatus::Unknown,
     }
 }

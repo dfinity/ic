@@ -1,6 +1,6 @@
 use crate::{
     admin_helper::IcAdmin,
-    command_helper::exec_cmd,
+    command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_with_retries},
     get_member_ips, get_node_heights_from_metrics,
@@ -8,9 +8,11 @@ use crate::{
     replay_helper,
     ssh_helper::SshHelper,
     util::{block_on, parse_hex_str},
-    Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
+    DataLocation, Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH,
+    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES,
+    NEW_IC_STATE, OLD_IC_STATE, READONLY,
 };
+use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::{CanisterId, NodeId, PrincipalId};
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -65,6 +67,7 @@ pub struct DownloadCertificationsStep {
     pub registry_helper: RegistryHelper,
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
+    pub auto_retry: bool,
     pub key_file: Option<PathBuf>,
     pub admin: bool,
 }
@@ -97,9 +100,10 @@ impl Step for DownloadCertificationsStep {
                 &target.display().to_string(),
                 self.require_confirmation,
                 self.key_file.as_ref(),
+                self.auto_retry,
                 5,
             )
-            .map_err(|e| warn!(self.logger, "Failed to download certifications: {:?}", e));
+            .map_err(|e| warn!(self.logger, "Skipping download: {:?}", e));
 
             success || res.is_ok()
         });
@@ -377,6 +381,85 @@ impl Step for DownloadIcStateStep {
     }
 }
 
+pub struct CopyLocalIcStateStep {
+    pub logger: Logger,
+    pub working_dir: String,
+    pub require_confirmation: bool,
+}
+
+impl Step for CopyLocalIcStateStep {
+    fn descr(&self) -> String {
+        format!(
+            "Copy node state from {} and config from {} to {}.",
+            IC_DATA_PATH, IC_JSON5_PATH, self.working_dir
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let mut excludes: Vec<&str> = IC_STATE_EXCLUDES.to_vec();
+
+        // Do not copy state using rsync, we will use the `cp` instead
+        excludes.push(CHECKPOINTS);
+
+        let work_dir = PathBuf::from(self.working_dir.clone());
+        // If we already have some certifications, we do not copy them again.
+        if work_dir
+            .join("data/ic_consensus_pool/certification")
+            .exists()
+        {
+            info!(self.logger, "Excluding certifications from download");
+            excludes.push("certification");
+            excludes.push("certifications");
+        }
+
+        rsync(
+            &self.logger,
+            excludes,
+            IC_DATA_PATH,
+            &self.working_dir,
+            self.require_confirmation,
+            None,
+        )?;
+
+        rsync(
+            &self.logger,
+            Vec::<String>::default(),
+            IC_JSON5_PATH,
+            &self.working_dir,
+            self.require_confirmation,
+            None,
+        )?;
+
+        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
+        let latest_checkpoint =
+            Recovery::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?;
+        info!(
+            self.logger,
+            "Found latest checkpoint: {latest_checkpoint:?}"
+        );
+
+        let recovery_checkpoints_path = work_dir.join("data").join(IC_CHECKPOINTS_PATH);
+        let log = self.require_confirmation.then_some(&self.logger);
+
+        info!(self.logger, "Creating recovery checkpoint directory");
+        let mut mkdir = Command::new("mkdir");
+        mkdir.arg("-p").arg(&recovery_checkpoints_path);
+        confirm_exec_cmd(&mut mkdir, log)?;
+
+        info!(
+            self.logger,
+            "Moving latest checkpoint into recovery directory"
+        );
+        let mut cp = Command::new("cp");
+        cp.arg("-R")
+            .arg(ic_checkpoints_path.join(latest_checkpoint.0.clone()))
+            .arg(recovery_checkpoints_path);
+        confirm_exec_cmd(&mut cp, log)?;
+
+        Ok(())
+    }
+}
+
 pub struct ReplaySubCmd {
     pub cmd: SubCommand,
     pub descr: String,
@@ -509,7 +592,7 @@ impl Step for ValidateReplayStep {
 
 pub struct UploadAndRestartStep {
     pub logger: Logger,
-    pub node_ip: IpAddr,
+    pub upload_method: DataLocation,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
     pub require_confirmation: bool,
@@ -517,26 +600,49 @@ pub struct UploadAndRestartStep {
     pub check_ic_replay_height: bool,
 }
 
+impl UploadAndRestartStep {
+    const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
+    // Note that on older versions of IC-OS this service does not exist.
+    // So try this operation, but ignore possible failure if service
+    // does not exist on the affected version.
+    const CMD_RESTART_REPLICA: &str = "\
+        (sudo systemctl restart setup-permissions || true);\
+        sudo systemctl start ic-replica;\
+        sudo systemctl status ic-replica;";
+
+    /// Sets the right state permissions on `target`, by copying the
+    /// permissions of the src path, removing executable permission and
+    /// giving read permissions for the target path to group and others.
+    fn cmd_set_permissions(src: &str, target: &str) -> String {
+        let mut set_permissions = String::new();
+        set_permissions.push_str(&format!("sudo chmod -R --reference={} {};", src, target));
+        set_permissions.push_str(&format!("sudo chown -R --reference={} {};", src, target));
+        set_permissions.push_str(&format!(
+            r"sudo find {} -type f -exec chmod a-x {{}} \;;",
+            target
+        ));
+        set_permissions.push_str(&format!(
+            r"sudo find {} -type f -exec chmod go+r {{}} \;;",
+            target
+        ));
+        set_permissions
+    }
+}
 impl Step for UploadAndRestartStep {
     fn descr(&self) -> String {
+        let replica = match self.upload_method {
+            DataLocation::Remote(ip) => &format!("replica {ip}"),
+            DataLocation::Local => "local replica",
+        };
         format!(
-            "Stopping replica {}, uploading and replacing state from {}, set access rights, \
-            restart replica.",
-            self.node_ip,
+            "Stopping {replica}, uploading and replacing state from {}, set access \
+            rights, restart replica.",
             self.data_src.display()
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         let account = ADMIN;
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            account.to_string(),
-            self.node_ip,
-            self.require_confirmation,
-            self.key_file.clone(),
-        );
-
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -559,71 +665,103 @@ impl Step for UploadAndRestartStep {
             }
         }
 
-        let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
-        // upload directory to create
-        let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
-        // path of highest checkpoint on upload node
-        let copy_from = format!(
-            "{}/$(ls {} | sort | tail -1)",
-            ic_checkpoints_path, ic_checkpoints_path
-        );
-        // path and name of checkpoint after replay
-        let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
-        let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
-
-        info!(
-            self.logger,
-            "Creating remote directory and copying previous checkpoint..."
-        );
-        if let Some(res) = ssh_helper.ssh(format!(
-            "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
-            upload_dir, CHECKPOINTS, cp, account, upload_dir
-        ))? {
-            info!(self.logger, "{}", res);
-        }
-
-        let target = format!("{}@[{}]:{}/", account, self.node_ip, upload_dir);
-        let src = format!("{}/", self.data_src.display());
-        info!(self.logger, "Uploading state...");
-        rsync(
-            &self.logger,
-            IC_STATE_EXCLUDES.to_vec(),
-            &src,
-            &target,
-            self.require_confirmation,
-            self.key_file.as_ref(),
-        )?;
-
         let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
-        info!(self.logger, "Restarting replica...");
-        let mut replace_state = String::new();
-        replace_state.push_str("sudo systemctl stop ic-replica;");
-        replace_state.push_str(&format!(
-            "sudo chmod -R --reference={} {};",
-            ic_state_path, upload_dir
-        ));
-        replace_state.push_str(&format!(
-            "sudo chown -R --reference={} {};",
-            ic_state_path, upload_dir
-        ));
-        replace_state.push_str(&format!("sudo rm -r {};", ic_state_path));
-        replace_state.push_str(&format!("sudo mv {} {};", upload_dir, ic_state_path));
-        replace_state.push_str(&format!(
-            r"sudo find {} -type f -exec chmod a-x {{}} \;;",
-            ic_state_path
-        ));
-        replace_state.push_str(&format!(
-            r"sudo find {} -type f -exec chmod go+r {{}} \;;",
-            ic_state_path
-        ));
-        // Note that on older versions of IC-OS this service does not exist.
-        // So try this operation, but ignore possible failure if service
-        // does not exist on the affected version.
-        replace_state.push_str("(sudo systemctl restart setup-permissions || true);");
-        replace_state.push_str("sudo systemctl start ic-replica;");
-        replace_state.push_str("sudo systemctl status ic-replica;");
+        let src = format!("{}/", self.data_src.display());
 
-        ssh_helper.ssh(replace_state)?;
+        // Decide: remote or local recovery
+        if let DataLocation::Remote(node_ip) = self.upload_method {
+            // For remote recoveries, we copy the source directory via rsync.
+            // To improve rsync times, we copy the latest checkpoint to the
+            // upload directory.
+            let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
+            let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
+            // path of highest checkpoint on upload node
+            let copy_from = format!(
+                "{}/$(ls {} | sort | tail -1)",
+                ic_checkpoints_path, ic_checkpoints_path
+            );
+            // path and name of checkpoint after replay
+            let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
+            let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
+            let cmd_create_and_copy_checkpoint_dir = format!(
+                "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
+                upload_dir, CHECKPOINTS, cp, account, upload_dir
+            );
+
+            let ssh_helper = SshHelper::new(
+                self.logger.clone(),
+                account.to_string(),
+                node_ip,
+                self.require_confirmation,
+                self.key_file.clone(),
+            );
+            info!(
+                self.logger,
+                "Creating remote directory and copying previous checkpoint..."
+            );
+            if let Some(res) = ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)? {
+                info!(self.logger, "{}", res);
+            }
+            let target = format!("{}@[{}]:{}/", account, node_ip, upload_dir);
+            info!(self.logger, "Uploading state...");
+            rsync(
+                &self.logger,
+                IC_STATE_EXCLUDES.to_vec(),
+                &src,
+                &target,
+                self.require_confirmation,
+                self.key_file.as_ref(),
+            )?;
+
+            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
+            let cmd_replace_state = format!(
+                "sudo rm -r {}; sudo mv {} {};",
+                ic_state_path, upload_dir, ic_state_path
+            );
+
+            info!(self.logger, "Restarting replica...");
+            ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
+            ssh_helper.ssh(cmd_set_permissions)?;
+            ssh_helper.ssh(cmd_replace_state)?;
+            ssh_helper.ssh(Self::CMD_RESTART_REPLICA.to_string())?;
+        } else {
+            let log = self.require_confirmation.then_some(&self.logger);
+            info!(self.logger, "Stopping replica...");
+            confirm_exec_cmd(
+                Command::new("bash").arg("-c").arg(Self::CMD_STOP_REPLICA),
+                log,
+            )?;
+
+            info!(self.logger, "Setting file permissions...");
+            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &src);
+            confirm_exec_cmd(Command::new("bash").arg("-c").arg(cmd_set_permissions), log)?;
+
+            // For local recoveries we first backup the original state, and
+            // then simply `mv` the new state to the upload directory. No
+            // rsync is needed, and thus no checkpoint copying.
+            let backup_path = format!("{}/{}", self.work_dir.display(), OLD_IC_STATE);
+            info!(self.logger, "Moving original state into {}...", backup_path);
+            let mut cmd_backup_state = Command::new("sudo");
+            cmd_backup_state.arg("mv");
+            cmd_backup_state.arg(&ic_state_path);
+            cmd_backup_state.arg(backup_path);
+            confirm_exec_cmd(&mut cmd_backup_state, log)?;
+
+            info!(self.logger, "Moving state locally...");
+            let mut mv_to_target = Command::new("sudo");
+            mv_to_target.arg("mv");
+            mv_to_target.arg(src);
+            mv_to_target.arg(ic_state_path);
+            confirm_exec_cmd(&mut mv_to_target, log)?;
+
+            info!(self.logger, "Restarting replica...");
+            confirm_exec_cmd(
+                Command::new("bash")
+                    .arg("-c")
+                    .arg(Self::CMD_RESTART_REPLICA),
+                log,
+            )?;
+        }
         Ok(())
     }
 }

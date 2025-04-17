@@ -112,6 +112,9 @@ fn test(env: TestEnv) {
                 .await_status_is_healthy()
                 .expect("Node didn't report healthy");
 
+            // Recreate the agent after the restart.
+            let agent = malicious_node.build_default_agent_async().await;
+
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
             for n in 0..(DKG_INTERVAL + 1) {

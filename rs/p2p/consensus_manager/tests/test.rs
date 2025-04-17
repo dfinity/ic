@@ -345,17 +345,18 @@ fn load_test(
     for i in 0..num_peers {
         let node = node_test_id(i);
         let processor = TestConsensus::new(log.clone(), node, 256 * (i as usize + 1), i % 2 == 0);
-        let (jh, mut cm) =
+        let (jh, cm) =
             start_consensus_manager(no_op_logger(), rt.handle().clone(), processor.clone());
         jhs.push(jh);
-        nodes.push((node, cm.router()));
+        let r = cm.router();
+        nodes.push((node, r));
         cms.push((node, cm));
         node_advert_map.insert(node, processor);
     }
     let (nodes, topology_watcher) = fully_connected_localhost_subnet(rt.handle(), log, id, nodes);
     for ((node1, transport), (node2, cm)) in nodes.into_iter().zip(cms.into_iter()) {
         assert!(node1 == node2);
-        cm.run(transport, topology_watcher.clone());
+        cm.start(transport, topology_watcher.clone());
     }
 
     rt.block_on(async move {

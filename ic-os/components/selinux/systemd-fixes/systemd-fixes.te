@@ -10,6 +10,10 @@ policy_module(systemd-fixes, 1.0.0)
 require { type init_t, initrc_t; }
 allow init_t initrc_t : process2 { nnp_transition };
 
+# Allow the NoNewPrivileges transition for fstrim_tool service that will call fstrim
+require { type fsadm_t; }
+allow initrc_t fsadm_t : process2 { nnp_transition };
+
 ###############################################################################
 # systemd-journal
 

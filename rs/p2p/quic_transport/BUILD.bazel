@@ -9,7 +9,7 @@ package(default_visibility = [
 DEPENDENCIES = [
     # There should not be any deps from "//rs".
     # If you have to add a new one please consult the NET team.
-    "//rs/async_utils",
+    "//rs/http_endpoints/async_utils",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/tls",
     "//rs/interfaces/registry",

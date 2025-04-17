@@ -83,7 +83,7 @@ const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 /// Range of allowed memos for neurons distributed via an SNS swap. This range is used to choose
-/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for Airdrop
+/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for developer
 /// neurons) do not conflict with the neuron basket memos.
 pub const NEURON_BASKET_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
@@ -2535,7 +2535,7 @@ impl Swap {
         if request
             .subaccount
             .as_ref()
-            .map_or(false, |subaccount| subaccount.len() != 32)
+            .is_some_and(|subaccount| subaccount.len() != 32)
         {
             return NewSaleTicketResponse::err_invalid_subaccount();
         }
@@ -3768,7 +3768,7 @@ impl<'a> SwapDigest<'a> {
     }
 }
 
-impl<'a> fmt::Debug for SwapDigest<'a> {
+impl fmt::Debug for SwapDigest<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         let Swap {
             lifecycle,

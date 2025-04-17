@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 62
+assertion_line: 63
 expression: out
 ---
 (module
@@ -19,6 +19,22 @@ expression: out
   (import "__" "stable_read_first_access" (func (;4;) (type 6)))
   (import "ic0" "msg_cycles_available" (func (;5;) (type 1)))
   (import "ic0" "msg_cycles_accept" (func (;6;) (type 2)))
+  (table (;0;) 0 1 funcref)
+  (memory (;0;) 1 1)
+  (memory (;1;) i64 0 8192000)
+  (memory (;2;) 2000 2000)
+  (global (;0;) (mut i64) i64.const 0)
+  (global (;1;) (mut i64) i64.const 0)
+  (global (;2;) (mut i64) i64.const 0)
+  (export "e" (func 6))
+  (export "table" (table 0))
+  (export "memory" (memory 0))
+  (export "stable_memory" (memory 1))
+  (export "stable_bytemap_memory" (memory 2))
+  (export "canister counter_instructions" (global 0))
+  (export "canister counter_dirty_pages" (global 1))
+  (export "canister counter_accessed_pages" (global 2))
+  (export "canister_start" (func $foo))
   (func $foo (;7;) (type 3)
     global.get 0
     i64.const 1
@@ -115,21 +131,5 @@ expression: out
     local.get 5
     i32.sub
   )
-  (table (;0;) 0 1 funcref)
-  (memory (;0;) 1 1)
-  (memory (;1;) i64 0 8192000)
-  (memory (;2;) 2000 2000)
-  (global (;0;) (mut i64) i64.const 0)
-  (global (;1;) (mut i64) i64.const 0)
-  (global (;2;) (mut i64) i64.const 0)
-  (export "e" (func 6))
-  (export "table" (table 0))
-  (export "memory" (memory 0))
-  (export "stable_memory" (memory 1))
-  (export "stable_bytemap_memory" (memory 2))
-  (export "canister counter_instructions" (global 0))
-  (export "canister counter_dirty_pages" (global 1))
-  (export "canister counter_accessed_pages" (global 2))
-  (export "canister_start" (func $foo))
 )
 

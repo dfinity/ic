@@ -220,6 +220,11 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
         # publish scan results for each channel
         for channel_id, scan_result in scan_result_by_channel.items():
             if scan_result.has_updates():
-                self.slack_api_by_channel[channel_id].send_message(
+                slack_msg_id = self.slack_api_by_channel[channel_id].send_message(
                     message=scan_result.get_slack_msg(repository, scanner), is_block_kit_message=True
                 )
+                reminders = scan_result.get_slack_thread_msgs_for_reminder()
+                for reminder in reminders:
+                    self.slack_api_by_channel[channel_id].send_message(
+                        message=reminder, thread_id=slack_msg_id, show_link_preview=False
+                    )

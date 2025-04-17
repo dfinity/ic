@@ -20,7 +20,7 @@
 {% macro btc_address(addr) -%}
     {% match addr %}
         {%- when Some(addr) -%}
-            {% if crate::blocklist_contains(addr) %}
+            {% if crate::is_blocked(addr) %}
                 <code style="color: red">{{addr}}</code>
             {% else %}
                 <code style="color: green">{{addr}}</code>

@@ -34,7 +34,7 @@ where
     }
 }
 
-impl<'a, T, Displayer> fmt::Display for DisplayProxy<'a, T, Displayer>
+impl<T, Displayer> fmt::Display for DisplayProxy<'_, T, Displayer>
 where
     Displayer: DisplayerOf<T>,
 {

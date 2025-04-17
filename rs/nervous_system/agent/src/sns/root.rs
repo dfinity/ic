@@ -1,27 +1,56 @@
-use ic_base_types::PrincipalId;
-use ic_sns_root::{
-    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
-    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
-};
-use serde::{Deserialize, Serialize};
-
 use crate::{
     sns::archive::ArchiveCanister, sns::governance::GovernanceCanister, sns::index::IndexCanister,
     sns::ledger::LedgerCanister, sns::swap::SwapCanister, sns::Sns, CallCanisters,
 };
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_clients::canister_status::CanisterStatusResult;
+use ic_sns_root::{
+    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+};
+use requests::GetSnsControlledCanisterStatus;
+use serde::{Deserialize, Serialize};
+
+pub mod requests;
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct RootCanister {
     pub canister_id: PrincipalId,
 }
 
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, thiserror::Error)]
-pub enum ListSnsCanistersError<E> {
-    #[error("SNS root canister did not return canister IDs for all canisters - this should never happen")]
-    SnsRootDidNotReturnAllCanisterIds(ListSnsCanistersResponse),
-    #[error("Failed to call SNS root canister")]
-    CallFailed(#[from] E),
+pub struct SnsCanisters {
+    pub sns: Sns,
+    pub dapps: Vec<PrincipalId>,
+}
+
+impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
+    type Error = String;
+
+    fn try_from(src: ListSnsCanistersResponse) -> Result<Self, Self::Error> {
+        let ListSnsCanistersResponse {
+            root: Some(sns_root_canister_id),
+            governance: Some(sns_governance_canister_id),
+            ledger: Some(sns_ledger_canister_id),
+            swap: Some(swap_canister_id),
+            index: Some(index_canister_id),
+            archives,
+            dapps,
+        } = src
+        else {
+            return Err(format!("Some SNS canisters were missing: {:?}", src));
+        };
+
+        let sns = Sns {
+            root: RootCanister::new(sns_root_canister_id),
+            governance: GovernanceCanister::new(sns_governance_canister_id),
+            ledger: LedgerCanister::new(sns_ledger_canister_id),
+            swap: SwapCanister::new(swap_canister_id),
+            index: IndexCanister::new(index_canister_id),
+            archive: archives.into_iter().map(ArchiveCanister::new).collect(),
+        };
+
+        Ok(Self { sns, dapps })
+    }
 }
 
 impl RootCanister {
@@ -47,32 +76,24 @@ impl RootCanister {
     pub async fn list_sns_canisters<C: CallCanisters>(
         &self,
         agent: &C,
-    ) -> Result<Sns, ListSnsCanistersError<C::Error>> {
+    ) -> Result<ListSnsCanistersResponse, C::Error> {
         let response = agent
             .call(self.canister_id, ListSnsCanistersRequest {})
             .await?;
-        let ListSnsCanistersResponse {
-            root: Some(sns_root_canister_id),
-            governance: Some(sns_governance_canister_id),
-            ledger: Some(sns_ledger_canister_id),
-            swap: Some(swap_canister_id),
-            index: Some(index_canister_id),
-            archives,
-            dapps: _,
-        } = response
-        else {
-            return Err(ListSnsCanistersError::SnsRootDidNotReturnAllCanisterIds(
-                response,
-            ));
-        };
 
-        Ok(Sns {
-            root: RootCanister::new(sns_root_canister_id),
-            governance: GovernanceCanister::new(sns_governance_canister_id),
-            ledger: LedgerCanister::new(sns_ledger_canister_id),
-            swap: SwapCanister::new(swap_canister_id),
-            index: IndexCanister::new(index_canister_id),
-            archive: archives.into_iter().map(ArchiveCanister::new).collect(),
-        })
+        Ok(response)
+    }
+
+    pub async fn get_sns_controlled_canister_status<C: CallCanisters>(
+        &self,
+        agent: &C,
+        canister_id: CanisterId,
+    ) -> Result<CanisterStatusResult, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                GetSnsControlledCanisterStatus { canister_id },
+            )
+            .await
     }
 }

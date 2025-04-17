@@ -147,20 +147,16 @@ impl ToProto for GetBlocksArgs {
     type Proto = protobuf::GetBlocksRequest;
 
     fn from_proto(pb: Self::Proto) -> Result<Self, String> {
-        let length = pb
-            .length
-            .try_into()
-            .map_err(|_| format!("{} count not be converted to a usize", pb.length))?;
         Ok(GetBlocksArgs {
             start: pb.start,
-            length,
+            length: pb.length,
         })
     }
 
     fn into_proto(self) -> Self::Proto {
         protobuf::GetBlocksRequest {
             start: self.start,
-            length: self.length as u64,
+            length: self.length,
         }
     }
 }

@@ -1,6 +1,6 @@
 use canister_test::Project;
 use ic_base_types::CanisterId;
-use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterStatusType};
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
@@ -121,8 +121,8 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
         "{:#?}",
         proposal_info
     );
@@ -222,8 +222,8 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
         "{:#?}",
         proposal_info
     );

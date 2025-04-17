@@ -12,16 +12,13 @@ use crate::{
     IntoInner,
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::idkg::{
+    IDkgChangeAction, IDkgChangeSet, IDkgPool, IDkgPoolSection, IDkgPoolSectionOp,
+    IDkgPoolSectionOps, MutableIDkgPoolSection,
+};
 use ic_interfaces::p2p::consensus::{
     ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
     ValidatedPoolReader,
-};
-use ic_interfaces::{
-    idkg::{
-        IDkgChangeAction, IDkgChangeSet, IDkgPool, IDkgPoolSection, IDkgPoolSectionOp,
-        IDkgPoolSectionOps, MutableIDkgPoolSection,
-    },
-    time_source::TimeSource,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -380,11 +377,7 @@ impl IDkgPoolImpl {
     }
 
     // Populates the unvalidated pool with the initial dealings from the CUP.
-    pub fn add_initial_dealings(
-        &mut self,
-        catch_up_package: &CatchUpPackage,
-        time_source: &dyn TimeSource,
-    ) {
+    pub fn add_initial_dealings(&mut self, catch_up_package: &CatchUpPackage) {
         let block = catch_up_package.content.block.get_value();
 
         let mut initial_dealings = Vec::new();
@@ -413,7 +406,7 @@ impl IDkgPoolImpl {
             self.insert(UnvalidatedArtifact {
                 message: IDkgMessage::Dealing(signed_dealing.clone()),
                 peer_id: signed_dealing.dealer_id(),
-                timestamp: time_source.get_relative_time(),
+                timestamp: block.context.time,
             })
         }
     }

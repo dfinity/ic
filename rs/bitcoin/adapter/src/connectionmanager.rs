@@ -4,11 +4,12 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use bitcoin::network::{
-    constants::ServiceFlags,
+use bitcoin::p2p::ServiceFlags;
+
+use bitcoin::p2p::{
     message::{CommandString, NetworkMessage},
     message_network::VersionMessage,
-    Address,
+    Address, Magic,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use rand::prelude::*;
@@ -81,7 +82,7 @@ pub struct ConnectionManager {
     logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
-    magic: u32,
+    magic: Magic,
     /// This field contains the number of connections the connection manager can manage at one time.
     max_connections: usize,
     /// This field contains the number of connections the connection manager must have in order to send messages.
@@ -393,6 +394,10 @@ impl ConnectionManager {
         addr: &SocketAddr,
         network_message: NetworkMessage,
     ) -> ConnectionManagerResult<()> {
+        self.metrics
+            .bitcoin_messages_sent
+            .with_label_values(&[network_message.cmd()])
+            .inc();
         let conn = self.get_connection(addr)?;
         if conn.send(network_message).is_err() {
             conn.disconnect();
@@ -585,10 +590,6 @@ impl ConnectionManager {
 
 impl Channel for ConnectionManager {
     fn send(&mut self, command: Command) -> Result<(), ChannelError> {
-        self.metrics
-            .bitcoin_messages_sent
-            .with_label_values(&[command.message.cmd()])
-            .inc();
         let Command { address, message } = command;
         if let Some(addr) = address {
             self.send_to(&addr, message).ok();
@@ -693,7 +694,8 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::{network::constants::ServiceFlags, Network};
+    use bitcoin::p2p::ServiceFlags;
+    use bitcoin::Network;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;

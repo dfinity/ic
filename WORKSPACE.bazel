@@ -4,6 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
+load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
@@ -26,9 +27,17 @@ canisters(
         "sns-wasm": "sns-wasm-canister.wasm.gz",
         "ck_btc_archive": "ic-icrc1-archive.wasm.gz",
         "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v1": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v2": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v2_noledgerversion": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v3": "ic-icrc1-ledger.wasm.gz",
         "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
         "ck_eth_archive": "ic-icrc1-archive-u256.wasm.gz",
         "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v1": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v2": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v2_noledgerversion": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v3": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "sns_root": "sns-root-canister.wasm.gz",
         "sns_governance": "sns-governance-canister.wasm.gz",
@@ -37,8 +46,9 @@ canisters(
         "sns_ledger_v2": "ic-icrc1-ledger.wasm.gz",
         "sns_archive": "ic-icrc1-archive.wasm.gz",
         "sns_index": "ic-icrc1-index-ng.wasm.gz",
+        "node-rewards": "node-rewards-canister.wasm.gz",
     },
-    path = "//:mainnet-canisters.json",
+    path = "//:mainnet-canister-revisions.json",
     reponames = {
         "registry": "mainnet_nns_registry_canister",
         "governance": "mainnet_nns_governance_canister",
@@ -52,9 +62,17 @@ canisters(
         "sns-wasm": "mainnet_nns_sns-wasm-canister",
         "ck_btc_archive": "mainnet_ckbtc_ic-icrc1-archive",
         "ck_btc_ledger": "mainnet_ckbtc_ic-icrc1-ledger",
+        "ck_btc_ledger_v1": "mainnet_ckbtc_ic-icrc1-ledger-v1",
+        "ck_btc_ledger_v2": "mainnet_ckbtc_ic-icrc1-ledger-v2",
+        "ck_btc_ledger_v2_noledgerversion": "mainnet_ckbtc_ic-icrc1-ledger-v2-noledgerversion",
+        "ck_btc_ledger_v3": "mainnet_ckbtc_ic-icrc1-ledger-v3",
         "ck_btc_index": "mainnet_ckbtc-index-ng",
         "ck_eth_archive": "mainnet_cketh_ic-icrc1-archive-u256",
         "ck_eth_ledger": "mainnet_cketh_ic-icrc1-ledger-u256",
+        "ck_eth_ledger_v1": "mainnet_cketh_ic-icrc1-ledger-u256-v1",
+        "ck_eth_ledger_v2": "mainnet_cketh_ic-icrc1-ledger-u256-v2",
+        "ck_eth_ledger_v2_noledgerversion": "mainnet_cketh_ic-icrc1-ledger-u256-v2-noledgerversion",
+        "ck_eth_ledger_v3": "mainnet_cketh_ic-icrc1-ledger-u256-v3",
         "ck_eth_index": "mainnet_cketh-index-ng",
         "sns_root": "mainnet_sns-root-canister",
         "sns_governance": "mainnet_sns-governance-canister",
@@ -63,6 +81,7 @@ canisters(
         "sns_ledger_v2": "mainnet_ic-icrc1-ledger-v2",
         "sns_archive": "mainnet_ic-icrc1-archive",
         "sns_index": "mainnet_ic-icrc1-index-ng",
+        "node-rewards": "mainnet_node-rewards-canister",
     },
 )
 
@@ -88,11 +107,8 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    # Back-ported fix: https://github.com/bazelbuild/rules_rust/pull/2981
-    patch_args = ["-p1"],
-    patches = ["//bazel:rules_rust.patch"],
-    sha256 = "85e2013727ab26fb22abdffe4b2ac0c27a2d5b6296167ba63d8f6e13140f51f9",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.53.0/rules_rust-v0.53.0.tar.gz"],
+    integrity = "sha256-8TBqrAsli3kN8BrZq8arsN8LZUFsdLTvJ/Sqsph4CmQ=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.56.0/rules_rust-0.56.0.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
@@ -107,12 +123,12 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.82.0",
+        "1.84.0",
         # Use the nightly version from the day before the branch.
         # -
         # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
         # only back-ported to stable, we use a more recent version.
-        "nightly/2024-09-23",
+        "nightly/2024-11-21",
     ],
 )
 
@@ -248,6 +264,4 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 
 idl_to_json(name = "idl2json")
 
-load("//bazel:jq.bzl", "jq_repository")
-
-jq_repository(name = "jq")
+mainnet_icos_images()

@@ -1,5 +1,0 @@
-from_latest_tag = false
-ignore_merge_commits = true
-
-[commit_types]
-draft = { changelog_title = "Draft" }

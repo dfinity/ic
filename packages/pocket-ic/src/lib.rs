@@ -1,48 +1,62 @@
 #![allow(clippy::test_attr_in_doctest)]
-//! # PocketIC: A Canister Testing Platform
-//!
-//! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
-//!
-//! It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
-//!
-//! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
-//!
-//! ```rust
-//! use candid::{Principal, encode_one};
-//! use pocket_ic::{WasmResult, PocketIc};
-//!
-//!  #[test]
-//!  fn test_counter_canister() {
-//!     let pic = PocketIc::new();
-//!     // Create an empty canister as the anonymous principal and add cycles.
-//!     let canister_id = pic.create_canister();
-//!     pic.add_cycles(canister_id, 2_000_000_000_000);
-//!  
-//!     let wasm_bytes = todo!();
-//!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
-//!     // 'inc' is a counter canister method.
-//!     call_counter_canister(&pic, canister_id, "inc");
-//!     // Check if it had the desired effect.
-//!     let reply = call_counter_canister(&pic, canister_id, "read");
-//!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
-//!  }
-//!
-//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
-//!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
-//!         .expect("Failed to call counter canister")
-//! }
-//! ```
-//! For more information, see the [README](https://crates.io/crates/pocket-ic).
-//!
+/// # PocketIC: A Canister Testing Platform
+///
+/// PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
+///
+/// It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
+///
+/// With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
+///
+/// ```rust
+/// use candid::{Principal, encode_one};
+/// use pocket_ic::PocketIc;
+///
+/// // 2T cycles
+/// const INIT_CYCLES: u128 = 2_000_000_000_000;
+///
+/// // Create a counter canister and charge it with 2T cycles.
+/// fn deploy_counter_canister(pic: &PocketIc) -> Principal {
+///     let canister_id = pic.create_canister();
+///     pic.add_cycles(canister_id, INIT_CYCLES);
+///     let counter_wasm = todo!();
+///     pic.install_canister(canister_id, counter_wasm, vec![], None);
+///     canister_id
+/// }
+///
+/// // Call a method on the counter canister as the anonymous principal.
+/// fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> Vec<u8> {
+///     pic.update_call(
+///         canister_id,
+///         Principal::anonymous(),
+///         method,
+///         encode_one(()).unwrap(),
+///     )
+///     .expect("Failed to call counter canister")
+/// }
+///
+/// #[test]
+/// fn test_counter_canister() {
+///     let pic = PocketIc::new();
+///     let canister_id = deploy_counter_canister(&pic);
+///
+///     // Make some calls to the counter canister.
+///     let reply = call_counter_canister(&pic, canister_id, "read");
+///     assert_eq!(reply, vec![0, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "write");
+///     assert_eq!(reply, vec![1, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "write");
+///     assert_eq!(reply, vec![2, 0, 0, 0]);
+///     let reply = call_counter_canister(&pic, canister_id, "read");
+///     assert_eq!(reply, vec![2, 0, 0, 0]);
+/// }
+/// ```
+/// For more information, see the [README](https://crates.io/crates/pocket-ic).
+///
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
         InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
         SubnetKind, SubnetSpec, Topology,
-    },
-    management_canister::{
-        CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
-        Snapshot,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -51,14 +65,22 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
+use flate2::read::GzDecoder;
+use ic_management_canister_types::{
+    CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
+    Snapshot,
+};
 use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
-    net::SocketAddr,
-    path::{Path, PathBuf},
+    fs::OpenOptions,
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
     process::Command,
     sync::{mpsc::channel, Arc},
     thread,
@@ -66,6 +88,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use strum_macros::EnumIter;
+use tempfile::TempDir;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
@@ -73,21 +96,67 @@ use tracing::{instrument, warn};
 use wslpath::windows_to_wsl;
 
 pub mod common;
-pub mod management_canister;
 pub mod nonblocking;
 
-const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 7.0.0";
+pub const EXPECTED_SERVER_VERSION: &str = "8.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
 const LOCALHOST: &str = "127.0.0.1";
 
+enum PocketIcStateKind {
+    /// A persistent state dir managed by the user.
+    StateDir(PathBuf),
+    /// A fresh temporary directory used if the user does not provide
+    /// a persistent state directory managed by the user.
+    /// The temporary directory is deleted when `PocketIcState` is dropped
+    /// unless `PocketIcState` is turned into a persistent state
+    /// at the path given by `PocketIcState::into_path`.
+    TempDir(TempDir),
+}
+
+pub struct PocketIcState {
+    state: PocketIcStateKind,
+}
+
+impl PocketIcState {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let temp_dir = TempDir::new().unwrap();
+        Self {
+            state: PocketIcStateKind::TempDir(temp_dir),
+        }
+    }
+
+    pub fn new_from_path(state_dir: PathBuf) -> Self {
+        Self {
+            state: PocketIcStateKind::StateDir(state_dir),
+        }
+    }
+
+    pub fn into_path(self) -> PathBuf {
+        match self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir,
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.into_path(),
+        }
+    }
+
+    pub(crate) fn state_dir(&self) -> PathBuf {
+        match &self.state {
+            PocketIcStateKind::StateDir(state_dir) => state_dir.clone(),
+            PocketIcStateKind::TempDir(temp_dir) => temp_dir.path().to_path_buf(),
+        }
+    }
+}
+
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
+    server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
-    state_dir: Option<PathBuf>,
+    read_only_state_dir: Option<PathBuf>,
+    state_dir: Option<PocketIcState>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -98,8 +167,10 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: None,
+            server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            read_only_state_dir: None,
             state_dir: None,
             nonmainnet_features: false,
             log_level: None,
@@ -114,11 +185,12 @@ impl PocketIcBuilder {
     }
 
     pub fn build(self) -> PocketIc {
-        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIc::from_components(
             self.config.unwrap_or_default(),
-            server_url,
+            self.server_url,
+            self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
@@ -127,17 +199,24 @@ impl PocketIcBuilder {
     }
 
     pub async fn build_async(self) -> PocketIcAsync {
-        let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIcAsync::from_components(
             self.config.unwrap_or_default(),
-            server_url,
+            self.server_url,
+            self.server_binary,
             self.max_request_time_ms,
+            self.read_only_state_dir,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
             self.bitcoind_addr,
         )
         .await
+    }
+
+    /// Provide the path to the PocketIC server binary used instead of the environment variable `POCKET_IC_BIN`.
+    pub fn with_server_binary(mut self, server_binary: PathBuf) -> Self {
+        self.server_binary = Some(server_binary);
+        self
     }
 
     /// Use an already running PocketIC server.
@@ -152,7 +231,17 @@ impl PocketIcBuilder {
     }
 
     pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+        self.state_dir = Some(PocketIcState::new_from_path(state_dir));
+        self
+    }
+
+    pub fn with_state(mut self, state_dir: PocketIcState) -> Self {
         self.state_dir = Some(state_dir);
+        self
+    }
+
+    pub fn with_read_only_state(mut self, read_only_state_dir: &PocketIcState) -> Self {
+        self.read_only_state_dir = Some(read_only_state_dir.state_dir());
         self
     }
 
@@ -177,56 +266,21 @@ impl PocketIcBuilder {
         }
     }
 
-    /// Add an empty NNS subnet
+    /// Add an empty NNS subnet unless an NNS subnet has already been added.
     pub fn with_nns_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.nns = Some(SubnetSpec::default());
+        config.nns = Some(config.nns.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an NNS subnet loaded form the given state directory. Note that the provided path must
-    /// be accessible for the PocketIC server process.
-    ///
-    /// `path_to_nns_state` should lead to the `ic_state` directory which is expected to have
-    /// the following structure:
-    ///
-    /// ic_state/
-    ///  |-- backups
-    ///  |-- checkpoints
-    ///  |-- diverged_checkpoints
-    ///  |-- diverged_state_markers
-    ///  |-- fs_tmp
-    ///  |-- page_deltas
-    ///  |-- states_metadata.pbuf
-    ///  |-- tip
-    ///  `-- tmp
-    ///
-    /// `nns_subnet_id` should be the subnet ID of the NNS subnet in the state under
-    /// `path_to_state`, e.g.:
-    /// ```rust
-    /// use pocket_ic::common::rest::SubnetId;
-    ///
-    /// let nns_subnet_id: SubnetId = candid::Principal::from_text(
-    ///     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-    /// ).unwrap().into();
-    /// ```
-    ///
-    /// The value can be obtained, e.g., via the following command:
-    /// ```sh
-    /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
-    /// ```
-    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
-        self.with_subnet_state(SubnetKind::NNS, nns_subnet_id, path_to_state)
-    }
-
-    /// Add a subnet with state loaded form the given state directory.
+    /// Add an NNS subnet with state loaded from the given state directory.
     /// Note that the provided path must be accessible for the PocketIC server process.
     ///
-    /// `state_dir` should point to a directory which is expected to have
+    /// `path_to_state` should lead to a directory which is expected to have
     /// the following structure:
     ///
-    /// state_dir/
+    /// path_to_state/
     ///  |-- backups
     ///  |-- checkpoints
     ///  |-- diverged_checkpoints
@@ -236,16 +290,29 @@ impl PocketIcBuilder {
     ///  |-- states_metadata.pbuf
     ///  |-- tip
     ///  `-- tmp
+    pub fn with_nns_state(self, path_to_state: PathBuf) -> Self {
+        self.with_subnet_state(SubnetKind::NNS, path_to_state)
+    }
+
+    /// Add a subnet with state loaded from the given state directory.
+    /// Note that the provided path must be accessible for the PocketIC server process.
     ///
-    /// `subnet_id` should be the subnet ID of the subnet in the state to be loaded
-    pub fn with_subnet_state(
-        mut self,
-        subnet_kind: SubnetKind,
-        subnet_id: Principal,
-        state_dir: PathBuf,
-    ) -> Self {
+    /// `path_to_state` should point to a directory which is expected to have
+    /// the following structure:
+    ///
+    /// path_to_state/
+    ///  |-- backups
+    ///  |-- checkpoints
+    ///  |-- diverged_checkpoints
+    ///  |-- diverged_state_markers
+    ///  |-- fs_tmp
+    ///  |-- page_deltas
+    ///  |-- states_metadata.pbuf
+    ///  |-- tip
+    ///  `-- tmp
+    pub fn with_subnet_state(mut self, subnet_kind: SubnetKind, path_to_state: PathBuf) -> Self {
         let mut config = self.config.unwrap_or_default();
-        let subnet_spec = SubnetSpec::default().with_state_dir(state_dir, subnet_id);
+        let subnet_spec = SubnetSpec::default().with_state_dir(path_to_state);
         match subnet_kind {
             SubnetKind::NNS => config.nns = Some(subnet_spec),
             SubnetKind::SNS => config.sns = Some(subnet_spec),
@@ -260,39 +327,39 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Add an empty sns subnet
+    /// Add an empty sns subnet unless an SNS subnet has already been added.
     pub fn with_sns_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.sns = Some(SubnetSpec::default());
+        config.sns = Some(config.sns.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty internet identity subnet
+    /// Add an empty II subnet unless an II subnet has already been added.
     pub fn with_ii_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.ii = Some(SubnetSpec::default());
+        config.ii = Some(config.ii.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty fiduciary subnet
+    /// Add an empty fiduciary subnet unless a fiduciary subnet has already been added.
     pub fn with_fiduciary_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.fiduciary = Some(SubnetSpec::default());
+        config.fiduciary = Some(config.fiduciary.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty bitcoin subnet
+    /// Add an empty bitcoin subnet unless a bitcoin subnet has already been added.
     pub fn with_bitcoin_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.bitcoin = Some(SubnetSpec::default());
+        config.bitcoin = Some(config.bitcoin.unwrap_or_default());
         self.config = Some(config);
         self
     }
 
-    /// Add an empty generic system subnet
+    /// Add an empty generic system subnet.
     pub fn with_system_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.system.push(SubnetSpec::default());
@@ -300,7 +367,7 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Add an empty generic application subnet
+    /// Add an empty generic application subnet.
     pub fn with_application_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.application.push(SubnetSpec::default());
@@ -308,7 +375,7 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Add an empty verified application subnet
+    /// Add an empty generic verified application subnet.
     pub fn with_verified_application_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.verified_application.push(SubnetSpec::default());
@@ -316,6 +383,7 @@ impl PocketIcBuilder {
         self
     }
 
+    /// Add an empty generic application subnet with benchmarking instruction configuration.
     pub fn with_benchmarking_application_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config
@@ -325,6 +393,7 @@ impl PocketIcBuilder {
         self
     }
 
+    /// Add an empty generic system subnet with benchmarking instruction configuration.
     pub fn with_benchmarking_system_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config
@@ -380,9 +449,11 @@ impl PocketIc {
 
     pub(crate) fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
+        server_url: Option<Url>,
+        server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PathBuf>,
+        read_only_state_dir: Option<PathBuf>,
+        state_dir: Option<PocketIcState>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -401,7 +472,9 @@ impl PocketIc {
             PocketIcAsync::from_components(
                 subnet_config_set,
                 server_url,
+                server_binary,
                 max_request_time_ms,
+                read_only_state_dir,
                 state_dir,
                 nonmainnet_features,
                 log_level,
@@ -415,6 +488,10 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    pub fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.pocket_ic.take_state_internal()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
@@ -467,7 +544,11 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub fn list_instances() -> Vec<String> {
-        let url = crate::start_or_reuse_server().join("instances").unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let url = runtime
+            .block_on(async { start_or_reuse_server(None).await.join("instances").unwrap() });
         let instances: Vec<String> = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -504,6 +585,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.tick().await })
     }
 
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn tick_with_configs(&self, configs: crate::common::rest::TickConfigs) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.tick_with_configs(configs).await })
+    }
+
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
@@ -513,6 +602,13 @@ impl PocketIc {
     pub fn auto_progress(&self) -> Url {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.auto_progress().await })
+    }
+
+    /// Returns whether automatic progress is enabled on the PocketIC instance.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn auto_progress_enabled(&self) -> bool {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.auto_progress_enabled().await })
     }
 
     /// Stops automatic progress (see `auto_progress`) on the IC.
@@ -529,12 +625,13 @@ impl PocketIc {
         self.pocket_ic.url()
     }
 
-    /// Creates an HTTP gateway for this IC instance
-    /// listening on an optionally specified port
-    /// and configures the IC instance to make progress
-    /// automatically, i.e., periodically update the time
-    /// of the IC to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// Creates an HTTP gateway for this PocketIC instance binding to `127.0.0.1`
+    /// and an optionally specified port (defaults to choosing an arbitrary unassigned port);
+    /// listening on `localhost`;
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api/v2` and `/api/v3` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
@@ -542,17 +639,20 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
     }
 
-    /// Creates an HTTP gateway for this PocketIC instance listening
-    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
-    /// and optionally specified domains (default to `localhost`)
+    /// Creates an HTTP gateway for this PocketIC instance binding
+    /// to an optionally specified IP address (defaults to `127.0.0.1`)
+    /// and port (defaults to choosing an arbitrary unassigned port);
+    /// listening on optionally specified domains (default to `localhost`);
     /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
     /// and configures the PocketIC instance to make progress automatically, i.e.,
-    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api/v2` and `/api/v3` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub async fn make_live_with_params(
         &mut self,
+        ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
@@ -560,7 +660,7 @@ impl PocketIc {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
-                .make_live_with_params(listen_at, domains, https_config)
+                .make_live_with_params(ip_addr, listen_at, domains, https_config)
                 .await
         })
     }
@@ -601,6 +701,13 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.set_time(time).await })
     }
 
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, time = ?time))]
+    pub fn set_certified_time(&self, time: SystemTime) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.set_certified_time(time).await })
+    }
+
     /// Advance the time on the IC on all subnets by some nanoseconds.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, duration = ?duration))]
     pub fn advance_time(&self, duration: Duration) {
@@ -637,7 +744,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -654,7 +761,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -670,26 +777,39 @@ impl PocketIc {
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+    pub fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
     }
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
-    /// or a round has been executed due to a separate PocketIC library call.
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
     pub fn ingress_status(
         &self,
         message_id: RawMessageId,
-    ) -> Option<Result<WasmResult, UserError>> {
+    ) -> Option<Result<Vec<u8>, RejectResponse>> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
     }
 
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    /// If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+    pub fn ingress_status_as(
+        &self,
+        message_id: RawMessageId,
+        caller: Principal,
+    ) -> IngressStatusResult {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status_as(message_id, caller).await })
+    }
+
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
-    /// or if rounds are executed due to separate PocketIC library calls.
-    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
     }
@@ -702,7 +822,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -719,7 +839,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -733,7 +853,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Principal,
-    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+    ) -> Result<Vec<CanisterLogRecord>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -748,7 +868,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<CanisterStatusResult, CallError> {
+    ) -> Result<CanisterStatusResult, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.canister_status(canister_id, sender).await })
     }
@@ -821,7 +941,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         chunk: Vec<u8>,
-    ) -> Result<Vec<u8>, CallError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -836,7 +956,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Vec<u8>>, CallError> {
+    ) -> Result<Vec<Vec<u8>>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stored_chunks(canister_id, sender).await })
     }
@@ -847,7 +967,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.clear_chunk_store(canister_id, sender).await })
     }
@@ -863,7 +983,7 @@ impl PocketIc {
         chunk_hashes_list: Vec<Vec<u8>>,
         wasm_module_hash: Vec<u8>,
         arg: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -905,7 +1025,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -922,7 +1042,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -937,7 +1057,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
     }
@@ -949,7 +1069,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         replace_snapshot: Option<Vec<u8>>,
-    ) -> Result<Snapshot, CallError> {
+    ) -> Result<Snapshot, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -965,7 +1085,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -980,7 +1100,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Snapshot>, CallError> {
+    ) -> Result<Vec<Snapshot>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -996,7 +1116,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1012,7 +1132,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         settings: CanisterSettings,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1028,7 +1148,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         new_controllers: Vec<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1043,7 +1163,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.start_canister(canister_id, sender).await })
     }
@@ -1054,7 +1174,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stop_canister(canister_id, sender).await })
     }
@@ -1065,7 +1185,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.delete_canister(canister_id, sender).await })
     }
@@ -1091,14 +1211,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
     }
 
-    fn update_call_with_effective_principal(
+    pub fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1124,7 +1244,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
@@ -1198,7 +1318,7 @@ pub fn call_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1222,7 +1342,7 @@ pub fn call_candid<Input, Output>(
     effective_principal: RawEffectivePrincipal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1243,7 +1363,7 @@ pub fn query_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1259,7 +1379,7 @@ pub fn query_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1275,7 +1395,7 @@ pub fn update_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1291,7 +1411,7 @@ pub fn update_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1305,15 +1425,15 @@ where
 /// [`query_candid`].
 pub fn with_candid<Input, Output>(
     input: Input,
-    f: impl FnOnce(Vec<u8>) -> Result<WasmResult, UserError>,
-) -> Result<Output, CallError>
+    f: impl FnOnce(Vec<u8>) -> Result<Vec<u8>, RejectResponse>,
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
 {
     let in_bytes = encode_args(input).expect("failed to encode args");
-    match f(in_bytes) {
-        Ok(WasmResult::Reply(out_bytes)) => Ok(decode_args(&out_bytes).unwrap_or_else(|e| {
+    f(in_bytes).map(|out_bytes| {
+        decode_args(&out_bytes).unwrap_or_else(|e| {
             panic!(
                 "Failed to decode response as candid type {}:\nerror: {}\nbytes: {:?}\nutf8: {}",
                 std::any::type_name::<Output>(),
@@ -1321,10 +1441,8 @@ where
                 out_bytes,
                 String::from_utf8_lossy(&out_bytes),
             )
-        })),
-        Ok(WasmResult::Reject(message)) => Err(CallError::Reject(message)),
-        Err(user_error) => Err(CallError::UserError(user_error)),
-    }
+        })
+    })
 }
 
 /// Error type for [`TryFrom<u64>`].
@@ -1498,48 +1616,81 @@ impl std::fmt::Display for ErrorCode {
     }
 }
 
-/// The error that is sent back to users from the IC if something goes
-/// wrong. It's designed to be copyable and serializable so that we
-/// can persist it in the ingress history.
+/// User-facing reject codes.
+///
+/// They can be derived from the most significant digit of the
+/// corresponding error code.
 #[derive(
-    PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    EnumIter,
 )]
-pub struct UserError {
-    /// The error code.
-    pub code: ErrorCode,
-    /// A human-readable description of the error.
-    pub description: String,
+pub enum RejectCode {
+    SysFatal = 1,
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    CanisterError = 5,
+    SysUnknown = 6,
 }
 
-impl std::fmt::Display for UserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // E.g. "IC0301: Canister 42 not found"
-        write!(f, "{}: {}", self.code, self.description)
+impl TryFrom<u64> for RejectCode {
+    type Error = TryFromError;
+    fn try_from(err: u64) -> Result<RejectCode, Self::Error> {
+        match err {
+            1 => Ok(RejectCode::SysFatal),
+            2 => Ok(RejectCode::SysTransient),
+            3 => Ok(RejectCode::DestinationInvalid),
+            4 => Ok(RejectCode::CanisterReject),
+            5 => Ok(RejectCode::CanisterError),
+            6 => Ok(RejectCode::SysUnknown),
+            _ => Err(TryFromError::ValueOutOfRange(err)),
+        }
     }
 }
 
-/// This enum describes the different error types when invoking a canister.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum CallError {
-    Reject(String),
-    UserError(UserError),
+/// User-facing type describing an unsuccessful (also called reject) call response.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+pub struct RejectResponse {
+    pub reject_code: RejectCode,
+    pub reject_message: String,
+    pub error_code: ErrorCode,
+    pub certified: bool,
 }
 
-/// This struct describes the different types that executing a WASM function in
-/// a canister can produce.
-#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum WasmResult {
-    /// Raw response, returned in a successful case.
-    Reply(#[serde(with = "serde_bytes")] Vec<u8>),
-    /// Returned with an error message when the canister decides to reject the
-    /// message.
-    Reject(String),
+impl std::fmt::Display for RejectResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Follows [agent-rs](https://github.com/dfinity/agent-rs/blob/a651dbbe69e61d4e8508c144cd60cfa3118eeb3a/ic-agent/src/agent/agent_error.rs#L54)
+        write!(f, "PocketIC returned a rejection error: reject code {:?}, reject message {}, error code {:?}", self.reject_code, self.reject_message, self.error_code)
+    }
+}
+
+/// This enum describes the result of retrieving ingress status.
+/// The `IngressStatusResult::Forbidden` variant is produced
+/// if an optional caller is provided and a corresponding read state request
+/// for the status of the same update call signed by that specified caller
+/// was rejected because the update call was submitted by a different caller.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum IngressStatusResult {
+    NotAvailable,
+    Forbidden(String),
+    Success(Result<Vec<u8>, RejectResponse>),
 }
 
 #[cfg(windows)]
-fn wsl_path(path: &std::ffi::OsStr, desc: &str) -> String {
+fn wsl_path(path: &PathBuf, desc: &str) -> String {
     windows_to_wsl(
-        path.to_str()
+        path.as_os_str()
+            .to_str()
             .unwrap_or_else(|| panic!("Could not convert {} path ({:?}) to String", desc, path)),
     )
     .unwrap_or_else(|e| {
@@ -1551,58 +1702,98 @@ fn wsl_path(path: &std::ffi::OsStr, desc: &str) -> String {
 }
 
 #[cfg(windows)]
-fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
     let mut cmd = Command::new("wsl");
     cmd.arg(wsl_path(bin_path, "PocketIC binary"));
     cmd
 }
 
 #[cfg(not(windows))]
-fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
     Command::new(bin_path)
 }
 
-/// Attempt to start a new PocketIC server if it's not already running.
-pub fn start_or_reuse_server() -> Url {
-    let bin_path: std::ffi::OsString =
-        std::env::var_os("POCKET_IC_BIN").unwrap_or("./pocket-ic".into());
-
-    if !Path::new(&bin_path).is_file() {
-        let is_dir = if Path::new(&bin_path).is_dir() {
-            " (this is a directory, but it should be a binary file)"
-        } else {
-            ""
-        };
-        panic!("
-Could not find the PocketIC binary.
-
-The PocketIC binary could not be found at {:?}{}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
-or place it in your current working directory (you are running PocketIC from {:?}).
-
-To download the binary, please visit https://github.com/dfinity/pocketic."
-, &bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
-    }
-
-    // check PocketIC server version compatibility
-    let mut cmd = pocket_ic_server_cmd(&bin_path);
+fn check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> {
+    let mut cmd = pocket_ic_server_cmd(server_binary);
     cmd.arg("--version");
-    let version = cmd
-        .output()
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to get version of PocketIC binary ({:?}): {}",
-                bin_path, e
-            )
-        })
-        .stdout;
+    let version = cmd.output().map_err(|e| e.to_string())?.stdout;
     let version_str = String::from_utf8(version)
-        .unwrap_or_else(|e| panic!("Failed to parse PocketIC binary version string: {}", e));
+        .map_err(|e| format!("Failed to parse PocketIC server version: {}.", e))?;
     let version_line = version_str.trim_end_matches('\n');
-    if version_line != EXPECTED_SERVER_VERSION {
-        panic!(
+    let expected_version_line = format!("pocket-ic-server {}", EXPECTED_SERVER_VERSION);
+    if version_line != expected_version_line {
+        return Err(format!(
             "Incompatible PocketIC server version: got {}; expected {}.",
-            version_line, EXPECTED_SERVER_VERSION
-        );
+            version_line, expected_version_line
+        ));
+    }
+    Ok(())
+}
+
+async fn download_pocketic_server(
+    server_url: String,
+    mut out: std::fs::File,
+) -> Result<(), String> {
+    let binary = reqwest::get(server_url)
+        .await
+        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .to_vec();
+    let mut gz = GzDecoder::new(&binary[..]);
+    let _ = std::io::copy(&mut gz, &mut out)
+        .map_err(|e| format!("Failed to write PocketIC server binary: {}", e));
+    Ok(())
+}
+
+/// Attempt to start a new PocketIC server if it's not already running.
+pub(crate) async fn start_or_reuse_server(server_binary: Option<PathBuf>) -> Url {
+    let default_bin_dir =
+        std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
+    let default_bin_path = default_bin_dir.join("pocket-ic");
+    let mut bin_path: PathBuf = server_binary.unwrap_or_else(|| {
+        std::env::var_os("POCKET_IC_BIN")
+            .unwrap_or_else(|| default_bin_path.clone().into())
+            .into()
+    });
+
+    if let Err(e) = check_pocketic_server_version(&bin_path) {
+        bin_path = default_bin_path.clone();
+        std::fs::create_dir_all(&default_bin_dir)
+            .expect("Failed to create PocketIC server directory");
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o777);
+        if let Ok(out) = options.open(&default_bin_path) {
+            #[cfg(target_os = "macos")]
+            let os = "darwin";
+            #[cfg(not(target_os = "macos"))]
+            let os = "linux";
+            let server_url = format!(
+                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-x86_64-{}.gz",
+                EXPECTED_SERVER_VERSION, os
+            );
+            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
+            if let Err(e) = download_pocketic_server(server_url, out).await {
+                let _ = std::fs::remove_file(default_bin_path);
+                panic!("{}", e);
+            }
+        } else {
+            // PocketIC server has already been created: wait until it's fully downloaded.
+            let start = std::time::Instant::now();
+            loop {
+                if check_pocketic_server_version(&default_bin_path).is_ok() {
+                    break;
+                }
+                if start.elapsed() > std::time::Duration::from_secs(60) {
+                    let _ = std::fs::remove_file(&default_bin_path);
+                    panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
     }
 
     // We use the test driver's process ID to share the PocketIC server between multiple tests
@@ -1612,10 +1803,7 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     let mut cmd = pocket_ic_server_cmd(&bin_path);
     cmd.arg("--port-file");
     #[cfg(windows)]
-    cmd.arg(wsl_path(
-        port_file_path.as_path().as_os_str(),
-        "PocketIC port file",
-    ));
+    cmd.arg(wsl_path(&port_file_path, "PocketIC port file"));
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
     if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
@@ -1624,8 +1812,19 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             cmd.stderr(std::process::Stdio::null());
         }
     }
+
+    // Start the server in the background so that it doesn't receive signals such as CTRL^C
+    // from the foreground terminal.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    // TODO: SDK-1936
+    #[allow(clippy::zombie_processes)]
     cmd.spawn()
-        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
+        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
 
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
@@ -1676,10 +1875,36 @@ pub fn get_default_effective_canister_id(
     ))
 }
 
+pub fn copy_dir(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
-    use crate::ErrorCode;
+    use crate::{ErrorCode, RejectCode};
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn reject_code_round_trip() {
+        for initial in RejectCode::iter() {
+            let round_trip = RejectCode::try_from(initial as u64).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
 
     #[test]
     fn error_code_round_trip() {
@@ -1687,6 +1912,21 @@ mod test {
             let round_trip = ErrorCode::try_from(initial as u64).unwrap();
 
             assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn reject_code_matches_ic_error_code() {
+        assert_eq!(
+            RejectCode::iter().len(),
+            ic_error_types::RejectCode::iter().len()
+        );
+        for ic_reject_code in ic_error_types::RejectCode::iter() {
+            let reject_code: RejectCode = (ic_reject_code as u64).try_into().unwrap();
+            assert_eq!(
+                format!("{:?}", reject_code),
+                format!("{:?}", ic_reject_code)
+            );
         }
     }
 

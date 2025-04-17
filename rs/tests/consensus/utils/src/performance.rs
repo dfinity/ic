@@ -2,7 +2,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
+use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
+use ic_system_test_driver::driver::test_env_api::{get_dependency_path, IcNodeSnapshot};
+use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
@@ -77,6 +80,9 @@ pub fn test_with_rt_handle(
         );
     }
     info!(log, "{} canisters installed successfully.", canisters.len());
+
+    info!(log, "Sleeping for 60 seconds");
+    std::thread::sleep(Duration::from_secs(60));
 
     info!(log, "Step 2: Instantiate and start the workload..");
     let payload: Vec<u8> = vec![0; message_size];
@@ -212,12 +218,12 @@ impl std::fmt::Display for TestMetrics {
         )?;
         writeln!(
             f,
-            "Average time to receive a rank 0 block: {:.1}s",
+            "Average time to receive a rank 0 block: {:.2}s",
             self.average_time_to_receive_block
         )?;
         write!(
             f,
-            "Avarage E2E ingress message latency: {:.1}s",
+            "Avarage E2E ingress message latency: {:.2}s",
             self.average_e2e_latency
         )
     }
@@ -338,6 +344,9 @@ pub async fn persist_metrics(
     metrics: TestMetrics,
     message_size: usize,
     rps: f64,
+    latency: Duration,
+    bandwidth_bits_per_seconds: u32,
+    subnet_size: usize,
     log: &Logger,
 ) {
     // elastic search url
@@ -355,6 +364,9 @@ pub async fn persist_metrics(
             "benchmark_settings": {
                 "message_size": message_size,
                 "rps": rps,
+                "latency_seconds": latency.as_secs_f64(),
+                "bandwith_bits_per_second": bandwidth_bits_per_seconds,
+                "subnet_size": subnet_size,
             },
             "benchmark_results": {
                 "success_rate": metrics.success_rate,
@@ -415,4 +427,31 @@ fn average_f64(nums: &[f64]) -> f64 {
     assert!(!nums.is_empty());
 
     nums.iter().sum::<f64>() / (nums.len() as f64)
+}
+
+pub fn setup_jaeger_vm(env: &TestEnv) -> std::net::Ipv6Addr {
+    const JAEGER_VM_NAME: &str = "jaeger-vm";
+
+    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    UniversalVm::new(JAEGER_VM_NAME.to_string())
+        .with_required_host_features(vec![HostFeature::Performance])
+        .with_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(1024)),
+        })
+        .with_config_img(path)
+        .start(env)
+        .expect("failed to setup Jaeger Universal VM");
+
+    let deployed_jaeger_vm = env.get_deployed_universal_vm(JAEGER_VM_NAME).unwrap();
+    let jaeger_vm = deployed_jaeger_vm.get_vm().unwrap();
+    let jaeger_ipv6 = jaeger_vm.ipv6;
+
+    info!(
+        env.logger(),
+        "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
+    );
+
+    jaeger_ipv6
 }

@@ -1,16 +1,22 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::host::hsm::{attach_hsm, detach_hsm};
 use crate::protocol::{Command, HostOSVsockVersion, NotifyData, Payload, Response, UpgradeData};
-use sha2::Digest;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use ic_http_utils::file_downloader::FileDownloader;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
+use std::time::Duration;
+use tokio::runtime::Runtime;
 
 pub fn dispatch(command: &Command) -> Response {
     use Command::*;
     match command {
         AttachHSM => attach_hsm(),
         DetachHSM => detach_hsm(),
-        Upgrade(upgrade_data) => upgrade_hostos(upgrade_data),
+        Upgrade(upgrade_data) => {
+            let rt = Runtime::new().map_err(|e| e.to_string())?;
+            rt.block_on(upgrade_hostos(upgrade_data))
+        }
         Notify(notify_data) => notify(notify_data),
         GetVsockProtocol => get_hostos_vsock_version(),
         GetHostOSVersion => get_hostos_version(),
@@ -71,64 +77,21 @@ fn notify(notify_data: &NotifyData) -> Response {
     Ok(Payload::NoPayload)
 }
 
-fn create_hostos_upgrade_file(upgrade_url: &str, file_path: &str) -> Result<(), String> {
-    let client = reqwest::blocking::Client::builder()
-        .build()
-        .map_err(|err| format!("Could not build download client: {}", err))?;
+async fn create_hostos_upgrade_file(
+    upgrade_url: &str,
+    file_path: &str,
+    target_hash: &str,
+) -> Result<(), String> {
+    let file_downloader = FileDownloader::new_with_timeout(None, Duration::from_secs(120));
 
-    let mut response = client
-        .get(upgrade_url)
-        .send()
-        .map_err(|err| format!("Could not download url: {}", err))?;
-
-    let mut upgrade_file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(file_path)
-        .map_err(|err| format!("Could not open upgrade file: {}", err))?;
-
-    if let Err(copy_err) = std::io::copy(&mut response, &mut upgrade_file) {
-        // Report on file download progress
-        match upgrade_file.metadata() {
-            Ok(metadata) => println!("Write error, '{}' bytes written", metadata.len()),
-            Err(metadata_err) => println!("Could not check file metadata: {}", metadata_err),
-        }
-
-        return Err(format!("Could not write upgrade file: {}", copy_err));
-    }
-
-    Ok(())
-}
-
-fn verify_hash(target_hash: &str) -> Result<bool, String> {
-    let mut upgrade_file = File::open(UPGRADE_FILE_PATH)
-        .map_err(|err| format!("Error opening upgrade file: {}", err))?;
-
-    let mut hasher = sha2::Sha256::new();
-    let mut buffer = [0; 65536];
-
-    loop {
-        let bytes_read = upgrade_file
-            .read(&mut buffer)
-            .map_err(|err| format!("Error reading upgrade file: {}", err))?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
-    }
-
-    let computed_hash = format!("{:x}", hasher.finalize());
-
-    if computed_hash == target_hash {
-        Ok(true)
-    } else {
-        Err(format!(
-            "Target hash does not equal computed hash.
-Target hash: {target_hash}
-Computed hash: {computed_hash}"
-        ))
-    }
+    file_downloader
+        .download_file(
+            upgrade_url,
+            Path::new(file_path),
+            Some(target_hash.to_string()),
+        )
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn run_upgrade() -> Response {
@@ -146,16 +109,17 @@ fn run_upgrade() -> Response {
     handle_command_output(command_output)
 }
 
-fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
-    // Attempt to re-use any previously downloaded upgrades, so long as the
-    // hash matches.
-    if verify_hash(&upgrade_data.target_hash).is_err() {
-        println!("Creating hostos upgrade file...");
-        create_hostos_upgrade_file(&upgrade_data.url, UPGRADE_FILE_PATH)?;
-
-        println!("Verifying hostos upgrade file hash...");
-        verify_hash(&upgrade_data.target_hash)?;
-    }
+async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
+    println!(
+        "Trying to fetch hostOS upgrade file from request: {:?}",
+        upgrade_data
+    );
+    create_hostos_upgrade_file(
+        &upgrade_data.url,
+        UPGRADE_FILE_PATH,
+        &upgrade_data.target_hash,
+    )
+    .await?;
 
     println!("Starting upgrade...");
     run_upgrade()

@@ -8,10 +8,12 @@
 use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
 use crate::{metrics::CallTreeMetricsNoOp, Hypervisor, NonReplicatedQueryKind};
+use ic_embedders::wasmtime_embedder::system_api::{
+    ApiType, ExecutionParameters, NonReplicatedQueryKind as SystemApiNonReplicatedQueryKind,
+};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
-use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -68,7 +70,7 @@ pub fn execute_non_replicated_query(
     let mut preserve_changes = false;
     let (non_replicated_query_kind, caller, call_context_id) = match query_kind {
         NonReplicatedQueryKind::Pure { caller } => {
-            (ic_system_api::NonReplicatedQueryKind::Pure, caller, None)
+            (SystemApiNonReplicatedQueryKind::Pure, caller, None)
         }
         NonReplicatedQueryKind::Stateful { call_origin } => {
             preserve_changes = true;
@@ -87,7 +89,7 @@ pub fn execute_non_replicated_query(
                 )
                 .unwrap();
             (
-                ic_system_api::NonReplicatedQueryKind::Stateful {
+                SystemApiNonReplicatedQueryKind::Stateful {
                     call_context_id,
                     outgoing_request: None,
                 },

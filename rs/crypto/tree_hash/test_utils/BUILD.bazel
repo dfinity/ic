@@ -17,6 +17,11 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/reproducible_rng",
 ]
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_library(
     name = "test_utils",
     testonly = True,
@@ -33,5 +38,6 @@ rust_library(
 rust_test_suite(
     name = "test_utils_integration",
     srcs = glob(["tests/**"]),
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":test_utils"],
 )

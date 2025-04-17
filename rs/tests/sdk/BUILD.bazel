@@ -36,7 +36,6 @@ BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
 system_test_nns(
     name = "dfx_smoke_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -59,7 +58,6 @@ system_test(
     env = {
         "WALLET_CANISTER_0_7_2_WASM": "$(rootpath @wallet_canister_0.7.2//file)",
     },
-    flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + [
         "@wallet_canister_0.7.2//file",

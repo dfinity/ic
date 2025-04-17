@@ -33,6 +33,22 @@ pub struct NeuronId {
     #[serde(with = "serde_bytes")]
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
+/// Neuron whose voting decisions are being followed.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Followee {
+    #[prost(message, optional, tag = "1")]
+    pub neuron_id: ::core::option::Option<NeuronId>,
+    /// Human-readable alias that helps identify this followee among other neurons.
+    #[prost(string, optional, tag = "2")]
+    pub alias: ::core::option::Option<::prost::alloc::string::String>,
+}
 /// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
 #[derive(
     candid::CandidType,
@@ -114,10 +130,14 @@ pub struct Neuron {
     /// this field for a dissolving neuron is `u64::MAX`.
     #[prost(uint64, tag = "6")]
     pub aging_since_timestamp_seconds: u64,
-    /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-    /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+    /// The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
+    /// to followees neuron IDs. The map's keys are represented by integers as Protobuf does not
+    /// support enum keys in maps.
     #[prost(btree_map = "uint64, message", tag = "11")]
     pub followees: ::prost::alloc::collections::BTreeMap<u64, neuron::Followees>,
+    /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+    #[prost(message, optional, tag = "19")]
+    pub topic_followees: ::core::option::Option<neuron::TopicFollowees>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -199,6 +219,34 @@ pub mod neuron {
     pub struct Followees {
         #[prost(message, repeated, tag = "1")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
+    }
+    /// A list of a neuron's followees, possibly associated with a given topic.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct FolloweesForTopic {
+        #[prost(message, repeated, tag = "1")]
+        pub followees: ::prost::alloc::vec::Vec<super::Followee>,
+        #[prost(enumeration = "super::Topic", optional, tag = "2")]
+        pub topic: ::core::option::Option<i32>,
+    }
+    /// A collection of a neuron's followees (per topic).
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct TopicFollowees {
+        #[prost(btree_map = "int32, message", tag = "1")]
+        pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
@@ -310,6 +358,9 @@ pub mod nervous_system_function {
         /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
         #[prost(string, optional, tag = "5")]
         pub validator_method_name: ::core::option::Option<::prost::alloc::string::String>,
+        /// The topic this proposal belongs to.
+        #[prost(enumeration = "super::Topic", optional, tag = "6")]
+        pub topic: ::core::option::Option<i32>,
     }
     #[derive(
         candid::CandidType,
@@ -366,6 +417,27 @@ pub struct Motion {
     #[prost(string, tag = "1")]
     pub motion_text: ::prost::alloc::string::String,
 }
+/// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ChunkedCanisterWasm {
+    /// Obligatory check sum of the overall WASM to be reassembled from chunks.
+    #[prost(bytes = "vec", tag = "1")]
+    pub wasm_module_hash: ::prost::alloc::vec::Vec<u8>,
+    /// Obligatory; indicates which canister stores the WASM chunks.
+    #[prost(message, optional, tag = "2")]
+    pub store_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+    /// one chunk.
+    #[prost(bytes = "vec", repeated, tag = "3")]
+    pub chunk_hashes_list: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
 /// A proposal function that upgrades a canister that is controlled by the
 /// SNS governance canister.
 #[derive(
@@ -395,6 +467,10 @@ pub struct UpgradeSnsControlledCanister {
         tag = "4"
     )]
     pub mode: ::core::option::Option<i32>,
+    /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
+    /// an empty, and this field should be set instead.
+    #[prost(message, optional, tag = "5")]
+    pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -612,6 +688,8 @@ pub struct ManageDappCanisterSettings {
     pub log_visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "7")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "8")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
 }
 /// Unlike `Governance.Version`, this message has optional fields and is the recommended one
 /// to use in APIs that can evolve. For example, the SNS Governance could eventually support
@@ -658,6 +736,18 @@ pub struct AdvanceSnsTargetVersion {
     #[prost(message, optional, tag = "1")]
     pub new_target: ::core::option::Option<SnsVersion>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SetTopicsForCustomProposals {
+    #[prost(btree_map = "uint64, enumeration(Topic)", tag = "1")]
+    pub custom_function_id_to_topic: ::prost::alloc::collections::BTreeMap<u64, i32>,
+}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
@@ -686,7 +776,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -796,6 +886,11 @@ pub mod proposal {
         /// Id = 15.
         #[prost(message, tag = "19")]
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
+        /// Change the mapping from custom proposal types to topics.
+        ///
+        /// Id = 16;
+        #[prost(message, tag = "20")]
+        SetTopicsForCustomProposals(super::SetTopicsForCustomProposals),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -959,6 +1054,19 @@ pub struct Ballot {
     #[prost(uint64, tag = "3")]
     pub cast_timestamp_seconds: u64,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TopicSelector {
+    #[prost(enumeration = "Topic", optional, tag = "1")]
+    pub topic: ::core::option::Option<i32>,
+}
 /// A tally of votes associated with a proposal.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
@@ -1029,6 +1137,7 @@ pub struct ProposalData {
     /// Id 13 - ManageLedgerParameters proposals.
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
+    /// Id 16 - SetTopicsForCustomProposals proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
@@ -1150,6 +1259,9 @@ pub struct ProposalData {
     #[prost(message, optional, tag = "21")]
     pub minimum_yes_proportion_of_exercised:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+    /// This proposal's topic.
+    #[prost(enumeration = "Topic", optional, tag = "25")]
+    pub topic: ::core::option::Option<i32>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]
@@ -1446,6 +1558,10 @@ pub struct NervousSystemParameters {
     /// (enabled) agree.
     #[prost(bool, optional, tag = "22")]
     pub maturity_modulation_disabled: ::core::option::Option<bool>,
+    /// Whether to automatically advance the SNS target version after a new upgrade is published
+    /// by the NNS. If not specified, defaults to false for backward compatibility.
+    #[prost(bool, optional, tag = "23")]
+    pub automatically_advance_target_version: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,
@@ -1739,7 +1855,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20"
+            tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 11, 12, 13, 20"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -1789,6 +1905,8 @@ pub mod governance {
             Configure(super::super::manage_neuron::Configure),
             #[prost(message, tag = "10")]
             Follow(super::super::manage_neuron::Follow),
+            #[prost(message, tag = "14")]
+            SetFollowing(super::super::manage_neuron::SetFollowing),
             #[prost(message, tag = "11")]
             MakeProposal(super::super::Proposal),
             #[prost(message, tag = "12")]
@@ -2236,7 +2354,7 @@ pub struct ManageNeuron {
     pub subaccount: ::prost::alloc::vec::Vec<u8>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -2533,6 +2651,19 @@ pub mod manage_neuron {
         #[prost(message, repeated, tag = "2")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowing {
+        /// The neuron's topic-based following, specified as a sequence of `FolloweesForTopic`.
+        #[prost(message, repeated, tag = "1")]
+        pub topic_following: ::prost::alloc::vec::Vec<super::neuron::FolloweesForTopic>,
+    }
     /// The operation that registers a given vote from the neuron for a given
     /// proposal (a directly cast vote as opposed to a vote that is cast as
     /// a result of a follow relation).
@@ -2663,6 +2794,8 @@ pub mod manage_neuron {
         Disburse(Disburse),
         #[prost(message, tag = "4")]
         Follow(Follow),
+        #[prost(message, tag = "14")]
+        SetFollowing(SetFollowing),
         /// Making a proposal is defined by a proposal, which contains the proposer neuron.
         /// Making a proposal will implicitly cast a yes vote for the proposing neuron.
         #[prost(message, tag = "5")]
@@ -2698,7 +2831,7 @@ pub mod manage_neuron {
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub command: ::core::option::Option<manage_neuron_response::Command>,
 }
@@ -2796,6 +2929,17 @@ pub mod manage_neuron_response {
         ::prost::Message,
     )]
     pub struct FollowResponse {}
+    /// The response to the ManageNeuron command 'set_following'.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowingResponse {}
     /// The response to the ManageNeuron command 'make_proposal'.
     #[derive(
         candid::CandidType,
@@ -2890,6 +3034,8 @@ pub mod manage_neuron_response {
         Disburse(DisburseResponse),
         #[prost(message, tag = "4")]
         Follow(FollowResponse),
+        #[prost(message, tag = "14")]
+        SetFollowing(SetFollowingResponse),
         #[prost(message, tag = "5")]
         MakeProposal(MakeProposalResponse),
         #[prost(message, tag = "6")]
@@ -3048,6 +3194,10 @@ pub struct ListProposals {
     /// If this list is empty, no restriction is applied.
     #[prost(enumeration = "ProposalDecisionStatus", repeated, tag = "5")]
     pub include_status: ::prost::alloc::vec::Vec<i32>,
+    /// A list of topics that should be included. If empty, all topics will be included.
+    /// The list may contain the None, expressing selection of proposals without topics.
+    #[prost(message, repeated, tag = "6")]
+    pub include_topics: ::prost::alloc::vec::Vec<TopicSelector>,
 }
 /// A response to the ListProposals command.
 #[derive(
@@ -3065,6 +3215,9 @@ pub struct ListProposalsResponse {
     /// Whether ballots cast by the caller are included in the returned proposals.
     #[prost(bool, optional, tag = "2")]
     pub include_ballots_by_caller: ::core::option::Option<bool>,
+    /// Whether topic-based filtering has been taken into account.
+    #[prost(bool, optional, tag = "3")]
+    pub include_topic_filtering: ::core::option::Option<bool>,
 }
 /// An operation that lists all neurons tracked in the Governance state in a
 /// paginated fashion.
@@ -3193,8 +3346,7 @@ pub struct ClaimSwapNeuronsRequest {
 }
 /// Nested message and enum types in `ClaimSwapNeuronsRequest`.
 pub mod claim_swap_neurons_request {
-    /// Replacement for NeuronParameters. Contains the information needed to set up
-    /// a neuron for a swap participant.
+    /// Contains the information needed to set up a neuron for a swap participant.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -3520,6 +3672,8 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(bool, optional, tag = "3")]
+        pub is_advanced_automatically: ::core::option::Option<bool>,
     }
     #[derive(
         candid::CandidType,
@@ -4181,6 +4335,72 @@ impl ClaimSwapNeuronsError {
             "CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED" => Some(Self::Unspecified),
             "CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED" => Some(Self::Unauthorized),
             "CLAIM_SWAP_NEURONS_ERROR_INTERNAL" => Some(Self::Internal),
+            _ => None,
+        }
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    strum_macros::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum Topic {
+    /// Unused, here for PB lint purposes.
+    Unspecified = 0,
+    /// Proposals to set the direction of the DAO by tokenomics & branding
+    DaoCommunitySettings = 1,
+    /// Proposals to upgrade and manage the SNS DAO framework
+    SnsFrameworkManagement = 2,
+    /// Proposals to manage the dapp's canisters
+    DappCanisterManagement = 3,
+    /// Proposals related to the dapp's business logic
+    ApplicationBusinessLogic = 4,
+    /// Proposals related to governance
+    Governance = 5,
+    /// Proposals related to treasury management
+    TreasuryAssetManagement = 6,
+    /// Critical proposals related to dapp operations
+    CriticalDappOperations = 7,
+}
+impl Topic {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "TOPIC_UNSPECIFIED",
+            Self::DaoCommunitySettings => "TOPIC_DAO_COMMUNITY_SETTINGS",
+            Self::SnsFrameworkManagement => "TOPIC_SNS_FRAMEWORK_MANAGEMENT",
+            Self::DappCanisterManagement => "TOPIC_DAPP_CANISTER_MANAGEMENT",
+            Self::ApplicationBusinessLogic => "TOPIC_APPLICATION_BUSINESS_LOGIC",
+            Self::Governance => "TOPIC_GOVERNANCE",
+            Self::TreasuryAssetManagement => "TOPIC_TREASURY_ASSET_MANAGEMENT",
+            Self::CriticalDappOperations => "TOPIC_CRITICAL_DAPP_OPERATIONS",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TOPIC_UNSPECIFIED" => Some(Self::Unspecified),
+            "TOPIC_DAO_COMMUNITY_SETTINGS" => Some(Self::DaoCommunitySettings),
+            "TOPIC_SNS_FRAMEWORK_MANAGEMENT" => Some(Self::SnsFrameworkManagement),
+            "TOPIC_DAPP_CANISTER_MANAGEMENT" => Some(Self::DappCanisterManagement),
+            "TOPIC_APPLICATION_BUSINESS_LOGIC" => Some(Self::ApplicationBusinessLogic),
+            "TOPIC_GOVERNANCE" => Some(Self::Governance),
+            "TOPIC_TREASURY_ASSET_MANAGEMENT" => Some(Self::TreasuryAssetManagement),
+            "TOPIC_CRITICAL_DAPP_OPERATIONS" => Some(Self::CriticalDappOperations),
             _ => None,
         }
     }

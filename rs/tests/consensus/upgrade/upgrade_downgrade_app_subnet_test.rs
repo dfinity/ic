@@ -22,7 +22,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    read_dependency_to_string, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+    get_mainnet_nns_revision, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
     IcNodeContainer, SubnetSnapshot,
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
@@ -114,7 +114,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+    let mainnet_version = get_mainnet_nns_revision();
     upgrade(
         &env,
         &nns_node,

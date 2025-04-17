@@ -23,7 +23,7 @@ use ic_consensus_system_test_utils::upgrade::{
     UpdateImageType,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
@@ -64,8 +64,7 @@ pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
 pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
-    let mainnet_version =
-        read_dependency_to_string("testnet/mainnet_nns_revision.txt").expect("mainnet IC version");
+    let mainnet_version = get_mainnet_nns_revision();
 
     // Bless mainnet version
     let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();

@@ -1,11 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 
-package(default_visibility = ["//visibility:private"])
-
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/config",
+    "//rs/http_endpoints/async_utils",
     "//rs/https_outcalls/service",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -17,7 +15,9 @@ DEPENDENCIES = [
     "@crate_index//:hyper-rustls",
     "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-util",
+    "@crate_index//:parking_lot",
     "@crate_index//:prometheus",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
@@ -34,10 +34,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:async-stream",
     "@crate_index//:bytes",
     "@crate_index//:once_cell",
-    "@crate_index//:rand",
     "@crate_index//:rstest",
     "@crate_index//:rustls",
     "@crate_index//:rustls-pemfile",
+    "@crate_index//:socks5-impl",
     "@crate_index//:tempfile",
     "@crate_index//:tokio-rustls",
     "@crate_index//:uuid",

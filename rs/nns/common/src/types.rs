@@ -1,6 +1,6 @@
 use crate::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
 use candid::{CandidType, Deserialize};
-use dfn_core::api::CanisterId;
+use ic_base_types::CanisterId;
 use serde::Serialize;
 use std::{
     cmp::{Eq, PartialEq},

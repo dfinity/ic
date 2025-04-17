@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_nns_test_utils::registry::TEST_ID;
@@ -14,12 +14,10 @@ use ic_nns_test_utils::{
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
-use ic_protobuf::registry::subnet::v1::{
-    ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, SubnetRecord,
-};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
 use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
-    ChainKeyConfig as ChainKeyConfigInternal, EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
@@ -33,14 +31,6 @@ use std::str::FromStr;
 
 mod common;
 use common::test_helpers::get_subnet_record;
-
-// TODO[NNS1-2986]: Remove, replacing with `make_ecdsa_master_public_key`.
-fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
-    EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: name.to_string(),
-    }
-}
 
 #[test]
 fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
@@ -77,9 +67,6 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -161,7 +148,6 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
         };
 
@@ -204,9 +190,6 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -287,7 +270,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             max_number_of_canisters: 0,
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
-                            ecdsa_config: None,
                             chain_key_config: None,
                         }
                         .encode_to_vec(),
@@ -322,9 +304,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             is_halted: Some(true),
             halt_at_cup_height: Some(true),
             features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -381,237 +360,9 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 max_number_of_canisters: 42,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
-                ecdsa_config: None,
                 chain_key_config: None,
             }
         );
-
-        Ok(())
-    });
-}
-
-// TODO[NNS1-3102]: Remove this test.
-#[test]
-fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
-    const ENABLE_BEFORE_ADDING_REJECT_MSG: &str = "Canister rejected with \
-        message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
-        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
-        signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' on Subnet \
-        'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
-        subnet does not hold the given key. A proposal to add that key to the subnet \
-        must first be separately submitted.'";
-
-    const NO_CHAIN_KEY_CONFIG_REJECT_MSG: &str = "Canister rejected with \
-        message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
-        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
-        signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' \
-        on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
-        but the subnet does not hold the given key. A proposal to add that key to the subnet \
-        must first be separately submitted.'";
-
-    local_test_on_nns_subnet(|runtime| async move {
-        let subnet_id = SubnetId::from(
-            PrincipalId::from_str(
-                "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-            )
-            .unwrap(),
-        );
-
-        let subnet_record = SubnetRecord {
-            membership: vec![],
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            start_as_nns: false,
-            subnet_type: SubnetType::Application.into(),
-            is_halted: false,
-            halt_at_cup_height: false,
-            features: None,
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-            ecdsa_config: None,
-            chain_key_config: None,
-        };
-
-        // Just create the registry canister and wait until the subnet_handler ID is
-        // known to install and initialize it so that it can be authorized to make
-        // mutations to the registry.
-        let registry = set_up_registry_canister(
-            &runtime,
-            RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(RegistryAtomicMutateRequest {
-                    mutations: vec![insert(
-                        make_subnet_record_key(subnet_id).as_bytes(),
-                        subnet_record.encode_to_vec(),
-                    )],
-                    preconditions: vec![],
-                })
-                .build(),
-        )
-        .await;
-
-        // Install the universal canister in place of the governance canister
-        let fake_governance_canister = set_up_universal_canister(&runtime).await;
-        // Since it takes the id reserved for the governance canister, it can impersonate
-        // it
-        assert_eq!(
-            fake_governance_canister.canister_id(),
-            ic_nns_constants::GOVERNANCE_CANISTER_ID
-        );
-
-        let signature_request_timeout_ns = Some(12345);
-        let idkg_key_rotation_period_ms = Some(12345);
-
-        let ecdsa_config = Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
-            key_ids: vec![make_ecdsa_key("key_id_1")],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns,
-            idkg_key_rotation_period_ms,
-        });
-
-        // update payload message
-        let mut payload = UpdateSubnetPayload {
-            ecdsa_config: ecdsa_config.clone(),
-            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
-            ..empty_update_subnet_payload(subnet_id)
-        };
-
-        let response = try_call_via_universal_canister(
-            &fake_governance_canister,
-            &registry,
-            "update_subnet",
-            Encode!(&payload).unwrap(),
-        )
-        .await;
-        let error_text = assert_matches!(response, Err(error_text) => error_text);
-        assert!(
-            error_text.starts_with(ENABLE_BEFORE_ADDING_REJECT_MSG),
-            "Unexpected error: `{}` (does not start with `{}`).",
-            error_text,
-            ENABLE_BEFORE_ADDING_REJECT_MSG,
-        );
-
-        let new_subnet_record = get_value_or_panic::<SubnetRecord>(
-            &registry,
-            make_subnet_record_key(subnet_id).as_bytes(),
-        )
-        .await;
-
-        // There should be no change
-        assert_eq!(new_subnet_record, subnet_record);
-
-        // Change one field at a time in this payload
-        payload = UpdateSubnetPayload {
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
-            ..empty_update_subnet_payload(subnet_id)
-        };
-
-        let response = try_call_via_universal_canister(
-            &fake_governance_canister,
-            &registry,
-            "update_subnet",
-            Encode!(&payload).unwrap(),
-        )
-        .await;
-
-        let err_text = assert_matches!(response, Err(err_text) => err_text);
-
-        assert!(
-            err_text.contains(NO_CHAIN_KEY_CONFIG_REJECT_MSG),
-            "Error `{}` does not contain expected substring\n{}",
-            err_text,
-            NO_CHAIN_KEY_CONFIG_REJECT_MSG,
-        );
-
-        let new_subnet_record = get_value_or_panic::<SubnetRecord>(
-            &registry,
-            make_subnet_record_key(subnet_id).as_bytes(),
-        )
-        .await;
-
-        // There should be no change
-        assert_eq!(new_subnet_record, subnet_record);
-
-        // Trying again, this time in the correct order
-        payload = UpdateSubnetPayload {
-            ecdsa_config: ecdsa_config.clone(),
-            ecdsa_key_signing_enable: None,
-            ..empty_update_subnet_payload(subnet_id)
-        };
-
-        assert!(try_call_via_universal_canister(
-            &fake_governance_canister,
-            &registry,
-            "update_subnet",
-            Encode!(&payload).unwrap()
-        )
-        .await
-        .is_ok());
-
-        let new_subnet_record = get_value_or_panic::<SubnetRecord>(
-            &registry,
-            make_subnet_record_key(subnet_id).as_bytes(),
-        )
-        .await;
-
-        // Should see the new value for the config reflected
-        let ecdsa_config_pb = ecdsa_config.clone().map(EcdsaConfigPb::from);
-        let chain_key_config_pb = ecdsa_config_pb.clone().map(ChainKeyConfigPb::from);
-        assert_eq!(
-            new_subnet_record,
-            SubnetRecord {
-                ecdsa_config: None, // obsolete (chain_key_config is used instead now)
-                chain_key_config: chain_key_config_pb,
-                ..subnet_record
-            }
-        );
-
-        // This update should enable signing on our subnet for the given key.
-        payload = UpdateSubnetPayload {
-            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
-            ..empty_update_subnet_payload(subnet_id)
-        };
-
-        let response = try_call_via_universal_canister(
-            &fake_governance_canister,
-            &registry,
-            "update_subnet",
-            Encode!(&payload).unwrap(),
-        )
-        .await;
-        assert_matches!(response, Ok(_));
-
-        let subnet_record = get_subnet_record(&registry, subnet_id).await;
-        {
-            let chain_key_config = subnet_record.chain_key_config.unwrap();
-            let max_queue_size = chain_key_config.key_configs[0].max_queue_size.unwrap();
-            assert_eq!(max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
-        }
-
-        let new_signing_subnet_list: Vec<_> = get_value_or_panic::<ChainKeySigningSubnetList>(
-            &registry,
-            make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(make_ecdsa_key(
-                "key_id_1",
-            )))
-            .as_bytes(),
-        )
-        .await
-        .subnets
-        .into_iter()
-        .map(|subnet_bytes| subnet_id_try_from_protobuf(subnet_bytes).unwrap())
-        .collect();
-
-        // The subnet is now responsible for signing with the key.
-        assert_eq!(new_signing_subnet_list, vec![subnet_id]);
 
         Ok(())
     });
@@ -639,7 +390,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
     let enable_before_adding_reject_msg = format!(
         "Canister rejected with \
         message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
-        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
+        called `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable \
         signing for chain key '{}' on Subnet \
         'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
         subnet does not hold the given key. A proposal to add that key to the subnet \
@@ -650,7 +401,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
     let no_chain_key_config_reject_msg = format!(
         "Canister rejected with message: \
         IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-        `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable signing \
+        `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable signing \
         for chain key '{}' \
         on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
         but the subnet does not hold the given key. A proposal to add that key to the subnet \
@@ -684,7 +435,6 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
         };
 
@@ -827,7 +577,6 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
                 subnet_record_1,
                 SubnetRecord {
                     chain_key_config: Some(expected_chain_key_config_pb),
-                    ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                     ..initial_subnet_record
                 }
             );
@@ -898,9 +647,6 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
-        ecdsa_key_signing_disable: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,

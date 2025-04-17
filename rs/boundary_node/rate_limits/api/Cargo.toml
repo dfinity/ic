@@ -10,6 +10,7 @@ documentation.workspace = true
 candid = { workspace = true }
 humantime = "2.1"
 ic-bn-lib = { workspace = true }
+ipnet = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -1,3 +1,7 @@
+use ic_consensus_idkg::metrics::{
+    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
+    KEY_ID_LABEL,
+};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_metrics::{
@@ -16,11 +20,6 @@ use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 use std::sync::RwLock;
-
-use crate::idkg::metrics::{
-    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
-    KEY_ID_LABEL,
-};
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -157,7 +156,7 @@ impl BatchStats {
         self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
-            .extend_from_slice(&payload.ingress.message_ids());
+            .extend(payload.ingress.message_ids().cloned());
     }
 }
 

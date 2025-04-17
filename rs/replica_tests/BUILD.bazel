@@ -5,12 +5,13 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
+    "//packages/ic-error-types",
     "//rs/bitcoin/replica_types",
     "//rs/bitcoin/service",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/execution_environment",
+    "//rs/http_endpoints/async_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
@@ -30,7 +31,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/logger",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",

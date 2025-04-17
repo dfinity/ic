@@ -190,7 +190,7 @@ impl<'a, M: Memory> SizeAwareWriter<'a, M> {
 }
 
 // Unsafe implementation required by BufMut
-unsafe impl<'a, M: Memory> BufMut for SizeAwareWriter<'a, M> {
+unsafe impl<M: Memory> BufMut for SizeAwareWriter<'_, M> {
     fn remaining_mut(&self) -> usize {
         // This function needs to return the number of bytes that can be written, not just to the
         // internal buffer, but to the underlying memory.
@@ -304,7 +304,7 @@ impl<'a, M: Memory> SizeAwareReader<'a, M> {
     }
 }
 
-impl<'a, M: Memory> Buf for SizeAwareReader<'a, M> {
+impl<M: Memory> Buf for SizeAwareReader<'_, M> {
     fn remaining(&self) -> usize {
         // Our implementation only reads from stable memory up until the size indicated by size bytes
         let total_written_memory = self.memory_used();

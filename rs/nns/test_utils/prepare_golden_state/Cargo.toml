@@ -1,0 +1,12 @@
+[package]
+name = "ic-nns-test-utils-prepare-golden-state"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "watch-and-prepare"
+path = "src/watch_and_prepare.rs"

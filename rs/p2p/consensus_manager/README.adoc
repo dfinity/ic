@@ -1,35 +1,27 @@
 = Abortable Broadcast 
 :toc:  
 
+== Background 
+
+Most properties of the protocols of the Consensus layer hold under an asynchronous network model, with no a priori bound on the delay of messages sent between replicas. 
+To guarantee liveness, the Internet Computer Consensus Protocol assumes a form of partial synchrony, which (roughly stated) says that the network will
+be periodically synchronous for short intervals of time. In such intervals of synchrony, all undelivered messages will be delivered in less than time δ, for some fixed bound δ. 
+The bound δ does not have to be known in advance (the protocol is initialized with a reasonable bound, but will dynamically adapt and increase this bound if it is too small).
+Regardless of whether an asynchronous or a partially synchronous network is assumed, the Consensus layer protocols rely on the fact that messages sent from one honest replica
+to another will eventually be delivered unless the transmission is explicitly aborted. It is the responsibility of the P2P layer to provide these guarantees.
+
 == Overview  
 
-This library implements the https://arxiv.org/abs/2410.22080[_Abortable Broadcast_] primitive.  
+This library provides an implementation of the https://arxiv.org/abs/2410.22080[Abortable Broadcast] primitive.
+This mechanism ensures that any message sent from one honest party to all other honest parties will eventually be delivered, provided the message is still active (i.e., it has not been aborted).
+In other words, the abortable broadcast implementation guarantees eventually consistency between honest peers.
 
-Currently, the implementation has some limitations that restrict its generalization:  
+=== Key Properties of the Implementation
+* Delivery Guarantee: Messages sent between honest peers are reliably delivered as long as they remain active.
+* Simple Interface: The interface is designed to be intuitive, exposing a channel API for publishing messages to all peers in the membership group.
+* Dynamic Adaptability: The implementation dynamically adjusts to changing network conditions, ensuring reliable message delivery without requiring fixed, pre-defined timing bounds.
+* Fault Tolerance: The implementation is robust against Byzantine, malicious, or otherwise faulty peers. It avoids slowing down the producer of data and prevents unbounded message buffering, even in the presence of adversarial behavior.
+* Finite Active Messages Assumption: The design achieves efficiency and simplicity by leveraging the assumption that there is always a finite number of active messages in the system. This assumption ensures predictable resource usage and prevents attacks that might exploit excessive message production.
 
-- **ArtifactAssembler coupling**: The implementation is tightly coupled with the `ArtifactAssembler`, reducing modularity.  
-- **Slot table deletions**: Deletions in the slot table are not propagated, which lead to inconsistencies.  
+This design makes the abortable broadcast primitive well-suited for asynchronous or partially synchronous environments, where the protocol must handle a mix of honest and potentially adversarial behavior while remaining reliable, efficient, and easy to use.
 
-== Requirements  
-
-[cols="3,3,3", options="header"]  
-|===  
-| **Capability** | **Purpose** | **Implementation Requirements**  
-
-| **PubSub-like library**  
-| Simplifies application development by abstracting one-to-many communication within a set of nodes.  
-| The library must implement https://en.wikipedia.org/wiki/Eventual_consistency[_eventual consistency_].  
-
-| **Multitenancy of applications**  
-| Allows multiple applications to safely use the library, ensuring isolation and uninterrupted operation between all applications.  
-| Must implement fair scheduling across peers to ensure resource allocation and isolation.  
-
-| **Operation in P2P networks with Byzantine peers**  
-| Ensures reliable message publishing and creation rates, even in networks with faulty or malicious nodes.  
-| The implementation must provide a non-IO-bound API and be memory-bounded.  
-
-| **Scalable and resource-efficient**  
-| Optimizes usage of shared resources (e.g., CPU, file descriptors) to maintain performance under high demand and prevent resource exhaustion.  
-| The library should expose a synchronous interface but implement asynchronous operations under the hood.  
-
-|===  

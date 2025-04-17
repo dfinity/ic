@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
-use bitcoin::{hashes::hex::FromHex, util::uint::Uint256, BlockHash, Network};
+use bitcoin::{BlockHash, CompactTarget, Network, Target};
 
 use crate::BlockHeight;
 
@@ -57,45 +57,21 @@ const TESTNET: &[(BlockHeight, &str)] = &[
     (546, "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70")
 ];
 
-/// Bitcoin mainnet maximum target value
-const BITCOIN_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000,
-    0x0000000000000000,
-    0x0000000000000000,
-    0x00000000ffff0000,
-]);
-
-/// Bitcoin testnet maximum target value
-const TESTNET_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000,
-    0x0000000000000000,
-    0x0000000000000000,
-    0x00000000ffff0000,
-]);
-
-/// Bitcoin regtest maximum target value
-const REGTEST_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000,
-    0x0000000000000000,
-    0x0000000000000000,
-    0x7fffff0000000000,
-]);
-
-/// Bitcoin signet maximum target value
-const SIGNET_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000u64,
-    0x0000000000000000u64,
-    0x0000000000000000u64,
-    0x00000377ae000000u64,
-]);
+/// Bitcoin testnet checkpoints
+#[rustfmt::skip]
+const TESTNET4: &[(BlockHeight, &str)] = &[
+    (64000, "000000000deb369dca3115f66e208733066f44c8cc177edd4b5f86869e6355b5")
+];
 
 /// Returns the maximum difficulty target depending on the network
-pub fn max_target(network: &Network) -> Uint256 {
+pub fn max_target(network: &Network) -> Target {
     match network {
-        Network::Bitcoin => BITCOIN_MAX_TARGET,
-        Network::Testnet => TESTNET_MAX_TARGET,
-        Network::Regtest => REGTEST_MAX_TARGET,
-        Network::Signet => SIGNET_MAX_TARGET,
+        Network::Bitcoin => Target::MAX_ATTAINABLE_MAINNET,
+        Network::Testnet => Target::MAX_ATTAINABLE_TESTNET,
+        Network::Testnet4 => Target::MAX_ATTAINABLE_TESTNET,
+        Network::Regtest => Target::MAX_ATTAINABLE_REGTEST,
+        Network::Signet => Target::MAX_ATTAINABLE_SIGNET,
+        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
@@ -103,19 +79,22 @@ pub fn max_target(network: &Network) -> Uint256 {
 /// readjusted in the network after a fixed time interval.
 pub fn no_pow_retargeting(network: &Network) -> bool {
     match network {
-        Network::Bitcoin | Network::Testnet | Network::Signet => false,
+        Network::Bitcoin | Network::Testnet | Network::Signet | Network::Testnet4 => false,
         Network::Regtest => true,
+        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
 /// Returns the PoW limit bits of the bitcoin network
-pub fn pow_limit_bits(network: &Network) -> u32 {
-    match network {
+pub fn pow_limit_bits(network: &Network) -> CompactTarget {
+    CompactTarget::from_consensus(match network {
         Network::Bitcoin => 0x1d00ffff,
         Network::Testnet => 0x1d00ffff,
+        Network::Testnet4 => 0x1d00ffff,
         Network::Regtest => 0x207fffff,
         Network::Signet => 0x1e0377ae,
-    }
+        &other => unreachable!("Unsupported network: {:?}", other),
+    })
 }
 
 /// Checkpoints used to validate blocks at certain heights.
@@ -123,14 +102,17 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
+        Network::Testnet4 => TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
+        _ => &[],
     };
     points
         .iter()
         .cloned()
         .map(|(height, hash)| {
-            let hash = BlockHash::from_hex(hash).expect("Programmer error: invalid hash");
+            //TODO: handle this unwrap without crashing
+            let hash = BlockHash::from_str(hash).expect("Programmer error: invalid hash");
             (height, hash)
         })
         .collect()
@@ -140,8 +122,10 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
+        Network::Testnet4 => TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
+        _ => &[],
     };
 
     points
@@ -151,29 +135,8 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
         .map_or(0, |(height, _)| *height)
 }
 
-pub fn last_checkpoint(network: &Network) -> Option<BlockHeight> {
-    let points = match network {
-        Network::Bitcoin => BITCOIN,
-        Network::Testnet => TESTNET,
-        Network::Signet => &[],
-        Network::Regtest => &[],
-    };
-
-    points.last().map(|(height, _)| *height)
-}
-
 #[cfg(test)]
 pub mod test {
-
-    use super::*;
-
-    /// Mainnet 00000000bcb3c8ff4e3e243ad47832d75bb81e922efdc05be63f2696c5dfad09
-    pub const MAINNET_HEADER_11109: &str = "0100000027e37046713f768e57bd9c613f70657048320cab3e016c6ad437dadd00000000a12e0863a26054892799db694b8ccd9f44ad062b4d6ef09d2be12e994d50649b9ca2e649ffff001d2823bacb";
-    /// Mainnet 00000000deaa3a36d8531844fd1cb11faff6a1171d5228d42131d1b302c56271
-    pub const MAINNET_HEADER_11110: &str = "0100000009addfc596263fe65bc0fd2e921eb85bd73278d43a243e4effc8b3bc0000000006413a83ca2d3fbf6b1ac332976043152e0093f17e29fef68c3eb736d379d7365aa3e649ffff001da44e7f02";
-    /// Mainnet 0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d
-    pub const MAINNET_HEADER_11111: &str = "010000007162c502b3d13121d428521d17a1f6af1fb11cfd441853d8363aaade000000007adf7b53a9dc840a210766054aa8a1b2076fd30dadcc3f757c23318a8c8be55213a4e649ffff001d05d9428b";
-
     /// Mainnet 000000000000000000063108ecc1f03f7fd1481eb20f97307d532a612bc97f04
     pub const MAINNET_HEADER_586656: &str ="00008020cff0e07ab39db0f31d4ded81ba2339173155b9c57839110000000000000000007a2d75dce5981ec421a54df706d3d407f66dc9170f1e0d6e48ed1e8a1cad7724e9ed365d083a1f17bc43b10a";
     /// Mainnet 0000000000000000000d37dfef7fe1c7bd22c893dbe4a94272c8cf556e40be99
@@ -187,22 +150,4 @@ pub mod test {
     pub const TESTNET_HEADER_2132555: &str = "004000200e1ff99438666c67c649def743fb82117537c2017bcc6ad617000000000000007fa40cf82bf224909e3174281a57af2eb3a4a2a961d33f50ec0772c1221c9e61ddfdc061ffff001a64526636";
     /// Testnet 00000000383cd7fff4692410ccd9bd6201790043bb41b93bacb21e9b85620767
     pub const TESTNET_HEADER_2132556: &str = "00000020974f55e77dff100bc252a01aa7b00d16736c6e04a091b03be200000000000000c44f2d69fc200c4a2211885000b6b67512f42c1bec550f3754e103b6c4046e05a202c161ffff001d09ec1bc4";
-
-    #[test]
-    fn test_latest_checkpoint_height() {
-        let height = latest_checkpoint_height(&Network::Bitcoin, 1_000_000);
-        assert_eq!(height, 704_256);
-
-        let height = latest_checkpoint_height(&Network::Bitcoin, 40_000);
-        assert_eq!(height, 33_333);
-
-        let height = latest_checkpoint_height(&Network::Testnet, 1_000_000);
-        assert_eq!(height, 546);
-    }
-
-    #[test]
-    fn test_last_checkpoint() {
-        assert_eq!(last_checkpoint(&Network::Bitcoin), Some(704_256));
-        assert_eq!(last_checkpoint(&Network::Regtest), None);
-    }
 }

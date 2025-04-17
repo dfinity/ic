@@ -121,7 +121,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 cmd.start_height,
             )
             .with_replay_target_height(target_height);
-            *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
+            *res_clone.borrow_mut() = player.restore_from_backup(cmd.start_height + 1);
             return;
         }
 
@@ -240,10 +240,12 @@ fn cmd_get_recovery_cup(
     let low_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::LowThreshold)
+        .expect("No current low threshold transcript available")
         .clone();
     let high_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("No current high threshold transcript available")
         .clone();
     let initial_ni_dkg_transcript_low_threshold =
         Some(InitialNiDkgTranscriptRecord::from(low_threshold_transcript));
@@ -266,7 +268,7 @@ fn cmd_get_recovery_cup(
         chain_key_initializations: vec![],
     };
 
-    let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(
+    let cup = ic_consensus::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,

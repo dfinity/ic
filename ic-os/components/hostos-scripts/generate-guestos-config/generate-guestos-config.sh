@@ -107,20 +107,34 @@ function assemble_config_media() {
 function generate_guestos_config() {
     RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
     MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
+    RESOURCES_NR_OF_VCPUS="$(jq -r ".resources.nr_of_vcpus" ${DEPLOYMENT})"
     # NOTE: `fetch-property` will error if the target is not found. Here we
     # only want to act when the field is set.
     CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})
 
-    CPU_DOMAIN="kvm"
-    CPU_SPEC="/opt/ic/share/kvm-cpu.xml"
+    # Generate inline CPU spec based on mode
+    CPU_SPEC=$(mktemp)
     if [ "${CPU_MODE}" == "qemu" ]; then
         CPU_DOMAIN="qemu"
-        CPU_SPEC="/opt/ic/share/qemu-cpu.xml"
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-model'/>
+EOF
+    else
+        CPU_DOMAIN="kvm"
+        CORE_COUNT=$((RESOURCES_NR_OF_VCPUS / 4))
+        cat >"${CPU_SPEC}" <<EOF
+<cpu mode='host-passthrough' migratable='off'>
+  <cache mode='passthrough'/>
+  <topology sockets='2' cores='${CORE_COUNT}' threads='2'/>
+  <feature policy="require" name="topoext"/>
+</cpu>
+EOF
     fi
 
     if [ ! -f "${OUTPUT}" ]; then
         mkdir -p "$(dirname "$OUTPUT")"
         sed -e "s@{{ resources_memory }}@${RESOURCES_MEMORY}@" \
+            -e "s@{{ nr_of_vcpus }}@${RESOURCES_NR_OF_VCPUS:-64}@" \
             -e "s@{{ mac_address }}@${MAC_ADDRESS}@" \
             -e "s@{{ cpu_domain }}@${CPU_DOMAIN}@" \
             -e "/{{ cpu_spec }}/{r ${CPU_SPEC}" -e "d" -e "}" \
@@ -138,6 +152,8 @@ function generate_guestos_config() {
             "HostOS generate GuestOS config" \
             "gauge"
     fi
+
+    rm -f "${CPU_SPEC}"
 }
 
 function main() {

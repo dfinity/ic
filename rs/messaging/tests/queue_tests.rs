@@ -15,8 +15,8 @@ use ic_types::{
     Cycles,
 };
 use maplit::btreemap;
-use std::collections::BTreeSet;
 use std::sync::Arc;
+use std::{collections::BTreeSet, vec};
 use xnet_test::{Metrics, StartArgs};
 
 const MAX_TICKS: u64 = 100;
@@ -33,6 +33,7 @@ struct SubnetPairProxy {
     pub local_canister_id: CanisterId,
     pub remote_env: Arc<StateMachine>,
     pub remote_canister_id: CanisterId,
+    call_timeouts_seconds: Vec<Option<u32>>,
 }
 
 impl SubnetPairProxy {
@@ -73,7 +74,15 @@ impl SubnetPairProxy {
             local_canister_id,
             remote_env: Arc::from(remote_env),
             remote_canister_id,
+            // Default to a mix of guaranteed response and best-effort calls.
+            call_timeouts_seconds: vec![None, Some(u32::MAX)],
         }
+    }
+
+    /// Sets the desired call timeouts.
+    fn with_call_timeouts(mut self, call_timeouts_seconds: &[Option<u32>]) -> Self {
+        self.call_timeouts_seconds = call_timeouts_seconds.to_vec();
+        self
     }
 
     /// Generates a routing table with canister ranges for 3 subnets.
@@ -102,7 +111,9 @@ impl SubnetPairProxy {
         Encode!(&StartArgs {
             network_topology,
             canister_to_subnet_rate,
-            payload_size_bytes,
+            request_payload_size_bytes: payload_size_bytes,
+            call_timeouts_seconds: self.call_timeouts_seconds.clone(),
+            response_payload_size_bytes: payload_size_bytes,
         })
     }
 
@@ -204,7 +215,7 @@ impl SubnetPairProxy {
         do_until_or_panic(MAX_TICKS, |_| {
             let exit_condition = self
                 .local_output_queue_snapshot()
-                .map_or(false, |q| q.len() >= min_num_messages);
+                .is_some_and(|q| q.len() >= min_num_messages);
             if !exit_condition {
                 self.local_env.tick();
             }
@@ -261,6 +272,7 @@ impl SubnetPairProxy {
             local_canister_id: self.local_canister_id,
             remote_env: Arc::new(destination_env),
             remote_canister_id: self.remote_canister_id,
+            call_timeouts_seconds: self.call_timeouts_seconds.clone(),
         })
     }
 }
@@ -418,7 +430,8 @@ fn test_timeout_removes_requests_from_output_queues() {
 /// an empty output queue.
 #[test]
 fn test_response_in_output_queue_causes_backpressure() {
-    let subnets = SubnetPairProxy::with_new_subnets();
+    // Guaranteed response calls only.
+    let subnets = SubnetPairProxy::with_new_subnets().with_call_timeouts(&[None]);
 
     let canister_to_subnet_rate = 10;
     let payload_size_bytes = 1024 * 1024;

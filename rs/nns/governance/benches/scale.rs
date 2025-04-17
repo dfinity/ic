@@ -17,8 +17,11 @@ use async_trait::async_trait;
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{cmc::FakeCmc, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
@@ -28,6 +31,7 @@ use ic_nns_governance::{
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 criterion_group! {
     name = benches;
@@ -37,17 +41,15 @@ criterion_group! {
 
 criterion_main!(benches);
 
-/// Mock of the required interface of `Governance`.
-struct MockEnvironment {
-    secs: u64,
+struct FakeRandomness {}
+
+impl FakeRandomness {
+    fn new() -> Self {
+        Self {}
+    }
 }
 
-#[async_trait]
-impl Environment for MockEnvironment {
-    fn now(&self) -> u64 {
-        self.secs
-    }
-
+impl RandomnessGenerator for FakeRandomness {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         todo!()
     }
@@ -62,6 +64,18 @@ impl Environment for MockEnvironment {
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
         todo!()
+    }
+}
+
+/// Mock of the required interface of `Governance`.
+struct MockEnvironment {
+    secs: u64,
+}
+
+#[async_trait]
+impl Environment for MockEnvironment {
+    fn now(&self) -> u64 {
+        self.secs
     }
 
     fn execute_nns_function(
@@ -145,9 +159,10 @@ fn linear_20k(c: &mut Criterion) {
     let secs = 1;
     let mut gov = Governance::new(
         fixture_for_scale(20_000, true),
-        Box::new(MockEnvironment { secs }),
-        Box::new(MockLedger {}),
-        Box::new(FakeCmc::new()),
+        Arc::new(MockEnvironment { secs }),
+        Arc::new(MockLedger {}),
+        Arc::new(FakeCmc::new()),
+        Box::new(FakeRandomness::new()),
     );
     c.bench_function("linear 20k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))
@@ -158,9 +173,10 @@ fn tree_20k(c: &mut Criterion) {
     let secs = 1;
     let mut gov = Governance::new(
         fixture_for_scale(20_000, false),
-        Box::new(MockEnvironment { secs }),
-        Box::new(MockLedger {}),
-        Box::new(FakeCmc::new()),
+        Arc::new(MockEnvironment { secs }),
+        Arc::new(MockLedger {}),
+        Arc::new(FakeCmc::new()),
+        Box::new(FakeRandomness::new()),
     );
     c.bench_function("tree 20k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))
@@ -171,9 +187,10 @@ fn linear_200k(c: &mut Criterion) {
     let secs = 1;
     let mut gov = Governance::new(
         fixture_for_scale(200_000, true),
-        Box::new(MockEnvironment { secs }),
-        Box::new(MockLedger {}),
-        Box::new(FakeCmc::new()),
+        Arc::new(MockEnvironment { secs }),
+        Arc::new(MockLedger {}),
+        Arc::new(FakeCmc::new()),
+        Box::new(FakeRandomness::new()),
     );
     c.bench_function("linear 200k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))
@@ -184,9 +201,10 @@ fn tree_200k(c: &mut Criterion) {
     let secs = 1;
     let mut gov = Governance::new(
         fixture_for_scale(200_000, false),
-        Box::new(MockEnvironment { secs }),
-        Box::new(MockLedger {}),
-        Box::new(FakeCmc::new()),
+        Arc::new(MockEnvironment { secs }),
+        Arc::new(MockLedger {}),
+        Arc::new(FakeCmc::new()),
+        Box::new(FakeRandomness::new()),
     );
     c.bench_function("tree 200k", |b| {
         b.iter(|| make_and_process_proposal(&mut gov))

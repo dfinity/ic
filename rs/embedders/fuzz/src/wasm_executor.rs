@@ -1,27 +1,26 @@
-use crate::ic_wasm::ICWasmModule;
+use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
 use ic_config::{
-    embedders::{Config, FeatureFlags},
-    execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
+    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
-    CompilationCache, WasmExecutionInput, WasmtimeEmbedder,
+    wasmtime_embedder::system_api::{
+        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+        InstructionLimits,
+    },
+    CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types_private::Global;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
-    ExecutionState, ExportedFunctions, Global, Memory, NetworkTopology,
-};
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
-    InstructionLimits,
+    ExecutionState, ExportedFunctions, Memory, MessageMemoryUsage, NetworkTopology,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
@@ -51,7 +50,7 @@ lazy_static! {
 pub fn run_fuzzer(module: ICWasmModule) {
     let wasm = module.module.to_bytes();
 
-    let persisted_globals: Vec<Global> = module.exoported_globals;
+    let persisted_globals: Vec<Global> = module.exported_globals;
 
     let canister_module = CanisterModule::new(wasm);
     let wasm_binary = WasmBinary::new(canister_module);
@@ -59,14 +58,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
     let log = no_op_logger();
-    let embedder_config = Config {
-        feature_flags: FeatureFlags {
-            write_barrier: FlagStatus::Enabled,
-            wasm64: FlagStatus::Enabled,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    let embedder_config = ic_embedders_config(module.config.memory64_enabled);
     let metrics_registry = MetricsRegistry::new();
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
@@ -97,8 +89,8 @@ pub fn run_fuzzer(module: ICWasmModule) {
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
     let canister_current_memory_usage = NumBytes::new(0);
-    let canister_current_message_memory_usage = NumBytes::new(0);
-    let compilation_cache = Arc::new(CompilationCache::new(NumBytes::new(0)));
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
+    let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());
     WasmExecutionInput {
         api_type: api_type.clone(),
         sandbox_safe_system_state: get_system_state(api_type),

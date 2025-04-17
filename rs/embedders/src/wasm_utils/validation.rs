@@ -40,9 +40,21 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
     STABLE_BYTEMAP_MEMORY_NAME,
 ];
 
+/// System functions that can be exported by a canister
+#[doc(hidden)] // pub for usage in tests
+pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
+    "canister_init",
+    "canister_inspect_message",
+    "canister_pre_upgrade",
+    "canister_post_upgrade",
+    "canister_heartbeat",
+    "canister_global_timer",
+    "canister_on_low_wasm_memory",
+];
+
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
-pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
+pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 11 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -528,6 +540,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "mint_cycles128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "call_cycles_add128",
             vec![(
                 API_VERSION_IC0,
@@ -539,6 +561,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
         ),
         (
             "canister_cycle_balance128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "canister_liquid_cycle_balance128",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
@@ -624,6 +656,86 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 FunctionSignature {
                     param_types: vec![],
                     return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "subnet_self_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "subnet_self_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_call",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_create_canister",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_http_request",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_ecdsa",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_sign_with_schnorr",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cost_vetkd_derive_key",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, ValType::I32, I],
+                    return_type: vec![ValType::I32],
                 },
             )],
         ),
@@ -882,15 +994,6 @@ fn validate_export_section(
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
-        let valid_system_functions = [
-            "canister_init",
-            "canister_pre_upgrade",
-            "canister_post_upgrade",
-            "canister_inspect_message",
-            "canister_heartbeat",
-            "canister_global_timer",
-            "canister_on_low_wasm_memory",
-        ];
         let mut number_exported_functions = 0;
         let mut sum_exported_function_name_lengths = 0;
         for export in &module.exports {
@@ -925,7 +1028,7 @@ fn validate_export_section(
                 } else if func_name.starts_with("canister_") {
                     // The "canister_" prefix is reserved and only functions allowed by the spec
                     // can be exported.
-                    if !valid_system_functions.contains(&func_name) {
+                    if !WASM_VALID_SYSTEM_FUNCTIONS.contains(&func_name) {
                         return Err(WasmValidationError::InvalidExportSection(format!(
                             "Exporting reserved function '{}' with \"canister_\" prefix",
                             func_name
@@ -1056,6 +1159,11 @@ fn validate_function_section(
         });
     }
     Ok(())
+}
+
+// Checks if the module has a Wasm64 memory.
+pub fn has_wasm64_memory(module: &Module) -> bool {
+    module.memories.first().is_some_and(|m| m.memory64)
 }
 
 // Checks that the initial size of the wasm (heap) memory is not larger than
@@ -1462,9 +1570,9 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
         // expect to see then the changes will likely need to be coordinated
         // with a change in how we create the memories in the implementation
         // of `wasmtime::MemoryCreator`.
-        .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
+        .memory_reservation(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
-        .static_memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
+        .memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
         .max_wasm_stack(MAX_WASM_STACK_SIZE);
     config
 }
@@ -1489,7 +1597,7 @@ fn can_compile(
     })
 }
 
-fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
+fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<NumBytes, WasmValidationError> {
     let parser = wasmparser::Parser::new(0);
     let payloads = parser.parse_all(wasm.as_slice());
     for payload in payloads {
@@ -1506,11 +1614,11 @@ fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidatio
                     allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
                 });
             } else {
-                return Ok(());
+                return Ok(NumBytes::from(size as u64));
             }
         }
     }
-    Ok(())
+    Ok(NumBytes::from(0))
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
@@ -1532,7 +1640,7 @@ pub(super) fn validate_wasm_binary<'a>(
     wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
-    check_code_section_size(wasm)?;
+    let code_section_size = check_code_section_size(wasm)?;
     can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
@@ -1545,7 +1653,14 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
-    validate_initial_wasm_memory_size(&module, config.max_wasm_memory_size)?;
+    // The maximum Wasm memory size is different for Wasm32 and Wasm64 and
+    // each needs to be validated accordingly.
+    let max_wasm_memory_size = if has_wasm64_memory(&module) {
+        config.max_wasm64_memory_size
+    } else {
+        config.max_wasm_memory_size
+    };
+    validate_initial_wasm_memory_size(&module, max_wasm_memory_size)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok((
@@ -1554,6 +1669,7 @@ pub(super) fn validate_wasm_binary<'a>(
             wasm_metadata,
             largest_function_instruction_count,
             max_complexity,
+            code_section_size,
         },
         module,
     ))

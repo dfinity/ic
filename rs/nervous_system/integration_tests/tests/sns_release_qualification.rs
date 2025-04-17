@@ -31,7 +31,7 @@ use sns_upgrade_test_utils::test_sns_upgrade;
 /// since there is sometimes a dependency between them, so we test them in both orders.
 ///
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
-
+///
 /// Deployment tests
 
 #[tokio::test]
@@ -56,8 +56,10 @@ async fn test_deployment_with_only_nns_upgrades() {
 
 #[tokio::test]
 async fn test_deployment_with_only_sns_upgrades() {
+    let nns_canisters_to_upgrade = vec![];
+
     test_sns_deployment(
-        vec![],
+        nns_canisters_to_upgrade,
         vec![
             SnsCanisterType::Root,
             SnsCanisterType::Governance,
@@ -71,8 +73,10 @@ async fn test_deployment_with_only_sns_upgrades() {
 
 #[tokio::test]
 async fn test_deployment_with_sns_root_and_governance_upgrade() {
+    let nns_canisters_to_upgrade = vec![];
+
     test_sns_deployment(
-        vec![],
+        nns_canisters_to_upgrade,
         vec![SnsCanisterType::Root, SnsCanisterType::Governance],
     )
     .await;
@@ -80,23 +84,70 @@ async fn test_deployment_with_sns_root_and_governance_upgrade() {
 
 #[tokio::test]
 async fn test_deployment_swap_upgrade() {
-    test_sns_deployment(vec![], vec![SnsCanisterType::Swap]).await;
+    let nns_canisters_to_upgrade = vec![];
+
+    test_sns_deployment(nns_canisters_to_upgrade, vec![SnsCanisterType::Swap]).await;
 }
 
 /// Upgrade Tests
 #[tokio::test]
-async fn test_upgrade_swap() {
-    test_sns_upgrade(vec![SnsCanisterType::Swap]).await;
+async fn test_upgrade_swap_auto() {
+    let automatically_advance_target_version = true;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Swap],
+        automatically_advance_target_version,
+    )
+    .await;
 }
 
 #[tokio::test]
-async fn test_upgrade_sns_gov_root() {
-    test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]).await;
+async fn test_upgrade_swap_no_auto() {
+    let automatically_advance_target_version = false;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Swap],
+        automatically_advance_target_version,
+    )
+    .await;
 }
 
 #[tokio::test]
-async fn test_upgrade_upgrade_sns_gov_root() {
-    test_sns_upgrade(vec![SnsCanisterType::Governance, SnsCanisterType::Root]).await;
+async fn test_upgrade_sns_gov_root_auto() {
+    let automatically_advance_target_version = true;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Root, SnsCanisterType::Governance],
+        automatically_advance_target_version,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_upgrade_sns_gov_root_no_auto() {
+    let automatically_advance_target_version = false;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Root, SnsCanisterType::Governance],
+        automatically_advance_target_version,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_upgrade_upgrade_sns_gov_root_auto() {
+    let automatically_advance_target_version: bool = true;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Governance, SnsCanisterType::Root],
+        automatically_advance_target_version,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_upgrade_upgrade_sns_gov_root_no_auto() {
+    let automatically_advance_target_version = false;
+    test_sns_upgrade(
+        vec![SnsCanisterType::Governance, SnsCanisterType::Root],
+        automatically_advance_target_version,
+    )
+    .await;
 }
 
 /// Tests a deployment of the SNS.

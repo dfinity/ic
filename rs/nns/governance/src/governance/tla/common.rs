@@ -52,3 +52,20 @@ pub fn function_domain_union(
     }
     ).collect()
 }
+
+pub fn function_range_union(
+    state_pairs: &[ResolvedStatePair],
+    field_name: &str,
+) -> BTreeSet<TlaValue> {
+    state_pairs.iter().flat_map(|pair| {
+        match (pair.start.get(field_name), pair.end.get(field_name)) {
+            (Some(TlaValue::Function(sf)), Some(TlaValue::Function(ef))) => {
+                sf.values().chain(ef.values()).cloned()
+            }
+            _ => {
+                panic!("Field {} not found in the start or end state, or not a function, when computing the union", field_name)
+            }
+        }
+    }
+    ).collect()
+}

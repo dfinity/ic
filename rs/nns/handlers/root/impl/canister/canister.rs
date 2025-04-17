@@ -1,10 +1,3 @@
-use candid::candid_method;
-use dfn_candid::{candid, candid_one, candid_one_with_config};
-use dfn_core::{
-    api::caller,
-    endpoint::{over, over_async},
-    stable,
-};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::{
@@ -23,7 +16,7 @@ use ic_nervous_system_root::{
     },
     LOG_PREFIX,
 };
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
     types::CallCanisterProposal,
@@ -43,7 +36,12 @@ use ic_nns_handler_root_interface::{
 use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use ic_cdk::println;
+use ic_cdk::{post_upgrade, query, spawn, update};
+
+fn caller() -> PrincipalId {
+    PrincipalId::from(ic_cdk::caller())
+}
 
 thread_local! {
     // How this value was chosen: queues become full at 500. This is 1/3 of that, which seems to be
@@ -53,7 +51,7 @@ thread_local! {
 
 fn new_management_canister_client() -> impl ManagementCanisterClient {
     let client =
-        ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
+        ManagementCanisterClientImpl::<CdkRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
 
     // Here, VIP = is an NNS canister
     let is_caller_vip = CanisterId::try_from(caller())
@@ -72,20 +70,15 @@ fn new_management_canister_client() -> impl ManagementCanisterClient {
 // messages are quite obscure.
 #[export_name = "canister_init"]
 fn canister_init() {
-    dfn_core::printer::hook();
     println!("{}canister_init", LOG_PREFIX);
 }
 
-#[export_name = "canister_post_upgrade"]
+#[post_upgrade]
 fn canister_post_upgrade() {
-    dfn_core::printer::hook();
     println!("{}canister_post_upgrade", LOG_PREFIX);
-    // Wipe out stable memory, because earlier version of this canister were
-    // stateful. This minimizes risk of future misinterpretation of data.
-    stable::set(&[]);
 }
 
-ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Returns the status of the canister specified in the input.
 ///
@@ -94,13 +87,8 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 ///
 /// This must be an update, not a query, because an inter-canister call to the
 /// management canister is required.
-#[export_name = "canister_update canister_status"]
-fn canister_status() {
-    over_async(candid_one, canister_status_)
-}
-
-#[candid_method(update, rename = "canister_status")]
-async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
+#[update]
+async fn canister_status(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
     let client = new_management_canister_client();
 
     let canister_status_response = client
@@ -111,58 +99,44 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
     canister_status_response.unwrap()
 }
 
-#[export_name = "canister_update submit_root_proposal_to_upgrade_governance_canister"]
-fn submit_root_proposal_to_upgrade_governance_canister() {
-    over_async(
-        candid,
-        |(expected_governance_wasm_sha, proposal): (
-            serde_bytes::ByteBuf,
-            ChangeCanisterRequest,
-        )| {
-            ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
-                caller(),
-                expected_governance_wasm_sha.to_vec(),
-                proposal,
-            )
-        },
-    );
+#[update(hidden = true)]
+async fn submit_root_proposal_to_upgrade_governance_canister(
+    expected_governance_wasm_sha: serde_bytes::ByteBuf,
+    proposal: ChangeCanisterRequest,
+) -> Result<(), String> {
+    ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
+        caller(),
+        expected_governance_wasm_sha.to_vec(),
+        proposal,
+    )
+    .await
 }
 
-#[export_name = "canister_update vote_on_root_proposal_to_upgrade_governance_canister"]
-fn vote_on_root_proposal_to_upgrade_governance_canister() {
-    over_async(
-        candid,
-        |(proposer, wasm_sha256, ballot): (
-            PrincipalId,
-            serde_bytes::ByteBuf,
-            RootProposalBallot,
-        )| {
-            ic_nns_handler_root::root_proposals::vote_on_root_proposal_to_upgrade_governance_canister(
-                caller(),
-                proposer,
-                wasm_sha256.to_vec(),
-                ballot,
-            )
-        },
-    );
+#[update(hidden = true)]
+async fn vote_on_root_proposal_to_upgrade_governance_canister(
+    proposer: PrincipalId,
+    wasm_sha256: serde_bytes::ByteBuf,
+    ballot: RootProposalBallot,
+) -> Result<(), String> {
+    ic_nns_handler_root::root_proposals::vote_on_root_proposal_to_upgrade_governance_canister(
+        caller(),
+        proposer,
+        wasm_sha256.to_vec(),
+        ballot,
+    )
+    .await
 }
 
-#[export_name = "canister_update get_pending_root_proposals_to_upgrade_governance_canister"]
-fn get_pending_root_proposals_to_upgrade_governance_canister() {
-    over(candid, |()| -> Vec<GovernanceUpgradeRootProposal> {
-        ic_nns_handler_root::root_proposals::get_pending_root_proposals_to_upgrade_governance_canister()
-    })
+#[update(hidden = true)]
+fn get_pending_root_proposals_to_upgrade_governance_canister() -> Vec<GovernanceUpgradeRootProposal>
+{
+    ic_nns_handler_root::root_proposals::get_pending_root_proposals_to_upgrade_governance_canister()
 }
 
 /// Executes a proposal to change an NNS canister.
-#[export_name = "canister_update change_nns_canister"]
-fn change_nns_canister() {
+#[update]
+fn change_nns_canister(request: ChangeCanisterRequest) {
     check_caller_is_governance();
-    over(candid_one, change_nns_canister_);
-}
-
-#[candid_method(update, rename = "change_nns_canister")]
-fn change_nns_canister_(request: ChangeCanisterRequest) {
     // We want to reply first, so that in the case that we want to upgrade the
     // governance canister, the root canister no longer holds a pending callback
     // to it -- and therefore does not prevent the governance canister from being
@@ -176,7 +150,7 @@ fn change_nns_canister_(request: ChangeCanisterRequest) {
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
     let future = async move {
-        let change_canister_result = change_canister::<DfnRuntime>(request).await;
+        let change_canister_result = change_canister::<CdkRuntime>(request).await;
         match change_canister_result {
             Ok(()) => {
                 println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
@@ -189,29 +163,19 @@ fn change_nns_canister_(request: ChangeCanisterRequest) {
 
     // Starts the proposal execution, which will continue after this function has
     // returned.
-    dfn_core::api::futures::spawn(future);
+    spawn(future);
 }
 
-#[export_name = "canister_update add_nns_canister"]
-fn add_nns_canister() {
+#[update]
+async fn add_nns_canister(request: AddCanisterRequest) {
     check_caller_is_governance();
-    over_async(candid_one, add_nns_canister_)
-}
-
-#[candid_method(update, rename = "add_nns_canister")]
-async fn add_nns_canister_(request: AddCanisterRequest) {
     canister_management::do_add_nns_canister(request).await;
 }
 
 // Executes a proposal to stop/start an nns canister.
-#[export_name = "canister_update stop_or_start_nns_canister"]
-fn stop_or_start_nns_canister() {
+#[update]
+async fn stop_or_start_nns_canister(request: StopOrStartCanisterRequest) {
     check_caller_is_governance();
-    over_async(candid_one, stop_or_start_nns_canister_)
-}
-
-#[candid_method(update, rename = "stop_or_start_nns_canister")]
-async fn stop_or_start_nns_canister_(request: StopOrStartCanisterRequest) {
     // It is a mistake to stop the root or governance canister, because if either of them is
     // stopped, there is no way to restore them to the running state. That would require executing a
     // proposal, but executing such proposals requires both of those canisters. Lifelife plays a
@@ -231,30 +195,21 @@ async fn stop_or_start_nns_canister_(request: StopOrStartCanisterRequest) {
         .unwrap() // For compatibility.
 }
 
-#[export_name = "canister_update call_canister"]
-fn call_canister() {
+#[update(hidden = true)]
+fn call_canister(proposal: CallCanisterProposal) {
     check_caller_is_governance();
-    over_async(candid, |(proposal,): (CallCanisterProposal,)| async move {
-        // Starts the proposal execution, which will continue after this function has returned.
-        let future = canister_management::call_canister(proposal);
-        dfn_core::api::futures::spawn(future);
-    });
+    // Starts the proposal execution, which will continue after this function has returned.
+    let future = canister_management::call_canister(proposal);
+    spawn(future);
 }
 
 /// Change the controllers of a canister controlled by NNS Root. Only callable
 /// by SNS-W.
-#[export_name = "canister_update change_canister_controllers"]
-fn change_canister_controllers() {
-    check_caller_is_sns_w();
-    over_async(candid_one, change_canister_controllers_)
-}
-
-/// Change the controllers of a canister controlled by NNS Root. Only callable
-/// by SNS-W.
-#[candid_method(update, rename = "change_canister_controllers")]
-async fn change_canister_controllers_(
+#[update]
+async fn change_canister_controllers(
     change_canister_controllers_request: ChangeCanisterControllersRequest,
 ) -> ChangeCanisterControllersResponse {
+    check_caller_is_sns_w();
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
         &mut new_management_canister_client(),
@@ -264,16 +219,11 @@ async fn change_canister_controllers_(
 
 /// Updates the canister settings of a canister controlled by NNS Root. Only callable by NNS
 /// Governance.
-#[export_name = "canister_update update_canister_settings"]
-fn update_canister_settings() {
-    check_caller_is_governance();
-    over_async(candid_one, update_canister_settings_);
-}
-
-#[candid_method(update, rename = "update_canister_settings")]
-async fn update_canister_settings_(
+#[update]
+async fn update_canister_settings(
     update_settings: UpdateCanisterSettingsRequest,
 ) -> UpdateCanisterSettingsResponse {
+    check_caller_is_governance();
     canister_management::update_canister_settings(
         update_settings,
         &mut new_management_canister_client(),
@@ -282,13 +232,9 @@ async fn update_canister_settings_(
 }
 
 /// Resources to serve for a given http_request
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    over(candid_one_with_config, serve_http)
-}
-
 /// Serve an HttpRequest made to this canister
-pub fn serve_http(request: HttpRequest) -> HttpResponse {
+#[query(hidden = true, decoding_quota = 10000)]
+pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
         _ => HttpResponseBuilder::not_found().build(),

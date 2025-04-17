@@ -8,7 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -29,6 +31,7 @@ k256 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rate-limits-api = { path = "../../boundary_node/rate_limits/api" }
+salt-sharing-api = { path = "../../boundary_node/salt_sharing/api" }
 regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 slog = { workspace = true }
@@ -66,3 +69,7 @@ path = "bn_update_workload_test.rs"
 [[bin]]
 name = "ic-systest-rate-limit-canister"
 path = "rate_limit_canister_test.rs"
+
+[[bin]]
+name = "ic-systest-salt-sharing-canister"
+path = "salt_sharing_canister_test.rs"

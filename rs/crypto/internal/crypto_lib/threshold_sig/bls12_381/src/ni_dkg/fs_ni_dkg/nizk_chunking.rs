@@ -24,7 +24,7 @@ const SECURITY_LEVEL: usize = 256;
 pub const NUM_ZK_REPETITIONS: usize = 32;
 
 /// Defined as ceil(SECURITY_LEVEL/NUM_ZK_REPETITIONS)
-pub const CHALLENGE_BITS: usize = (SECURITY_LEVEL + NUM_ZK_REPETITIONS - 1) / NUM_ZK_REPETITIONS;
+pub const CHALLENGE_BITS: usize = SECURITY_LEVEL.div_ceil(NUM_ZK_REPETITIONS);
 
 // The number of bytes needed to represent a challenge (which must fit in a usize)
 pub const CHALLENGE_BYTES: usize = (CHALLENGE_BITS + 7) / 8;

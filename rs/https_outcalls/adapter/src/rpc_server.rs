@@ -1,12 +1,13 @@
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_CONNECT, LABEL_DOWNLOAD,
     LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
-    LABEL_UPLOAD, LABEL_URL_PARSE,
+    LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_OK, LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use crate::Config;
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
 use hyper::{
     body::Bytes,
     header::{HeaderMap, ToStrError},
@@ -21,9 +22,14 @@ use ic_https_outcalls_service::{
     https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
     HttpsOutcallRequest, HttpsOutcallResponse,
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use parking_lot::{RwLock, RwLockUpgradableReadGuard};
+use rand::{seq::SliceRandom, thread_rng};
+use std::collections::BTreeMap;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::{Request, Response, Status};
 
@@ -41,15 +47,21 @@ const USER_AGENT_ADAPTER: &str = "ic/1.0";
 /// "the total number of bytes representing the header names and values must not exceed 48KiB".
 const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
+/// The maximum number of times we will try to connect to a SOCKS proxy.
+const MAX_SOCKS_PROXY_RETRIES: usize = 3;
+
 type OutboundRequestBody = Full<Bytes>;
 
-/// Implements HttpsOutcallsService
-// TODO: consider making this private
+type Cache =
+    BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
+
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
     socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
+    cache: Arc<RwLock<Cache>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
+    http_connect_timeout_secs: u64,
 }
 
 impl CanisterHttp {
@@ -98,8 +110,194 @@ impl CanisterHttp {
         Self {
             client,
             socks_client,
+            cache: Arc::new(RwLock::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
+            http_connect_timeout_secs: config.http_connect_timeout_secs,
+        }
+    }
+
+    fn create_socks_proxy_client(
+        &self,
+        proxy_addr: Uri,
+    ) -> Client<HttpsConnector<SocksConnector<HttpConnector>>, Full<Bytes>> {
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false);
+        http_connector
+            .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
+
+        Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(
+            HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .expect("Failed to set native roots")
+                .https_only()
+                .enable_all_versions()
+                .wrap_connector(SocksConnector {
+                    proxy_addr,
+                    auth: None,
+                    connector: http_connector,
+                }),
+        )
+    }
+
+    fn compare_results(
+        &self,
+        result: &Result<http::Response<Incoming>, String>,
+        dark_launch_result: &Result<http::Response<Incoming>, String>,
+    ) {
+        match (result, dark_launch_result) {
+            (Ok(result), Ok(dark_launch_result)) => {
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_OK])
+                    .inc();
+                if result.status() != dark_launch_result.status() {
+                    info!(
+                        self.logger,
+                        "SOCKS_PROXY_DL: status code mismatch: {} vs {}",
+                        result.status(),
+                        dark_launch_result.status(),
+                    );
+                }
+            }
+            (Err(_), Err(_)) => {
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_ERROR])
+                    .inc();
+            }
+            (Ok(_), Err(err)) => {
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_ERROR])
+                    .inc();
+                info!(
+                    self.logger,
+                    "SOCKS_PROXY_DL: regular request succeeded, DL request failed with error {}",
+                    err,
+                );
+            }
+            (Err(err), Ok(_)) => {
+                self.metrics
+                    .socks_proxy_dl_requests
+                    .with_label_values(&[LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_OK])
+                    .inc();
+                info!(
+                    self.logger,
+                    "SOCKS_PROXY_DL: DL request succeeded, regular request failed with error {}",
+                    err,
+                );
+            }
+        }
+    }
+
+    // Attempts to load the socks client from the cache. If not present, creates a new socks client and adds it to the cache.
+    fn get_socks_client(
+        &self,
+        socks_proxy_uri: Uri,
+    ) -> Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody> {
+        let cache_guard = self.cache.upgradable_read();
+
+        if let Some(client) = cache_guard.get(&socks_proxy_uri.to_string()) {
+            client.clone()
+        } else {
+            let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
+            self.metrics.socks_cache_misses.inc();
+            let client = self.create_socks_proxy_client(socks_proxy_uri.clone());
+            cache_guard.insert(socks_proxy_uri.to_string(), client.clone());
+            self.metrics.socks_cache_size.set(cache_guard.len() as i64);
+            client
+        }
+    }
+
+    fn classify_uri_host(uri: &Uri) -> &str {
+        let Some(host) = uri.host() else {
+            return "empty";
+        };
+
+        if host.parse::<Ipv4Addr>().is_ok() {
+            return "v4";
+        }
+
+        if host.starts_with('[') && host.ends_with(']') {
+            let inside = &host[1..host.len() - 1];
+            if inside.parse::<Ipv6Addr>().is_ok() {
+                return "v6";
+            }
+        }
+
+        "domain_name"
+    }
+
+    async fn do_https_outcall_socks_proxy(
+        &self,
+        socks_proxy_addrs: Vec<String>,
+        request: http::Request<Full<Bytes>>,
+    ) -> Result<http::Response<Incoming>, String> {
+        let mut socks_proxy_addrs = socks_proxy_addrs.to_owned();
+
+        socks_proxy_addrs.shuffle(&mut thread_rng());
+
+        let mut last_error = None;
+
+        let mut tries = 0;
+
+        for socks_proxy_addr in &socks_proxy_addrs {
+            let socks_proxy_uri: Uri = match socks_proxy_addr.parse() {
+                Ok(uri) => uri,
+                Err(e) => {
+                    debug!(self.logger, "Failed to parse SOCKS proxy address: {}", e);
+                    continue;
+                }
+            };
+
+            tries += 1;
+            if tries > MAX_SOCKS_PROXY_RETRIES {
+                break;
+            }
+
+            let socks_client = self.get_socks_client(socks_proxy_uri);
+
+            let url_format = Self::classify_uri_host(request.uri());
+
+            match socks_client.request(request.clone()).await {
+                Ok(resp) => {
+                    self.metrics
+                        .socks_connection_attempts
+                        .with_label_values(&[
+                            &tries.to_string(),
+                            "success",
+                            socks_proxy_addr,
+                            url_format,
+                        ])
+                        .inc();
+                    return Ok(resp);
+                }
+                Err(socks_err) => {
+                    self.metrics
+                        .socks_connection_attempts
+                        .with_label_values(&[
+                            &tries.to_string(),
+                            "failure",
+                            socks_proxy_addr,
+                            url_format,
+                        ])
+                        .inc();
+                    debug!(
+                        self.logger,
+                        "Failed to connect through SOCKS with address {}: {}",
+                        socks_proxy_addr,
+                        socks_err
+                    );
+                    last_error = Some(socks_err);
+                }
+            }
+        }
+
+        if let Some(last_error) = last_error {
+            Err(format!("{:?}", last_error))
+        } else {
+            Err("No SOCKS proxy addresses provided".to_string())
         }
     }
 }
@@ -198,18 +396,44 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    self.socks_client.request(http_req_clone).await.map_err(|e| {
-                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
-                    })
+
+                    let mut result = self
+                        .socks_client
+                        .request(http_req_clone.clone())
+                        .await
+                        .map_err(|socks_err| {
+                            format!(
+                                "Request failed direct connect {:?} and connect through socks {:?}",
+                                direct_err, socks_err
+                            )
+                        });
+
+                    //TODO(SOCKS_PROXY_DL): Remove the compare_results once we are confident in the SOCKS proxy implementation.
+                    if !req.socks_proxy_addrs.is_empty() {
+                        let dark_launch_result = self
+                            .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                            .await;
+
+                        self.compare_results(&result, &dark_launch_result);
+                        if result.is_err() && dark_launch_result.is_ok() {
+                            // Id dl found something, return that.
+                            result = dark_launch_result;
+                        }
+                    }
+
+                    result
                 }
-                Ok(resp)=> Ok(resp),
+                Ok(resp) => Ok(resp),
             }
         } else {
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {:?}", e))
+            self.client
+                .request(http_req)
+                .await
+                .map_err(|e| format!("Failed to directly connect: {:?}", e))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
@@ -458,5 +682,30 @@ mod tests {
         ];
         let headers = validate_headers(header_vec).unwrap();
         assert_eq!(headers.len(), 3);
+    }
+
+    #[test]
+    fn test_classify_uri_host() {
+        let ipv4_url = "http://127.0.0.1/path";
+        let ipv6_url = "http://[2001:db8::1]/path";
+        let domain_name_url = "http://example.com/something";
+        let empty_hostname_url = "/hello/world";
+
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(ipv4_url).unwrap()),
+            "v4"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(ipv6_url).unwrap()),
+            "v6"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(domain_name_url).unwrap()),
+            "domain_name"
+        );
+        assert_eq!(
+            CanisterHttp::classify_uri_host(&Uri::from_str(empty_hostname_url).unwrap()),
+            "empty"
+        );
     }
 }

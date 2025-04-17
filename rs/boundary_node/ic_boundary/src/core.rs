@@ -2,15 +2,10 @@
 use std::{
     error::Error as StdError,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
-use anonymization_client::{
-    Canister as AnonymizationCanister,
-    CanisterMethodsBuilder as AnonymizationCanisterMethodsBuilder, Track,
-    Tracker as AnonymizationTracker,
-};
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
@@ -49,8 +44,7 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
-use rand::rngs::OsRng;
-use tokio::sync::RwLock;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -73,6 +67,7 @@ use crate::{
     rate_limiting::{generic, RateLimit},
     retry::{retry_request, RetryParams},
     routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
         Snapshotter,
@@ -201,6 +196,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // Setup registry-related stuff
     let persister = Persister::new(Arc::clone(&routing_table));
 
+    // Snapshot update notification channels
+    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
+
     // Registry Client
     let (registry_client, registry_replicator, nns_pub_key) =
         if let Some(v) = &cli.registry.registry_local_store_path {
@@ -222,6 +220,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
                 http_client_check,
                 &metrics_registry,
+                channel_snapshot_send,
+                channel_snapshot_recv.clone(),
                 &mut runners,
             )?;
 
@@ -283,16 +283,30 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // Generic Ratelimiter
+    let generic_limiter_opts = generic::Options {
+        tti: cli.rate_limiting.rate_limit_generic_tti,
+        max_shards: cli.rate_limiting.rate_limit_generic_max_shards,
+        poll_interval: cli.rate_limiting.rate_limit_generic_poll_interval,
+        autoscale: cli.rate_limiting.rate_limit_generic_autoscale,
+    };
     let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
-        Some(Arc::new(generic::Limiter::new_from_file(v.clone())))
+        Some(Arc::new(generic::GenericLimiter::new_from_file(
+            v.clone(),
+            generic_limiter_opts,
+            channel_snapshot_recv,
+            &metrics_registry,
+        )))
+    } else if let Some(v) = cli.rate_limiting.rate_limit_generic_canister_id {
+        Some(Arc::new(generic::GenericLimiter::new_from_canister(
+            v,
+            agent.clone().unwrap(),
+            generic_limiter_opts,
+            cli.misc.crypto_config.is_some(),
+            channel_snapshot_recv,
+            &metrics_registry,
+        )))
     } else {
-        cli.rate_limiting.rate_limit_generic_canister_id.map(|x| {
-            Arc::new(if cli.misc.crypto_config.is_some() {
-                generic::Limiter::new_from_canister_update(x, agent.clone().unwrap())
-            } else {
-                generic::Limiter::new_from_canister_query(x, agent.clone().unwrap())
-            })
-        })
+        None
     };
 
     // HTTP Logs Anonymization
@@ -424,23 +438,28 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     runners.push(Box::new(metrics_runner));
 
     if let Some(v) = generic_limiter {
-        let runner = Box::new(WithThrottle(
-            v,
-            ThrottleParams::new(cli.rate_limiting.rate_limit_generic_poll_interval),
-        ));
-        runners.push(runner);
+        runners.push(Box::new(v));
     }
 
     // HTTP Logs Anonymization
-    let tracker = if let Some(v) = cli.obs.obs_log_anonymization_canister_id {
-        let canister = AnonymizationCanister::new(agent.clone().unwrap(), v);
-        let cm = AnonymizationCanisterMethodsBuilder::new(canister)
-            .with_metrics(&metrics_registry)
-            .build();
-        Some(AnonymizationTracker::new(Box::new(OsRng), cm)?)
-    } else {
-        None
-    };
+    let salt_fetcher = cli
+        .obs
+        .obs_log_anonymization_canister_id
+        .and_then(|canister_id| {
+            agent.as_ref().map(|agent| {
+                Arc::new(AnonymizationSaltFetcher::new(
+                    agent.clone(),
+                    canister_id,
+                    cli.obs.obs_log_anonymization_poll_interval,
+                    anonymization_salt,
+                    &metrics_registry,
+                ))
+            })
+        });
+
+    if let Some(fetcher) = salt_fetcher {
+        runners.push(Box::new(fetcher));
+    }
 
     TokioScope::scope_and_block(move |s| {
         if let Some(v) = registry_replicator {
@@ -448,20 +467,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 v.start_polling(cli.registry.registry_nns_urls, nns_pub_key)
                     .await
                     .context("failed to start registry replicator")?
-                    .await
-                    .context("registry replicator failed")?;
+                    .await;
 
                 Ok::<(), Error>(())
-            });
-        }
-
-        // Anonymization Tracker
-        if let Some(mut t) = tracker {
-            s.spawn(async move {
-                t.track(|value| {
-                    anonymization_salt.store(Some(Arc::new(value)));
-                })
-                .await
             });
         }
 
@@ -594,10 +602,11 @@ fn setup_registry(
     persister: WithMetricsPersist<Persister>,
     http_client_check: Arc<dyn http::Client>,
     metrics_registry: &Registry,
+    channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
+    channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     runners: &mut Vec<Box<dyn Run>>,
 ) -> Result<(Option<RegistryReplicator>, Option<ThresholdSigPublicKey>), Error> {
     // Snapshots
-    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
     let snapshot_runner = WithMetricsSnapshot(
         {
             let mut snapshotter = Snapshotter::new(
@@ -818,7 +827,7 @@ pub fn setup_router(
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn http::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
-    generic_limiter: Option<Arc<generic::Limiter>>,
+    generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
@@ -828,6 +837,8 @@ pub fn setup_router(
         http_client.clone(),
         Arc::clone(&routing_table),
         Arc::clone(&registry_snapshot),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
     );
 
     let proxy_router = Arc::new(proxy_router);
@@ -839,13 +850,9 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new()
-        .route(routes::PATH_QUERY, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        })
-        .layer(option_layer(cache.map(|x| {
-            middleware::from_fn_with_state(x.clone(), cache_middleware)
-        })));
+    let query_route = Router::new().route(routes::PATH_QUERY, {
+        post(routes::handle_canister).with_state(proxy.clone())
+    });
 
     let call_route = {
         let mut route = Router::new()
@@ -994,6 +1001,9 @@ pub fn setup_router(
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
+        .layer(option_layer(cache.map(|x| {
+            middleware::from_fn_with_state(x.clone(), cache_middleware)
+        })))
         .layer(middleware_retry.clone());
 
     let service_subnet_read = ServiceBuilder::new()
@@ -1056,12 +1066,6 @@ impl<T: Run> Run for WithMetrics<T> {
         out
     }
 }
-
-#[allow(dead_code)]
-pub struct WithRetry<T>(
-    pub T,
-    pub Duration, // attempt_interval
-);
 
 pub struct ThrottleParams {
     pub throttle_duration: Duration,

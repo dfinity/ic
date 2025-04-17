@@ -20,10 +20,9 @@ use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
-use crate::{address::BitcoinAddress, ECDSAPublicKey, Timestamp};
+use crate::{address::BitcoinAddress, ECDSAPublicKey, Network, Timestamp};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
-pub use ic_btc_interface::Network;
 use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_canister_log::log;
 use ic_utils_ensure::ensure_eq;
@@ -249,20 +248,8 @@ pub enum UtxoCheckStatus {
     Clean,
     /// The UTXO in question is tainted.
     Tainted,
-}
-
-impl UtxoCheckStatus {
-    pub fn from_clean_flag(clean: bool) -> Self {
-        if clean {
-            Self::Clean
-        } else {
-            Self::Tainted
-        }
-    }
-
-    pub fn is_clean(self) -> bool {
-        self == Self::Clean
-    }
+    /// The UTXO is clean but minting failed.
+    CleanButMintUnknown,
 }
 
 /// Relevant data for a checked UTXO. The UUID and `kyt_provider` are kept for
@@ -301,11 +288,11 @@ pub struct CkBtcMinterState {
     /// before being sent.
     pub max_time_in_queue_nanos: u64,
 
-    /// Per-principal lock for update_balance
-    pub update_balance_principals: BTreeSet<Principal>,
+    /// Per-account lock for update_balance
+    pub update_balance_accounts: BTreeSet<Account>,
 
-    /// Per-principal lock for retrieve_btc
-    pub retrieve_btc_principals: BTreeSet<Principal>,
+    /// Per-account lock for retrieve_btc
+    pub retrieve_btc_accounts: BTreeSet<Account>,
 
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
@@ -367,14 +354,13 @@ pub struct CkBtcMinterState {
     pub utxos_state_addresses: BTreeMap<Account, BTreeSet<Utxo>>,
 
     /// This map contains the UTXOs we removed due to a transaction finalization
-    /// while there was a concurrent update_balance call for the principal whose
-    /// UTXOs participated in the transaction. The UTXOs can belong to any
-    /// subaccount of the principal.
+    /// while there was a concurrent update_balance call for the account whose
+    /// UTXOs participated in the transaction.
     ///
     /// We insert a new entry into this map if we discover a concurrent
     /// update_balance calls during a transaction finalization and remove the
     /// entry once the update_balance call completes.
-    pub finalized_utxos: BTreeMap<Principal, BTreeSet<Utxo>>,
+    pub finalized_utxos: BTreeMap<Account, BTreeSet<Utxo>>,
 
     /// Process one timer event at a time.
     pub is_timer_running: bool,
@@ -448,7 +434,7 @@ impl CkBtcMinterState {
             kyt_fee,
         }: InitArgs,
     ) {
-        self.btc_network = btc_network.into();
+        self.btc_network = btc_network;
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
@@ -696,9 +682,9 @@ impl CkBtcMinterState {
 
     fn forget_utxo(&mut self, utxo: &Utxo) {
         if let Some(account) = self.outpoint_account.remove(&utxo.outpoint) {
-            if self.update_balance_principals.contains(&account.owner) {
+            if self.update_balance_accounts.contains(&account) {
                 self.finalized_utxos
-                    .entry(account.owner)
+                    .entry(account)
                     .or_default()
                     .insert(utxo.clone());
             }
@@ -932,7 +918,7 @@ impl CkBtcMinterState {
     /// Return UTXOs of the given account that are known to the minter.
     pub fn known_utxos_for_account(&self, account: &Account) -> Vec<Utxo> {
         let maybe_existing_utxos = self.utxos_state_addresses.get(account);
-        let maybe_finalized_utxos = self.finalized_utxos.get(&account.owner);
+        let maybe_finalized_utxos = self.finalized_utxos.get(account);
         match (maybe_existing_utxos, maybe_finalized_utxos) {
             (Some(existing_utxos), Some(finalized_utxos)) => existing_utxos
                 .union(finalized_utxos)
@@ -965,7 +951,7 @@ impl CkBtcMinterState {
                 .unwrap_or(false)
                 || self
                     .finalized_utxos
-                    .get(&account.owner)
+                    .get(account)
                     .map(|utxos| utxos.contains(utxo))
                     .unwrap_or(false)
         };
@@ -1061,6 +1047,24 @@ impl CkBtcMinterState {
                 *self.owed_kyt_amount.entry(provider).or_insert(0) += self.check_fee;
             }
         }
+    }
+
+    /// Marks the given UTXO as successfully checked but minting failed.
+    fn mark_utxo_checked_mint_unknown(&mut self, utxo: Utxo, account: &Account) {
+        // It should have already been removed from suspended_utxos
+        debug_assert_eq!(
+            self.suspended_utxos.contains_utxo(&utxo, account),
+            (None, None),
+            "BUG: UTXO was still suspended and cannot be marked as mint unknown"
+        );
+        self.checked_utxos.insert(
+            utxo,
+            CheckedUtxo {
+                uuid: None,
+                status: UtxoCheckStatus::CleanButMintUnknown,
+                kyt_provider: None,
+            },
+        );
     }
 
     /// Marks the given UTXO as successfully checked.
@@ -1278,6 +1282,16 @@ impl CkBtcMinterState {
             SuspendedReason::Quarantined => Some(u),
         })
     }
+
+    pub fn mint_status_unknown_utxos(&self) -> impl Iterator<Item = &Utxo> {
+        self.checked_utxos.iter().filter_map(|(utxo, checked)| {
+            if checked.status == UtxoCheckStatus::CleanButMintUnknown {
+                Some(utxo)
+            } else {
+                None
+            }
+        })
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Default)]
@@ -1445,15 +1459,15 @@ impl From<InitArgs> for CkBtcMinterState {
     #[allow(deprecated)]
     fn from(args: InitArgs) -> Self {
         Self {
-            btc_network: args.btc_network.into(),
+            btc_network: args.btc_network,
             ecdsa_key_name: args.ecdsa_key_name,
             ecdsa_public_key: None,
             min_confirmations: args
                 .min_confirmations
                 .unwrap_or(crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS),
             max_time_in_queue_nanos: args.max_time_in_queue_nanos,
-            update_balance_principals: Default::default(),
-            retrieve_btc_principals: Default::default(),
+            update_balance_accounts: Default::default(),
+            retrieve_btc_accounts: Default::default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),

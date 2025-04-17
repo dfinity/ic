@@ -27,6 +27,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/canister_client/sender",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",

@@ -5,7 +5,6 @@ use crate::metrics::{
     OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
 };
 use ic_adapter_metrics_client::AdapterMetrics;
-use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
@@ -15,6 +14,7 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest,
 };
 use ic_config::adapters::AdaptersConfig;
+use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
 use ic_logger::{error, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};

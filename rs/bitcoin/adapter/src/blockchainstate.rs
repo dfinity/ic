@@ -1,14 +1,22 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader, Network};
+use bitcoin::{
+    block::Header as BlockHeader, blockdata::constants::genesis_block, consensus::Encodable, Block,
+    BlockHash, Network,
+};
+
+use bitcoin::Work;
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
-/// This field contains the datatype used to store "work" of a Bitcoin blockchain
-pub type Work = bitcoin::util::uint::Uint256;
+/// The limit at which we should stop making additional requests for new blocks as the block cache
+/// becomes too large. Inflight `getdata` messages will remain active, but new `getdata` messages will
+/// not be created.
+const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
+const ONE_MB: usize = 1_024 * 1_024;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
@@ -75,10 +83,15 @@ pub enum AddBlockError {
     /// Used to indicate that the merkle root of the block is invalid.
     #[error("Received a block with an invalid merkle root: {0}")]
     InvalidMerkleRoot(BlockHash),
-    // Used to indicate when the header causes an error while adding a block to the state.
+    /// Used to indicate when the header causes an error while adding a block to the state.
     #[error("Block's header caused an error: {0}")]
     Header(AddHeaderError),
+    /// Used to indicate that the block could not be serialized.
+    #[error("Serialization error for block {0} with error {1}")]
+    CouldNotSerialize(BlockHash, String),
 }
+
+pub type SerializedBlock = Vec<u8>;
 
 /// This struct is a cache of Bitcoin blockchain.
 /// The BlockChainState caches all the Bitcoin headers, some of the Bitcoin blocks.
@@ -91,8 +104,8 @@ pub struct BlockchainState {
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
     header_cache: HashMap<BlockHash, HeaderNode>,
 
-    /// This field stores a hashmap containing BlockHash and the corresponding Block.
-    block_cache: HashMap<BlockHash, Block>,
+    /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
+    block_cache: HashMap<BlockHash, Arc<SerializedBlock>>,
 
     /// This field contains the known tips of the header cache.
     tips: Vec<Tip>,
@@ -133,6 +146,11 @@ impl BlockchainState {
     /// Returns the header for the given block hash.
     pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
         self.header_cache.get(hash)
+    }
+
+    /// Returns the hashes of all cached blocks.
+    pub(crate) fn get_cached_blocks(&self) -> Vec<BlockHash> {
+        self.block_cache.keys().copied().collect()
     }
 
     /// Processes the `headers` message received from Bitcoin nodes by adding them to the state.
@@ -238,7 +256,15 @@ impl BlockchainState {
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
-        self.block_cache.insert(block_hash, block);
+
+        let mut serialized_block = vec![];
+        block
+            .consensus_encode(&mut serialized_block)
+            .map_err(|e| AddBlockError::CouldNotSerialize(block_hash, e.to_string()))?;
+
+        self.block_cache
+            .insert(block_hash, Arc::new(serialized_block));
+
         self.metrics
             .block_cache_size
             .set(self.get_block_cache_size() as i64);
@@ -315,10 +341,10 @@ impl BlockchainState {
         hashes
     }
 
-    /// This method takes a list of block hashes as input.
-    /// For each block hash, if the corresponding block is stored in the `block_cache`, the cached block is returned.
-    pub fn get_block(&self, block_hash: &BlockHash) -> Option<&Block> {
-        self.block_cache.get(block_hash)
+    /// This method takes a block hash
+    /// If the corresponding block is stored in the `block_cache`, the cached block is returned.
+    pub fn get_block(&self, block_hash: &BlockHash) -> Option<Arc<SerializedBlock>> {
+        self.block_cache.get(block_hash).cloned()
     }
 
     /// Used when the adapter is shutdown and no longer requires holding on to blocks.
@@ -326,9 +352,13 @@ impl BlockchainState {
         self.block_cache = HashMap::new();
     }
 
+    pub(crate) fn is_block_cache_full(&self) -> bool {
+        self.get_block_cache_size() >= BLOCK_CACHE_THRESHOLD_BYTES
+    }
+
     /// Returns the current size of the block cache.
     pub fn get_block_cache_size(&self) -> usize {
-        self.block_cache.values().fold(0, |sum, b| b.size() + sum)
+        self.block_cache.values().map(|block| block.len()).sum()
     }
 }
 
@@ -338,18 +368,18 @@ impl HeaderStore for BlockchainState {
             .map(|cached| (cached.header, cached.height))
     }
 
-    fn get_height(&self) -> BlockHeight {
-        self.get_active_chain_tip().height
-    }
-
     fn get_initial_hash(&self) -> BlockHash {
         self.genesis().block_hash()
+    }
+
+    fn get_height(&self) -> BlockHeight {
+        self.get_active_chain_tip().height
     }
 }
 
 #[cfg(test)]
 mod test {
-    use bitcoin::TxMerkleNode;
+    use bitcoin::{consensus::Decodable, Block, TxMerkleNode};
     use ic_metrics::MetricsRegistry;
 
     use super::*;
@@ -373,12 +403,14 @@ mod test {
         let mut cached_blocks = vec![];
         for hash in &block_hashes {
             if let Some(block) = state.get_block(hash) {
-                cached_blocks.push(block);
+                cached_blocks.push((*hash, block));
             }
         }
 
         assert_eq!(cached_blocks.len(), 1);
-        let block = cached_blocks.first().expect("there should be 1");
+        let (block_hash, serialized_block) = cached_blocks.first().expect("there should be 1");
+        let block = Block::consensus_decode(&mut (*serialized_block).as_slice()).unwrap();
+        assert_eq!(*block_hash, block_1_hash);
         assert_eq!(block.block_hash(), block_1_hash);
     }
 
@@ -538,7 +570,7 @@ mod test {
         let initial_header = state.genesis();
         let mut chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
         let last_header = chain.get_mut(10).unwrap();
-        last_header.prev_blockhash = BlockHash::default();
+        last_header.prev_blockhash = BlockHash::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
 
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = chain_hashes[10];
@@ -575,7 +607,8 @@ mod test {
         assert!(matches!(result, Ok(())));
 
         // Make a block 2's merkle root invalid and try to add the block to the cache.
-        block_2.header.merkle_root = TxMerkleNode::default();
+        block_2.header.merkle_root =
+            TxMerkleNode::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
         // Block 2's hash will now be changed because of the merkle root change.
         let block_2_hash = block_2.block_hash();
         let result = state.add_block(block_2);
@@ -632,7 +665,7 @@ mod test {
         state.add_block(test_state.block_1.clone()).unwrap();
         state.add_block(test_state.block_2.clone()).unwrap();
 
-        let expected_cache_size = test_state.block_1.size() + test_state.block_2.size();
+        let expected_cache_size = test_state.block_1.total_size() + test_state.block_2.total_size();
         let block_cache_size = state.get_block_cache_size();
 
         assert_eq!(expected_cache_size, block_cache_size);
@@ -685,7 +718,7 @@ mod test {
 
     /// Test header store `get_header` function.
     #[test]
-    fn test_headerstore_get_header() {
+    fn test_headerstore_get_cached_header() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
@@ -700,9 +733,10 @@ mod test {
             if h == 0 {
                 assert_eq!(state.get_initial_hash(), state.genesis().block_hash(),);
             } else {
+                let header_node = state.get_cached_header(&header.block_hash()).unwrap();
                 assert_eq!(
-                    state.get_header(&header.block_hash()).unwrap(),
-                    (chain[h], (h + 1) as u32),
+                    (header_node.header, header_node.height),
+                    (chain[h], (h + 1) as u32)
                 );
             }
         }

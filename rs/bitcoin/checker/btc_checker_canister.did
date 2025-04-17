@@ -9,6 +9,13 @@ type CheckAddressResponse = variant { Passed; Failed };
 
 type CheckTransactionArgs = record { txid : blob };
 
+type CheckTransactionStrArgs = record { txid : text };
+
+type CheckTransactionQueryArgs = variant { 
+    TxIdStr : text;
+    TxIdBin : blob; 
+};
+
 // The result of a check_transaction call.
 type CheckTransactionResponse = variant {
     // When check finishes and all input addresses passed.
@@ -48,9 +55,22 @@ type CheckTransactionIrrecoverableError = variant {
     InvalidTransaction : text;
 };
 
+// The result of a check_transaction_query call.
+type CheckTransactionQueryResponse = variant {
+    // When check finishes and all input addresses passed.
+    Passed;
+    // When check finishes and one or more input addresses failed.
+    // The list of failed addresses are returned as a best effort, which may be non-exhaustive.
+    Failed: vec BitcoinAddress;
+     // The result is not available, but may be obtainable via a call to the non-query version
+     // of `check_transaction`.
+    Unknown;
+};
+
 type InitArg = record {
     btc_network : BtcNetwork;
-    check_mode: CheckMode;
+    check_mode : CheckMode;
+    num_subnet_nodes : nat16;
 };
 
 type UpgradeArg = record {
@@ -58,7 +78,7 @@ type UpgradeArg = record {
     num_subnet_nodes: opt nat16;
 };
 
-type CheckArg = variant {
+type CheckArg = opt variant {
     InitArg : InitArg;
     UpgradeArg: opt UpgradeArg;
 };
@@ -85,7 +105,16 @@ service : (CheckArg) -> {
     // of the return result.
     check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
 
+    // Same as check_transaction, but taking the transaction id argument as a string.
+    check_transaction_str: (CheckTransactionStrArgs) -> (CheckTransactionResponse);
+
+    // Same as check_transaction, but query method, hence it does not perform any HTTP
+    // outcalls to fetch the required information.
+    // IMPORTANT: this endpoint is meant as a debugging tool and is not guaranteed to be backwards-compatible.
+    check_transaction_query: (CheckTransactionQueryArgs) -> (CheckTransactionQueryResponse) query;
+
     // Return `Passed` if the given Bitcoin address passes the Bitcoin checker, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.
     check_address: (CheckAddressArgs) -> (CheckAddressResponse) query;
+
 }

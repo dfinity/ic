@@ -32,10 +32,13 @@ jobs:
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |
+          # Until we have a hermetic CC toolchain, tell bazel to use the "real" clang
+          # (instead of Apple's, which sometimes breaks on wasm32)
+          export CC=/opt/homebrew/opt/llvm/bin/clang
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
             --config=ci --config=macos_ci \
-            --test_tag_filters="test_macos,test_macos_slow,-upload" \
+            --test_tag_filters="test_macos,test_macos_slow" \
             //packages/pocket-ic/... //rs/... //publish/binaries/...

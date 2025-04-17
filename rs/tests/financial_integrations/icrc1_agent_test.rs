@@ -298,13 +298,19 @@ pub fn test(env: TestEnv) {
         use LookupStatus::Found;
         let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree).unwrap();
 
+        let mut index_bytes = Vec::with_capacity(10);
+        leb128::write::unsigned(&mut index_bytes, 1_u64).unwrap();
+
         assert_eq!(
             hash_tree.lookup(&[b"last_block_index"]),
-            Found(&mleaf((1_u64).to_be_bytes()))
+            Found(&mleaf(&index_bytes)),
+            "The last_block_index bytes do not match an LEB128-encoded value '1': {:?} vs {:?}",
+            hash_tree.lookup(&[b"last_block_index"]),
+            index_bytes
         );
 
         assert_eq!(
-            hash_tree.lookup(&[b"tip_hash"]),
+            hash_tree.lookup(&[b"last_block_hash"]),
             Found(&mleaf(archived_blocks.blocks[1].hash()))
         );
 
@@ -400,7 +406,7 @@ fn mleaf<B: AsRef<[u8]>>(blob: B) -> MixedHashTree {
     MixedHashTree::Leaf(blob.as_ref().to_vec())
 }
 
-pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &LedgerArgument) {
+pub async fn install_icrc1_ledger(canister: &mut Canister<'_>, args: &LedgerArgument) {
     install_rust_canister_from_path(
         canister,
         get_dependency_path(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),

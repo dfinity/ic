@@ -1,13 +1,14 @@
 use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::build_ledger_archive_wasm;
 use icp_ledger::Operation::Mint;
 use icp_ledger::{AccountIdentifier, Block, Memo, Transaction};
-use pocket_ic::{PocketIcBuilder, WasmResult};
+use pocket_ic::PocketIcBuilder;
 use serde_bytes::ByteBuf;
 
 const GENESIS_IN_NANOS_SINCE_UNIX_EPOCH: u64 = 1_620_328_630_000_000_000;
@@ -15,6 +16,8 @@ const GENESIS_IN_NANOS_SINCE_UNIX_EPOCH: u64 = 1_620_328_630_000_000_000;
 struct Setup {
     pocket_ic: pocket_ic::PocketIc,
     archive_canister_id: CanisterId,
+    archive_wasm: Vec<u8>,
+    canister_id: CanisterId,
 }
 
 impl Setup {
@@ -31,7 +34,7 @@ impl Setup {
         let max_transactions_per_response = 10u64;
         pocket_ic.install_canister(
             Principal::from(canister_id),
-            archive_wasm,
+            archive_wasm.clone(),
             Encode!(
                 &canister_id,
                 &node_block_height_offset,
@@ -44,10 +47,12 @@ impl Setup {
         Setup {
             pocket_ic,
             archive_canister_id: canister_id,
+            archive_wasm,
+            canister_id,
         }
     }
 
-    fn assert_remaining_capacity(&self, remaining_capacity: usize) {
+    fn assert_remaining_capacity(&self, remaining_capacity: u64) {
         let result = self
             .pocket_ic
             .update_call(
@@ -57,13 +62,7 @@ impl Setup {
                 Encode!(&()).expect("should encode empty args"),
             )
             .expect("failed to send remaining_capacity request");
-        let result = match result {
-            WasmResult::Reply(result) => result,
-            WasmResult::Reject(s) => {
-                panic!("Call to remaining_capacity failed: {:#?}", s)
-            }
-        };
-        let res = Decode!(&result, usize).expect("failed to decode usize");
+        let res = Decode!(&result, u64).expect("failed to decode usize");
         assert_eq!(res, remaining_capacity);
     }
 
@@ -77,6 +76,29 @@ impl Setup {
                 Encode!(&encoded_blocks).expect("should encode vec![encoded_block]"),
             )
             .expect("failed to send append_blocks request");
+    }
+
+    fn upgrade(&self, upgrade_arg: Option<ArchiveUpgradeArgument>, expected_error: Option<String>) {
+        let upgrade_arg = Encode!(&upgrade_arg).expect("should encode archive upgrade args");
+        match self.pocket_ic.upgrade_canister(
+            Principal::from(self.canister_id),
+            self.archive_wasm.clone(),
+            upgrade_arg,
+            None,
+        ) {
+            Ok(_) => {
+                if expected_error.is_some() {
+                    panic!("Upgrade should fail!");
+                }
+            }
+            Err(e) => {
+                if let Some(error_msg) = expected_error {
+                    assert!(e.reject_message.contains(&error_msg));
+                } else {
+                    panic!("Upgrade should succeed!");
+                }
+            }
+        };
     }
 }
 
@@ -101,7 +123,7 @@ fn valid_encoded_block() -> EncodedBlock {
 fn should_return_initial_remaining_capacity_correctly() {
     let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1u64;
     let setup = Setup::new(archive_memory_size);
-    setup.assert_remaining_capacity(archive_memory_size as usize);
+    setup.assert_remaining_capacity(archive_memory_size);
 }
 
 #[test]
@@ -118,9 +140,9 @@ fn should_return_remaining_capacity_correctly_after_appending_block() {
     let archive_memory_size = valid_encoded_block().size_bytes() as u64 + 1u64;
     let setup = Setup::new(archive_memory_size);
     let encoded_block = valid_encoded_block();
-    let encoded_block_size = encoded_block.size_bytes();
+    let encoded_block_size = encoded_block.size_bytes() as u64;
     setup.append_block(encoded_block);
-    setup.assert_remaining_capacity(archive_memory_size as usize - encoded_block_size);
+    setup.assert_remaining_capacity(archive_memory_size - encoded_block_size);
 }
 
 #[test]
@@ -157,7 +179,7 @@ fn large_http_request() {
         body: ByteBuf::from(vec![42; 1_000]),
     };
     let http_request_bytes = Encode!(&http_request).unwrap();
-    let response = match setup
+    let response_bytes = setup
         .pocket_ic
         .update_call(
             setup.archive_canister_id.into(),
@@ -165,11 +187,8 @@ fn large_http_request() {
             "http_request",
             http_request_bytes,
         )
-        .unwrap()
-    {
-        WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
-        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
-    };
+        .unwrap();
+    let response = Decode!(&response_bytes, HttpResponse).unwrap();
     assert_eq!(response.status_code, 200);
 
     // The anonymous end-user sends a large HTTP request. This should be rejected.
@@ -185,5 +204,48 @@ fn large_http_request() {
             large_http_request_bytes,
         )
         .unwrap_err();
-    assert!(err.description.contains("Deserialization Failed"));
+    assert!(err
+        .reject_message
+        .contains("failed to decode call arguments"));
+}
+
+#[test]
+fn should_update_max_capacity_with_upgrade_arg() {
+    let encoded_block = valid_encoded_block();
+    let encoded_block_size = encoded_block.size_bytes() as u64;
+    let setup = Setup::new(encoded_block_size + 7);
+    setup.append_block(encoded_block.clone());
+    setup.assert_remaining_capacity(7);
+
+    setup.upgrade(None, None);
+    setup.assert_remaining_capacity(7);
+
+    let mut upgrade_arg = ArchiveUpgradeArgument {
+        max_memory_size_bytes: None,
+    };
+
+    // Check upgrade arg without specifying the max capacity.
+    setup.upgrade(Some(upgrade_arg.clone()), None);
+    setup.assert_remaining_capacity(7);
+
+    upgrade_arg.max_memory_size_bytes = Some(2 * encoded_block_size + 7);
+    setup.upgrade(Some(upgrade_arg.clone()), None);
+    setup.assert_remaining_capacity(encoded_block_size + 7);
+    setup.append_block(encoded_block);
+    setup.assert_remaining_capacity(7);
+
+    upgrade_arg.max_memory_size_bytes = Some(encoded_block_size);
+    setup.upgrade(
+        Some(upgrade_arg.clone()),
+        Some("Cannot set max_memory_size_bytes to".to_string()),
+    );
+    setup.assert_remaining_capacity(7);
+
+    upgrade_arg.max_memory_size_bytes = Some(2 * encoded_block_size);
+    setup.upgrade(Some(upgrade_arg.clone()), None);
+    setup.assert_remaining_capacity(0);
+
+    upgrade_arg.max_memory_size_bytes = Some(u64::MAX);
+    setup.upgrade(Some(upgrade_arg), None);
+    setup.assert_remaining_capacity(u64::MAX - 2 * encoded_block_size);
 }

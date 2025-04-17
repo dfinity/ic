@@ -6,6 +6,7 @@ type Account = record {
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
+  SetTopicsForCustomProposals : SetTopicsForCustomProposals;
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
@@ -64,6 +65,7 @@ type CanisterStatusResultV2 = record {
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
   module_hash : opt blob;
+  query_stats : opt QueryStats;
 };
 
 type CanisterStatusType = variant {
@@ -104,6 +106,7 @@ type ClaimedSwapNeurons = record {
 type Command = variant {
   Split : Split;
   Follow : Follow;
+  SetFollowing : SetFollowing;
   DisburseMaturity : DisburseMaturity;
   ClaimOrRefresh : ClaimOrRefresh;
   Configure : Configure;
@@ -120,6 +123,7 @@ type Command_1 = variant {
   Error : GovernanceError;
   Split : SplitResponse;
   Follow : record {};
+  SetFollowing : record {};
   DisburseMaturity : DisburseMaturityResponse;
   ClaimOrRefresh : ClaimOrRefreshResponse;
   Configure : record {};
@@ -135,6 +139,7 @@ type Command_1 = variant {
 type Command_2 = variant {
   Split : Split;
   Follow : Follow;
+  SetFollowing : SetFollowing;
   DisburseMaturity : DisburseMaturity;
   Configure : Configure;
   RegisterVote : RegisterVote;
@@ -166,6 +171,7 @@ type DefiniteCanisterSettingsArgs = record {
   wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
+  wasm_memory_threshold : opt nat;
 };
 
 type DeregisterDappCanisters = record {
@@ -219,6 +225,10 @@ type Follow = record {
   followees : vec NeuronId;
 };
 
+type SetFollowing = record {
+  topic_following : vec FolloweesForTopic;
+};
+
 type Followees = record {
   followees : vec NeuronId;
 };
@@ -233,6 +243,7 @@ type GenericNervousSystemFunction = record {
   target_canister_id : opt principal;
   validator_method_name : opt text;
   target_method_name : opt text;
+  topic : opt Topic;
 };
 
 type GetMaturityModulationResponse = record {
@@ -369,10 +380,16 @@ type ListProposals = record {
   limit : nat32;
   exclude_type : vec nat64;
   include_status : vec int32;
+  include_topics : opt vec TopicSelector;
+};
+
+type TopicSelector = record {
+  topic : opt Topic;
 };
 
 type ListProposalsResponse = record {
   include_ballots_by_caller : opt bool;
+  include_topic_filtering : opt bool;
   proposals : vec ProposalData;
 };
 
@@ -384,6 +401,7 @@ type ManageDappCanisterSettings = record {
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
+  wasm_memory_threshold : opt nat64;
 };
 
 type SnsVersion = record {
@@ -397,6 +415,10 @@ type SnsVersion = record {
 
 type AdvanceSnsTargetVersion = record {
   new_target : opt SnsVersion;
+};
+
+type SetTopicsForCustomProposals = record {
+  custom_function_id_to_topic : vec record { nat64; Topic };
 };
 
 type ManageLedgerParameters = record {
@@ -493,6 +515,12 @@ type NervousSystemParameters = record {
   voting_rewards_parameters : opt VotingRewardsParameters;
   maturity_modulation_disabled : opt bool;
   max_number_of_principals_per_neuron : opt nat64;
+  automatically_advance_target_version : opt bool;
+};
+
+type FolloweesForTopic = record {
+  followees : vec Followee;
+  topic : opt Topic;
 };
 
 type Neuron = record {
@@ -510,11 +538,19 @@ type Neuron = record {
   vesting_period_seconds : opt nat64;
   disburse_maturity_in_progress : vec DisburseMaturityInProgress;
   followees : vec record { nat64; Followees };
+  topic_followees : opt record {
+    topic_id_to_followees : vec record { int32; FolloweesForTopic };
+  };
   neuron_fees_e8s : nat64;
 };
 
 type NeuronId = record {
   id : blob;
+};
+
+type Followee = record {
+  neuron_id : opt NeuronId;
+  alias : opt text;
 };
 
 type NeuronIds = record {
@@ -524,16 +560,6 @@ type NeuronIds = record {
 type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
-};
-
-type NeuronParameters = record {
-  controller : opt principal;
-  dissolve_delay_seconds : opt nat64;
-  source_nns_neuron_id : opt nat64;
-  stake_e8s : opt nat64;
-  followees : vec NeuronId;
-  hotkey : opt principal;
-  neuron_id : opt NeuronId;
 };
 
 type NeuronPermission = record {
@@ -615,10 +641,18 @@ type ProposalData = record {
   minimum_yes_proportion_of_exercised : opt Percentage;
   is_eligible_for_rewards : bool;
   executed_timestamp_seconds : nat64;
+  topic : opt Topic;
 };
 
 type ProposalId = record {
   id : nat64;
+};
+
+type QueryStats = record {
+  num_calls_total : opt nat;
+  num_instructions_total : opt nat;
+  request_payload_bytes_total : opt nat;
+  response_payload_bytes_total : opt nat;
 };
 
 type RegisterDappCanisters = record {
@@ -723,8 +757,15 @@ type PendingVersion = record {
   target_version : opt Version;
 };
 
+type ChunkedCanisterWasm = record {
+  wasm_module_hash : blob;
+  store_canister_id : opt principal;
+  chunk_hashes_list : vec blob;
+};
+
 type UpgradeSnsControlledCanister = record {
   new_canister_wasm : blob;
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
   mode : opt int32;
   canister_id : opt principal;
   canister_upgrade_arg : opt blob;
@@ -789,6 +830,7 @@ type UpgradeStepsReset = record {
 type TargetVersionSet = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
+  is_advanced_automatically : opt bool;
 };
 
 type TargetVersionReset = record {
@@ -837,6 +879,32 @@ type GetUpgradeJournalResponse = record {
 type AdvanceTargetVersionRequest = record { target_version : opt Version; };
 type AdvanceTargetVersionResponse = record {};
 
+
+type Topic = variant {
+  DaoCommunitySettings;
+  SnsFrameworkManagement;
+  DappCanisterManagement;
+  ApplicationBusinessLogic;
+  Governance;
+  TreasuryAssetManagement;
+  CriticalDappOperations;
+};
+
+type TopicInfo = record {
+  topic : opt Topic;
+  name : opt text;
+  description : opt text;
+  native_functions : opt vec NervousSystemFunction;
+  custom_functions : opt vec NervousSystemFunction;
+  is_critical : opt bool;
+};
+
+type ListTopicsRequest = record {};
+type ListTopicsResponse = record {
+  topics: opt vec TopicInfo;
+  uncategorized_functions: opt vec NervousSystemFunction
+};
+
 service : (Governance) -> {
   add_maturity : (AddMaturityRequest) -> (AddMaturityResponse);
   claim_swap_neurons : (ClaimSwapNeuronsRequest) -> (ClaimSwapNeuronsResponse);
@@ -856,6 +924,7 @@ service : (Governance) -> {
   list_nervous_system_functions : () -> (ListNervousSystemFunctionsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
+  list_topics : (ListTopicsRequest) -> (ListTopicsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   mint_tokens : (MintTokensRequest) -> (record {});
   set_mode : (SetMode) -> (record {});

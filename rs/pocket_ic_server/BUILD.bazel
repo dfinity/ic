@@ -6,12 +6,13 @@ BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
+    "//packages/ic-error-types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/crypto/ed25519",
     "//rs/crypto/iccsa",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",
@@ -32,9 +33,9 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/starter:ic-starter-lib",
     "//rs/state_machine_tests",
+    "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils/thread",
@@ -72,6 +73,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
@@ -103,10 +105,13 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:nix",
+    "@crate_index//:prometheus",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
+    "@crate_index//:rustls",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
@@ -141,7 +146,10 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO: restrict the visibility
     visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+    deps = LIB_DEPENDENCIES + [
+        ":pocket-ic-server-lib",
+        "//rs/canister_sandbox:build_script",
+    ],
 )
 
 rust_library(
@@ -155,7 +163,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "7.0.0",
+    version = "8.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
@@ -189,6 +197,17 @@ rust_test(
     },
     tags = [
         "cpu:8",
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        #  ---- test_http_gateway stdout ----
+        #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
+        #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
+        #    kind: Request, url: "http://7tjcv-pp777-77776-qaaaa-cai.raw.localhost:49380/",
+        #    source: hyper_util::client::legacy::Error(
+        #      Connect,
+        #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
+        #    )
+        #  }
+        "requires-network",
         "test_macos",
     ],
     deps = TEST_DEPENDENCIES,
@@ -203,6 +222,7 @@ rust_test(
     ],
     data = [
         ":pocket-ic-server",
+        "//hs/spec_compliance:ic-ref-test",
         "//rs/tests/httpbin-rs:httpbin",
         "//rs/tests/research:ic-hs",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -211,6 +231,7 @@ rust_test(
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
+        "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     tags = [
@@ -240,6 +261,11 @@ rust_test(
         "BTC_WASM": "$(rootpath @btc_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    tags = ["test_macos"],
+    tags = [
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
+        "test_macos",
+    ],
     deps = TEST_DEPENDENCIES,
 )

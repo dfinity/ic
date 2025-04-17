@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -29,7 +29,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = MAINNET_ENV,
     tags = [
         "experimental_system_test_colocation",
         "system_test_hourly",
@@ -39,8 +39,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -59,8 +58,7 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_downgrade_nns_subnet_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = MAINNET_ENV,
     tags = [
         "system_test_hourly",
     ],
@@ -69,8 +67,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -84,9 +81,9 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_app_subnet_test",
+    env = MAINNET_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of over 2.27% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -94,8 +91,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -111,9 +107,9 @@ system_test_nns(
 
 system_test_nns(
     name = "downgrade_app_subnet_test",
+    env = MAINNET_ENV,
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,  # flakiness rate of over 2.97% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -121,8 +117,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -138,11 +133,9 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_with_alternative_urls",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev = True,
@@ -162,11 +155,9 @@ system_test_nns(
 
 system_test_nns(
     name = "unassigned_node_upgrade_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev = True,

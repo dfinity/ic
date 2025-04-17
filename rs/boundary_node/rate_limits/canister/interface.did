@@ -29,7 +29,7 @@ type OutputConfig = record {
 };
 
 // Response structure for returning the requested configuration and associated metadata
-type OutputConfigResponse = record {
+type ConfigResponse = record {
     version: Version;         // Version of the configuration
     active_since: Timestamp;  // Time when this configuration was added (became active)
     config: OutputConfig;     // Contains the list of rules
@@ -94,14 +94,14 @@ type GetConfigError = variant {
 };
 
 type GetRuleByIdError = variant {
-    NotFound;                       // Indicates that a rule with the specified ID does not exist
-    InvalidUuidFormat: text;        // Indicates that the provided ID is not a valid UUID
+    NotFound;                 // Indicates that a rule with the specified ID does not exist
+    InvalidUuidFormat;        // Indicates that the provided ID is not a valid UUID
     Internal: text;                 // Captures all unexpected internal errors
 };
 
 type GetRulesByIncidentIdError = variant {
-    NotFound;                       // Indicates that an incident with the specified ID does not exist
-    InvalidUuidFormat: text;        // Indicates that the provided ID is not a valid UUID
+    NotFound;                 // Indicates that an incident with the specified ID does not exist
+    InvalidUuidFormat;        // Indicates that the provided ID is not a valid UUID
     Internal: text;                 // Captures all unexpected internal errors
 };
 
@@ -117,7 +117,7 @@ type DiscloseRulesResponse = variant {
 };
 
 type GetConfigResponse = variant {
-  Ok: OutputConfigResponse;
+  Ok: ConfigResponse;
   Err: GetConfigError;
 };
 

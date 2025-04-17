@@ -1,12 +1,13 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "ipv4_integration_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        "@crate_index//:indoc",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
@@ -27,7 +28,6 @@ system_test_nns(
 
 system_test(
     name = "reboot_toy",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",

@@ -26,15 +26,6 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
 
-        #[arg(long, default_value_t = true)]
-        use_nns_public_key: bool,
-
-        #[arg(long, default_value_t = false)]
-        use_ssh_authorized_keys: bool,
-
-        #[arg(long, default_value_t = true)]
-        use_node_operator_private_key: bool,
-
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
     },
@@ -160,9 +151,6 @@ pub fn main() -> Result<()> {
         Some(Commands::CreateSetuposConfig {
             config_ini_path,
             deployment_json_path,
-            use_nns_public_key,
-            use_ssh_authorized_keys,
-            use_node_operator_private_key,
             setupos_config_json_path,
         }) => {
             // get config.ini settings
@@ -209,25 +197,28 @@ pub fn main() -> Result<()> {
 
             let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
-            let node_reward_type = node_reward_type.expect("Node reward type is required.");
-
-            let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
-            if !node_reward_type_pattern.is_match(&node_reward_type) {
-                anyhow::bail!(
-                    "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
-                    node_reward_type
-                );
+            if let Some(ref node_reward_type) = node_reward_type {
+                let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
+                if !node_reward_type_pattern.is_match(node_reward_type) {
+                    anyhow::bail!(
+                            "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                            node_reward_type
+                        );
+                }
+            } else {
+                println!("Node reward type is not set. Skipping validation.");
             }
 
             let icos_settings = ICOSSettings {
-                node_reward_type: Some(node_reward_type),
+                node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name.parse()?,
                 logging: Logging::default(),
-                use_nns_public_key,
+                use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                use_node_operator_private_key,
-                use_ssh_authorized_keys,
+                use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
+                    .exists(),
+                use_ssh_authorized_keys: Path::new("/config/ssh_authorized_keys").exists(),
                 icos_dev_settings: ICOSDevSettings::default(),
             };
 
@@ -240,6 +231,7 @@ pub fn main() -> Result<()> {
                     .cpu
                     .clone()
                     .unwrap_or("kvm".to_string()),
+                vm_nr_of_vcpus: deployment_json_settings.resources.nr_of_vcpus.unwrap_or(64),
                 verbose,
             };
 
@@ -376,7 +368,7 @@ pub fn main() -> Result<()> {
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
-        // TODO(NODE-1519): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
+        // TODO(NODE-1518): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
         // Regenerate config.json on *every boot* in case the config structure changes between
         // when we roll out the update-config service and when we roll out the 'config integration'
         Some(Commands::UpdateGuestosConfig) => update_guestos_config(),

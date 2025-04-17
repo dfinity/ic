@@ -2,7 +2,7 @@
 #
 # Build step for example:
 # - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev \ `
-#   `--build-arg BASE_IMAGE=docker.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
+#   `--build-arg BASE_IMAGE=ghcr.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
 #
 #
 # The base images are defined in docker-base.prod and docker-base.dev. Update
@@ -25,8 +25,8 @@ WORKDIR /tmp
 
 # Download and verify ic-gateway
 RUN \
-    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.1.60/ic-gateway_0.1.60_amd64.deb && \
-    echo "20abbe7a26da531ff459a905c92c3a9f01c6582cf2751bc63e46b11671f3f003  ic-gateway_0.1.60_amd64.deb" | sha256sum -c
+    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.2.8/ic-gateway_0.2.8_amd64.deb && \
+    echo "d0604b1a1f4362fcb7237bffcaf2c464c6e161daf4b8a221cbbc79b0d24a8bbf  ic-gateway_0.2.8_amd64.deb" | sha256sum -c
 
 #
 # Second build stage:
@@ -56,9 +56,9 @@ FROM image-${BUILD_TYPE}
 
 USER root:root
 
-COPY --from=download /tmp/ic-gateway_0.1.60_amd64.deb /tmp/ic-gateway_0.1.60_amd64.deb
-RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.60_amd64.deb && \
-    rm /tmp/ic-gateway_0.1.60_amd64.deb
+COPY --from=download /tmp/ic-gateway_0.2.8_amd64.deb /tmp/ic-gateway_0.2.8_amd64.deb
+RUN dpkg -i --force-confold /tmp/ic-gateway_0.2.8_amd64.deb && \
+    rm /tmp/ic-gateway_0.2.8_amd64.deb
 
 RUN mkdir -p /boot/config \
              /boot/efi \

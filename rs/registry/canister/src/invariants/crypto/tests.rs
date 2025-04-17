@@ -601,7 +601,7 @@ mod ecdsa_signing_subnet_lists {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
@@ -1020,11 +1020,11 @@ mod ecdsa_signing_subnet_lists {
                             max_queue_size: Default::default(),
                         })
                         .collect();
-                    let ecdsa_config = ChainKeyConfig {
+                    let chain_key_config = ChainKeyConfig {
                         key_configs,
                         ..Default::default()
                     };
-                    Some(ChainKeyConfigPb::from(ecdsa_config))
+                    Some(ChainKeyConfigPb::from(chain_key_config))
                 } else {
                     None
                 };

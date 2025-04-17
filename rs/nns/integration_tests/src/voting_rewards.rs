@@ -109,6 +109,11 @@ fn test_increase_maturity_just_after_init() {
                 .await
                 .unwrap());
         }
+        // Async reward distribution
+        for _ in 0..5 {
+            runtime.tick().await;
+        }
+
         assert_eq!(latest_reward_event.day_after_genesis, 1);
         assert!(
             latest_reward_event.distributed_e8s_equivalent > 0,

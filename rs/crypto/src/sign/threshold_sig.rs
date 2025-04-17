@@ -192,7 +192,7 @@ impl ThresholdSigVerifierInternal {
 /// Given that both cases indicate that the implementations of DKG and threshold
 /// signatures are not aligned and also a caller could not recover from this, we
 /// panic.
-fn lazily_calculated_public_key_from_store<C: ThresholdSignatureCspClient>(
+pub(crate) fn lazily_calculated_public_key_from_store<C: ThresholdSignatureCspClient>(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     threshold_sig_csp_client: &C,
     dkg_id: &NiDkgId,

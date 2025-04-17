@@ -5,33 +5,41 @@
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
-pub use ic_crypto_internal_bls12_381_type::*;
-use rand::{CryptoRng, RngCore};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+pub use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, PairingInvalidPoint, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Prepared, Gt, LagrangeCoefficients};
 
-mod ro;
+use rand::{CryptoRng, RngCore};
 
 /// The index of a node
 pub type NodeIndex = u32;
 
-/// The derivation path
+/// The derivation context
 #[derive(Clone)]
-pub struct DerivationPath {
+pub struct DerivationContext {
     delta: Scalar,
 }
 
-impl DerivationPath {
-    /// Create a new derivation path
-    pub fn new<U: AsRef<[u8]>>(canister_id: &[u8], extra_paths: &[U]) -> Self {
-        let mut ro = ro::RandomOracle::new("ic-crypto-vetkd-bls12-381-derivation-path");
+// Prefix-freeness is not required, as the domain separator is used with XMD,
+// which includes the domain separator's length as a distinct input.
+const DERIVATION_CONTEXT_DST: &[u8; 29] = b"ic-vetkd-bls12-381-g2-context";
 
-        ro.update_bin(canister_id);
+impl DerivationContext {
+    /// Create a new derivation context
+    pub fn new(canister_id: &[u8], context: &[u8]) -> Self {
+        let mut input = vec![];
+        input.extend_from_slice(&(canister_id.len() as u64).to_be_bytes()); // 8 bytes length
+        input.extend_from_slice(canister_id);
 
-        for path in extra_paths {
-            ro.update_bin(path.as_ref());
+        let mut delta = Scalar::hash(DERIVATION_CONTEXT_DST, &input);
+
+        if !context.is_empty() {
+            let mut input = vec![];
+            input.extend_from_slice(&(context.len() as u64).to_be_bytes()); // 8 bytes length
+            input.extend_from_slice(context.as_ref());
+
+            delta += Scalar::hash(DERIVATION_CONTEXT_DST, &input);
         }
 
-        let delta = ro.finalize_to_scalar();
         Self { delta }
     }
 
@@ -40,107 +48,7 @@ impl DerivationPath {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-/// Deserialization of a transport secret key failed
-pub enum TransportSecretKeyDeserializationError {
-    /// Error indicating the key was not a valid scalar
-    InvalidSecretKey,
-}
-
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
-/// Secret key of the transport key pair
-pub struct TransportSecretKey {
-    secret_key: Scalar,
-}
-
-impl TransportSecretKey {
-    /// The length of the serialized encoding of this type
-    pub const BYTES: usize = Scalar::BYTES;
-
-    /// Create a new transport secret key
-    pub fn generate<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        let secret_key = Scalar::random(rng);
-        Self { secret_key }
-    }
-
-    /// Serialize the transport secret key to a bytestring
-    pub fn serialize(&self) -> [u8; Self::BYTES] {
-        self.secret_key.serialize()
-    }
-
-    /// Deserialize a previously serialized transport secret key
-    pub fn deserialize(bytes: &[u8]) -> Result<Self, TransportSecretKeyDeserializationError> {
-        let secret_key = Scalar::deserialize(&bytes)
-            .map_err(|_| TransportSecretKeyDeserializationError::InvalidSecretKey)?;
-        Ok(Self { secret_key })
-    }
-
-    /// Return the public key associated with this secret key
-    pub fn public_key(&self) -> TransportPublicKey {
-        let public_key = G1Affine::generator() * &self.secret_key;
-        TransportPublicKey::new(public_key.to_affine())
-    }
-
-    fn secret(&self) -> &Scalar {
-        &self.secret_key
-    }
-
-    /// Decrypt an encrypted key
-    ///
-    /// Returns None if decryption failed
-    pub fn decrypt(
-        &self,
-        ek: &EncryptedKey,
-        dpk: &DerivedPublicKey,
-        did: &[u8],
-    ) -> Option<G1Affine> {
-        let msg = augmented_hash_to_g1(&dpk.pt, did);
-
-        let k = G1Affine::from(G1Projective::from(&ek.c3) - &ek.c1 * self.secret());
-
-        let dpk_prep = G2Prepared::from(&dpk.pt);
-        let k_is_valid_sig =
-            Gt::multipairing(&[(&k, G2Prepared::neg_generator()), (&msg, &dpk_prep)]).is_identity();
-
-        if k_is_valid_sig {
-            Some(k)
-        } else {
-            None
-        }
-    }
-
-    /// Decrypt an encrypted key, and hash it to a symmetric key
-    ///
-    /// Returns None if decryption failed
-    ///
-    /// The output length can be arbitrary and is specified by the caller
-    ///
-    /// The `symmetric_key_associated_data` field should include information about
-    /// the protocol and cipher that this key will be used for
-    pub fn decrypt_and_hash(
-        &self,
-        ek: &EncryptedKey,
-        dpk: &DerivedPublicKey,
-        did: &[u8],
-        symmetric_key_bytes: usize,
-        symmetric_key_associated_data: &[u8],
-    ) -> Option<Vec<u8>> {
-        match self.decrypt(ek, dpk, did) {
-            None => None,
-            Some(k) => {
-                let mut ro = ro::RandomOracle::new(&format!(
-                    "ic-crypto-vetkd-bls12-381-create-secret-key-{}-bytes",
-                    symmetric_key_bytes
-                ));
-                ro.update_bin(symmetric_key_associated_data);
-                ro.update_bin(&k.serialize());
-                Some(ro.finalize_to_vec(symmetric_key_bytes))
-            }
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserializing a transport public key failed
 pub enum TransportPublicKeyDeserializationError {
     /// Error indicating the public key was not a valid elliptic curve point
@@ -156,10 +64,6 @@ pub struct TransportPublicKey {
 impl TransportPublicKey {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = G1Affine::BYTES;
-
-    fn new(public_key: G1Affine) -> Self {
-        Self { public_key }
-    }
 
     /// Serialize this public key to a bytestring
     pub fn serialize(&self) -> [u8; Self::BYTES] {
@@ -178,7 +82,7 @@ impl TransportPublicKey {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserializing a derived public key failed
 pub enum DerivedPublicKeyDeserializationError {
     /// The public point was not a valid encoding
@@ -195,9 +99,9 @@ impl DerivedPublicKey {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = G2Affine::BYTES;
 
-    /// Derive a public key relative to another public key and a derivation path
-    pub fn compute_derived_key(pk: &G2Affine, derivation_path: &DerivationPath) -> Self {
-        let pt = G2Affine::from(G2Affine::generator() * derivation_path.delta() + pk);
+    /// Derive a public key relative to another public key and a derivation context
+    pub fn compute_derived_key(pk: &G2Affine, context: &DerivationContext) -> Self {
+        let pt = G2Affine::from(G2Affine::generator() * context.delta() + pk);
         Self { pt }
     }
 
@@ -206,22 +110,17 @@ impl DerivedPublicKey {
         self.pt.serialize()
     }
 
+    /// Return the derived point in G2
+    pub fn point(&self) -> &G2Affine {
+        &self.pt
+    }
+
     /// Deserialize a previously serialized derived public key
     pub fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
         let pt = G2Affine::deserialize(&bytes)
             .map_err(|_| DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
         Ok(Self { pt })
     }
-}
-
-/// See draft-irtf-cfrg-bls-signature-01 §4.2.2 for details on BLS augmented signatures
-fn augmented_hash_to_g1(pk: &G2Affine, data: &[u8]) -> G1Affine {
-    let domain_sep = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
-
-    let mut signature_input = vec![];
-    signature_input.extend_from_slice(&pk.serialize());
-    signature_input.extend_from_slice(data);
-    G1Affine::hash(domain_sep, &signature_input)
 }
 
 /// Check the validity of an encrypted key or encrypted key share
@@ -261,23 +160,26 @@ fn check_validity(
     true
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserializing an encrypted key failed
 pub enum EncryptedKeyDeserializationError {
     /// Error indicating one or more of the points was invalid
     InvalidEncryptedKey,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// Error indicating that combining shares into an encrypted key failed
 pub enum EncryptedKeyCombinationError {
     /// Two shares had the same node index
     DuplicateNodeIndex,
     /// There were insufficient shares to perform combination
     InsufficientShares,
-    /// Some of the key shares are invalid; the Vec contains the list of
-    /// node indexes whose shares were malformed
-    InvalidKeyShares(Vec<NodeIndex>),
+    /// Not enough valid shares
+    InsufficientValidKeyShares,
+    /// Some of the key shares are invalid
+    InvalidShares,
+    /// The reconstruction threshold was invalid
+    ReconstructionFailed,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -292,14 +194,11 @@ impl EncryptedKey {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = 2 * G1Affine::BYTES + G2Affine::BYTES;
 
-    /// Combine several shares into an encrypted key
-    pub fn combine(
-        nodes: &[(NodeIndex, G2Affine, EncryptedKeyShare)],
+    /// Combine, unchecked.
+    /// The returned key may be invalid.
+    fn combine_unchecked(
+        nodes: &[(NodeIndex, EncryptedKeyShare)],
         reconstruction_threshold: usize,
-        master_pk: &G2Affine,
-        tpk: &TransportPublicKey,
-        derivation_path: &DerivationPath,
-        did: &[u8],
     ) -> Result<Self, EncryptedKeyCombinationError> {
         if nodes.len() < reconstruction_threshold {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
@@ -309,48 +208,106 @@ impl EncryptedKey {
             .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
 
         let c1 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.2.c1).collect::<Vec<_>>())
+            .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
         let c2 = l
-            .interpolate_g2(&nodes.iter().map(|i| &i.2.c2).collect::<Vec<_>>())
+            .interpolate_g2(&nodes.iter().map(|i| &i.1.c2).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
         let c3 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.2.c3).collect::<Vec<_>>())
+            .interpolate_g1(&nodes.iter().map(|i| &i.1.c3).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
 
-        let c = Self { c1, c2, c3 };
-
-        if !c.is_valid(master_pk, derivation_path, did, tpk) {
-            // Detect and return the invalid share id(s)
-            let mut invalid = vec![];
-
-            for (node_id, node_pk, node_eks) in nodes {
-                if !node_eks.is_valid(master_pk, node_pk, derivation_path, did, tpk) {
-                    invalid.push(*node_id);
-                }
-            }
-
-            return Err(EncryptedKeyCombinationError::InvalidKeyShares(invalid));
-        }
-
-        Ok(c)
+        Ok(Self { c1, c2, c3 })
     }
 
-    /// Check if this encrypted key is valid with respect to the provided derivation path
+    /// Combines all the given shares into an encrypted key.
+    ///
+    /// If the result is Ok(), the returned key is guaranteed to be valid.
+    /// Returns the combined key, if it is valid.
+    /// Does not take the nodes' individual public keys as input.
+    pub fn combine_all(
+        nodes: &[(NodeIndex, EncryptedKeyShare)],
+        reconstruction_threshold: usize,
+        master_pk: &G2Affine,
+        tpk: &TransportPublicKey,
+        context: &DerivationContext,
+        input: &[u8],
+    ) -> Result<Self, EncryptedKeyCombinationError> {
+        let c = Self::combine_unchecked(nodes, reconstruction_threshold)?;
+        if c.is_valid(master_pk, context, input, tpk) {
+            Ok(c)
+        } else {
+            Err(EncryptedKeyCombinationError::InvalidShares)
+        }
+    }
+
+    /// Filters the valid shares from the given ones, and combines them into a valid key, if possible.
+    /// The returned key is guaranteed to be valid.
+    /// Returns an error if not sufficient shares are given or if not sufficient valid shares are given.
+    /// Takes also the nodes' individual public keys as input, which means the individual public keys
+    /// must be available: calculating them is comparatively expensive. Note that combine_all does not
+    /// take the individual public keys as input.
+    pub fn combine_valid_shares(
+        nodes: &[(NodeIndex, G2Affine, EncryptedKeyShare)],
+        reconstruction_threshold: usize,
+        master_pk: &G2Affine,
+        tpk: &TransportPublicKey,
+        context: &DerivationContext,
+        input: &[u8],
+    ) -> Result<Self, EncryptedKeyCombinationError> {
+        if nodes.len() < reconstruction_threshold {
+            return Err(EncryptedKeyCombinationError::InsufficientShares);
+        }
+
+        // Take the first reconstruction_threshold shares which pass validity check
+        let mut valid_shares = Vec::with_capacity(reconstruction_threshold);
+
+        for (node_index, node_pk, node_eks) in nodes.iter() {
+            if node_eks.is_valid(master_pk, node_pk, context, input, tpk) {
+                valid_shares.push((*node_index, node_eks.clone()));
+
+                if valid_shares.len() >= reconstruction_threshold {
+                    break;
+                }
+            }
+        }
+
+        if valid_shares.len() < reconstruction_threshold {
+            return Err(EncryptedKeyCombinationError::InsufficientValidKeyShares);
+        }
+
+        let c = Self::combine_unchecked(&valid_shares, reconstruction_threshold)?;
+
+        // If sufficient shares are available, and all were valid (which we already checked)
+        // then the resulting signature should always be valid as well.
+        //
+        // This check is mostly to catch the case where the reconstruction_threshold was
+        // somehow incorrect.
+        if c.is_valid(master_pk, context, input, tpk) {
+            Ok(c)
+        } else {
+            Err(EncryptedKeyCombinationError::ReconstructionFailed)
+        }
+    }
+
+    /// Check if this encrypted key is valid with respect to the provided derivation input and context
     pub fn is_valid(
         &self,
         master_pk: &G2Affine,
-        derivation_path: &DerivationPath,
-        did: &[u8],
+        context: &DerivationContext,
+        input: &[u8],
         tpk: &TransportPublicKey,
     ) -> bool {
-        let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_path);
-        let msg = augmented_hash_to_g1(&dpk.pt, did);
+        let dpk = DerivedPublicKey::compute_derived_key(master_pk, context);
+        let msg = G1Affine::augmented_hash(&dpk.pt, input);
         check_validity(&self.c1, &self.c2, &self.c3, tpk, &dpk.pt, &msg)
     }
 
     /// Deserialize an encrypted key
-    pub fn deserialize(val: [u8; Self::BYTES]) -> Result<Self, EncryptedKeyDeserializationError> {
+    pub fn deserialize(val: &[u8]) -> Result<Self, EncryptedKeyDeserializationError> {
+        if val.len() != Self::BYTES {
+            return Err(EncryptedKeyDeserializationError::InvalidEncryptedKey);
+        }
         let c2_start = G1Affine::BYTES;
         let c3_start = G1Affine::BYTES + G2Affine::BYTES;
 
@@ -381,6 +338,21 @@ impl EncryptedKey {
 
         output
     }
+
+    /// Return the c1 element
+    pub fn c1(&self) -> &G1Affine {
+        &self.c1
+    }
+
+    /// Return the c2 element
+    pub fn c2(&self) -> &G2Affine {
+        &self.c2
+    }
+
+    /// Return the c3 element
+    pub fn c3(&self) -> &G1Affine {
+        &self.c3
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -391,7 +363,7 @@ pub struct EncryptedKeyShare {
     c3: G1Affine,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// Error indicating that deserialization of an encrypted key share failed
 pub enum EncryptedKeyShareDeserializationError {
     /// One or more of the share points were not valid
@@ -408,17 +380,17 @@ impl EncryptedKeyShare {
         master_pk: &G2Affine,
         node_sk: &Scalar,
         transport_pk: &TransportPublicKey,
-        derivation_path: &DerivationPath,
-        did: &[u8],
+        context: &DerivationContext,
+        input: &[u8],
     ) -> Self {
-        let delta = derivation_path.delta();
+        let delta = context.delta();
 
         let dsk = delta + node_sk;
         let dpk = G2Affine::from(G2Affine::generator() * delta + master_pk);
 
         let r = Scalar::random(rng);
 
-        let msg = augmented_hash_to_g1(&dpk, did);
+        let msg = G1Affine::augmented_hash(&dpk, input);
 
         let c1 = G1Affine::from(G1Affine::generator() * &r);
         let c2 = G2Affine::from(G2Affine::generator() * &r);
@@ -432,22 +404,23 @@ impl EncryptedKeyShare {
         &self,
         master_pk: &G2Affine,
         master_pki: &G2Affine,
-        derivation_path: &DerivationPath,
-        did: &[u8],
+        context: &DerivationContext,
+        input: &[u8],
         tpk: &TransportPublicKey,
     ) -> bool {
-        let dpki = DerivedPublicKey::compute_derived_key(master_pki, derivation_path);
-        let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_path);
+        let dpki = DerivedPublicKey::compute_derived_key(master_pki, context);
+        let dpk = DerivedPublicKey::compute_derived_key(master_pk, context);
 
-        let msg = augmented_hash_to_g1(&dpk.pt, did);
+        let msg = G1Affine::augmented_hash(&dpk.pt, input);
 
         check_validity(&self.c1, &self.c2, &self.c3, tpk, &dpki.pt, &msg)
     }
 
     /// Deserialize an encrypted key share
-    pub fn deserialize(
-        val: [u8; Self::BYTES],
-    ) -> Result<Self, EncryptedKeyShareDeserializationError> {
+    pub fn deserialize(val: &[u8]) -> Result<Self, EncryptedKeyShareDeserializationError> {
+        if val.len() != Self::BYTES {
+            return Err(EncryptedKeyShareDeserializationError::InvalidEncryptedKeyShare);
+        }
         let c2_start = G1Affine::BYTES;
         let c3_start = G1Affine::BYTES + G2Affine::BYTES;
 

@@ -11,3 +11,4 @@ class Team(IntEnum):
     EXECUTION_TEAM = 7
     NNS_TEAM = 8
     CRYPTO_TEAM = 9
+    IDENTITY_TEAM = 10

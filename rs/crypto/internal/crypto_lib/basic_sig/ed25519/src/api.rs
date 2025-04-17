@@ -13,7 +13,7 @@ mod tests;
 pub fn keypair_from_rng<R: Rng + CryptoRng>(
     csprng: &mut R,
 ) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
-    let signing_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(csprng);
+    let signing_key = ic_ed25519::PrivateKey::generate_using_rng(csprng);
     let sk = types::SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(
         &signing_key.serialize_raw(),
     ));
@@ -144,7 +144,7 @@ pub fn secret_key_to_pkcs8_v2_der(
 /// # Errors
 /// * `MalformedSecretKey` if the secret key is malformed
 pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
-    let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(sk.0.expose_secret());
+    let signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(sk.0.expose_secret());
     let signature = signing_key.sign_message(msg);
     Ok(types::SignatureBytes(signature))
 }
@@ -160,7 +160,7 @@ pub fn verify(
     msg: &[u8],
     pk: &types::PublicKeyBytes,
 ) -> CryptoResult<()> {
-    let public_key = ic_crypto_ed25519::PublicKey::deserialize_raw(&pk.0).map_err(|e| {
+    let public_key = ic_ed25519::PublicKey::deserialize_raw(&pk.0).map_err(|e| {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Ed25519,
             key_bytes: Some(pk.0.to_vec()),

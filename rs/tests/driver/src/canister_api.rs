@@ -97,7 +97,6 @@ pub trait Request<T: Response> {
 /// via an appropriate `Request<ResponseType>`, for which `ResponseType` <: `Response` is a Candid type that can be decoded.
 ///
 /// Some examples of when this type is appropriate:
-/// - Counter Canister (//rs/workload_generator:counter.wat)
 /// - Universal Canister (//rs/universal_canister/lib)
 #[derive(Clone)]
 pub struct GenericRequest {
@@ -738,6 +737,9 @@ impl ListNnsNeuronsRequest {
                 include_neurons_readable_by_caller,
                 include_empty_neurons_readable_by_caller: None,
                 include_public_neurons_in_full_neurons: None,
+                page_number: None,
+                page_size: None,
+                neuron_subaccounts: None,
             },
         }
     }

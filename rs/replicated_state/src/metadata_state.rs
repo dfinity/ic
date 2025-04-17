@@ -10,7 +10,9 @@ use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
+use ic_management_canister_types_private::{
+    MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
+};
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -35,7 +37,6 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
         is_subnet_id, CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
-        NO_DEADLINE,
     },
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
@@ -72,7 +73,7 @@ pub struct SystemMetadata {
     pub ingress_history: IngressHistoryState,
 
     /// XNet stream state indexed by the _destination_ subnet id.
-    pub(super) streams: Arc<Streams>,
+    pub(super) streams: Arc<StreamMap>,
 
     /// The canister ID ranges from which this subnet generates canister IDs.
     canister_allocation_ranges: CanisterIdRanges,
@@ -436,6 +437,9 @@ impl SubnetMetrics {
         use_case: CyclesUseCase,
         cycles: NominalCycles,
     ) {
+        if cycles.get() == 0 {
+            return;
+        }
         *self
             .consumed_cycles_by_use_case
             .entry(use_case)
@@ -473,6 +477,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::CanisterCreation
                 | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::VetKd
+                | CyclesUseCase::DroppedMessages
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }
@@ -730,10 +735,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // Ingress history is persisted separately. We rely on `load_checkpoint()` to
             // properly set this value.
             ingress_history: Default::default(),
-            streams: Arc::new(Streams {
-                guaranteed_responses_size_bytes: Streams::calculate_stats(&streams),
-                streams,
-            }),
+            streams: Arc::new(streams),
             network_topology: try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",
@@ -800,7 +802,7 @@ impl SystemMetadata {
     }
 
     /// Returns a reference to the streams.
-    pub fn streams(&self) -> &Streams {
+    pub fn streams(&self) -> &StreamMap {
         &self.streams
     }
 
@@ -1230,6 +1232,9 @@ pub struct Stream {
 
     /// Stream flags observed in the header of the reverse stream.
     reverse_stream_flags: StreamFlags,
+
+    /// Number of guaranteed responses per responding canister.
+    guaranteed_response_counts: BTreeMap<CanisterId, usize>,
 }
 
 impl Default for Stream {
@@ -1241,12 +1246,14 @@ impl Default for Stream {
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
+        let guaranteed_response_counts = BTreeMap::default();
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
             reverse_stream_flags,
+            guaranteed_response_counts,
         }
     }
 }
@@ -1285,6 +1292,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         for req_or_resp in item.messages {
             messages.push(req_or_resp.try_into()?);
         }
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
@@ -1326,6 +1334,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
                     deprecated_responses_only: flags.deprecated_responses_only,
                 })
                 .unwrap_or_default(),
+            guaranteed_response_counts,
         })
     }
 }
@@ -1334,12 +1343,14 @@ impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals: VecDeque::new(),
             messages_size_bytes,
             reverse_stream_flags: Default::default(),
+            guaranteed_response_counts,
         }
     }
 
@@ -1350,12 +1361,14 @@ impl Stream {
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::size_bytes(&messages);
+        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
             reverse_stream_flags: Default::default(),
+            guaranteed_response_counts,
         }
     }
 
@@ -1392,11 +1405,28 @@ impl Stream {
         self.messages.end()
     }
 
+    /// Returns the number of guaranteed responses in the stream for each responding canister.
+    pub fn guaranteed_response_counts(&self) -> &BTreeMap<CanisterId, usize> {
+        &self.guaranteed_response_counts
+    }
+
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: RequestOrResponse) {
         self.messages_size_bytes += message.count_bytes();
+        if let RequestOrResponse::Response(response) = &message {
+            if !response.is_best_effort() {
+                *self
+                    .guaranteed_response_counts
+                    .entry(response.respondent)
+                    .or_insert(0) += 1;
+            }
+        }
         self.messages.push(message);
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+        debug_assert_eq!(
+            Self::calculate_guaranteed_response_counts(&self.messages),
+            self.guaranteed_response_counts
+        );
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all
@@ -1437,6 +1467,28 @@ impl Stream {
             // Deduct every discarded message from the stream's byte size.
             self.messages_size_bytes -= msg.count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+
+            if let RequestOrResponse::Response(response) = &msg {
+                if !response.is_best_effort() {
+                    match self
+                        .guaranteed_response_counts
+                        .get_mut(&response.respondent)
+                    {
+                        Some(0) | None => {
+                            debug_assert!(false);
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(1) => {
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(count) => *count -= 1,
+                    }
+                }
+            }
+            debug_assert_eq!(
+                Self::calculate_guaranteed_response_counts(&self.messages),
+                self.guaranteed_response_counts
+            );
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
@@ -1490,6 +1542,21 @@ impl Stream {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 
+    fn calculate_guaranteed_response_counts(
+        messages: &StreamIndexedQueue<RequestOrResponse>,
+    ) -> BTreeMap<CanisterId, usize> {
+        let mut result = BTreeMap::new();
+        for (_, msg) in messages.iter() {
+            if let RequestOrResponse::Response(response) = msg {
+                // We only count guaranteed responses
+                if !response.is_best_effort() {
+                    *result.entry(response.respondent).or_insert(0) += 1;
+                }
+            }
+        }
+        result
+    }
+
     /// Returns a reference to the reverse stream flags.
     pub fn reverse_stream_flags(&self) -> &StreamFlags {
         &self.reverse_stream_flags
@@ -1511,256 +1578,6 @@ impl CountBytes for Stream {
 impl From<Stream> for StreamSlice {
     fn from(val: Stream) -> Self {
         StreamSlice::new(val.header(), val.messages)
-    }
-}
-
-/// Wrapper around a private `StreamMap` plus stats.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct Streams {
-    /// Map of streams by destination `SubnetId`.
-    streams: StreamMap,
-
-    /// Map of response sizes in bytes by respondent `CanisterId`.
-    guaranteed_responses_size_bytes: BTreeMap<CanisterId, usize>,
-}
-
-impl Streams {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Returns a reference to the wrapped `StreamMap`.
-    pub fn streams(&self) -> &StreamMap {
-        &self.streams
-    }
-
-    /// Returns a reference to the stream for the given destination subnet.
-    pub fn get(&self, destination: &SubnetId) -> Option<&Stream> {
-        self.streams.get(destination)
-    }
-
-    /// Returns an iterator over all `(&SubnetId, &Stream)` pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&SubnetId, &Stream)> {
-        self.streams.iter()
-    }
-
-    /// Returns an iterator over all `&SubnetId` keys.
-    pub fn keys(&self) -> impl Iterator<Item = &SubnetId> {
-        self.streams.keys()
-    }
-
-    /// Pushes the given message onto the stream for the given destination
-    /// subnet.
-    pub fn push(&mut self, destination: SubnetId, msg: RequestOrResponse) {
-        if let RequestOrResponse::Response(response) = &msg {
-            if response.deadline == NO_DEADLINE {
-                *self
-                    .guaranteed_responses_size_bytes
-                    .entry(response.respondent)
-                    .or_default() += msg.count_bytes();
-            }
-        }
-
-        self.streams.entry(destination).or_default().push(msg);
-
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-    }
-
-    /// Returns a mutable reference to the stream for the given destination
-    /// subnet.
-    pub fn get_mut(&mut self, destination: &SubnetId) -> Option<StreamHandle> {
-        // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
-        // at least do it before.
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-
-        match self.streams.get_mut(destination) {
-            Some(stream) => Some(StreamHandle::new(
-                stream,
-                &mut self.guaranteed_responses_size_bytes,
-            )),
-            None => None,
-        }
-    }
-
-    /// Returns a mutable reference to the stream for the given destination
-    /// subnet, inserting it if it doesn't already exist.
-    pub fn get_mut_or_insert(&mut self, destination: SubnetId) -> StreamHandle {
-        // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
-        // at least do it before.
-        #[cfg(debug_assertions)]
-        self.debug_validate_stats();
-
-        StreamHandle::new(
-            self.streams.entry(destination).or_default(),
-            &mut self.guaranteed_responses_size_bytes,
-        )
-    }
-
-    /// Returns the guaranteed response sizes by responder canister stat.
-    pub fn guaranteed_responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
-        &self.guaranteed_responses_size_bytes
-    }
-
-    /// Prunes zero-valued guaranteed response sizes entries.
-    ///
-    /// This is triggered explicitly by `ReplicatedState` after it has updated the
-    /// canisters' copies of these values (including the zeroes).
-    pub fn prune_zero_guaranteed_responses_size_bytes(&mut self) {
-        self.guaranteed_responses_size_bytes
-            .retain(|_, &mut value| value != 0);
-    }
-
-    /// Computes the `guaranteed_responses_size_bytes` map from scratch. Used when
-    /// deserializing and in asserts.
-    ///
-    /// Time complexity: O(num_messages).
-    pub fn calculate_stats(streams: &StreamMap) -> BTreeMap<CanisterId, usize> {
-        let mut guaranteed_responses_size_bytes: BTreeMap<CanisterId, usize> = BTreeMap::new();
-        for (_, stream) in streams.iter() {
-            for (_, msg) in stream.messages().iter() {
-                if let RequestOrResponse::Response(response) = msg {
-                    if response.deadline == NO_DEADLINE {
-                        *guaranteed_responses_size_bytes
-                            .entry(response.respondent)
-                            .or_default() += msg.count_bytes();
-                    }
-                }
-            }
-        }
-        guaranteed_responses_size_bytes
-    }
-
-    /// Checks that the running accounting of the sizes of responses in streams is
-    /// accurate.
-    #[cfg(debug_assertions)]
-    fn debug_validate_stats(&self) {
-        let mut nonzero_guaranteed_responses_size_bytes =
-            self.guaranteed_responses_size_bytes.clone();
-        nonzero_guaranteed_responses_size_bytes.retain(|_, &mut value| value != 0);
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            nonzero_guaranteed_responses_size_bytes
-        );
-    }
-}
-
-/// A mutable reference to a stream owned by a `Streams` struct; bundled with
-/// the `Streams`' stats, to be updated on stream mutations.
-pub struct StreamHandle<'a> {
-    stream: &'a mut Stream,
-
-    guaranteed_responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
-}
-
-impl<'a> StreamHandle<'a> {
-    pub fn new(
-        stream: &'a mut Stream,
-        guaranteed_responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
-    ) -> Self {
-        Self {
-            stream,
-            guaranteed_responses_size_bytes,
-        }
-    }
-
-    /// Returns a reference to the message queue.
-    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
-        self.stream.messages()
-    }
-
-    /// Returns the stream's begin index.
-    pub fn messages_begin(&self) -> StreamIndex {
-        self.stream.messages_begin()
-    }
-
-    /// Returns the stream's end index.
-    pub fn messages_end(&self) -> StreamIndex {
-        self.stream.messages_end()
-    }
-
-    /// Returns a reference to the reject signals.
-    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
-        self.stream.reject_signals()
-    }
-
-    /// Returns the index just beyond the last sent signal.
-    pub fn signals_end(&self) -> StreamIndex {
-        self.stream.signals_end
-    }
-
-    /// Appends the given message to the tail of the stream.
-    ///
-    /// Returns the byte size of the pushed message.
-    pub fn push(&mut self, message: RequestOrResponse) -> usize {
-        let size_bytes = message.count_bytes();
-        if let RequestOrResponse::Response(response) = &message {
-            if response.deadline == NO_DEADLINE {
-                *self
-                    .guaranteed_responses_size_bytes
-                    .entry(response.respondent)
-                    .or_default() += size_bytes;
-            }
-        }
-        self.stream.push(message);
-        size_bytes
-    }
-
-    /// Pushes an accept signal. Since these are not explicitly encoded, this
-    /// just increments `signals_end`.
-    pub fn push_accept_signal(&mut self) {
-        self.stream.push_accept_signal();
-    }
-
-    /// Appends a reject signal (the current `signals_end`) to the tail of the
-    /// reject signals; and then increments `signals_end`.
-    pub fn push_reject_signal(&mut self, reason: RejectReason) {
-        self.stream.push_reject_signal(reason);
-    }
-
-    /// Garbage collects messages before `new_begin`, collecting and returning all
-    /// messages for which a reject signal was received.
-    pub fn discard_messages_before(
-        &mut self,
-        new_begin: StreamIndex,
-        reject_signals: &VecDeque<RejectSignal>,
-    ) -> Vec<(RejectReason, RequestOrResponse)> {
-        // Update stats for each discarded message.
-        for (index, msg) in self.stream.messages().iter() {
-            if index >= new_begin {
-                break;
-            }
-            if let RequestOrResponse::Response(response) = &msg {
-                if response.deadline == NO_DEADLINE {
-                    let canister_guaranteed_responses_size_bytes = self
-                        .guaranteed_responses_size_bytes
-                        .get_mut(&response.respondent)
-                        .expect(
-                            "No `guaranteed_responses_size_bytes` entry for discarded response",
-                        );
-                    *canister_guaranteed_responses_size_bytes -= msg.count_bytes();
-                }
-            }
-        }
-
-        self.stream
-            .discard_messages_before(new_begin, reject_signals)
-    }
-
-    /// Garbage collects signals before `new_signals_begin`.
-    pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
-        self.stream.discard_signals_before(new_signals_begin);
-    }
-
-    /// Returns a reference to the reverse stream flags.
-    pub fn reverse_stream_flags(&self) -> &StreamFlags {
-        &self.stream.reverse_stream_flags
-    }
-
-    /// Sets the reverse stream flags.
-    pub fn set_reverse_stream_flags(&mut self, flags: StreamFlags) {
-        self.stream.set_reverse_stream_flags(flags);
     }
 }
 
@@ -2355,32 +2172,6 @@ impl
 
 pub(crate) mod testing {
     use super::*;
-
-    /// Testing only: Exposes `Streams` internals for use in other modules'
-    /// tests.
-    pub trait StreamsTesting {
-        /// Testing only: Modifies `SystemMetadata::streams` by applying the
-        /// provided function.
-        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F);
-    }
-
-    impl StreamsTesting for Streams {
-        fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
-            f(&mut self.streams);
-
-            // Update `guaranteed_responses_size_bytes`, retaining all previous keys with a
-            // default byte size of zero (so that the respective canister's
-            // `transient_stream_guaranteed_responses_size_bytes` is correctly reset to
-            // zero).
-            self.guaranteed_responses_size_bytes
-                .values_mut()
-                .for_each(|size| *size = 0);
-            for (canister_id, size_bytes) in Streams::calculate_stats(&self.streams) {
-                self.guaranteed_responses_size_bytes
-                    .insert(canister_id, size_bytes);
-            }
-        }
-    }
 
     /// Early warning system / stumbling block forcing the authors of changes adding
     /// or removing replicated state fields to think about and/or ask the Message

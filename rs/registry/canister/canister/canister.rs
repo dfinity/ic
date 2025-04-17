@@ -10,11 +10,12 @@ use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
-    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
-    AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
+    AddNodePayload, Chunk, GetChunkRequest, GetNodeProvidersMonthlyXdrRewardsRequest,
+    UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -43,6 +44,7 @@ use registry_canister::{
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
+        do_remove_node_operators::RemoveNodeOperatorsPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
@@ -83,6 +85,9 @@ use std::ptr::addr_of_mut;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use dfn_core::stable::stable64_read;
+use ic_nervous_system_common::memory_manager_upgrade_storage::{load_protobuf, store_protobuf};
+use registry_canister::storage::with_upgrades_memory;
 
 static mut REGISTRY: Option<Registry> = None;
 
@@ -162,14 +167,12 @@ fn canister_init() {
 fn canister_pre_upgrade() {
     println!("{}canister_pre_upgrade", LOG_PREFIX);
     let registry = registry();
-    let mut serialized = Vec::new();
     let ss = RegistryCanisterStableStorage {
         registry: Some(registry.serializable_form()),
         pre_upgrade_version: Some(registry.latest_version()),
     };
-    ss.encode(&mut serialized)
-        .expect("Error serializing to stable.");
-    stable::set(&serialized);
+    with_upgrades_memory(|memory| store_protobuf(memory, &ss))
+        .expect("Failed to encode protobuf pre-upgrade");
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -177,10 +180,24 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}canister_post_upgrade", LOG_PREFIX);
     // call stable_storage APIs and get registry instance in canister context
-    let registry = registry_mut();
-    let stable_storage = stable::get();
+    // Look for MemoryManager magic bytes
+    let mut magic_bytes = [0u8; 3];
+    stable64_read(&mut magic_bytes, 0, 3);
+    let mut mgr_version_byte = [0u8; 1];
+    stable64_read(&mut mgr_version_byte, 3, 1);
+
+    let registry_storage: RegistryCanisterStableStorage =
+        if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
+            with_upgrades_memory(load_protobuf).expect("Failed to decode protobuf post-upgrade")
+        } else {
+            let stable_storage = stable::get();
+            RegistryCanisterStableStorage::decode(stable_storage.as_slice())
+                .expect("Error decoding from stable.")
+        };
     // delegate real work to more testable function
-    registry_lifecycle::canister_post_upgrade(registry, stable_storage.as_slice());
+
+    let registry = registry_mut();
+    registry_lifecycle::canister_post_upgrade(registry, registry_storage);
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
@@ -369,6 +386,16 @@ fn atomic_mutate() {
 
     let bytes = serialize_atomic_mutate_response(response_pb).expect("Error serializing response");
     reply(&bytes)
+}
+
+#[export_name = "canister_query get_chunk"]
+fn get_chunk() {
+    over(candid_one, get_chunk_);
+}
+
+#[candid_method(query, rename = "get_chunk")]
+fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
+    registry().get_chunk(request)
 }
 
 #[export_name = "canister_update revise_elected_guestos_versions"]
@@ -885,15 +912,17 @@ fn get_node_providers_monthly_xdr_rewards() {
     check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards");
     over(
         candid_one,
-        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
-            get_node_providers_monthly_xdr_rewards_()
+        |request: Option<GetNodeProvidersMonthlyXdrRewardsRequest>| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+            get_node_providers_monthly_xdr_rewards_(request)
         },
     )
 }
 
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
-fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
-    registry().get_node_providers_monthly_xdr_rewards()
+fn get_node_providers_monthly_xdr_rewards_(
+    arg: Option<GetNodeProvidersMonthlyXdrRewardsRequest>,
+) -> Result<NodeProvidersMonthlyXdrRewards, String> {
+    registry().get_node_providers_monthly_xdr_rewards(arg.unwrap_or_default())
 }
 
 #[export_name = "canister_query get_api_boundary_node_ids"]

@@ -11,7 +11,7 @@
 use crate::{all_supported_versions, encoding::*, CertificationVersion};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -333,7 +333,6 @@ fn canonical_encoding_stream_header_v19_plus() {
 ///       00                  # unsigned(0)
 ///    03                     # field_index(SubnetMetrics::update_transactions_total)
 ///    19 1068                # unsigned(4200)
-
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]

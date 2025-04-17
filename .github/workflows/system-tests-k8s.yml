@@ -8,20 +8,24 @@ name: System Tests K8s
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 * * * *"
   pull_request:
     paths:
-      - '.github/workflows/system-tests-k8s.yml'
+      - ".github/workflows/system-tests-k8s.yml"
   workflow_dispatch:
     inputs:
       targets:
-        description: 'System Tests / Bazel Targets'
+        description: "System Tests / Bazel Targets"
         required: false
-        default: '//rs/tests/nns:node_removal_from_registry_test'
+        default: "//rs/tests/nns:node_removal_from_registry_test"
       jobs:
-        description: 'Concurrent Bazel Jobs'
+        description: "Concurrent Bazel Test Jobs"
         required: false
-        default: '32'
+        default: "32"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
   TARGETS: |
@@ -29,7 +33,7 @@ env:
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
     '//rs/tests/nns:node_removal_from_registry_test' }}
   JOBS: |
-    ${{ github.event_name == 'schedule' && '12' ||
+    ${{ github.event_name == 'schedule' && '32' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
     '32' }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -38,8 +42,6 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 
 jobs:
   system-tests-k8s:
@@ -48,7 +50,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
@@ -58,12 +60,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to Dockerhub
+      - name: Before script
+        id: before-script
         shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
 
       - name: Set KUBECONFIG
         shell: bash
@@ -73,17 +74,27 @@ jobs:
         env:
           TNET_KUBECONFIG: ${{ secrets.TNET_KUBECONFIG }}
 
+      - name: Write AWS credentials
+        shell: bash
+        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        run: |
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "${{ env.TARGETS }}"
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-system_test_hourly,-system_test_nightly --k8s"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test
+              --config=ci
+              --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated,-long_test,-system_test_hourly,-system_test_nightly --k8s
+          BAZEL_TARGETS: ${{ env.TARGETS }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
@@ -94,7 +105,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.pb.gpg
             profile.json
 
   system-tests-k8s-hourly:
@@ -103,25 +114,19 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 150
+    #if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    # Disabling until we have data confirming stability of non-hourly system tests
+    if: ${{ false }}
     needs: [system-tests-k8s]
-    # always run after 'system-tests-k8s' job but on schedule event only
-    if: ${{ always() && github.event_name == 'schedule' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
       - name: Set KUBECONFIG
         shell: bash
@@ -131,17 +136,44 @@ jobs:
         env:
           TNET_KUBECONFIG: ${{ secrets.TNET_KUBECONFIG }}
 
+      - name: Get Bazel Target List
+        shell: bash
+        run: |
+          # Query Bazel for targets: system tests with k8s flag AND (long_test flag OR system_test_hourly flag)
+          T=$(bazel query 'attr(tags, "k8s", tests(attr(tags, "long_test|system_test_hourly", //...))) except attr(tags, "colocated|manual|system_test_nightly", //...)')
+
+          # Handle empty target list
+          if [[ -z "$T" ]]; then
+            echo "No Bazel targets found matching the criteria."
+            echo "TARGETS=" >> $GITHUB_ENV
+            exit 1
+          fi
+
+          # Convert to space-separated list and trim
+          T=$(echo "$T" | tr '\n' ' ' | sed -e 's/,$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+          # Export to GitHub environment
+          echo "TARGETS=$T" >> $GITHUB_ENV
+
+      - name: Write AWS credentials
+        shell: bash
+        if: inputs.CLOUD_CREDENTIALS_CONTENT != ''
+        run: |
+          AWS_CREDS="${HOME}/.aws/credentials"
+          mkdir -p "$(dirname "${AWS_CREDS}")"
+          echo '${{ inputs.CLOUD_CREDENTIALS_CONTENT }}' >"$AWS_CREDS"
+
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "${{ env.TARGETS }}"
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--jobs=${{ env.JOBS }} --test_tag_filters=k8s,system_test_hourly,-manual,-colocated,-system_test_nightly --k8s"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BAZEL_COMMAND: >-
+            test
+              --config=ci
+              --local_test_jobs=${{ env.JOBS }} --test_tag_filters=k8s --k8s --flaky_test_attempts=3
+          BAZEL_TARGETS: ${{ env.TARGETS }}
+          CLOUD_CREDENTIALS_CONTENT: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
@@ -152,5 +184,5 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.pb.gpg
             profile.json

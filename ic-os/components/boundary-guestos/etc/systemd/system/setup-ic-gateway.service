@@ -2,7 +2,7 @@
 Description=Setup environment for ic-gateway
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-Requires=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
 
 [Service]
 Type=oneshot

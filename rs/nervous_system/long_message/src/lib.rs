@@ -94,19 +94,16 @@ impl Display for OverCallContextError {
 ///
 /// Note: Caller is responsible for validity of references across message bounds.  This could be
 /// dangerous in places where global state is being referenced.
-///
-/// # Panics if the number of instructions used exceeds the given panic threshold.
 pub async fn noop_self_call_if_over_instructions(
     message_threshold: u64,
     call_context_threshold: Option<u64>,
 ) -> Result<(), OverCallContextError> {
-    // We may still need a new message context for whatever cleanupis needed, but also we will return
-    // an error if the call context is over the threshold.
+    // We may still need a new message context for whatever cleanup is needed, but also we will
+    // return an error if the call context is over the threshold.
     if is_message_over_threshold(message_threshold) {
         make_noop_call().await;
     }
 
-    // first we check the upper bound to see if we should panic.
     if let Some(upper_bound) = call_context_threshold {
         if is_call_context_over_threshold(upper_bound) {
             return Err(OverCallContextError { limit: upper_bound });

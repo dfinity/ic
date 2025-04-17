@@ -34,6 +34,7 @@ type DefiniteCanisterSettings = record {
 type LogVisibility = variant {
     controllers;
     public;
+    allowed_viewers : vec principal;
 };
 
 type RetrieveBtcArgs = record {
@@ -350,7 +351,12 @@ type SuspendedReason = variant {
     Quarantined;
 };
 
-type Event = variant {
+type Event = record {
+    timestamp : opt nat64;
+    payload : EventType;
+};
+
+type EventType = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
     received_utxos : record { to_account : Account; mint_txid : opt nat64; utxos : vec Utxo };
@@ -394,6 +400,10 @@ type Event = variant {
         utxo : Utxo;
         account : Account;
     };
+    checked_utxo_mint_unknown : record {
+        utxo : Utxo;
+        account : Account;
+    };
     ignored_utxo : record { utxo: Utxo; };
     suspended_utxo : record { utxo: Utxo; account: Account; reason: SuspendedReason };
     retrieve_btc_kyt_failed : record {
@@ -426,6 +436,7 @@ service : (minter_arg : MinterArg) -> {
     // endpoint.
     //
     // If the owner is not set, it defaults to the caller's principal.
+    // The resolved owner must be a non-anonymous principal.
     get_btc_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
 
     // Returns UTXOs of the given account known by the minter (with no

@@ -3,6 +3,8 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_nns_governance_api::pb::v1::Proposal;
+use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
 use ic_rosetta_api::models::BlockIdentifier;
@@ -16,6 +18,7 @@ use ic_rosetta_api::request_types::KeyMetadata;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
 use ic_rosetta_api::request_types::NeuronInfoMetadata;
 use ic_rosetta_api::request_types::PublicKeyOrPrincipal;
+use ic_rosetta_api::request_types::RegisterVoteMetadata;
 use ic_rosetta_api::request_types::RequestType;
 use ic_rosetta_api::request_types::SetDissolveTimestampMetadata;
 use ic_rosetta_api::request_types::SpawnMetadata;
@@ -32,6 +35,7 @@ use rosetta_core::identifiers::TransactionIdentifier;
 use rosetta_core::models::CurveType;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::Amount;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::objects::Operation;
 use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
@@ -40,7 +44,6 @@ use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use url::ParseError;
-
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
@@ -211,9 +214,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -272,9 +278,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -297,9 +306,43 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: None,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn build_register_vote_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        proposal: u64,
+        vote: i32,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "REGISTER_VOTE".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                RegisterVoteMetadata {
+                    neuron_index,
+                    vote,
+                    proposal: Some(proposal),
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -562,6 +605,7 @@ impl RosettaClient {
     pub fn build_refresh_voting_power_operations(
         signer_principal: Principal,
         neuron_index: u64,
+        principal_id: Option<PrincipalId>,
     ) -> anyhow::Result<Vec<Operation>> {
         Ok(vec![Operation {
             operation_identifier: OperationIdentifier {
@@ -577,9 +621,12 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                NeuronIdentifierMetadata { neuron_index }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                NeuronIdentifierMetadata {
+                    neuron_index,
+                    controller: principal_id.map(PublicKeyOrPrincipal::Principal),
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -718,7 +765,7 @@ impl RosettaClient {
             // Verify that the signature is correct
             match signer_keypair.get_curve_type() {
                 CurveType::Edwards25519 => {
-                    let verification_key = ic_crypto_ed25519::PublicKey::deserialize_raw(
+                    let verification_key = ic_ed25519::PublicKey::deserialize_raw(
                         signer_keypair.get_pb_key().as_slice(),
                     )
                     .with_context(|| {
@@ -735,15 +782,14 @@ impl RosettaClient {
                     };
                 }
                 CurveType::Secp256K1 => {
-                    let verification_key = ic_crypto_secp256k1::PublicKey::deserialize_sec1(
-                        &signer_keypair.get_pb_key(),
-                    )
-                    .with_context(|| {
-                        format!(
-                            "Failed to convert public key to verification key: {:?}",
-                            signer_keypair.get_pb_key()
-                        )
-                    })?;
+                    let verification_key =
+                        ic_secp256k1::PublicKey::deserialize_sec1(&signer_keypair.get_pb_key())
+                            .with_context(|| {
+                                format!(
+                                    "Failed to convert public key to verification key: {:?}",
+                                    signer_keypair.get_pb_key()
+                                )
+                            })?;
                     if !verification_key
                         .verify_signature(signable_bytes.as_slice(), signed_bytes.as_slice())
                     {
@@ -1129,6 +1175,59 @@ impl RosettaClient {
         .await
     }
 
+    // Register a vote on a proposal using a specific neuron.
+    pub async fn register_vote<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        register_vote_args: RosettaRegisterVoteArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let register_vote_operations = RosettaClient::build_register_vote_operations(
+            signer_keypair.generate_principal_id()?.0,
+            register_vote_args.neuron_index.unwrap_or(0),
+            register_vote_args.proposal,
+            register_vote_args.vote,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            register_vote_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    // Retrieves the list of proposals that are currently pending.
+    pub async fn get_pending_proposals(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<Vec<Proposal>, String> {
+        let response = self
+            .call(CallRequest::new(
+                network_identifier.clone(),
+                "get_pending_proposals".to_owned(),
+                ObjectMap::new(),
+            ))
+            .await
+            .unwrap();
+
+        let pending_proposals: Vec<Proposal> =
+            PendingProposalsResponse::try_from(Some(response.result))
+                .unwrap()
+                .pending_proposals
+                .into_iter()
+                .map(|p| p.proposal.unwrap())
+                .collect();
+
+        Ok(pending_proposals)
+    }
+
     /// A neuron can be set to automatically restake its maturity.
     pub async fn change_auto_stake_maturity<T>(
         &self,
@@ -1347,6 +1446,7 @@ impl RosettaClient {
         network_identifier: NetworkIdentifier,
         signer_keypair: &T,
         neuron_index: u64,
+        controller_principal_id: Option<PrincipalId>,
     ) -> anyhow::Result<ConstructionSubmitResponse>
     where
         T: RosettaSupportedKeyPair,
@@ -1354,6 +1454,7 @@ impl RosettaClient {
         let refresh_voting_power_operations = RosettaClient::build_refresh_voting_power_operations(
             signer_keypair.generate_principal_id()?.0,
             neuron_index,
+            controller_principal_id,
         )?;
         self.make_submit_and_wait_for_transaction(
             signer_keypair,
@@ -1531,6 +1632,47 @@ impl RosettaSetNeuronDissolveDelayArgsBuilder {
     pub fn build(self) -> RosettaSetNeuronDissolveDelayArgs {
         RosettaSetNeuronDissolveDelayArgs {
             dissolve_delay_seconds: self.dissolve_delay_seconds,
+            neuron_index: self.neuron_index,
+        }
+    }
+}
+
+pub struct RosettaRegisterVoteArgs {
+    pub neuron_index: Option<u64>,
+    pub proposal: u64,
+    pub vote: i32,
+}
+
+impl RosettaRegisterVoteArgs {
+    pub fn builder(proposal: u64, vote: i32) -> RosettaRegisterVoteArgsBuilder {
+        RosettaRegisterVoteArgsBuilder::new(proposal, vote)
+    }
+}
+
+pub struct RosettaRegisterVoteArgsBuilder {
+    proposal: u64,
+    vote: i32,
+    neuron_index: Option<u64>,
+}
+
+impl RosettaRegisterVoteArgsBuilder {
+    pub fn new(proposal: u64, vote: i32) -> Self {
+        Self {
+            proposal,
+            vote,
+            neuron_index: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn build(self) -> RosettaRegisterVoteArgs {
+        RosettaRegisterVoteArgs {
+            proposal: self.proposal,
+            vote: self.vote,
             neuron_index: self.neuron_index,
         }
     }

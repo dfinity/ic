@@ -363,6 +363,7 @@ pub enum MetricsDomain {
     IdkgProtocol,
     ThresholdEcdsa,
     ThresholdSchnorr,
+    VetKd,
     PublicSeed,
     KeyManagement,
 }

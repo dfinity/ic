@@ -1,0 +1,11 @@
+[package]
+name = "ic-nervous-system-timers"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+ic-cdk-timers = { workspace = true }
+slotmap = { workspace = true }

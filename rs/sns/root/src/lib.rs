@@ -32,7 +32,6 @@ use types::SnsCanisterType;
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
-mod request_impls;
 pub mod types;
 
 // The number of dapp canisters that can be registered with the SNS Root
@@ -195,6 +194,7 @@ impl ValidatedManageDappCanisterSettingsRequest {
             reserved_cycles_limit: request.reserved_cycles_limit.map(Nat::from),
             log_visibility: LogVisibility::try_from(request.log_visibility()).ok(),
             wasm_memory_limit: request.wasm_memory_limit.map(Nat::from),
+            wasm_memory_threshold: request.wasm_memory_threshold.map(Nat::from),
         };
         let invalid_dapp_canister_ids = request
             .canister_ids
@@ -2201,6 +2201,7 @@ mod tests {
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
             wasm_memory_limit: Some(1_000_000_000),
+            wasm_memory_threshold: Some(1_000_000),
         };
         let validated_request = ValidatedManageDappCanisterSettingsRequest::try_from(
             request,
@@ -2226,6 +2227,7 @@ mod tests {
                     reserved_cycles_limit: Some(Nat::from(1_000_000_000_000u64)),
                     log_visibility: Some(LogVisibility::Controllers),
                     wasm_memory_limit: Some(Nat::from(1_000_000_000u64)),
+                    wasm_memory_threshold: Some(Nat::from(1_000_000u64)),
                 },
             }
         );
@@ -2245,6 +2247,7 @@ mod tests {
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
             wasm_memory_limit: Some(1_000_000_000),
+            wasm_memory_threshold: Some(1_000_000),
         };
         let failure_reason = ValidatedManageDappCanisterSettingsRequest::try_from(
             request,

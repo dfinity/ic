@@ -249,7 +249,6 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin_proto httpbin' to = 
       `catch` (\(HUnitFailure _ r) -> putStrLn r >> exitFailure)
 
   putStrLn $ "Spec version tested:  " ++ T.unpack specVersion
-  putStrLn $ "Spec version claimed: " ++ T.unpack (status_api_version s)
 
   return
     AgentConfig
@@ -370,11 +369,11 @@ addNonce =
 getRand8Bytes :: IO BS.ByteString
 getRand8Bytes = BS.pack <$> replicateM 8 randomIO
 
--- Adds expiry 5 minutes
+-- Adds expiry 3 minutes
 addExpiry :: GenR -> IO GenR
 addExpiry = addIfNotThere "ingress_expiry" $ do
   t <- getPOSIXTime
-  return $ GNat $ round ((t + 60 * 5) * 1000_000_000)
+  return $ GNat $ round ((t + 60 * 3) * 1000_000_000)
 
 envelope :: SecretKey -> GenR -> IO GenR
 envelope sk = delegationEnv sk []
@@ -384,7 +383,7 @@ delegationEnv sk1 dels content = do
   let sks = sk1 : map fst dels
 
   t <- getPOSIXTime
-  let expiry = round ((t + 5 * 60) * 1000_000_000)
+  let expiry = round ((t + 3 * 60) * 1000_000_000)
   delegations <- for (zip sks dels) $ \(sk1, (sk2, targets)) -> do
     let delegation =
           rec $
@@ -991,20 +990,17 @@ runGet a b = case Get.runGetOrFail (a <* done) b of
 -- * Status endpoint parsing
 
 data StatusResponse = StatusResponse
-  { status_api_version :: T.Text,
-    status_root_key :: Blob
-  }
+  {status_root_key :: Blob}
 
 statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
 statusResponse =
   asExceptT . record do
-    v <- field text "ic_api_version"
     _ <- optionalField text "impl_source"
     _ <- optionalField text "impl_version"
     _ <- optionalField text "impl_revision"
     pk <- field blob "root_key"
     swallowAllFields -- More fields are explicitly allowed
-    return StatusResponse {status_api_version = v, status_root_key = pk}
+    return StatusResponse {status_root_key = pk}
 
 -- * Interacting with aaaaa-aa (via HTTP)
 

@@ -210,62 +210,6 @@ enum Visibility {
   VISIBILITY_PUBLIC = 2;
 }
 
-// The result of querying for the state of a single neuron.
-message NeuronInfo {
-  // The exact time at which this data was computed. This means, for
-  // example, that the exact time that this neuron will enter the
-  // dissolved state, assuming it is currently dissolving, is given
-  // by `retrieved_at_timestamp_seconds+dissolve_delay_seconds`.
-  uint64 retrieved_at_timestamp_seconds = 1;
-  // The current state of the neuron. See [NeuronState] for a
-  // description of the different states.
-  NeuronState state = 2;
-  // The current age of the neuron. See [Neuron::age_seconds]
-  // for details on how it is computed.
-  uint64 age_seconds = 3;
-  // The current dissolve delay of the neuron. See
-  // [Neuron::dissolve_delay_seconds] for details on how it is
-  // computed.
-  uint64 dissolve_delay_seconds = 4;
-  // See [Neuron::recent_ballots] for a description.
-  repeated BallotInfo recent_ballots = 5;
-  // Current voting power of the neuron.
-  uint64 voting_power = 6;
-  // When the Neuron was created. A neuron can only vote on proposals
-  // submitted after its creation date.
-  uint64 created_timestamp_seconds = 7;
-  // Current stake of the neuron, in e8s.
-  uint64 stake_e8s = 8;
-  // Timestamp when this neuron joined the community fund.
-  optional uint64 joined_community_fund_timestamp_seconds = 9;
-  // If this neuron is a known neuron, this is data associated
-  // with it, including the neuron's name and (optionally) a description.
-  optional KnownNeuronData known_neuron_data = 10;
-  // The type of the Neuron. See [NeuronType] for a description
-  // of the different states.
-  optional NeuronType neuron_type = 11;
-  // See the Visibility enum.
-  optional Visibility visibility = 12;
-  // The last time that voting power was "refreshed". There are two ways to
-  // refresh the voting power of a neuron: set following, or vote directly. In
-  // the future, there will be a dedicated API for refreshing. Note that direct
-  // voting implies that refresh also occurs when a proposal is created, because
-  // direct voting is part of proposal creation.
-  //
-  // Effect: When this becomes > 6 months ago, the amount of voting power that
-  // this neuron can exercise decreases linearly down to 0 over the course of 1
-  // month. After that, following is cleared, except for ManageNeuron proposals.
-  //
-  // This will always be populated. If the underlying neuron was never
-  // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
-  // after the UNIX epoch).
-  optional uint64 voting_power_refreshed_timestamp_seconds = 13;
-  // See the analogous field in Nueron.
-  optional uint64 deciding_voting_power = 14;
-  // See the analogous field in Neuron.
-  optional uint64 potential_voting_power = 15;
-}
-
 // A transfer performed from some account to stake a new neuron.
 message NeuronStakeTransfer {
   // When the transfer arrived at the governance canister.
@@ -468,62 +412,14 @@ message Neuron {
   // to overwrite next.
   optional uint32 recent_ballots_next_entry_index = 25;
 
-  // The amount of "sway" this neuron has when voting on proposals.
-  //
-  // When a proposal is created, each eligible neuron gets a "blank" ballot. The
-  // amount of voting power in that ballot is set to the neuron's deciding
-  // voting power at the time of proposal creation. There are two ways that a
-  // proposal can become decided:
-  //
-  //   1. Early: Either more than half of the total voting power in the ballots
-  //   votes in favor (then the proposal is approved), or at least half of the
-  //   votal voting power in the ballots votes against (then, the proposal is
-  //   rejected).
-  //
-  //   2. The proposal's voting deadline is reached. At that point, if there is
-  //   more voting power in favor than against, and at least 3% of the total
-  //   voting power voted in favor, then the proposal is approved. Otherwise, it
-  //   is rejected.
-  //
-  // If a neuron regularly refreshes its voting power, this has the same value
-  // as potential_voting_power. Actions that cause a refresh are as follows:
-  //
-  //     1. voting directly (not via following)
-  //     2. set following
-  //     3. refresh voting power
-  //
-  // (All of these actions are performed via the manage_neuron method.)
-  //
-  // However, if a neuron has not refreshed in a "long" time, this will be less
-  // than potential voting power. See VotingPowerEconomics. As a further result
-  // of less deciding voting power, not only does it have less influence on the
-  // outcome of proposals, the neuron receives less voting rewards (when it
-  // votes indirectly via following).
-  //
-  // For details, see https://dashboard.internetcomputer.org/proposal/132411.
-  //
-  // Per NNS policy, this is opt. Nevertheless, it will never be null.
-  optional uint64 deciding_voting_power = 26;
+  // The maturity disbursements that are in progress for this neuron.
+  repeated MaturityDisbursement maturity_disbursements_in_progress = 28;
 
-  // The amount of "sway" this neuron can have if it refreshes its voting power
-  // frequently enough.
-  //
-  // Unlike deciding_voting_power, this does NOT take refreshing into account.
-  // Rather, this only takes three factors into account:
-  //
-  //     1. (Net) staked amount - This is the "base" of a neuron's voting power.
-  //        This primarily consists of the neuron's ICP balance.
-  //
-  //     2. Age - Neurons with more age have more voting power (all else being
-  //        equal).
-  //
-  //     3. Dissolve delay - Neurons with longer dissolve delay have more voting
-  //        power (all else being equal). Neurons with a dissolve delay of less
-  //        than six months are not eligible to vote. Therefore, such neurons
-  //        are considered to have 0 voting power.
-  //
-  // Per NNS policy, this is opt. Nevertheless, it will never be null.
-  optional uint64 potential_voting_power = 27;
+  reserved "deciding_voting_power";
+  reserved 26;
+
+  reserved "potential_voting_power";
+  reserved 27;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -1207,6 +1103,19 @@ message ManageNeuron {
   // fields in Neuron.
   message RefreshVotingPower {}
 
+  // Disburse the maturity of a neuron to any ledger account. If an account
+  // is not specified, the caller's account will be used. The caller can choose
+  // a percentage of the current maturity to disburse to the ledger account. The
+  // resulting amount to disburse must be greater than or equal to the
+  // transaction fee.
+  message DisburseMaturity {
+    // The percentage to disburse, from 1 to 100
+    uint32 percentage_to_disburse = 1;
+
+    // The (optional) principal to which to transfer the stake.
+    Account to_account = 2;
+  }
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -1221,88 +1130,7 @@ message ManageNeuron {
     Merge merge = 14;
     StakeMaturity stake_maturity = 15;
     RefreshVotingPower refresh_voting_power = 16;
-  }
-}
-
-// The response of the ManageNeuron command
-//
-// There is a dedicated response type for each `ManageNeuron.command` field
-message ManageNeuronResponse {
-  message ConfigureResponse {}
-
-  message DisburseResponse {
-    // The block height at which the disburse transfer happened
-    uint64 transfer_block_height = 1;
-  }
-
-  message SpawnResponse {
-    // The ID of the Neuron created from spawning a Neuron
-    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
-  }
-
-  message MergeMaturityResponse {
-    uint64 merged_maturity_e8s = 1;
-    uint64 new_stake_e8s = 2;
-  }
-
-  message StakeMaturityResponse {
-    uint64 maturity_e8s = 1;
-    uint64 staked_maturity_e8s = 2;
-  }
-
-  message FollowResponse {}
-
-  message MakeProposalResponse {
-    // The ID of the created proposal
-    ic_nns_common.pb.v1.ProposalId proposal_id = 1;
-    optional string message = 2;
-  }
-
-  message RegisterVoteResponse {}
-
-  message SplitResponse {
-    // The ID of the Neuron created from splitting another Neuron
-    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
-  }
-
-  // A response for merging or simulating merge neurons
-  message MergeResponse {
-    // The resulting state of the source neuron
-    Neuron source_neuron = 1;
-    // The resulting state of the target neuron
-    Neuron target_neuron = 2;
-    // The NeuronInfo of the source neuron
-    NeuronInfo source_neuron_info = 3;
-    // The NeuronInfo of the target neuron
-    NeuronInfo target_neuron_info = 4;
-  }
-
-  message DisburseToNeuronResponse {
-    // The ID of the Neuron created from disbursing a Neuron
-    ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
-  }
-
-  message ClaimOrRefreshResponse {
-    ic_nns_common.pb.v1.NeuronId refreshed_neuron_id = 1;
-  }
-
-  message RefreshVotingPowerResponse {}
-
-  oneof command {
-    GovernanceError error = 1;
-    ConfigureResponse configure = 2;
-    DisburseResponse disburse = 3;
-    SpawnResponse spawn = 4;
-    FollowResponse follow = 5;
-    MakeProposalResponse make_proposal = 6;
-    RegisterVoteResponse register_vote = 7;
-    SplitResponse split = 8;
-    DisburseToNeuronResponse disburse_to_neuron = 9;
-    ClaimOrRefreshResponse claim_or_refresh = 10;
-    MergeMaturityResponse merge_maturity = 11;
-    MergeResponse merge = 12;
-    StakeMaturityResponse stake_maturity = 13;
-    RefreshVotingPowerResponse refresh_voting_power = 14;
+    DisburseMaturity disburse_maturity = 17;
   }
 }
 
@@ -1780,64 +1608,6 @@ message WaitForQuietState {
   uint64 current_deadline_timestamp_seconds = 1;
 }
 
-// This is a view of the ProposalData returned by API queries and is NOT used
-// for storage. The ballots are restricted to those of the caller's neurons and
-// additionally it has the computed fields, topic, status, and reward_status.
-message ProposalInfo {
-  // The unique id for this proposal.
-  ic_nns_common.pb.v1.ProposalId id = 1;
-
-  // The ID of the neuron that made this proposal.
-  ic_nns_common.pb.v1.NeuronId proposer = 2;
-
-  // The amount of ICP in E8s to be charged to the proposer if the proposal is
-  // rejected.
-  uint64 reject_cost_e8s = 3;
-
-  // The proposal originally submitted.
-  Proposal proposal = 4;
-
-  // The timestamp, in seconds from the Unix epoch, when this proposal was made.
-  uint64 proposal_timestamp_seconds = 5;
-
-  // See [ProposalData::ballots].
-  map<fixed64, Ballot> ballots = 6;
-
-  // See [ProposalData::latest_tally].
-  Tally latest_tally = 7;
-
-  // See [ProposalData::decided_timestamp_seconds].
-  uint64 decided_timestamp_seconds = 8;
-
-  // See [ProposalData::executed_timestamp_seconds].
-  uint64 executed_timestamp_seconds = 12;
-
-  // See [ProposalData::failed_timestamp_seconds].
-  uint64 failed_timestamp_seconds = 13;
-
-  // See [ProposalData::failure_reason].
-  GovernanceError failure_reason = 18;
-
-  // See [ProposalData::reward_event_round].
-  uint64 reward_event_round = 14;
-
-  // Derived - see [Topic] for more information
-  Topic topic = 15;
-
-  // Derived - see [ProposalStatus] for more information
-  ProposalStatus status = 16;
-
-  // Derived - see [ProposalRewardStatus] for more information
-  ProposalRewardStatus reward_status = 17;
-
-  optional uint64 deadline_timestamp_seconds = 19;
-
-  DerivedProposalInformation derived_proposal_information = 20;
-
-  // See [ProposalData::total_potential_voting_power].
-  optional uint64 total_potential_voting_power = 21;
-}
-
 // Network economics contains the parameters for several operations related
 // to the economy of the network. When submitting a NetworkEconomics proposal
 // default values (0) are considered unchanged, so a valid proposal only needs
@@ -1919,6 +1689,15 @@ message VotingPowerEconomics {
   //
   // Initially, set to 1/12 years.
   optional uint64 clear_following_after_seconds = 2;
+
+  // The minimum dissolve delay a neuron must have in order to be eligible to vote.
+  //
+  // Neurons with a dissolve delay lower than this threshold will not have
+  // voting power, even if they are otherwise active.
+  //
+  // This value is an essential part of the staking mechanism, promoting
+  // long-term alignment with the network's governance.
+  optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 3;
 }
 
 // The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -2212,6 +1991,10 @@ message InstallCode {
   optional bytes arg = 4;
   // Whether to skip stopping the canister before installing. Optional. Default is false.
   optional bool skip_stopping_before_installing = 5;
+  // The hash of the wasm module to install. Calculated from `wasm_module` when proposal is created.
+  optional bytes wasm_module_hash = 6;
+  // The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
+  optional bytes arg_hash = 7;
 }
 
 message StopOrStartCanister {
@@ -2257,6 +2040,7 @@ message UpdateCanisterSettings {
     optional uint64 freezing_threshold = 4;
     optional LogVisibility log_visibility = 5;
     optional uint64 wasm_memory_limit = 6;
+    optional uint64 wasm_memory_threshold = 7;
   }
 
   // The settings to update. Required.
@@ -2497,74 +2281,6 @@ message Governance {
 
   MakingSnsProposal making_sns_proposal = 20;
 
-  // Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
-  message Migration {
-    enum MigrationStatus {
-      // Unspecified.
-      MIGRATION_STATUS_UNSPECIFIED = 0;
-      // Migration is in progress.
-      MIGRATION_STATUS_IN_PROGRESS = 1;
-      // Migration succeeded.
-      MIGRATION_STATUS_SUCCEEDED = 2;
-      // Migration failed.
-      MIGRATION_STATUS_FAILED = 3;
-    }
-
-    // Migration status.
-    optional MigrationStatus status = 1;
-
-    // The reason why it failed. Should only be present when the status is FAILED.
-    // This is only for debugging and it should not be used programmatically (other than its presence).
-    optional string failure_reason = 2;
-
-    // Migration progress (cursor).
-    oneof progress {
-      // Last neuron id migrated.
-      ic_nns_common.pb.v1.NeuronId last_neuron_id = 3;
-    }
-  }
-
-  // The status of all on-going (and recently completed) migrations (that take
-  // place over the course of multiple heartbeat calls).
-  //
-  // Each Migration field corresponds to one (ongoing or recently completed) migration.
-  //
-  // After a migration is finished, it should be OK to reserve the tag and lose the data.
-  message Migrations {
-    // Migrates neuron indexes to stable storage.
-    Migration neuron_indexes_migration = 1;
-    Migration copy_inactive_neurons_to_stable_memory_migration = 2;
-  }
-
-  // Migration related data.
-  Migrations migrations = 21;
-
-  // A map of followees to their followers.
-  message FollowersMap {
-    message Followers {
-      // The followers of the neuron with the given ID.
-      // These values will be non-repeating, and order does not matter.
-      repeated ic_nns_common.pb.v1.NeuronId followers = 1;
-    }
-    // The key is the neuron ID of the followee.
-    map<fixed64, Followers> followers_map = 1;
-  }
-
-  // A Structure used during upgrade to store the index of topics for neurons to their followers.
-  // This is the inverse of what is stored in a Neuron (its followees).
-  map<int32, FollowersMap> topic_followee_index = 22;
-
-  reserved 6;
-  reserved "authz";
-
-  // Reserved id for deprecated `seed_accounts`
-  reserved 23;
-  reserved "seed_accounts";
-
-  // Reserved id for deprecated `genesis_neuron_accounts`
-  reserved 24;
-  reserved "genesis_neuron_accounts";
-
   // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
   optional XdrConversionRate xdr_conversion_rate = 26;
 
@@ -2574,6 +2290,25 @@ message Governance {
   // Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
   // source of randomness (from the platform)
   optional bytes rng_seed = 28;
+
+  reserved 6;
+  reserved "authz";
+
+  // Reserved id for deprecated `migrations`.
+  reserved 21;
+  reserved "migrations";
+
+  // Reserved id for deprecated `seed_accounts`
+  reserved 23;
+  reserved "seed_accounts";
+
+  // Reserved id for deprecated `genesis_neuron_accounts`
+  reserved 24;
+  reserved "genesis_neuron_accounts";
+
+  // Reserved id for deprecated `topic_followee_index`
+  reserved 22;
+  reserved "topic_followee_index";
 }
 
 message XdrConversionRate {
@@ -2625,55 +2360,6 @@ message ListProposalInfo {
   optional bool omit_large_fields = 7;
 }
 
-message ListProposalInfoResponse {
-  repeated ProposalInfo proposal_info = 1;
-}
-
-// A request to list neurons. The "requested list", i.e., the list of
-// neuron IDs to retrieve information about, is the union of the list
-// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
-// the list of neuron IDs of neurons for which the caller is the
-// controller or one of the hot keys.
-message ListNeurons {
-  option (ic_base_types.pb.v1.tui_signed_message) = true;
-  // The neurons to get information about. The "requested list"
-  // contains all of these neuron IDs.
-  repeated fixed64 neuron_ids = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  // If true, the "requested list" also contains the neuron ID of the
-  // neurons that the calling principal is authorized to read.
-  bool include_neurons_readable_by_caller = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  // Whether to also include empty neurons readable by the caller. This field only has an effect
-  // when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
-  // `neuron_ids` field, then the neuron will be included in the response regardless of the value of
-  // this field. Since the previous behavior was to always include empty neurons readable by caller,
-  // if this field is not provided, it defaults to true, in order to maintain backwards
-  // compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
-  optional bool include_empty_neurons_readable_by_caller = 3;
-  // If this is set to true, and a neuron in the "requested list" has its
-  // visibility set to public, then, it will (also) be included in the
-  // full_neurons field in the response (which is of type ListNeuronsResponse).
-  // Note that this has no effect on which neurons are in the "requested list".
-  // In particular, this does not cause all public neurons to become part of the
-  // requested list. In general, you probably want to set this to true, but
-  // since this feature was added later, it is opt in to avoid confusing
-  // existing (unmigrated) callers.
-  optional bool include_public_neurons_in_full_neurons = 4;
-}
-
-// A response to a `ListNeurons` request.
-//
-// The "requested list" is described in `ListNeurons`.
-message ListNeuronsResponse {
-  // For each neuron ID in the "requested list", if this neuron exists,
-  // its `NeuronInfo` at the time of the call will be in this map.
-  map<fixed64, NeuronInfo> neuron_infos = 1;
-  // For each neuron ID in the "requested list", if the neuron exists,
-  // and the caller is authorized to read the full neuron (controller,
-  // hot key, or controller or hot key of some followee on the
-  // `ManageNeuron` topic).
-  repeated Neuron full_neurons = 2;
-}
-
 // A response to "ListKnownNeurons"
 message ListKnownNeuronsResponse {
   // List of known neurons.
@@ -2684,29 +2370,6 @@ message ListKnownNeuronsResponse {
 message ListNodeProvidersResponse {
   // List of all "NodeProviders"
   repeated NodeProvider node_providers = 1;
-}
-
-// The arguments to the method `claim_or_refresh_neuron_from_account`.
-//
-// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
-message ClaimOrRefreshNeuronFromAccount {
-  // The principal for which to refresh the account. If not specified,
-  // defaults to the caller.
-  ic_base_types.pb.v1.PrincipalId controller = 1;
-  // The memo of the staking transaction.
-  uint64 memo = 2;
-}
-
-// Response to claim_or_refresh_neuron_from_account.
-//
-// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
-message ClaimOrRefreshNeuronFromAccountResponse {
-  oneof result {
-    // Specified in case of error.
-    GovernanceError error = 1;
-    // The ID of the neuron that was created or empty in the case of error.
-    ic_nns_common.pb.v1.NeuronId neuron_id = 2;
-  }
 }
 
 // The monthly Node Provider rewards as of a point in time.
@@ -3030,4 +2693,57 @@ message ProposalVotingStateMachine {
   repeated ic_nns_common.pb.v1.NeuronId neurons_to_check_followers = 3;
   repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
   map<uint64, Vote> recent_neuron_ballots_to_record = 5;
+}
+
+// A Ledger subaccount.
+message Subaccount {
+  bytes subaccount = 1;
+}
+
+// A Ledger account identified by the owner of the account `of` and
+// the `subaccount`. If the `subaccount` is not specified then the default
+// one is used.
+message Account {
+  // The owner of the account.
+  ic_base_types.pb.v1.PrincipalId owner = 1;
+
+  // The subaccount of the account. If not set then the default
+  // subaccount (all bytes set to 0) is used.
+  optional Subaccount subaccount = 2;
+}
+
+// A reward disbribution that has been calculated but not fully disbursed.
+// This supports large reward distributions that may need to be split into multiple
+// messages.
+message RewardsDistributionInProgress {
+  map<uint64, uint64> neuron_ids_to_e8_amounts = 1;
+}
+
+message MaturityDisbursement {
+  // The amount of maturity being disbursed in e8s.
+  uint64 amount_e8s = 1;
+  // The timestamp at which the maturity was disbursed.
+  uint64 timestamp_of_disbursement_seconds = 2;
+  // The account to disburse the maturity to.
+  Account account_to_disburse_to = 3;
+  // The timestamp at which the maturity disbursement should be finalized.
+  uint64 finalize_disbursement_timestamp_seconds = 4;
+}
+
+// A map of neuron voting powers at a certain point in time. It can be used to initialize ballots of
+// a proposal.
+message NeuronIdToVotingPowerMap {
+  // Map from neuron id to the voting power of the neuron.
+  map<fixed64, uint64> voting_power_map = 1;
+}
+
+// Total voting power (deciding and potential) at a certain point in time. A history of the totals
+// can be used to detect voting power spikes. See `Neuron::deciding_voting_power` and
+// `Neuron::potential_voting_power` for more information.
+message VotingPowerTotal {
+  // The total deciding voting power.
+  uint64 total_deciding_voting_power = 1;
+
+  // The total potential voting power.
+  uint64 total_potential_voting_power = 2;
 }

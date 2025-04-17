@@ -1,20 +1,26 @@
-use crate::ic_wasm::ICWasmModule;
-use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
+use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
 use ic_embedders::InstanceRunResult;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_interfaces::execution_environment::SystemApi;
-use ic_replicated_state::Global;
+use ic_management_canister_types_private::Global;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use std::collections::BTreeSet;
 use tokio::runtime::Runtime;
 
+const MAX_PARALLEL_EXECUTIONS: usize = 2;
+type DeterministicExecutionResult = Vec<(
+    HypervisorResult<Option<WasmResult>>,
+    HypervisorResult<InstanceRunResult>,
+    u64,
+)>;
+
 #[inline(always)]
 pub fn run_fuzzer(module: ICWasmModule) {
     let wasm = module.module.to_bytes();
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
+    let memory64_enabled = module.config.memory64_enabled;
 
     if wasm_methods.is_empty() {
         return;
@@ -29,88 +35,99 @@ pub fn run_fuzzer(module: ICWasmModule) {
         .build()
         .unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
 
-    let first_execution = rt.spawn({
-        let wasm = wasm.clone();
-        let wasm_methods = wasm_methods.clone();
+    let futs = (0..MAX_PARALLEL_EXECUTIONS)
+        .map(|_| {
+            rt.spawn({
+                let wasm = wasm.clone();
+                let wasm_methods = wasm_methods.clone();
 
-        async move { execute_wasm(wasm, wasm_methods) }
-    });
-
-    let second_execution = rt.spawn(async move { execute_wasm(wasm, wasm_methods) });
+                async move { execute_wasm(wasm, wasm_methods, memory64_enabled) }
+            })
+        })
+        .collect::<Vec<_>>();
 
     rt.block_on(async move {
-        let first = first_execution.await.unwrap();
-        let second = second_execution.await.unwrap();
+        let result = futures::future::join_all(futs)
+            .await
+            .into_iter()
+            .map(|r| r.expect("Failed to join tasks"))
+            .collect::<Vec<_>>();
 
-        // same size
-        assert_eq!(first.len(), second.len());
+        let first = result.first();
 
-        for (x, y) in std::iter::zip(first, second) {
-            // execution result must be same
-            assert_eq!(x.0, y.0);
+        if let Some(first) = first {
+            result
+                .iter()
+                .for_each(|r| equal(first.to_vec(), r.to_vec()));
+        }
+    });
+}
 
-            // instructions used must be same
-            assert_eq!(x.2, y.2);
+// Panics if the results are not equal
+fn equal(first: DeterministicExecutionResult, second: DeterministicExecutionResult) {
+    // same size
+    assert_eq!(first.len(), second.len());
 
-            match (x.1, y.1) {
-                (Ok(run_x), Ok(run_y)) => {
-                    assert_eq!(run_x.wasm_dirty_pages, run_y.wasm_dirty_pages);
-                    assert_eq!(
-                        run_x.stable_memory_dirty_pages,
-                        run_y.stable_memory_dirty_pages
-                    );
+    for (x, y) in std::iter::zip(first, second) {
+        // execution result must be same
+        assert_eq!(x.0, y.0);
 
-                    // special treatment because of NaN
-                    let globals_x = run_x.exported_globals;
-                    let globals_y = run_y.exported_globals;
-                    for (g_x, g_y) in std::iter::zip(globals_x, globals_y) {
-                        match (g_x, g_y) {
-                            (Global::F32(f_x), Global::F32(f_y)) => {
-                                if !f_x.is_nan() && !f_y.is_nan() {
-                                    assert_eq!(f_x, f_y);
-                                } else {
-                                    // should hold because of canonicalization
-                                    assert_eq!(f_x.to_bits(), f_y.to_bits());
-                                }
+        // instructions used must be same
+        assert_eq!(x.2, y.2);
+
+        match (x.1, y.1) {
+            (Ok(run_x), Ok(run_y)) => {
+                assert_eq!(run_x.wasm_dirty_pages, run_y.wasm_dirty_pages);
+                assert_eq!(
+                    run_x.stable_memory_dirty_pages,
+                    run_y.stable_memory_dirty_pages
+                );
+
+                // special treatment because of NaN
+                let globals_x = run_x.exported_globals;
+                let globals_y = run_y.exported_globals;
+                for (g_x, g_y) in std::iter::zip(globals_x, globals_y) {
+                    match (g_x, g_y) {
+                        (Global::F32(f_x), Global::F32(f_y)) => {
+                            if !f_x.is_nan() && !f_y.is_nan() {
+                                assert_eq!(f_x, f_y);
+                            } else {
+                                // should hold because of canonicalization
+                                assert_eq!(f_x.to_bits(), f_y.to_bits());
                             }
-                            (Global::F64(f_x), Global::F64(f_y)) => {
-                                if !f_x.is_nan() && !f_y.is_nan() {
-                                    assert_eq!(f_x, f_y);
-                                } else {
-                                    // should hold because of canonicalization
-                                    assert_eq!(f_x.to_bits(), f_y.to_bits());
-                                }
+                        }
+                        (Global::F64(f_x), Global::F64(f_y)) => {
+                            if !f_x.is_nan() && !f_y.is_nan() {
+                                assert_eq!(f_x, f_y);
+                            } else {
+                                // should hold because of canonicalization
+                                assert_eq!(f_x.to_bits(), f_y.to_bits());
                             }
-                            (_, _) => {
-                                assert_eq!(g_x, g_y);
-                            }
+                        }
+                        (_, _) => {
+                            assert_eq!(g_x, g_y);
                         }
                     }
                 }
-                (Err(e_x), Err(e_y)) => {
-                    assert_eq!(e_x, e_y);
-                }
-                (_, _) => {
-                    panic!("Instance results doesn't match");
-                }
+            }
+            (Err(e_x), Err(e_y)) => {
+                assert_eq!(e_x, e_y);
+            }
+            (_, _) => {
+                panic!("Instance results doesn't match");
             }
         }
-    });
+    }
 }
 
 #[inline(always)]
 fn execute_wasm(
     wasm: Vec<u8>,
     wasm_methods: BTreeSet<WasmMethod>,
-) -> Vec<(
-    HypervisorResult<Option<WasmResult>>,
-    HypervisorResult<InstanceRunResult>,
-    u64,
-)> {
+    memory64_enabled: bool,
+) -> DeterministicExecutionResult {
     let mut result = vec![];
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.write_barrier = FlagStatus::Enabled;
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_embedders_config(memory64_enabled);
     let instance_result = WasmtimeInstanceBuilder::new()
         .with_wasm(wasm)
         .with_config(config)

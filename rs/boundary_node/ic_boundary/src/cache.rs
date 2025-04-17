@@ -12,9 +12,9 @@ use axum::{
 use bytes::Bytes;
 use http::{
     header::{HeaderMap, CACHE_CONTROL},
-    response, Version,
+    response, Extensions, Version,
 };
-use ic_bn_lib::http::body::buffer_body;
+use ic_bn_lib::{http::body::buffer_body, types::RequestType};
 use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
 use crate::routes::{ApiError, RequestContext};
@@ -79,6 +79,7 @@ struct CacheItem {
     status: StatusCode,
     version: Version,
     headers: HeaderMap,
+    extensions: Extensions,
     body: Bytes,
 }
 
@@ -100,9 +101,11 @@ fn weigh_entry(k: &Arc<RequestContext>, v: &CacheItem) -> u32 {
         + 58; // 2 x Principal
 
     for (k, v) in v.headers.iter() {
-        cost += k.as_str().as_bytes().len();
+        cost += k.as_str().len();
         cost += v.as_bytes().len();
     }
+
+    // TODO no way currently to estimate Extensions size
 
     cost as u32
 }
@@ -142,6 +145,7 @@ impl Cache {
             status: parts.status,
             version: parts.version,
             headers: parts.headers.clone(),
+            extensions: parts.extensions.clone(),
             body,
         };
 
@@ -161,6 +165,7 @@ impl Cache {
             .status(item.status)
             .version(item.version);
 
+        *builder.extensions_mut().unwrap() = item.extensions;
         *builder.headers_mut().unwrap() = item.headers;
 
         Some(builder.body(Body::from(item.body)).unwrap())
@@ -178,8 +183,7 @@ impl Cache {
         self.cache.run_pending_tasks().await;
     }
 
-    // For now stuff below is used only in tests, but belongs here
-    #[allow(dead_code)]
+    #[cfg(test)]
     async fn clear(&self) {
         self.cache.invalidate_all();
         self.housekeep().await;
@@ -193,6 +197,11 @@ pub async fn cache_middleware(
     request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Just bypass if it's not Query
+    if ctx.request_type != RequestType::Query {
+        return Ok(next.run(request).await);
+    }
+
     let bypass_reason = (|| {
         // Skip cache if there's a nonce
         if ctx.nonce.is_some() {

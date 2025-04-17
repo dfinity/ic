@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+##################################################################################
+# NOTE: This script is deprecated and will be removed in the future.
+#       Please use the new script ci/tools/repro-check instead.
+##################################################################################
+
 # This script verifies a specific commit hash or a proposal for reproducibility.
 # If it's a proposal, we need to make sure that proposal_hash == CDN_hash == build_hash.
 # Otherwise, we only need to make sure that CDN_hash == build_hash.
@@ -107,15 +112,23 @@ check_ic_repo() {
     git_remote="$(git config --get remote.origin.url)"
 
     log_debug "Check the repository is an IC repository"
-    # Possible values of `git_remote` are listed below
-    # git@github.com:dfinity/ic.git
-    # https://github.com/dfinity/ic.git
-    if [[ "$git_remote" == */ic.git ]] || [[ "$git_remote" == */ic ]]; then
+    # Some of the possible values of `git_remote` that should be matched:
+    # git@github.com:dfinity/ic.git, https://github.com/dfinity/ic.git
+    # git@github.com:dfinity/ic-private.git, https://github.com/dfinity/ic-private.git
+    # git@github.com:<other-org>/ic.git, https://github.com/<other-org>/ic.git
+    if [[ "$git_remote" == */ic* ]]; then
         log_debug "Inside IC repository"
     else
         error "When not specifying any option please run this script inside an IC git repository"
     fi
 }
+
+log_warning ""
+log_warning "************************************************"
+log_warning "This script is deprecated and will be removed in the near future."
+log_warning "Please use the new script ci/tools/repro-check instead."
+log_warning "************************************************"
+log_warning ""
 
 #################### Set-up
 if [ "${DEBUG:-}" == "2" ]; then

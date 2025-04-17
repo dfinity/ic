@@ -64,7 +64,7 @@ impl<'a> PoolReader<'a> {
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
     /// `min` and `max`. This assumes the correctness of the state of the pool.
     pub fn get_range(
-        &'a self,
+        &self,
         block: Block,
         min: Height,
         max: Height,

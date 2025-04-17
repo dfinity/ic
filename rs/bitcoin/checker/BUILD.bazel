@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_SRCS = [
     "src/blocklist.rs",
+    "src/blocklist/tests.rs",
     "src/lib.rs",
     "src/types.rs",
 ]
@@ -16,8 +17,10 @@ rust_library(
     crate_name = "ic_btc_checker",
     deps = [
         # Keep sorted.
-        "@crate_index//:bitcoin_0_32",
+        "@crate_index//:bitcoin",
         "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:serde",
     ],
 )
@@ -38,6 +41,7 @@ rust_test(
         # Keep sorted.
         "@crate_index//:candid_parser",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:proptest",
         "@crate_index//:scraper",
         "@crate_index//:tokio",
@@ -61,7 +65,7 @@ rust_canister(
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:base64",
-        "@crate_index//:bitcoin_0_32",
+        "@crate_index//:bitcoin",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:ciborium",
@@ -70,9 +74,9 @@ rust_canister(
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:time",
@@ -97,6 +101,7 @@ rust_ic_test(
         # Keep sorted.
         ":btc_checker_lib",
         "//:pocket-ic-server",
+        "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/pocket-ic",
         "//rs/rust_canisters/http_types",
         "//rs/test_utilities/load_wasm",
@@ -106,5 +111,7 @@ rust_ic_test(
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:regex",
     ],
 )

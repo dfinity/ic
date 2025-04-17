@@ -1,21 +1,17 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
-use crate::memo::Status;
 use crate::queries::WithdrawalFee;
-use crate::state::ReimbursementReason;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_checker::CheckTransactionResponse;
-use ic_btc_interface::{
-    GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
-};
+use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_management_canister_types::DerivationPath;
+use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork;
+use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
-use num_traits::ToPrimitive;
+use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -114,6 +110,69 @@ pub struct MinterInfo {
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
+}
+
+pub type GetUtxosRequest = ic_cdk::api::management_canister::bitcoin::GetUtxosRequest;
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct GetUtxosResponse {
+    pub utxos: Vec<Utxo>,
+    pub tip_height: u32,
+    pub next_page: Option<Page>,
+}
+
+impl From<ic_cdk::api::management_canister::bitcoin::GetUtxosResponse> for GetUtxosResponse {
+    fn from(response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse) -> Self {
+        Self {
+            utxos: response
+                .utxos
+                .into_iter()
+                .map(|utxo| Utxo {
+                    outpoint: OutPoint {
+                        txid: Txid::try_from(utxo.outpoint.txid.as_slice())
+                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
+                        vout: utxo.outpoint.vout,
+                    },
+                    value: utxo.value,
+                    height: utxo.height,
+                })
+                .collect(),
+
+            tip_height: response.tip_height,
+            next_page: response.next_page.map(Page::from),
+        }
+    }
+}
+
+// Note that both [ic_btc_interface::Network] and
+// [ic_cdk::api::management_canister::bitcoin::BitcoinNetwork] from ic_cdk
+// would serialize to lowercase names, but here we keep uppercase names for
+// backward compatibility with the state of already deployed minter canister.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+    Regtest,
+}
+
+impl From<Network> for BitcoinNetwork {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => BitcoinNetwork::Mainnet,
+            Network::Testnet => BitcoinNetwork::Testnet,
+            Network::Regtest => BitcoinNetwork::Regtest,
+        }
+    }
+}
+
+impl std::fmt::Display for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+            Self::Regtest => write!(f, "regtest"),
+        }
+    }
 }
 
 struct SignTxRequest {
@@ -313,7 +372,7 @@ async fn submit_pending_requests() {
                 // There is no point in retrying the request because the
                 // amount is too low.
                 for request in batch {
-                    state::audit::remove_retrieve_btc_request(s, request);
+                    state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
                 }
                 None
             }
@@ -327,7 +386,7 @@ async fn submit_pending_requests() {
                 for request in batch {
                     if request.address == address && request.amount == amount {
                         // Finalize the request that we cannot fulfill.
-                        state::audit::remove_retrieve_btc_request(s, request);
+                        state::audit::remove_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME);
                     } else {
                         // Keep the rest of the requests in the batch, we will
                         // try to build a new transaction on the next iteration.
@@ -413,6 +472,7 @@ async fn submit_pending_requests() {
                                     submitted_at: ic_cdk::api::time(),
                                     fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                                 },
+                                &IC_CANISTER_RUNTIME,
                             );
                         });
                     }
@@ -463,35 +523,6 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
         .collect()
 }
 
-async fn reimburse_failed_kyt() {
-    let try_to_reimburse = state::read_state(|s| s.pending_reimbursements.clone());
-    for (burn_block_index, entry) in try_to_reimburse {
-        let (memo_status, kyt_fee) = match entry.reason {
-            ReimbursementReason::TaintedDestination { kyt_fee, .. } => (Status::Rejected, kyt_fee),
-            ReimbursementReason::CallFailed => (Status::CallFailed, 0),
-        };
-        let reimburse_memo = crate::memo::MintMemo::KytFail {
-            kyt_fee: Some(kyt_fee),
-            status: Some(memo_status),
-            associated_burn_index: Some(burn_block_index),
-        };
-        if let Ok(block_index) = crate::updates::update_balance::mint(
-            entry
-                .amount
-                .checked_sub(kyt_fee)
-                .expect("reimburse underflow"),
-            entry.account,
-            crate::memo::encode(&reimburse_memo).into(),
-        )
-        .await
-        {
-            state::mutate_state(|s| {
-                state::audit::reimbursed_failed_deposit(s, burn_block_index, block_index)
-            });
-        }
-    }
-}
-
 async fn finalize_requests() {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
@@ -536,10 +567,10 @@ async fn finalize_requests() {
 
     state::mutate_state(|s| {
         if !new_utxos.is_empty() {
-            state::audit::add_utxos(s, None, main_account, new_utxos);
+            state::audit::add_utxos(s, None, main_account, new_utxos, &IC_CANISTER_RUNTIME);
         }
         for txid in &confirmed_transactions {
-            state::audit::confirm_transaction(s, txid);
+            state::audit::confirm_transaction(s, txid, &IC_CANISTER_RUNTIME);
             maybe_finalized_transactions.remove(txid);
         }
     });
@@ -559,7 +590,7 @@ async fn finalize_requests() {
                 "[finalize_requests]: finalized transaction {} assumed to be stuck",
                 &txid
             );
-            state::audit::confirm_transaction(s, &txid);
+            state::audit::confirm_transaction(s, &txid, &IC_CANISTER_RUNTIME);
         }
     });
 
@@ -733,7 +764,7 @@ async fn finalize_requests() {
                 };
 
                 state::mutate_state(|s| {
-                    state::audit::replace_transaction(s, old_txid, new_tx);
+                    state::audit::replace_transaction(s, old_txid, new_tx, &IC_CANISTER_RUNTIME);
                 });
             }
             Err(err) => {
@@ -1113,92 +1144,6 @@ fn distribute(amount: u64, n: u64) -> Vec<u64> {
     shares
 }
 
-pub async fn distribute_kyt_fees() {
-    use icrc_ledger_client_cdk::CdkRuntime;
-    use icrc_ledger_client_cdk::ICRC1Client;
-    use icrc_ledger_types::icrc1::transfer::TransferArg;
-
-    enum MintError {
-        TransferError(TransferError),
-        CallError(i32, String),
-    }
-
-    impl std::fmt::Debug for MintError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                MintError::TransferError(e) => write!(f, "TransferError({:?})", e),
-                MintError::CallError(code, msg) => write!(f, "CallError({}, {:?})", code, msg),
-            }
-        }
-    }
-
-    async fn mint(amount: u64, to: candid::Principal, memo: Memo) -> Result<u64, MintError> {
-        debug_assert!(memo.0.len() <= CKBTC_LEDGER_MEMO_SIZE as usize);
-
-        let client = ICRC1Client {
-            runtime: CdkRuntime,
-            ledger_canister_id: state::read_state(|s| s.ledger_id.get().into()),
-        };
-        client
-            .transfer(TransferArg {
-                from_subaccount: None,
-                to: Account {
-                    owner: to,
-                    subaccount: None,
-                },
-                fee: None,
-                created_at_time: None,
-                memo: Some(memo),
-                amount: candid::Nat::from(amount),
-            })
-            .await
-            .map_err(|(code, msg)| MintError::CallError(code, msg))?
-            .map_err(MintError::TransferError)
-            .map(|n| n.0.to_u64().expect("nat does not fit into u64"))
-    }
-
-    let fees_to_distribute = state::read_state(|s| s.owed_kyt_amount.clone());
-    for (provider, amount) in fees_to_distribute {
-        let memo = crate::memo::MintMemo::Kyt;
-        match mint(amount, provider, crate::memo::encode(&memo).into()).await {
-            Ok(block_index) => {
-                state::mutate_state(|s| {
-                    if let Err(state::Overdraft(overdraft)) =
-                        state::audit::distributed_kyt_fee(s, provider, amount, block_index)
-                    {
-                        // This should never happen because:
-                        //  1. The fee distribution task is guarded (at most one copy is active).
-                        //  2. Fee distribution is the only way to decrease the balance.
-                        log!(
-                            P0,
-                            "BUG[distribute_kyt_fees]: distributed {} to {} but the balance is only {}",
-                            tx::DisplayAmount(amount),
-                            provider,
-                            tx::DisplayAmount(amount - overdraft),
-                        );
-                    } else {
-                        log!(
-                            P0,
-                            "[distribute_kyt_fees]: minted {} to {}",
-                            tx::DisplayAmount(amount),
-                            provider,
-                        );
-                    }
-                });
-            }
-            Err(error) => {
-                log!(
-                    P0,
-                    "[distribute_kyt_fees]: failed to mint {} to {} with error: {:?}",
-                    tx::DisplayAmount(amount),
-                    provider,
-                    error
-                );
-            }
-        }
-    }
-}
-
 pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
     use tasks::{pop_if_ready, run_task};
 
@@ -1352,7 +1297,7 @@ impl CanisterRuntime for IcCanisterRuntime {
 }
 
 /// Time in nanoseconds since the epoch (1970-01-01).
-#[derive(Eq, Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Eq, Clone, Copy, PartialEq, Debug, Default, Serialize, CandidType, serde::Deserialize)]
 pub struct Timestamp(u64);
 
 impl Timestamp {

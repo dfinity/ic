@@ -67,6 +67,7 @@ message Block {
   reserved 14;
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
+  bytes vetkd_payload_bytes = 17;
   bytes payload_hash = 11;
 }
 
@@ -198,21 +199,42 @@ message CanisterQueryStats {
   uint64 egress_payload_size = 5;
 }
 
+enum VetKdErrorCode {
+  VET_KD_ERROR_CODE_UNSPECIFIED = 0;
+  VET_KD_ERROR_CODE_TIMED_OUT = 1;
+  VET_KD_ERROR_CODE_INVALID_KEY = 2;
+}
+
+message VetKdAgreement {
+  uint64 callback_id = 1;
+  oneof agreement {
+    bytes data = 2;
+    VetKdErrorCode reject = 3;
+  }
+}
+
 message IngressIdOffset {
   uint64 expiry = 1;
   bytes message_id = 2;
   uint64 offset = 3;
 }
 
+message IngressMessage {
+  bytes message_id = 1;
+  uint64 expiry = 2;
+  bytes signed_request_bytes = 3;
+}
+
 message IngressPayload {
-  repeated IngressIdOffset id_and_pos = 1;
-  bytes buffer = 2;
+  reserved 1, 2;
+  repeated IngressMessage ingress_messages = 3;
 }
 
 // Stripped consensus artifacts messages below
 message GetIngressMessageInBlockRequest {
   IngressMessageId ingress_message_id = 1;
   ConsensusMessageId block_proposal_id = 2;
+  bytes ingress_bytes_hash = 3;
 }
 
 message GetIngressMessageInBlockResponse {
@@ -227,6 +249,7 @@ message StrippedBlockProposal {
 
 message StrippedIngressMessage {
   IngressMessageId stripped = 1;
+  bytes ingress_bytes_hash = 2;
 }
 
 message StrippedConsensusMessage {

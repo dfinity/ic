@@ -79,7 +79,10 @@ rust_library(
 rust_test(
     name = "index_ng_unit_test",
     crate = ":_wasm_index_ng_canister",
-    data = [":index-ng.did"],
+    data = [
+        ":index-ng.did",
+        "//rs/ledger_suite/icrc1/ledger:ledger.did",
+    ],
     deps = [
         # Keep sorted.
         "//rs/ledger_suite/icrc1/test_utils",
@@ -98,18 +101,17 @@ rust_test(
         ],
         crate_features = conf["crate_features"],
         data = [
-            "//rs/ledger_suite/icrc1/index:index_canister.wasm",
-        ] + [
             conf["index_wasm"],
             conf["ledger_wasm"],
         ],
         env = {
+            "RUST_TEST_THREADS": "4",
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index-ng",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
-            "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index:index_canister.wasm)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
         },
         extra_srcs = ["tests/common/mod.rs"],
+        tags = ["cpu:4"],
         deps = [
             # Keep sorted.
             ":index-ng",
@@ -117,7 +119,6 @@ rust_test(
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
-            "//rs/ledger_suite/icrc1/index",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/icrc1/test_utils",
             "//rs/ledger_suite/icrc1/tokens_u64",
@@ -147,39 +148,39 @@ rust_test(
         # - Ledger with ICRC-3 and with get-blocks
         {
             "crate_features": [],
-            "index_wasm": ":index_ng_canister.wasm",
-            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm",
+            "index_wasm": ":index_ng_canister.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
             "test_suffix": "",
         },
         {
             "crate_features": [],
-            "index_wasm": ":index_ng_canister_u256.wasm",
-            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm",
+            "index_wasm": ":index_ng_canister_u256.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
             "test_suffix": "_u256",
         },
         # - Ledger with ICRC-3 and without get-blocks
         {
             "crate_features": ["get_blocks_disabled"],
-            "index_wasm": ":index_ng_canister.wasm",
-            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_getblocksdisabled.wasm",
+            "index_wasm": ":index_ng_canister.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_getblocksdisabled.wasm.gz",
             "test_suffix": "_wo_getblocks",
         },
         {
             "crate_features": ["get_blocks_disabled"],
-            "index_wasm": ":index_ng_canister_u256.wasm",
-            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm",
+            "index_wasm": ":index_ng_canister_u256.wasm.gz",
+            "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
             "test_suffix": "_u256_wo_getblocks",
         },
         # - Ledger without ICRC-3 and with get-blocks
         {
             "crate_features": ["icrc3_disabled"],
-            "index_wasm": ":index_ng_canister.wasm",
+            "index_wasm": ":index_ng_canister.wasm.gz",
             "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3.wasm.gz//file",
             "test_suffix": "_wo_icrc3",
         },
         {
             "crate_features": ["icrc3_disabled"],
-            "index_wasm": ":index_ng_canister_u256.wasm",
+            "index_wasm": ":index_ng_canister_u256.wasm.gz",
             "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz//file",
             "test_suffix": "_wo_icrc3_u256",
         },
@@ -194,12 +195,12 @@ rust_ic_test_suite_with_extra_srcs(
     data = [
         "//rs/ledger_suite/icrc1/index-ng:index_ng_canister.wasm.gz",
         "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
-        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
     ],
     env = {
         "IC_ICRC1_INDEX_WASM_U256_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
         "IC_ICRC1_INDEX_WASM_U64_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister.wasm.gz)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister.wasm)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz)",
     },
     extra_srcs = [
         "tests/common/mod.rs",

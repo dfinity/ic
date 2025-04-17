@@ -42,7 +42,7 @@ fn test(env: TestEnv) {
             &governance,
             app_subnet.subnet_id,
             key_ids.clone(),
-            Some(Duration::from_secs(1)),
+            Some(Duration::from_millis(1)),
             &log,
         )
         .await;
@@ -62,12 +62,17 @@ fn test(env: TestEnv) {
             )
             .await
             .unwrap_err();
+            let expected_message = if key_id.is_idkg_key() {
+                "Signature request expired"
+            } else {
+                "VetKD request expired"
+            };
             assert_eq!(
                 error,
                 AgentError::CertifiedReject(RejectResponse {
                     reject_code: RejectCode::CanisterReject,
-                    reject_message: "Signature request expired".to_string(),
-                    error_code: None
+                    reject_message: expected_message.to_string(),
+                    error_code: Some("IC0406".to_string())
                 })
             )
         }

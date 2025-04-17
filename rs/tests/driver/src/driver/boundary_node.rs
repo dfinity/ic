@@ -27,8 +27,8 @@ use crate::{
         },
         test_setup::{GroupSetup, InfraProvider},
     },
-    k8s::datavolume::DataVolumeContentType,
     k8s::images::upload_image,
+    k8s::job::wait_for_job_completion,
     k8s::tnet::TNet,
     retry_with_msg,
     util::{block_on, create_agent, create_agent_mapping},
@@ -37,7 +37,6 @@ use crate::{
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use ic_agent::{Agent, AgentError};
-use kube::ResourceExt;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -353,12 +352,8 @@ impl BoundaryNodeWithVm {
                     &mk_compressed_img_path()
                 ),
             ))?;
-            block_on(tnet_node.deploy_config_image(
-                &mk_compressed_img_path(),
-                "config",
-                DataVolumeContentType::Kubevirt,
-            ))
-            .expect("deploying config image failed");
+            block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
+                .expect("waiting for job failed");
             block_on(tnet_node.start()).expect("starting vm failed");
         }
 
@@ -474,18 +469,8 @@ impl BoundaryNode {
         let allocated_vm = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => {
                 let mut tnet = TNet::read_attribute(env);
-                block_on(tnet.deploy_boundary_image(boundary_node_img_url))
-                    .expect("failed to deploy guestos image");
-                let vm_res = block_on(tnet.vm_create(
-                    CreateVmRequest {
-                        primary_image: ImageLocation::PersistentVolumeClaim {
-                            name: format!("{}-image-boundaryos", tnet.owner.name_any()),
-                        },
-                        ..create_vm_req
-                    },
-                    ImageType::IcOsImage,
-                ))
-                .expect("failed to create vm");
+                let vm_res = block_on(tnet.vm_create(create_vm_req, ImageType::IcOsImage))
+                    .expect("failed to create vm");
                 tnet.write_attribute(env);
                 vm_res
             }

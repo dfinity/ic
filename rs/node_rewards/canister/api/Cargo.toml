@@ -1,0 +1,15 @@
+[package]
+name = "ic-node-rewards-canister-api"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }

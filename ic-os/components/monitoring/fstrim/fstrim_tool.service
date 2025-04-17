@@ -1,5 +1,7 @@
 [Unit]
 Description=Discard unused blocks on /var/lib/ic/crypto filesystem
+After=setup-fstrim-metrics.service
+Wants=setup-fstrim-metrics.service
 
 [Service]
 Type=oneshot
@@ -31,3 +33,7 @@ SystemCallArchitectures=native
 SystemCallErrorNumber=EPERM
 SystemCallFilter=@system-service
 UMask=022
+
+# Disable systemd start and stop logs
+LogLevelMax=1
+SyslogLevel=2

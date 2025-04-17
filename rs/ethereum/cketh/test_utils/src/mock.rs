@@ -4,7 +4,7 @@ use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
 };
 use ic_error_types::RejectCode;
-use ic_management_canister_types::CanisterHttpResponsePayload;
+use ic_management_canister_types_private::CanisterHttpResponsePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
 use ic_types::messages::CallbackId;

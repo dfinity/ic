@@ -932,8 +932,6 @@ fn icrc1_ledger_init_arg(
         ),
         max_memo_length: Some(MAX_MEMO_LENGTH),
         feature_flags: Some(ICRC2_FEATURE),
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 

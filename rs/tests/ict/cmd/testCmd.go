@@ -20,6 +20,7 @@ type Config struct {
 	filterTests          string
 	farmBaseUrl          string
 	requiredHostFeatures string
+	k8sBranch            string
 }
 
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
@@ -42,7 +43,8 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		command := []string{"bazel", "test", target, "--config=systest"}
 		command = append(command, "--cache_test_results=no")
 		// Try and sync k8s dashboards
-		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"})
+		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
+		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
 		if err != nil {
 			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
 		} else {
@@ -90,7 +92,7 @@ func NewTestCmd() *cobra.Command {
 		Use:     "test <system_test_target> [flags] [-- <bazel_args>]",
 		Aliases: []string{"system_test", "t"},
 		Short:   "Run system_test target with Bazel",
-		Example: "  ict test //rs/tests/testing_verification:basic_health_test\n  ict test basic_health_test --dry-run -- --test_tmpdir=./tmp --test_output=errors\n  ict test //rs/tests/testing_verification:basic_health_test --set-required-host-features \"performance,host=dm1-dll01.dm1.dfinity.network\"",
+		Example: "  ict test //rs/tests/idx:basic_health_test\n  ict test basic_health_test --dry-run -- --test_tmpdir=./tmp --test_output=errors\n  ict test //rs/tests/idx:basic_health_test --set-required-host-features \"performance,host=dm1-dll01.dm1.dfinity.network\"",
 		Args:    cobra.MinimumNArgs(1),
 		RunE:    TestCommandWithConfig(&cfg),
 	}
@@ -100,6 +102,7 @@ func NewTestCmd() *cobra.Command {
 	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "include-tests", "i", "", "Execute only those test functions which contain a substring.")
 	testCmd.PersistentFlags().StringVarP(&cfg.farmBaseUrl, "farm-url", "", "", "Use a custom url for the Farm webservice.")
 	testCmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
+	testCmd.PersistentFlags().StringVarP(&cfg.k8sBranch, "k8s-branch", "", "main", "Override the branch from which the dashboards are being synced. Default: main")
 	testCmd.SetOut(os.Stdout)
 	return testCmd
 }

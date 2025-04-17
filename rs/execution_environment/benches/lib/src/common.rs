@@ -2,13 +2,14 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
+use ic_config::embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::{
     Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
     as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
@@ -24,7 +25,6 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
-use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
@@ -38,8 +38,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
@@ -88,6 +87,7 @@ where
 {
     let own_subnet_id = subnet_test_id(1);
     let nns_subnet_id = subnet_test_id(2);
+    let subnet_type = exec_env.own_subnet_type();
     let hypervisor = exec_env.hypervisor_for_testing();
 
     let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
@@ -167,7 +167,7 @@ where
         memory_allocation: canister_state.memory_allocation(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
         compute_allocation: canister_state.compute_allocation(),
-        subnet_type: hypervisor.subnet_type(),
+        subnet_type,
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
     };
@@ -177,7 +177,7 @@ where
         SMALL_APP_SUBNET_MAX_SIZE,
         own_subnet_id,
         nns_subnet_id,
-        hypervisor.subnet_type(),
+        subnet_type,
         subnets,
         None,
     ));
@@ -225,7 +225,6 @@ fn run_benchmark<G, I, W, R>(
                             expected_ops,
                             expected_ops / 1_000_000
                         );
-                        println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
@@ -239,19 +238,6 @@ fn run_benchmark<G, I, W, R>(
     group.finish();
 }
 
-fn check_sandbox_defined() -> bool {
-    if std::env::var("SANDBOX_BINARY").is_err()
-        || std::env::var("LAUNCHER_BINARY").is_err()
-        || std::env::var("COMPILER_BINARY").is_err()
-    {
-        eprintln!("WARNING: The SANDBOX_BINARY or LAUNCHER_BINARY or COMPILER_BINARY env variables are not defined.");
-        eprintln!("         Please use `bazel run ...` instead or define the variables manually.");
-        eprintln!("         Skipping the benchmark...");
-        return false;
-    }
-    true
-}
-
 /// Run all benchmark in the list.
 /// List of benchmarks: benchmark id (name), WAT, expected number of instructions.
 pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
@@ -259,9 +245,6 @@ where
     G: AsRef<str>,
     R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
-    if !check_sandbox_defined() {
-        return;
-    }
     let log = no_op_logger();
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;
@@ -274,7 +257,7 @@ where
     ));
     let mut embedders_config = EmbeddersConfig {
         feature_flags: FeatureFlags {
-            best_effort_responses: FlagStatus::Enabled,
+            best_effort_responses: BestEffortResponsesFeature::Enabled,
             wasm64: FlagStatus::Enabled,
             ..FeatureFlags::default()
         },
@@ -282,7 +265,7 @@ where
     };
 
     // Set up larger heap, of 8GB for the Wasm64 feature.
-    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+    embedders_config.max_wasm64_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
 
     let config = Config {
         embedders_config,
@@ -294,12 +277,12 @@ where
         config.clone(),
         &metrics_registry,
         own_subnet_id,
-        own_subnet_type,
         log.clone(),
         Arc::clone(&cycles_account_manager),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         Arc::new(FakeStateManager::new()),
+        Path::new("/tmp"),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
@@ -331,6 +314,9 @@ where
         subnet_configs
             .scheduler_config
             .canister_snapshot_baseline_instructions,
+        subnet_configs
+            .scheduler_config
+            .canister_snapshot_data_baseline_instructions,
     );
     for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(

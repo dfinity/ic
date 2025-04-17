@@ -6,6 +6,7 @@ use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
+use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
 use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
@@ -25,6 +26,9 @@ use icp_ledger::{
 };
 use std::time::Instant;
 
+/// The number of instructions that can be executed in a single canister upgrade as per
+/// https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
+const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 300_000_000_000;
 const INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
@@ -247,7 +251,10 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.perform_upgrade_downgrade_testing(true);
 
     // Downgrade all the canisters to the mainnet version
-    setup.downgrade_to_mainnet();
+    // For breaking changes, e.g., if mainnet is running a version with balances and allowances in
+    // stable structures, but master also has blocks in stable structures, `ledger_is_downgradable`
+    // should be set to `false`, otherwise `true`.
+    setup.downgrade_to_mainnet(true);
 
     // Verify ledger balance and allowance state
     // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
@@ -296,17 +303,27 @@ impl Setup {
         self.upgrade_index(&self.master_wasms.index);
         self.upgrade_ledger(&self.master_wasms.ledger)
             .expect("should successfully upgrade ledger to new local version");
-        self.upgrade_archive_canisters(&self.master_wasms.archive);
+        self.check_ledger_metrics();
+        self.upgrade_archive_canisters(
+            &self.master_wasms.archive,
+            Encode!(&()).expect("failed to encode archive upgrade arg"),
+        );
     }
 
-    pub fn downgrade_to_mainnet(&self) {
+    pub fn downgrade_to_mainnet(&self, ledger_is_downgradable: bool) {
         println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
-        match self.upgrade_ledger(&self.mainnet_wasms.ledger) {
-            Ok(_) => {
+        match (
+            ledger_is_downgradable,
+            self.upgrade_ledger(&self.mainnet_wasms.ledger),
+        ) {
+            (false, Ok(_)) => {
                 panic!("should fail to downgrade ledger to mainnet version");
             }
-            Err(err) => {
+            (true, Ok(_)) => {
+                // The ledger was downgraded successfully, which is what was expected to happen
+            }
+            (false, Err(err)) => {
                 // The ledger will still be running the master version, while the other canisters
                 // will be downgraded to the mainnet version. This is not an ideal situation, nor
                 // is it expected to happen in practice, but for the moment let's run the test to
@@ -316,8 +333,15 @@ impl Setup {
                     "Trying to downgrade from incompatible version",
                 );
             }
+            (true, Err(err)) => {
+                panic!(
+                    "should successfully downgrade ledger to mainnet version: {}",
+                    err
+                );
+            }
         }
-        self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
+        self.check_ledger_metrics();
+        self.upgrade_archive_canisters(&self.mainnet_wasms.archive, vec![]);
     }
 
     pub fn perform_upgrade_downgrade_testing(
@@ -334,6 +358,25 @@ impl Setup {
         ));
     }
 
+    fn check_ledger_metrics(&self) {
+        let metrics = retrieve_metrics(&self.state_machine, LEDGER_CANISTER_ID);
+        println!("Ledger metrics:");
+        for metric in metrics {
+            println!("  {}", metric);
+        }
+        let upgrade_instructions = parse_metric(
+            &self.state_machine,
+            LEDGER_CANISTER_ID,
+            "ledger_total_upgrade_instructions_consumed",
+        );
+        assert!(
+            upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
+            "Upgrade instructions ({}) should be less than the instruction limit ({})",
+            upgrade_instructions,
+            CANISTER_UPGRADE_INSTRUCTION_LIMIT
+        );
+    }
+
     fn list_archives(&self) -> Archives {
         Decode!(
             &self
@@ -346,21 +389,16 @@ impl Setup {
         .expect("failed to decode archives response")
     }
 
-    fn upgrade_archive(&self, archive_canister_id: CanisterId, wasm_bytes: Vec<u8>) {
-        self.state_machine
-            .upgrade_canister(archive_canister_id, wasm_bytes, vec![])
-            .unwrap_or_else(|e| {
-                panic!(
-                    "should successfully upgrade archive '{}' to new local version: {}",
-                    archive_canister_id, e
-                )
-            });
-    }
-
-    fn upgrade_archive_canisters(&self, wasm: &Wasm) {
+    fn upgrade_archive_canisters(&self, wasm: &Wasm, upgrade_arg: Vec<u8>) {
         let archives = self.list_archives().archives;
         for archive_info in &archives {
-            self.upgrade_archive(archive_info.canister_id, wasm.clone().bytes());
+            self.state_machine
+                .upgrade_canister(
+                    archive_info.canister_id,
+                    wasm.clone().bytes(),
+                    upgrade_arg.clone(),
+                )
+                .expect("failed to upgrade archive");
         }
     }
 

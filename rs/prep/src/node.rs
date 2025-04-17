@@ -21,7 +21,9 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord},
+    node::v1::{
+        ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord, NodeRewardType,
+    },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -306,6 +308,10 @@ pub struct NodeConfiguration {
     /// The domain name of the node
     #[serde(skip_serializing, skip_deserializing)]
     pub domain: Option<String>,
+
+    /// The type of rewards that the node operator wants to receive for the node.
+    /// E.g. "type3.1" or "type1" or similar from the node reward table in the NNS.
+    pub node_reward_type: Option<String>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -324,6 +330,10 @@ impl From<NodeConfiguration> for pbNodeRecord {
                 .map(|id| id.to_vec())
                 .unwrap_or_default(),
             domain: node_configuration.domain,
+            node_reward_type: node_configuration
+                .node_reward_type
+                .map(NodeRewardType::from)
+                .map(|t| t as i32),
             ..Default::default()
         }
     }
@@ -440,6 +450,7 @@ mod node_configuration {
             node_operator_principal_id: None,
             secret_key_store: None,
             domain: None,
+            node_reward_type: None,
         };
 
         let got = pbNodeRecord::from(node_configuration);

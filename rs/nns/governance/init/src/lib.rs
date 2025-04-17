@@ -95,6 +95,17 @@ impl GovernanceCanisterInitPayloadBuilder {
             TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
         };
         use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+        use std::time::SystemTime;
+
+        // This assumption here is that with_current_time is used.
+        // Alternatively, we could use u64::MAX, but u64::MAX is not as
+        // realistic.
+        let voting_power_refreshed_timestamp_seconds = Some(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
 
         let mut neuron1 = {
             let neuron_id = NeuronIdProto::from(self.new_neuron_id());
@@ -109,6 +120,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                                                          * TEST_NEURON_TOTAL_STAKE_E8S */
                 account: subaccount,
                 not_for_profit: true,
+                voting_power_refreshed_timestamp_seconds,
                 ..Default::default()
             }
         };
@@ -135,6 +147,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 aging_since_timestamp_seconds: 1,
                 account: subaccount,
                 not_for_profit: false,
+                voting_power_refreshed_timestamp_seconds,
                 ..Default::default()
             }
         };
@@ -153,6 +166,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 aging_since_timestamp_seconds: 10,
                 account: subaccount,
                 not_for_profit: false,
+                voting_power_refreshed_timestamp_seconds,
                 ..Default::default()
             }
         };

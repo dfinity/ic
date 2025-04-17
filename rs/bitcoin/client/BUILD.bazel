@@ -14,10 +14,10 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//rs/async_utils",
         "//rs/bitcoin/replica_types",
         "//rs/bitcoin/service",
         "//rs/config",
+        "//rs/http_endpoints/async_utils",
         "//rs/interfaces/adapter_client",
         "//rs/monitoring/adapter_metrics/client",
         "//rs/monitoring/logger",

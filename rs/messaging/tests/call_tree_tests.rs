@@ -6,7 +6,9 @@ use ic_base_types::PrincipalId;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
-use ic_test_utilities_metrics::fetch_histogram_stats;
+use ic_test_utilities_metrics::fetch_histogram_vec_stats;
+use ic_test_utilities_metrics::metric_vec;
+use ic_test_utilities_metrics::HistogramStats;
 use ic_test_utilities_types::ids::SUBNET_0;
 use ic_types::Cycles;
 use std::collections::VecDeque;
@@ -86,14 +88,21 @@ impl CallTreeTestFixture {
 
         if let WasmResult::Reply(msg) = result {
             let state = Decode!(&msg, State).unwrap();
-            let stats = fetch_histogram_stats(
+            let stats = fetch_histogram_vec_stats(
                 self.0.metrics_registry(),
                 "execution_environment_request_call_tree_depth",
-            )
-            .unwrap();
+            );
 
-            assert_eq!(state.call_count, stats.count);
-            assert_eq!(state.depth_total as f64, stats.sum);
+            assert_eq!(
+                metric_vec(&[(
+                    &[("class", "guaranteed_response")],
+                    HistogramStats {
+                        count: state.call_count,
+                        sum: state.depth_total as f64
+                    }
+                ),]),
+                stats,
+            );
         } else {
             unreachable!();
         }

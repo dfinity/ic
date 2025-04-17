@@ -4,9 +4,28 @@ use crate::{
 };
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use serde::{Deserialize, Serialize};
 use slog::{o, Drain, Logger};
+use std::net::{IpAddr, Ipv6Addr};
 use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum DataLocation {
+    Local,
+    Remote(IpAddr),
+}
+
+pub fn data_location_from_str(s: &str) -> RecoveryResult<DataLocation> {
+    if s == "local" {
+        return Ok(DataLocation::Local);
+    }
+    Ok(DataLocation::Remote(IpAddr::V6(
+        Ipv6Addr::from_str(s).map_err(|e| {
+            RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {:?}", e))
+        })?,
+    )))
+}
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
     let rt = Runtime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));

@@ -7,6 +7,7 @@ edition = "2021"
 async-trait = { workspace = true }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 futures = { workspace = true }
+ic-nervous-system-canisters = { path = "../../canisters" }
 ic-nervous-system-common = { path = "../../common" }
 ic-wasm = { workspace = true }
 icp-ledger = { path = "../../../ledger_suite/icp" }

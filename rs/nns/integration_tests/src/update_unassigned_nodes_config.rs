@@ -50,8 +50,8 @@ fn test_submit_update_ssh_readonly_access_for_all_unassigned_nodes() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         let ssh_keys = vec!["key0".to_string(), "key1".to_string()];
@@ -78,8 +78,8 @@ fn test_submit_update_ssh_readonly_access_for_all_unassigned_nodes() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.
@@ -114,8 +114,8 @@ fn test_submit_update_ssh_readonly_access_for_all_unassigned_nodes() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Failed
+                .status,
+            ProposalStatus::Failed as i32
         );
 
         // No proposals should be pending now.
@@ -165,8 +165,8 @@ fn test_submit_deploy_guestos_to_all_unassigned_nodes_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.

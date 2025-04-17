@@ -15,6 +15,7 @@ type CanisterSettings = record {
   reserved_cycles_limit: opt nat;
   wasm_memory_limit: opt nat;
   log_visibility: opt LogVisibility;
+  wasm_memory_threshold: opt nat;
 };
 type LogVisibility = variant { controllers; public };
 

@@ -14,7 +14,7 @@ In production, configuration is propagated from a partition on the USB installer
 === SetupOS -> HostOS
 
 SetupOS validates, sanitizes, and copies all of its configuration files to the HostOS config partition:
-  config.ini                      # Data center-specific network settings
+  config.ini                      # Data center and node-specific network settings
   ssh_authorized_keys             # SSH private keys
   node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
   deployment.json                 # Deployment-specific configurations

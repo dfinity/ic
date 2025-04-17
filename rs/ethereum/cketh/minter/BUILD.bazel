@@ -22,6 +22,16 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "helper_contracts",
+    srcs = [
+        "DepositHelperWithSubaccount.sol",
+        "ERC20DepositHelper.sol",
+        "EthDepositHelper.sol",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "minter",
     srcs = glob(
@@ -42,10 +52,10 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
         "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/secp256k1",
         "//rs/ethereum/evm-rpc-client",
         "//rs/phantom_newtype",
         "//rs/types/management_canister_types",
@@ -133,6 +143,7 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
+        "templates/pagination.html",
         "templates/principal_to_bytes.js",
     ],
     crate_features = features,
@@ -146,9 +157,9 @@ rust_test(
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
+        "//packages/ic-secp256k1",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/secp256k1",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
@@ -185,16 +196,16 @@ rust_binary(
         name = "integration_tests" + name_suffix,
         srcs = glob(["tests/**/*.rs"]),
         data = [
-            ":cketh_minter_debug.wasm",
-            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm",
+            ":cketh_minter_debug.wasm.gz",
+            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
             "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
             "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         ] + extra_data,
         env = {
             "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
-            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
-            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm)",
+            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm.gz)",
+            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
             "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
             "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
             "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",

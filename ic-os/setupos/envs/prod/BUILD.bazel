@@ -1,6 +1,7 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
+load("//publish:defs.bzl", "checksum_rule")
 
 # The macro contains several targets.
 # Check
@@ -9,6 +10,9 @@ load("//ic-os/setupos:defs.bzl", "image_deps")
 icos_build(
     name = "prod",
     image_deps_func = image_deps,
+    max_file_sizes = {
+        "disk-img.tar.zst": 2100 * 1000 * 1000,  # 2.1 GB on 2025-03-21
+    },
     upgrades = False,
     upload_prefix = "setup-os",
     vuln_scan = False,
@@ -17,4 +21,10 @@ icos_build(
 launch_bare_metal(
     name = "launch_bare_metal",
     image_zst_file = ":disk-img.tar.zst",
+)
+
+# Export checksums & build artifacts
+checksum_rule(
+    name = "compute_checksums",
+    inputs = [":prod"],
 )
