@@ -1205,6 +1205,9 @@ pub fn get_allowances(from: Account, spender: Account, max_results: u64, now: u6
             if result.len() >= max_results as usize {
                 break;
             }
+            if allowance.0.account.owner != from.owner {
+                break;
+            }
             if let Some(expires_at) = allowance.1.expires_at {
                 if expires_at.as_nanos_since_unix_epoch() <= now {
                     continue;
