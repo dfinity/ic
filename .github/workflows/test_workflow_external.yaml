@@ -1,0 +1,32 @@
+name: CI External
+on:
+  merge_group:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ci-main-external:
+    if: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
+    name: CI Main
+    uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24-large
+
+  ci-pr-only-external:
+    if: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
+    name: CI PR Only
+    uses: ./.github/workflows/ci-pr-only.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24-large
+
+  macos-arm64-external:
+    if: ${{ github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name }}
+    name: MacOS Silicon
+    uses: ./.github/workflows/test-namespace-darwin.yaml
+    secrets: inherit
