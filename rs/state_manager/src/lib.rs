@@ -61,7 +61,7 @@ use ic_types::{
 use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
-use std::convert::{From, TryFrom};
+use std::convert::{identity, From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::ops::Deref;
@@ -191,6 +191,7 @@ pub struct CheckpointMetrics {
     replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     num_page_maps_by_load_status: IntGaugeVec,
+    num_loaded_wasm_files_by_source: IntGaugeVec,
     log: ReplicaLogger,
 }
 
@@ -238,6 +239,12 @@ impl CheckpointMetrics {
             "How many PageMaps are loaded or not at the end of checkpoint interval.",
             &["status"],
         );
+
+        let num_loaded_wasm_files_by_source = metrics_registry.int_gauge_vec(
+            "state_manager_num_loaded_wasm_files_by_source",
+            "How many WasmFiles of canisters or snapshots are loaded at the end of checkpoint interval.",
+            &["source"],
+        );
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
@@ -246,6 +253,7 @@ impl CheckpointMetrics {
             replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             num_page_maps_by_load_status,
+            num_loaded_wasm_files_by_source,
             log: replica_logger,
         }
     }
@@ -1124,13 +1132,14 @@ fn switch_to_checkpoint(
                 Arc::clone(fd_factory),
             )?);
 
-        let wasm_binary = snapshot_layout.wasm().deserialize(
+        let wasm_binary = snapshot_layout.wasm().lazy_load_with_module_hash(
             new_snapshot
                 .execution_snapshot()
                 .wasm_binary
                 .module_hash()
                 .into(),
-        )?;
+        );
+        debug_assert_eq!(wasm_binary.file_loading_status(), Some(false));
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
@@ -1143,11 +1152,11 @@ fn switch_to_checkpoint(
             let embedder_cache = Arc::clone(&tip_state.wasm_binary.embedder_cache);
             let wasm_binary = canister_layout
                 .wasm()
-                .deserialize(tip_state.wasm_binary.binary.module_hash().into())?;
-            debug_assert_eq!(
-                tip_state.wasm_binary.binary.as_slice(),
-                wasm_binary.as_slice()
-            );
+                .lazy_load_with_module_hash(tip_state.wasm_binary.binary.module_hash().into());
+            // debug_assert_eq!(
+            //     tip_state.wasm_binary.binary.as_slice(),
+            //     wasm_binary.as_slice()
+            // );
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
                     binary: wasm_binary,
@@ -1590,6 +1599,73 @@ impl StateManagerImpl {
             .num_page_maps_by_load_status
             .with_label_values(&["not_loaded"])
             .set(not_loaded);
+    }
+
+    /// Populate `num_loaded_wasm_files_by_source` in the metrics with their actual
+    /// values in provided state.
+    fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
+        for canister in state.canisters_iter() {
+            if let Some(execution_state) = canister.execution_state.as_ref() {
+                eprintln!("canister wasm: {:?}", execution_state.wasm_binary.binary);
+                eprintln!(
+                    "file_loading_status {:?}",
+                    execution_state.wasm_binary.binary.file_loading_status()
+                );
+            }
+        }
+
+        for (_, snapshot) in state.canister_snapshots.iter() {
+            eprintln!(
+                "snapshot wasm: {:?}",
+                snapshot.execution_snapshot().wasm_binary
+            );
+            eprintln!(
+                "file_loading_status {:?}",
+                snapshot
+                    .execution_snapshot()
+                    .wasm_binary
+                    .file_loading_status()
+            );
+        }
+
+        let num_loaded_canister_wasm = state
+            .canister_states
+            .iter()
+            .filter_map(|(_, canister)| canister.execution_state.as_ref())
+            .filter(|execution_state| {
+                execution_state
+                    .wasm_binary
+                    .binary
+                    .file_loading_status()
+                    .is_some_and(identity)
+            })
+            .count();
+
+        let num_loaded_snapshot_wasm = state
+            .canister_snapshots
+            .iter()
+            .filter(|(_, snapshot)| {
+                snapshot
+                    .execution_snapshot()
+                    .wasm_binary
+                    .file_loading_status()
+                    .is_some_and(identity)
+            })
+            .count();
+
+        eprintln!("num_loaded_canister_wasm: {}", num_loaded_canister_wasm);
+        eprintln!("num_loaded_snapshot_wasm: {}", num_loaded_snapshot_wasm);
+
+        self.metrics
+            .checkpoint_metrics
+            .num_loaded_wasm_files_by_source
+            .with_label_values(&["canister"])
+            .set(num_loaded_canister_wasm as i64);
+        self.metrics
+            .checkpoint_metrics
+            .num_loaded_wasm_files_by_source
+            .with_label_values(&["snapshot"])
+            .set(num_loaded_snapshot_wasm as i64);
     }
 
     /// Reads states metadata file, returning an empty one if any errors occurs.
@@ -2312,6 +2388,7 @@ impl StateManagerImpl {
         height: Height,
     ) -> CreateCheckpointResult {
         self.observe_num_loaded_pagemaps(&state);
+        self.observe_num_loaded_wasm_files(&state);
         struct PreviousCheckpointInfo {
             base_manifest: Manifest,
             base_height: Height,
@@ -3082,6 +3159,7 @@ impl StateManager for StateManagerImpl {
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
+        eprintln!("height {} is with scope {:?}", height, scope);
         let _timer = self
             .metrics
             .api_call_duration

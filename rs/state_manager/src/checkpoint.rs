@@ -14,8 +14,8 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits,
-    CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
+    error::LayoutError, validate_wasm_file, AccessPolicy, CanisterLayout, CanisterSnapshotBits,
+    CanisterStateBits, CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -127,6 +127,15 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     )
     .into_iter()
     .try_for_each(identity)?;
+
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_wasm_files()?.into_iter(),
+        |wasm_file| validate_wasm_file(wasm_file),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
+
     if let Some(reference_state) = reference_state {
         validate_eq_checkpoint(
             checkpoint_layout,
@@ -800,7 +809,7 @@ pub fn load_canister_state(
             let wasm_binary = WasmBinary::new(
                 canister_layout
                     .wasm()
-                    .deserialize(execution_state_bits.binary_hash)?,
+                    .lazy_load_with_module_hash(execution_state_bits.binary_hash),
             );
             durations.insert("wasm_binary", starting_time.elapsed());
 
@@ -979,7 +988,7 @@ pub fn load_snapshot(
         let starting_time = Instant::now();
         let wasm_binary = snapshot_layout
             .wasm()
-            .deserialize(canister_snapshot_bits.binary_hash)?;
+            .lazy_load_with_module_hash(canister_snapshot_bits.binary_hash);
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
         let exported_globals = canister_snapshot_bits.exported_globals.clone();
