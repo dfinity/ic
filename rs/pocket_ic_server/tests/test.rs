@@ -482,6 +482,8 @@ async fn test_gateway(server_url: Url, https: bool) {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
+
+    pic.drop().await;
 }
 
 #[tokio::test]

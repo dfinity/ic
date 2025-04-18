@@ -433,6 +433,9 @@ async fn test_canister_http_live() {
         .unwrap();
     let http_response = Decode!(&res, HttpResponse).unwrap();
     assert_eq!(http_response.body, b"...");
+
+    // Explicitly drop async instance.
+    pic.drop().await;
 }
 ```
 
