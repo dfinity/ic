@@ -43,7 +43,7 @@ anchors:
       options: >-
         -e NODE_NAME
         --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp --mount type=volume,chown=true,destination=/tmp/zig-cache -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
     runs-on:
@@ -220,6 +220,9 @@ jobs:
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
           # use llvm-clang instead of apple's
           echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
+      - name: Setup zig-cache
+        run: |
+            mkdir -p /tmp/zig-cache
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/

@@ -96,7 +96,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp --mount type=volume,chown=true,destination=/tmp/zig-cache -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     runs-on:
       group: zh1
@@ -191,6 +191,9 @@ jobs:
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
           # use llvm-clang instead of apple's
           echo "CC=/usr/local/opt/llvm/bin/clang" >> "$GITHUB_ENV"
+      - name: Setup zig-cache
+        run: |
+          mkdir -p /tmp/zig-cache
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
@@ -212,7 +215,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp --mount type=volume,chown=true,destination=/tmp/zig-cache -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -233,7 +236,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp --mount type=volume,chown=true,destination=/tmp/zig-cache -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -285,7 +288,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:994bfcba2fa5efbb52c515bb01e6e8a5828878d6528603e7133fb195bd2a6c89
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp --mount type=volume,chown=true,destination=/tmp/zig-cache -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:

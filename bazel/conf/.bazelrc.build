@@ -150,8 +150,8 @@ test --test_env=CLICOLOR_FORCE=true
 # difference by cutting out duplicated work.
 
 # Set the cache path for all environments
-build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/var/zig-cache
-# Share /var/zig-cache across targets
-build --sandbox_add_mount_pair=/var/zig-cache
+build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
+# Share /tmp/zig-cache across targets
+build --sandbox_add_mount_pair=/tmp/zig-cache
 # Allow writes to the shared cache
-build --sandbox_writable_path=/var/zig-cache
+build --sandbox_writable_path=/tmp/zig-cache
