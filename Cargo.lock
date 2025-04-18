@@ -11482,6 +11482,7 @@ dependencies = [
  "ic-types",
  "maplit",
  "prost 0.13.4",
+ "serde_json",
 ]
 
 [[package]]
