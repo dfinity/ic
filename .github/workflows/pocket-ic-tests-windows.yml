@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - packages/pocket-ic/**
+      - rs/pocket_ic_server/**
   schedule:
     - cron: "0 1 * * *"
 # runs for the same workflow are cancelled on PRs but not on master
