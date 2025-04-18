@@ -289,7 +289,7 @@ impl Registry {
                 .get_chain_key_enabled_subnet_list(chain_key_id)
                 .unwrap_or_default();
 
-            // If this subnet is already disabled for that key, do nothing.
+            // If that key is already disabled on this subnet, do nothing.
             if !chain_key_signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
