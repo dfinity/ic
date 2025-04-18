@@ -153,11 +153,7 @@ pub mod fake {
 
         /// Encodes a prost message at latest_version + 1, and updates latest_version.
         pub fn encode_value<T: prost::Message>(&self, key: impl AsRef<str>, value: Option<T>) {
-            self.encode_value_at_version(
-                key,
-                self.version.load(atomic::Ordering::SeqCst) + 1,
-                value,
-            );
+            self.encode_value_at_version(key, self.latest_version().checked_add(1).unwrap(), value);
         }
 
         /// Encodes a prost message at the given version, and updates latest_version if the given version is
@@ -173,7 +169,7 @@ pub mod fake {
         }
 
         pub fn get_value(&self, key: impl AsRef<str>) -> Option<Vec<u8>> {
-            self.get_value_at_version(key, self.version.load(atomic::Ordering::SeqCst))
+            self.get_value_at_version(key, self.latest_version())
         }
 
         fn get_value_at_version(&self, key: impl AsRef<str>, version: u64) -> Option<Vec<u8>> {
@@ -204,7 +200,7 @@ pub mod fake {
 
         /// Sets a value at latest_version + 1, and updates latest_version.
         pub fn set_value(&self, key: impl AsRef<str>, value: Option<Vec<u8>>) {
-            self.set_value_at_version(key, self.version.load(atomic::Ordering::SeqCst) + 1, value);
+            self.set_value_at_version(key, self.latest_version().checked_add(1).unwrap(), value);
         }
 
         /// Sets a value at the given version, and updates latest_version if the given version is
@@ -237,7 +233,7 @@ pub mod fake {
                     entry.insert(index, registry_value)
                 }
             }
-            if version > self.version.load(atomic::Ordering::SeqCst) {
+            if version > self.latest_version() {
                 self.version.store(version, atomic::Ordering::SeqCst);
             }
         }
@@ -245,8 +241,8 @@ pub mod fake {
         /// Applies mutations as latest version.  This is similar to what Registry actually does, which
         /// is helpful for re-using other code that sets initial Registry mutations.
         pub fn apply_mutations(&self, mutations: Vec<RegistryMutation>) {
-            let current_version = self.version.load(atomic::Ordering::SeqCst);
-            let next_version = current_version + 1;
+            let current_version = self.latest_version();
+            let next_version = current_version.checked_add(1).unwrap();
             for mutation in mutations {
                 let mut binding = self.store.lock().unwrap();
 
@@ -271,7 +267,7 @@ pub mod fake {
                     .map_err(|e| NervousSystemError::new_with_message(format!("{e:?}")));
             }
 
-            Ok(self.version.load(atomic::Ordering::SeqCst).into())
+            Ok(self.latest_version().into())
         }
 
         /// Returns the changes since the given version.  This is a fake implementation that
@@ -294,7 +290,7 @@ pub mod fake {
             }
 
             let version = version.get();
-            let max_version = version + 10;
+            let max_version = version.checked_add(10).unwrap();
 
             let changes = self
                 .store
