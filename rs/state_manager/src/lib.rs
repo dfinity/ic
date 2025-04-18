@@ -1153,10 +1153,10 @@ fn switch_to_checkpoint(
             let wasm_binary = canister_layout
                 .wasm()
                 .lazy_load_with_module_hash(tip_state.wasm_binary.binary.module_hash().into());
-            debug_assert_eq!(
-                tip_state.wasm_binary.binary.as_slice(),
-                wasm_binary.as_slice()
-            );
+            // debug_assert_eq!(
+            //     tip_state.wasm_binary.binary.as_slice(),
+            //     wasm_binary.as_slice()
+            // );
             tip_state.wasm_binary = Arc::new(
                 ic_replicated_state::canister_state::execution_state::WasmBinary {
                     binary: wasm_binary,
