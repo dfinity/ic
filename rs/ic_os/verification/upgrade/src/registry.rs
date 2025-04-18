@@ -38,13 +38,9 @@ pub fn get_blessed_guest_launch_measurements_from_registry(
             // TODO: consider logging errors
         })
         .flatten()
-        .flat_map(|version_record| version_record.guest_launch_measurement_sha256_hex)
-        .map(|measurement| measurement.into_bytes())
+        .flat_map(|version_record| version_record.guest_launch_measurements)
+        .map(|measurement| measurement.measurement)
         .collect_vec();
-
-    if measurements.is_empty() {
-        return Err("No blessed guest launch measurements found".to_string());
-    }
 
     Ok(measurements)
 }
@@ -52,30 +48,104 @@ pub fn get_blessed_guest_launch_measurements_from_registry(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_interfaces_registry::RegistryValue;
     use ic_interfaces_registry_mocks::MockRegistryClient;
-    use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
+    use ic_protobuf::registry::replica_version::v1::{
+        BlessedReplicaVersions, GuestLaunchMeasurement, ReplicaVersionRecord,
+    };
+    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
+    use ic_types::RegistryVersion;
+    use mockall::predicate::eq;
+    use prost::Message;
 
     #[test]
     fn test_get_blessed_guest_launch_measurements_from_registry() {
-        //     let mut mock_registry_client = MockRegistryClient::new();
-        //
-        //     let blessed_replica_versions = BlessedReplicaVersions {
-        //         blessed_version_ids: vec!["foo".to_string(), "bar".to_string(), "no_data".to_string()],
-        //     };
-        //
-        //     mock_registry_client.expect_get_value()
-        //         .withf(|key, version| {
-        //             key == make_replica_version_key() &&
-        //             version == &ic_base_types::RegistryVersion::from(0)
-        //         })
-        //         .returning(|key, version| {
-        //         let mut v = Vec::new();
-        //         blessed_replica_versions.encode(&mut v).unwrap();
-        //         Ok(Some(v))
-        //     });
-        //
-        //     let result = get_blessed_guest_launch_measurements_from_registry(&mock_registry_client);
-        //     assert!(result.is_ok());
+        let registry_version = RegistryVersion::from(42);
+        let blessed_versions = ["version1", "version2"];
+
+        let measurement1 = [1, 2, 3, 4, 5];
+        let measurement2 = [6, 7, 8, 9, 10];
+        let measurement3 = [11, 12, 13, 14, 15];
+        let measurement4 = [16, 17, 18, 19, 20];
+
+        let replica_versions_and_records = vec![
+            (
+                "version1",
+                create_replica_record("12345", &[measurement1, measurement2]),
+            ),
+            ("version2", create_replica_record("abcde", &[measurement3])),
+            ("version3", create_replica_record("99999", &[measurement4])),
+        ];
+
+        let mock_registry_client = setup_mock_registry_client(
+            registry_version,
+            &blessed_versions,
+            &replica_versions_and_records,
+        );
+
+        assert_eq!(
+            get_blessed_guest_launch_measurements_from_registry(&mock_registry_client),
+            Ok(vec![
+                measurement1.to_vec(),
+                measurement2.to_vec(),
+                measurement3.to_vec()
+            ])
+        );
+    }
+
+    fn create_replica_record(
+        package_hash: &str,
+        measurements: &[impl AsRef<[u8]>],
+    ) -> ReplicaVersionRecord {
+        ReplicaVersionRecord {
+            release_package_sha256_hex: package_hash.to_string(),
+            release_package_urls: vec![],
+            guest_launch_measurements: measurements
+                .iter()
+                .map(|m| GuestLaunchMeasurement {
+                    measurement: m.as_ref().to_vec(),
+                    metadata: None,
+                })
+                .collect(),
+        }
+    }
+
+    fn setup_mock_registry_client(
+        registry_version: RegistryVersion,
+        blessed_replica_ids: &[&str],
+        replica_versions_and_records: &[(&str, ReplicaVersionRecord)],
+    ) -> MockRegistryClient {
+        let mut mock_client = MockRegistryClient::new();
+
+        mock_client
+            .expect_get_latest_version()
+            .return_const(registry_version);
+
+        let blessed_versions = BlessedReplicaVersions {
+            blessed_version_ids: blessed_replica_ids
+                .iter()
+                .map(|id| id.to_string())
+                .collect(),
+        };
+
+        mock_client
+            .expect_get_value()
+            .with(
+                eq(make_blessed_replica_versions_key()),
+                eq(registry_version),
+            )
+            .return_once(move |_, _| Ok(Some(blessed_versions.encode_to_vec())));
+
+        for (version_key, record) in replica_versions_and_records {
+            let encoded_record = record.encode_to_vec();
+            mock_client
+                .expect_get_value()
+                .with(
+                    eq(make_replica_version_key(version_key)),
+                    eq(registry_version),
+                )
+                .return_once(move |_, _| Ok(Some(encoded_record)));
+        }
+
+        mock_client
     }
 }

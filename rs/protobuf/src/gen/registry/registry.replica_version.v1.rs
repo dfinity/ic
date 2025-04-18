@@ -9,9 +9,21 @@ pub struct ReplicaVersionRecord {
     /// that corresponds to this version
     #[prost(string, repeated, tag = "7")]
     pub release_package_urls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    #[prost(string, optional, tag = "8")]
-    pub guest_launch_measurement_sha256_hex: ::core::option::Option<::prost::alloc::string::String>,
+    /// The SEV measurements that belong to this release
+    #[prost(message, repeated, tag = "9")]
+    pub guest_launch_measurements: ::prost::alloc::vec::Vec<GuestLaunchMeasurement>,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct GuestLaunchMeasurement {
+    #[prost(bytes = "vec", tag = "1")]
+    pub measurement: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub metadata: ::core::option::Option<GuestLaunchMeasurementMetadata>,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct GuestLaunchMeasurementMetadata {
+    #[prost(string, tag = "1")]
+    pub boot_alternative: ::prost::alloc::string::String,
 }
 /// A list of blessed versions of the IC Replica
 ///
@@ -22,10 +34,4 @@ pub struct BlessedReplicaVersions {
     /// A list of version information ids.
     #[prost(string, repeated, tag = "1")]
     pub blessed_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct Measurement {
-    /// In AMD SEV-SNP, this has 48 bytes.
-    #[prost(bytes = "vec", tag = "1")]
-    pub measurement: ::prost::alloc::vec::Vec<u8>,
 }
