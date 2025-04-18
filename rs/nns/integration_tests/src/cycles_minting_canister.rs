@@ -96,12 +96,13 @@ async fn set_icp_xdr_conversion_rate(
     )
     .await;
 
+    let proposal_info = wait_for_final_state(&nns.governance, proposal_id).await;
     // Wait for the proposal to be accepted and executed.
     assert_eq!(
-        wait_for_final_state(&nns.governance, proposal_id)
-            .await
-            .status,
-        ProposalStatus::Executed as i32
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
+        "Proposal should have been executed but was not: {:?}",
+        proposal_info
     );
 
     let response: IcpXdrConversionRateCertifiedResponse = nns
